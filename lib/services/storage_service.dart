@@ -146,6 +146,10 @@ class StorageService {
   static const String _defaultFilterRipSourcesKey = 'default_filter_rip_sources_v1';
   static const String _defaultFilterLanguagesKey = 'default_filter_languages_v1';
 
+  // Default Torrent Provider Settings
+  // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
+  static const String _defaultTorrentProviderKey = 'default_torrent_provider_v1';
+
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
@@ -1425,6 +1429,7 @@ class StorageService {
     await prefs.remove(_defaultFilterQualitiesKey);
     await prefs.remove(_defaultFilterRipSourcesKey);
     await prefs.remove(_defaultFilterLanguagesKey);
+    await prefs.remove(_defaultTorrentProviderKey);
   }
 
   /// Clear torrent engine toggles and limits
@@ -2650,6 +2655,23 @@ class StorageService {
   static Future<void> setDefaultFilterLanguages(List<String> languages) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
+  }
+
+  // Default Torrent Provider methods
+  // Returns: 'none' (ask every time), 'torbox', 'debrid', or 'pikpak'
+  static Future<String> getDefaultTorrentProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_defaultTorrentProviderKey) ?? 'none';
+  }
+
+  static Future<void> setDefaultTorrentProvider(String provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_defaultTorrentProviderKey, provider);
+  }
+
+  static Future<void> clearDefaultTorrentProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_defaultTorrentProviderKey);
   }
 }
 

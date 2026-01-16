@@ -22,6 +22,7 @@ import 'settings/torrent_settings_page.dart';
 import 'settings/filter_settings_page.dart';
 import 'settings/engine_import_page.dart';
 import 'settings/stremio_addons_page.dart';
+import 'settings/provider_settings_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -199,6 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
+      onOpenProviderSettings: _openProviderSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
@@ -250,6 +252,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const FilterSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openProviderSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProviderSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -431,6 +441,7 @@ class _SettingsLayout extends StatelessWidget {
   final _ConnectionsSummary connections;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
+  final Future<void> Function() onOpenProviderSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
@@ -445,6 +456,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.connections,
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
+    required this.onOpenProviderSettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
@@ -484,6 +496,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Filter Settings',
                 subtitle: 'Default quality, source, and language filters',
                 onTap: onOpenFilterSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.cloud_sync_rounded,
+                title: 'Provider Settings',
+                subtitle: 'Default provider for adding torrents',
+                onTap: onOpenProviderSettings,
               ),
               _SettingsTile(
                 icon: Icons.extension_rounded,

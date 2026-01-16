@@ -442,7 +442,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return _enabledServicesCount > 1;
   }
 
-  void _handleTorrentCardActivated(Torrent torrent, int index) {
+  void _handleTorrentCardActivated(Torrent torrent, int index) async {
     // Handle different stream types
     if (torrent.isDirectStream) {
       // Direct URL - play directly without debrid
@@ -452,6 +452,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // External URL - open in browser
       _openExternalStream(torrent);
       return;
+    }
+
+    // Check if there's a default provider set
+    final defaultProvider = await StorageService.getDefaultTorrentProvider();
+    if (!mounted) return;
+
+    // If default provider is set and available, use it directly
+    if (defaultProvider != 'none') {
+      if (defaultProvider == 'torbox' && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+        _addToTorbox(torrent.infohash, torrent.name);
+        return;
+      } else if (defaultProvider == 'debrid' && _realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+        _addToRealDebrid(torrent.infohash, torrent.name, index);
+        return;
+      } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
+        _sendToPikPak(torrent.infohash, torrent.name);
+        return;
+      }
+      // If default provider is not available, fall through to show dialog or use available service
     }
 
     // Torrent stream - needs debrid service
@@ -526,66 +545,55 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _showServiceSelectionDialog(Torrent torrent, int index) async {
-    final List<Widget> options = [];
+    // Build list of available providers
+    final List<_ProviderOption> providers = [];
 
-    // Add Torbox option if enabled
     if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
-          title: const Text('Torbox', style: TextStyle(color: Colors.white)),
-          onTap: () => Navigator.of(context).pop('torbox'),
-        ),
-      );
+      providers.add(_ProviderOption(
+        id: 'torbox',
+        name: 'Torbox',
+        icon: Icons.flash_on_rounded,
+        color: const Color(0xFF7C3AED),
+      ));
     }
 
-    // Add Real-Debrid option if enabled
     if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
-          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
-          onTap: () => Navigator.of(context).pop('debrid'),
-        ),
-      );
+      providers.add(_ProviderOption(
+        id: 'debrid',
+        name: 'Real-Debrid',
+        icon: Icons.cloud_rounded,
+        color: const Color(0xFFE50914),
+      ));
     }
 
-    // Add PikPak option if enabled
     if (_pikpakEnabled) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
-          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
-          onTap: () => Navigator.of(context).pop('pikpak'),
-        ),
-      );
+      providers.add(_ProviderOption(
+        id: 'pikpak',
+        name: 'PikPak',
+        icon: Icons.folder_rounded,
+        color: const Color(0xFF0088CC),
+      ));
     }
 
-    final result = await showDialog<String>(
+    final result = await showDialog<_ProviderDialogResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        title: const Text(
-          'Add Torrent',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: options,
-        ),
-      ),
+      builder: (context) => _ProviderSelectionDialog(providers: providers),
     );
 
-    if (result == 'torbox') {
-      _addToTorbox(torrent.infohash, torrent.name);
-    } else if (result == 'debrid') {
-      _addToRealDebrid(torrent.infohash, torrent.name, index);
-    } else if (result == 'pikpak') {
-      _sendToPikPak(torrent.infohash, torrent.name);
+    if (result != null) {
+      // Save preference if "Always use this" was checked
+      if (result.alwaysUse) {
+        await StorageService.setDefaultTorrentProvider(result.provider);
+      }
+
+      // Execute the selected action
+      if (result.provider == 'torbox') {
+        _addToTorbox(torrent.infohash, torrent.name);
+      } else if (result.provider == 'debrid') {
+        _addToRealDebrid(torrent.infohash, torrent.name, index);
+      } else if (result.provider == 'pikpak') {
+        _sendToPikPak(torrent.infohash, torrent.name);
+      }
     }
   }
 
@@ -12532,6 +12540,275 @@ class _CapabilityBadge extends StatelessWidget {
           fontSize: 10,
           color: color,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Provider option for the selection dialog
+class _ProviderOption {
+  final String id;
+  final String name;
+  final IconData icon;
+  final Color color;
+
+  const _ProviderOption({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.color,
+  });
+}
+
+/// Result from the provider selection dialog
+class _ProviderDialogResult {
+  final String provider;
+  final bool alwaysUse;
+
+  const _ProviderDialogResult({
+    required this.provider,
+    required this.alwaysUse,
+  });
+}
+
+/// Provider selection dialog with improved UI and DPAD support
+class _ProviderSelectionDialog extends StatefulWidget {
+  final List<_ProviderOption> providers;
+
+  const _ProviderSelectionDialog({required this.providers});
+
+  @override
+  State<_ProviderSelectionDialog> createState() => _ProviderSelectionDialogState();
+}
+
+class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
+  bool _alwaysUseThis = false;
+  int _focusedIndex = -1;
+  bool _checkboxFocused = false;
+
+  // Focus nodes for DPAD navigation
+  final List<FocusNode> _providerFocusNodes = [];
+  final FocusNode _checkboxFocusNode = FocusNode(debugLabel: 'always-use-checkbox');
+
+  @override
+  void initState() {
+    super.initState();
+    // Create focus nodes for each provider
+    for (int i = 0; i < widget.providers.length; i++) {
+      final node = FocusNode(debugLabel: 'provider-$i');
+      node.addListener(() => _onProviderFocusChange(i));
+      _providerFocusNodes.add(node);
+    }
+    _checkboxFocusNode.addListener(_onCheckboxFocusChange);
+
+    // Auto-focus first provider after dialog opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_providerFocusNodes.isNotEmpty) {
+        _providerFocusNodes[0].requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final node in _providerFocusNodes) {
+      node.dispose();
+    }
+    _checkboxFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onProviderFocusChange(int index) {
+    if (mounted) {
+      setState(() {
+        _focusedIndex = _providerFocusNodes[index].hasFocus ? index : _focusedIndex;
+      });
+    }
+  }
+
+  void _onCheckboxFocusChange() {
+    if (mounted) {
+      setState(() {
+        _checkboxFocused = _checkboxFocusNode.hasFocus;
+      });
+    }
+  }
+
+  void _selectProvider(String providerId) {
+    Navigator.of(context).pop(_ProviderDialogResult(
+      provider: providerId,
+      alwaysUse: _alwaysUseThis,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Add to',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Provider options
+                ...widget.providers.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final provider = entry.value;
+                  final isFocused = _focusedIndex == index;
+
+                  return Focus(
+                    focusNode: _providerFocusNodes[index],
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          (event.logicalKey == LogicalKeyboardKey.select ||
+                              event.logicalKey == LogicalKeyboardKey.enter ||
+                              event.logicalKey == LogicalKeyboardKey.space)) {
+                        _selectProvider(provider.id);
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: Material(
+                      color: isFocused
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () => _selectProvider(provider.id),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                provider.icon,
+                                color: provider.color,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  provider.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+
+                // Divider
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    height: 1,
+                  ),
+                ),
+
+                // "Always use this" checkbox
+                Focus(
+                  focusNode: _checkboxFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent &&
+                        (event.logicalKey == LogicalKeyboardKey.select ||
+                            event.logicalKey == LogicalKeyboardKey.enter ||
+                            event.logicalKey == LogicalKeyboardKey.space)) {
+                      setState(() {
+                        _alwaysUseThis = !_alwaysUseThis;
+                      });
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: Material(
+                    color: _checkboxFocused
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _alwaysUseThis = !_alwaysUseThis;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: _alwaysUseThis
+                                    ? theme.colorScheme.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: _alwaysUseThis
+                                      ? theme.colorScheme.primary
+                                      : Colors.white.withValues(alpha: 0.4),
+                                  width: 2,
+                                ),
+                              ),
+                              child: _alwaysUseThis
+                                  ? const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 14,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 14),
+                            Text(
+                              'Remember my choice',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
