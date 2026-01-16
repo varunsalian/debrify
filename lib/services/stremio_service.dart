@@ -649,47 +649,6 @@ class StremioService {
       final Map<String, dynamic> data = json.decode(response.body);
       final streamsRaw = data['streams'] as List<dynamic>?;
 
-      // === DEBUG LOGGING: Raw addon response ===
-      debugPrint('');
-      debugPrint('╔══════════════════════════════════════════════════════════════');
-      debugPrint('║ STREMIO ADDON RESPONSE DEBUG');
-      debugPrint('║ Addon: ${addon.name}');
-      debugPrint('║ URL: $url');
-      debugPrint('║ Stream count: ${streamsRaw?.length ?? 0}');
-      debugPrint('╠══════════════════════════════════════════════════════════════');
-
-      if (streamsRaw != null && streamsRaw.isNotEmpty) {
-        for (int i = 0; i < streamsRaw.length && i < 10; i++) {
-          final stream = streamsRaw[i] as Map<String, dynamic>;
-          debugPrint('║');
-          debugPrint('║ Stream #$i:');
-          debugPrint('║   infoHash: ${stream['infoHash']}');
-          debugPrint('║   url: ${stream['url']}');
-          debugPrint('║   externalUrl: ${stream['externalUrl']}');
-          debugPrint('║   name: ${stream['name']}');
-          debugPrint('║   title: ${stream['title']}');
-          debugPrint('║   description: ${stream['description']}');
-          debugPrint('║   behaviorHints: ${stream['behaviorHints']}');
-
-          // Log all other keys we might be missing
-          final knownKeys = {'infoHash', 'url', 'externalUrl', 'name', 'title', 'description', 'behaviorHints', 'fileIdx'};
-          final otherKeys = stream.keys.where((k) => !knownKeys.contains(k)).toList();
-          if (otherKeys.isNotEmpty) {
-            debugPrint('║   OTHER FIELDS:');
-            for (final key in otherKeys) {
-              debugPrint('║     $key: ${stream[key]}');
-            }
-          }
-        }
-        if (streamsRaw.length > 10) {
-          debugPrint('║');
-          debugPrint('║ ... and ${streamsRaw.length - 10} more streams');
-        }
-      }
-      debugPrint('╚══════════════════════════════════════════════════════════════');
-      debugPrint('');
-      // === END DEBUG LOGGING ===
-
       if (streamsRaw == null || streamsRaw.isEmpty) {
         return [];
       }
