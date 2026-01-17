@@ -532,16 +532,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     AndroidNativeDownloader.isTelevision().then((isTv) async {
       if (!mounted) return;
 
-      // Check if auto-launch is enabled to avoid race condition
-      final autoLaunchEnabled = await StorageService.getStartupAutoLaunchEnabled();
-
       setState(() {
         _isAndroidTv = isTv;
-        // Only auto-navigate to Debrify TV if auto-launch is NOT enabled
-        // (auto-launch will handle navigation after setting up channel ID)
-        if (_isAndroidTv && !autoLaunchEnabled) {
-          _selectedIndex = 3; // Debrify TV
-        }
       });
 
       // Set up TV sidebar focus callback
