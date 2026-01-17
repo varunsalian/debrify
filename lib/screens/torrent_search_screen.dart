@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:http/http.dart' as http;
 import '../models/playlist_view_mode.dart';
 import '../models/torrent.dart';
 import '../models/advanced_search_selection.dart';
@@ -20,6 +24,7 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
+import '../utils/deovr_utils.dart' as deovr;
 import '../widgets/stat_chip.dart';
 import '../widgets/file_selection_dialog.dart';
 import 'video_player_screen.dart';
@@ -4898,6 +4903,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Launch player immediately - retry logic will handle cold storage
           final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
           final title = file['name'] ?? torrentName;
+
+          // Check if VR playback should be used
+          final useDeoVR = await _shouldUseDeoVR(title);
+          if (useDeoVR) {
+            await _launchWithDeoVR(videoUrl: url, filename: title);
+            return;
+          }
+
           await VideoPlayerLauncher.push(
             context,
             VideoPlayerLaunchArgs(
@@ -7029,6 +7042,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           file: file,
         );
         if (!mounted) return;
+
+        // Check if VR playback should be used
+        final useDeoVR = await _shouldUseDeoVR(torrent.name);
+        if (useDeoVR) {
+          await _launchWithDeoVR(videoUrl: streamUrl, filename: torrent.name);
+          return;
+        }
+
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -8009,6 +8030,216 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   // Compact action button widget for the chooser dialog
+
+  /// Launch video in DeoVR player with VR format settings.
+  ///
+  /// This method checks user's Quick Play VR settings to determine:
+  /// - Whether to show format selection dialog
+  /// - Whether to auto-detect format from filename or use defaults
+  Future<void> _launchWithDeoVR({
+    required String videoUrl,
+    required String filename,
+  }) async {
+    if (!Platform.isAndroid) return;
+
+    // Load VR settings
+    final autoDetectFormat = await StorageService.getQuickPlayVrAutoDetectFormat();
+    final showFormatDialog = await StorageService.getQuickPlayVrShowDialog();
+
+    // Determine format
+    String screenType;
+    String stereoMode;
+
+    if (autoDetectFormat) {
+      // Auto-detect from filename
+      final detected = deovr.detectVRFormat(filename);
+      screenType = detected.screenType;
+      stereoMode = detected.stereoMode;
+    } else {
+      // Use user's saved defaults
+      screenType = await StorageService.getQuickPlayVrDefaultScreenType();
+      stereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+    }
+
+    // Show format selection dialog if enabled
+    if (showFormatDialog && mounted) {
+      String selectedScreenType = screenType;
+      String selectedStereoMode = stereoMode;
+
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('DeoVR Format'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  filename,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+                const Text('Screen Type', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedScreenType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: deovr.screenTypeLabels.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => selectedScreenType = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+                const Text('Stereo Mode', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedStereoMode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: deovr.stereoModeLabels.entries
+                      .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => selectedStereoMode = value);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(true),
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Play'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (result != true || !mounted) return;
+      screenType = selectedScreenType;
+      stereoMode = selectedStereoMode;
+    }
+
+    // Launch DeoVR
+    try {
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+
+      // Generate DeoVR JSON
+      final json = deovr.generateDeoVRJson(
+        videoUrl: videoUrl,
+        title: filename,
+        screenType: screenType,
+        stereoMode: stereoMode,
+      );
+      final jsonString = jsonEncode(json);
+
+      debugPrint('DeoVR JSON content: $jsonString');
+
+      // Upload JSON to jsonblob.com
+      final response = await http.post(
+        Uri.parse('https://jsonblob.com/api/jsonBlob'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonString,
+      );
+
+      if (response.statusCode != 201) {
+        throw Exception('Failed to upload JSON: ${response.statusCode}');
+      }
+
+      final location = response.headers['location'];
+      if (location == null) {
+        throw Exception('No location header in response');
+      }
+
+      final jsonUrl = 'https://jsonblob.com$location';
+      debugPrint('DeoVR JSON uploaded to: $jsonUrl');
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Launch DeoVR with the public URL
+      final deoVrUri = 'deovr://$jsonUrl';
+      debugPrint('Launching DeoVR with URI: $deoVrUri');
+
+      final intent = AndroidIntent(
+        action: 'action_view',
+        data: deoVrUri,
+      );
+      await intent.launch();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Launching DeoVR...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open with DeoVR: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Check if VR playback should be used based on settings and content.
+  /// Returns true if DeoVR should be launched instead of regular player.
+  Future<bool> _shouldUseDeoVR(String filename) async {
+    if (!Platform.isAndroid) return false;
+
+    final vrMode = await StorageService.getQuickPlayVrMode();
+
+    switch (vrMode) {
+      case 'disabled':
+        return false;
+      case 'always':
+        return true;
+      case 'auto':
+        // Check if filename indicates VR content
+        return deovr.isVrContent(filename);
+      default:
+        return false;
+    }
+  }
+
   Future<void> _playFromResult({
     required List<dynamic> links,
     required List<dynamic>? files,
@@ -8057,6 +8288,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         } catch (_) {
           // Fallback to torrentName if fetch fails
+        }
+
+        // Check if VR playback should be used
+        final useDeoVR = await _shouldUseDeoVR(finalTitle);
+        if (useDeoVR) {
+          await _launchWithDeoVR(videoUrl: videoUrl, filename: finalTitle);
+          return;
         }
 
         await VideoPlayerLauncher.push(

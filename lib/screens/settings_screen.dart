@@ -23,6 +23,7 @@ import 'settings/filter_settings_page.dart';
 import 'settings/engine_import_page.dart';
 import 'settings/stremio_addons_page.dart';
 import 'settings/provider_settings_page.dart';
+import 'settings/quick_play_settings_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -201,6 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
+      onOpenQuickPlaySettings: _openQuickPlaySettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
@@ -260,6 +262,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const ProviderSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openQuickPlaySettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const QuickPlaySettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -442,6 +452,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
+  final Future<void> Function() onOpenQuickPlaySettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
@@ -457,6 +468,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
+    required this.onOpenQuickPlaySettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
@@ -502,6 +514,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Provider Settings',
                 subtitle: 'Default provider for adding torrents',
                 onTap: onOpenProviderSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.bolt_rounded,
+                title: 'Quick Play Settings',
+                subtitle: 'Configure quick play for torrent search',
+                onTap: onOpenQuickPlaySettings,
               ),
               _SettingsTile(
                 icon: Icons.extension_rounded,

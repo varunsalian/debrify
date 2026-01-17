@@ -150,6 +150,14 @@ class StorageService {
   // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
   static const String _defaultTorrentProviderKey = 'default_torrent_provider_v1';
 
+  // Quick Play VR Settings
+  // VR Player Mode: 'disabled' (always regular player), 'auto' (detect VR content), 'always' (always use DeoVR)
+  static const String _quickPlayVrModeKey = 'quick_play_vr_mode';
+  static const String _quickPlayVrDefaultScreenTypeKey = 'quick_play_vr_default_screen_type';
+  static const String _quickPlayVrDefaultStereoModeKey = 'quick_play_vr_default_stereo_mode';
+  static const String _quickPlayVrAutoDetectFormatKey = 'quick_play_vr_auto_detect_format';
+  static const String _quickPlayVrShowDialogKey = 'quick_play_vr_show_dialog';
+
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
@@ -2672,6 +2680,73 @@ class StorageService {
   static Future<void> clearDefaultTorrentProvider() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_defaultTorrentProviderKey);
+  }
+
+  // Quick Play VR Settings methods
+
+  /// Get VR player mode: 'disabled', 'auto', or 'always'
+  static Future<String> getQuickPlayVrMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_quickPlayVrModeKey) ?? 'disabled';
+  }
+
+  static Future<void> setQuickPlayVrMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_quickPlayVrModeKey, mode);
+  }
+
+  /// Get default VR screen type (dome, sphere, flat, fisheye, mkx200, rf52)
+  static Future<String> getQuickPlayVrDefaultScreenType() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_quickPlayVrDefaultScreenTypeKey) ?? 'dome';
+  }
+
+  static Future<void> setQuickPlayVrDefaultScreenType(String screenType) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_quickPlayVrDefaultScreenTypeKey, screenType);
+  }
+
+  /// Get default VR stereo mode (sbs, tb, off)
+  static Future<String> getQuickPlayVrDefaultStereoMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_quickPlayVrDefaultStereoModeKey) ?? 'sbs';
+  }
+
+  static Future<void> setQuickPlayVrDefaultStereoMode(String stereoMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_quickPlayVrDefaultStereoModeKey, stereoMode);
+  }
+
+  /// Get whether to auto-detect VR format from filename
+  static Future<bool> getQuickPlayVrAutoDetectFormat() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_quickPlayVrAutoDetectFormatKey) ?? true;
+  }
+
+  static Future<void> setQuickPlayVrAutoDetectFormat(bool autoDetect) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_quickPlayVrAutoDetectFormatKey, autoDetect);
+  }
+
+  /// Get whether to show VR format selection dialog before launching DeoVR
+  static Future<bool> getQuickPlayVrShowDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_quickPlayVrShowDialogKey) ?? true;
+  }
+
+  static Future<void> setQuickPlayVrShowDialog(bool showDialog) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_quickPlayVrShowDialogKey, showDialog);
+  }
+
+  /// Clear all Quick Play VR settings
+  static Future<void> clearQuickPlayVrSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_quickPlayVrModeKey);
+    await prefs.remove(_quickPlayVrDefaultScreenTypeKey);
+    await prefs.remove(_quickPlayVrDefaultStereoModeKey);
+    await prefs.remove(_quickPlayVrAutoDetectFormatKey);
+    await prefs.remove(_quickPlayVrShowDialogKey);
   }
 }
 

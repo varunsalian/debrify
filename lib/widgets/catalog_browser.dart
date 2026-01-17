@@ -942,108 +942,196 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       onKeyEvent: _handleKeyEvent,
       child: Material(
         color: Colors.transparent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.2),
-              width: _isFocused ? 2 : 1,
-            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Use vertical layout on narrow screens (< 500px)
+            final useVerticalLayout = constraints.maxWidth < 500;
+
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isFocused
+                      ? colorScheme.primary
+                      : colorScheme.outline.withOpacity(0.2),
+                  width: _isFocused ? 2 : 1,
+                ),
+              ),
+              child: useVerticalLayout
+                  ? _buildVerticalLayout(theme, colorScheme)
+                  : _buildHorizontalLayout(theme, colorScheme),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Horizontal layout for wide screens - thumbnail, details, and buttons in a row
+  Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
+    return Row(
+      children: [
+        // Thumbnail
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 70,
+            height: 100,
+            child: _buildPoster(colorScheme),
           ),
-          child: Row(
+        ),
+        const SizedBox(width: 14),
+        // Details
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Thumbnail
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 70,
-                  height: 100,
-                  child: _buildPoster(colorScheme),
+              // Title
+              Text(
+                widget.item.name,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(width: 14),
-              // Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Title
-                    Text(
-                      widget.item.name,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // Metadata row
-                    Row(
-                      children: [
-                        _buildTypeBadge(widget.item.type),
-                        if (widget.item.year != null) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            widget.item.year!,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        if (widget.item.imdbRating != null) ...[
-                          const SizedBox(width: 8),
-                          const Icon(
-                            Icons.star,
-                            size: 14,
-                            color: Colors.amber,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            widget.item.imdbRating!.toStringAsFixed(1),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Action buttons
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Torrents button (first)
-                  _buildActionButton(
-                    icon: Icons.list_rounded,
-                    label: 'Browse',
-                    color: const Color(0xFF6366F1), // Indigo
-                    isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
-                    onTap: widget.onSources,
-                  ),
-                  const SizedBox(width: 6),
-                  // Quick Play button (second)
-                  _buildActionButton(
-                    icon: Icons.play_arrow_rounded,
-                    label: 'Quick Play',
-                    color: const Color(0xFF10B981), // Green
-                    isHighlighted: _isFocused && _isQuickPlayButtonFocused,
-                    onTap: widget.onQuickPlay,
-                  ),
-                ],
-              ),
+              const SizedBox(height: 4),
+              // Metadata row
+              _buildMetadataRow(theme, colorScheme),
             ],
           ),
         ),
-      ),
+        const SizedBox(width: 8),
+        // Action buttons
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildActionButton(
+              icon: Icons.list_rounded,
+              label: 'Browse',
+              color: const Color(0xFF6366F1),
+              isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+              onTap: widget.onSources,
+            ),
+            const SizedBox(width: 6),
+            _buildActionButton(
+              icon: Icons.play_arrow_rounded,
+              label: 'Quick Play',
+              color: const Color(0xFF10B981),
+              isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+              onTap: widget.onQuickPlay,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Vertical layout for narrow screens - content stacked with buttons below
+  Widget _buildVerticalLayout(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Top row: Thumbnail + Details
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 60,
+                height: 85,
+                child: _buildPoster(colorScheme),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Details - takes remaining space
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title - full width available
+                  Text(
+                    widget.item.name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  // Metadata row
+                  _buildMetadataRow(theme, colorScheme),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Bottom row: Action buttons
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.list_rounded,
+                label: 'Browse',
+                color: const Color(0xFF6366F1),
+                isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+                onTap: widget.onSources,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.play_arrow_rounded,
+                label: 'Quick Play',
+                color: const Color(0xFF10B981),
+                isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                onTap: widget.onQuickPlay,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetadataRow(ThemeData theme, ColorScheme colorScheme) {
+    return Row(
+      children: [
+        _buildTypeBadge(widget.item.type),
+        if (widget.item.year != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            widget.item.year!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (widget.item.imdbRating != null) ...[
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.star,
+            size: 14,
+            color: Colors.amber,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            widget.item.imdbRating!.toStringAsFixed(1),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1095,6 +1183,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,

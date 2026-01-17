@@ -1,3 +1,15 @@
+/// Check if a video title indicates VR content
+/// Returns true if filename contains common VR markers
+bool isVrContent(String title) {
+  final titleUpper = title.toUpperCase();
+  // Common VR indicators: VR, 180/360 degrees, stereo modes, headset names
+  return RegExp(
+    r'\b(VR|180|360|SBS|SIDEBYSIDE|SIDE_BY_SIDE|TB|3DV|OVERUNDER|OVER_UNDER|'
+    r'OCULUS|QUEST|PSVR|VIVE|RIFT|FISHEYE|MKX|VRCA)\b|'
+    r'_VR_|_180_|_360_|_SBS_|_TB_',
+  ).hasMatch(titleUpper);
+}
+
 /// Detect VR format from video title
 /// Returns (screenType, stereoMode) with defaults of 180° SBS
 ({String screenType, String stereoMode}) detectVRFormat(String title) {
