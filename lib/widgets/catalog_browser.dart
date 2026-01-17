@@ -877,23 +877,25 @@ class _CatalogItemCard extends StatefulWidget {
 
 class _CatalogItemCardState extends State<_CatalogItemCard> {
   bool _isFocused = false;
-  // For DPAD: track which button is focused (true = Quick Play, false = Sources)
-  bool _isQuickPlayButtonFocused = true;
+  // For DPAD: track which button is focused (true = Quick Play, false = Torrents)
+  // Default to Torrents (first button)
+  bool _isQuickPlayButtonFocused = false;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // Left/Right arrow navigation between buttons
+    // Order: [Torrents] [Quick Play]
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (!_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = true);
+      if (_isQuickPlayButtonFocused) {
+        setState(() => _isQuickPlayButtonFocused = false); // Move to Torrents
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = false);
+      if (!_isQuickPlayButtonFocused) {
+        setState(() => _isQuickPlayButtonFocused = true); // Move to Quick Play
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -924,9 +926,9 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       onFocusChange: (focused) {
         setState(() {
           _isFocused = focused;
-          // Reset to Quick Play button when card gains focus
+          // Reset to Torrents button (first) when card gains focus
           if (focused) {
-            _isQuickPlayButtonFocused = true;
+            _isQuickPlayButtonFocused = false;
           }
         });
         if (focused) {
@@ -942,7 +944,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         color: Colors.transparent,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
             borderRadius: BorderRadius.circular(12),
@@ -959,12 +961,12 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
-                  width: 56,
-                  height: 80,
+                  width: 70,
+                  height: 100,
                   child: _buildPoster(colorScheme),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               // Details
               Expanded(
                 child: Column(
@@ -1019,22 +1021,22 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Quick Play button
-                  _buildActionButton(
-                    icon: Icons.play_arrow_rounded,
-                    label: 'Play',
-                    color: const Color(0xFF10B981), // Green
-                    isHighlighted: _isFocused && _isQuickPlayButtonFocused,
-                    onTap: widget.onQuickPlay,
-                  ),
-                  const SizedBox(width: 6),
-                  // Sources button
+                  // Torrents button (first)
                   _buildActionButton(
                     icon: Icons.list_rounded,
-                    label: 'Sources',
+                    label: 'Torrents',
                     color: const Color(0xFF6366F1), // Indigo
                     isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
                     onTap: widget.onSources,
+                  ),
+                  const SizedBox(width: 6),
+                  // Quick Play button (second)
+                  _buildActionButton(
+                    icon: Icons.play_arrow_rounded,
+                    label: 'Quick Play',
+                    color: const Color(0xFF10B981), // Green
+                    isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                    onTap: widget.onQuickPlay,
                   ),
                 ],
               ),
@@ -1052,43 +1054,61 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     required bool isHighlighted,
     required VoidCallback onTap,
   }) {
+    // Darker shade for gradient effect
+    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isHighlighted ? color : color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
+          // Solid gradient background - always visible
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isHighlighted
+                ? [color, darkColor]
+                : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
+          ),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isHighlighted ? color : color.withOpacity(0.3),
+            color: isHighlighted
+                ? Colors.white.withValues(alpha: 0.4)
+                : Colors.white.withValues(alpha: 0.15),
             width: isHighlighted ? 2 : 1,
           ),
-          boxShadow: isHighlighted
-              ? [
-                  BoxShadow(
-                    color: color.withOpacity(0.4),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : null,
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
+              blurRadius: isHighlighted ? 16 : 8,
+              spreadRadius: isHighlighted ? 2 : 0,
+              offset: const Offset(0, 4),
+            ),
+            if (isHighlighted)
+              BoxShadow(
+                color: color.withValues(alpha: 0.3),
+                blurRadius: 24,
+                spreadRadius: 4,
+              ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 16,
-              color: isHighlighted ? Colors.white : color,
+              size: 18,
+              color: Colors.white,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
-                color: isHighlighted ? Colors.white : color,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
               ),
             ),
           ],
