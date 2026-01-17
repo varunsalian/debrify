@@ -447,6 +447,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleTorrentCardActivated(Torrent torrent, int index) async {
+    // Check if this is a Quick Play action (to skip dialog if multiple services)
+    final isQuickPlay = _quickPlayPending;
+    if (isQuickPlay) {
+      setState(() {
+        _quickPlayPending = false;
+      });
+    }
+
     // Handle different stream types
     if (torrent.isDirectStream) {
       // Direct URL - play directly without debrid
@@ -478,8 +486,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Torrent stream - needs debrid service
-    if (_multipleServicesEnabled) {
-      // Show dialog to choose service
+    if (_multipleServicesEnabled && !isQuickPlay) {
+      // Show dialog to choose service (skip for Quick Play)
       _showServiceSelectionDialog(torrent, index);
     } else if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
       // Direct to Real-Debrid
@@ -2241,15 +2249,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _checkQuickPlayAfterSearch() {
     if (!_quickPlayPending || _quickPlaySelection == null) return;
 
-    // Reset quick play state
     final selection = _quickPlaySelection!;
+    // Note: Keep _quickPlayPending = true so _handleTorrentCardActivated knows to skip dialog
     setState(() {
-      _quickPlayPending = false;
       _quickPlaySelection = null;
     });
 
     if (_torrents.isEmpty) {
       debugPrint('TorrentSearchScreen: Quick Play - no torrents found');
+      // Reset quick play state
+      setState(() {
+        _quickPlayPending = false;
+      });
       // Show a snackbar to inform user
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2279,6 +2290,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Auto-play the selected torrent
+    // Note: _quickPlayPending is still true, will be reset in _handleTorrentCardActivated
     if (selectedTorrent != null) {
       // Find the index for the handler
       final index = _torrents.indexOf(selectedTorrent);
