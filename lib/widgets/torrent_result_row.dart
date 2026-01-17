@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,6 +24,7 @@ class TorrentResultRow extends StatefulWidget {
     this.isCached = false,
     this.cacheService,
     required this.onTap,
+    this.onLongPress,
     this.onNavigateUp,
     this.onNavigateDown,
   });
@@ -36,6 +39,10 @@ class TorrentResultRow extends StatefulWidget {
 
   /// Called when row is tapped - should show service picker
   final VoidCallback onTap;
+
+  /// Called when row is long-pressed - shows provider selection dialog
+  final VoidCallback? onLongPress;
+
   final VoidCallback? onNavigateUp;
   final VoidCallback? onNavigateDown;
 
@@ -46,6 +53,11 @@ class TorrentResultRow extends StatefulWidget {
 class _TorrentResultRowState extends State<TorrentResultRow> {
   bool _isFocused = false;
 
+  // For DPAD long press detection
+  Timer? _longPressTimer;
+  bool _longPressTriggered = false;
+  static const _longPressDuration = Duration(milliseconds: 500);
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +66,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
 
   @override
   void dispose() {
+    _longPressTimer?.cancel();
     widget.focusNode.removeListener(_onFocusChange);
     super.dispose();
   }
@@ -84,23 +97,48 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final isSelectKey = event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter;
 
-    // Select/Enter triggers action
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      widget.onTap();
-      return KeyEventResult.handled;
+    // Handle Select/Enter key with long press support
+    if (isSelectKey) {
+      if (event is KeyDownEvent) {
+        // Start long press timer
+        _longPressTriggered = false;
+        _longPressTimer?.cancel();
+        _longPressTimer = Timer(_longPressDuration, () {
+          if (!mounted) return;
+          _longPressTriggered = true;
+          // Trigger long press callback if available, otherwise fall back to tap
+          if (widget.onLongPress != null) {
+            widget.onLongPress!();
+          } else {
+            widget.onTap();
+          }
+        });
+        return KeyEventResult.handled;
+      } else if (event is KeyUpEvent) {
+        // Cancel timer and trigger tap if long press wasn't triggered
+        _longPressTimer?.cancel();
+        _longPressTimer = null;
+        if (!_longPressTriggered) {
+          widget.onTap();
+        }
+        _longPressTriggered = false;
+        return KeyEventResult.handled;
+      }
     }
 
-    // Arrow navigation
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      widget.onNavigateUp?.call();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      widget.onNavigateDown?.call();
-      return KeyEventResult.handled;
+    // Arrow navigation (only on key down)
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onNavigateUp?.call();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onNavigateDown?.call();
+        return KeyEventResult.handled;
+      }
     }
 
     return KeyEventResult.ignored;
@@ -158,6 +196,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

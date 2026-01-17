@@ -10320,6 +10320,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Only show cache badge if we actually checked cache status (not just assuming cached)
       cacheService: (_torboxCacheCheckEnabled && _torboxCacheStatus != null && _torboxResultIsCached(torrent.infohash)) ? 'torbox' : null,
       onTap: () => _handleTorrentCardActivated(torrent, index),
+      // Long press shows provider selection dialog (useful when default is set)
+      onLongPress: _multipleServicesEnabled
+          ? () => _showServiceSelectionDialog(torrent, index)
+          : null,
       onNavigateUp: index == 0
           ? () => _filterButtonFocusNode.requestFocus()
           : () {
