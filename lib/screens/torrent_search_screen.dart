@@ -473,13 +473,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // If default provider is set and available, use it directly
     if (defaultProvider != 'none') {
       if (defaultProvider == 'torbox' && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
-        _addToTorbox(torrent.infohash, torrent.name);
+        _addToTorbox(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
         return;
       } else if (defaultProvider == 'debrid' && _realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
-        _addToRealDebrid(torrent.infohash, torrent.name, index);
+        _addToRealDebrid(torrent.infohash, torrent.name, index, forcePlay: isQuickPlay);
         return;
       } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
-        _sendToPikPak(torrent.infohash, torrent.name);
+        _sendToPikPak(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
         return;
       }
       // If default provider is not available, fall through to show dialog or use available service
@@ -491,13 +491,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _showServiceSelectionDialog(torrent, index);
     } else if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
       // Direct to Real-Debrid
-      _addToRealDebrid(torrent.infohash, torrent.name, index);
+      _addToRealDebrid(torrent.infohash, torrent.name, index, forcePlay: isQuickPlay);
     } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
       // Direct to Torbox
-      _addToTorbox(torrent.infohash, torrent.name);
+      _addToTorbox(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
     } else if (_pikpakEnabled) {
       // Direct to PikPak
-      _sendToPikPak(torrent.infohash, torrent.name);
+      _sendToPikPak(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
     } else {
       // No service configured
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3538,7 +3538,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _sendToPikPak(String infohash, String torrentName) async {
+  Future<void> _sendToPikPak(String infohash, String torrentName, {bool forcePlay = false}) async {
     try {
       final magnet = 'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
 
@@ -3635,6 +3635,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   (show) {
                     if (mounted) setDialogState(() => showingTimeoutOptions = show);
                   },
+                  forcePlay: forcePlay,
                 );
               }
 
@@ -4218,8 +4219,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     DateTime startTime,
     Function(int) onProgress,
     bool Function() isCancelled,
-    Function(bool) setShowTimeoutOptions,
-  ) async {
+    Function(bool) setShowTimeoutOptions, {
+    bool forcePlay = false,
+  }) async {
     final pikpak = PikPakApiService.instance;
     const pollInterval = Duration(seconds: 2);
     const timeoutShowOptions = Duration(seconds: 60);
@@ -4362,7 +4364,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             return;
           }
 
-          await _showPikPakPostAddOptions(torrentName, fileId, videoFiles, torrent);
+          await _showPikPakPostAddOptions(torrentName, fileId, videoFiles, torrent, forcePlay: forcePlay);
           return;
         }
 
@@ -4384,12 +4386,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String torrentName,
     String fileId,
     List<Map<String, dynamic>> videoFiles,
-    Torrent torrent,
-  ) async {
+    Torrent torrent, {
+    bool forcePlay = false,
+  }) async {
     if (!mounted) return;
 
     final hasVideo = videoFiles.isNotEmpty;
-    final postAction = await StorageService.getPikPakPostTorrentAction();
+    // Override to 'play' for Quick Play
+    final postAction = forcePlay ? 'play' : await StorageService.getPikPakPostTorrentAction();
     final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
 
     // For PikPak, we only extract video files, so if we have videos, we can enable video-only actions
@@ -5570,8 +5574,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _addToRealDebrid(
     String infohash,
     String torrentName,
-    int index,
-  ) async {
+    int index, {
+    bool forcePlay = false,
+  }) async {
     // Check if API key is available
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -5689,7 +5694,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       Navigator.of(context).pop();
 
       // Handle post-torrent action
-      await _handlePostTorrentAction(result, torrentName, apiKey, index);
+      await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -6122,7 +6127,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  Future<void> _addToTorbox(String infohash, String torrentName) async {
+  Future<void> _addToTorbox(String infohash, String torrentName, {bool forcePlay = false}) async {
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showTorboxApiKeyMissingMessage();
@@ -6209,7 +6214,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       if (!mounted) return;
       final torrent = _findTorrentByInfohash(infohash, torrentName);
-      await _showTorboxPostAddOptions(torboxTorrent, torrent);
+      await _showTorboxPostAddOptions(torboxTorrent, torrent, forcePlay: forcePlay);
     } catch (e) {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -6319,13 +6324,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return TorboxService.getTorrentById(apiKey, torrentId, attempts: 5);
   }
 
-  Future<void> _showTorboxPostAddOptions(TorboxTorrent torboxTorrent, Torrent torrent) async {
+  Future<void> _showTorboxPostAddOptions(TorboxTorrent torboxTorrent, Torrent torrent, {bool forcePlay = false}) async {
     if (!mounted) return;
     final videoFiles = torboxTorrent.files.where(_torboxFileLooksLikeVideo).toList();
     final hasVideo = videoFiles.isNotEmpty;
 
-    // Get the post-torrent action preference
-    final postAction = await StorageService.getTorboxPostTorrentAction();
+    // Get the post-torrent action preference (override to 'play' for Quick Play)
+    final postAction = forcePlay ? 'play' : await StorageService.getTorboxPostTorrentAction();
     final torboxHidden = await StorageService.getTorboxHiddenFromNav();
     final apiKey = await StorageService.getTorboxApiKey();
 
@@ -7473,9 +7478,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     Map<String, dynamic> result,
     String torrentName,
     String apiKey,
-    int index,
-  ) async {
-    final postAction = await StorageService.getPostTorrentAction();
+    int index, {
+    bool forcePlay = false,
+  }) async {
+    // Override to 'play' for Quick Play
+    final postAction = forcePlay ? 'play' : await StorageService.getPostTorrentAction();
     final rdHidden = await StorageService.getRealDebridHiddenFromNav();
     final downloadLink = result['downloadLink'] as String;
     final fileSelection = result['fileSelection'] as String;
