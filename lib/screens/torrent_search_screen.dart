@@ -2276,18 +2276,28 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Find the best torrent based on the rules
     Torrent? selectedTorrent;
 
-    if (!selection.isSeries) {
-      // Movies: prefer direct links
-      selectedTorrent = _torrents.firstWhere(
-        (t) => t.isDirectStream,
-        orElse: () => _torrents.first,
-      );
-      debugPrint('TorrentSearchScreen: Quick Play (movie) - selected ${selectedTorrent.isDirectStream ? "direct link" : "torrent"}: ${selectedTorrent.displayTitle}');
-    } else {
-      // Series: just pick the first result (which should be sorted by relevance)
-      selectedTorrent = _torrents.first;
-      debugPrint('TorrentSearchScreen: Quick Play (series) - selected: ${selectedTorrent.displayTitle}');
+    // Filter to only actual torrents (exclude direct/external streams)
+    final torrentsOnly = _torrents.where((t) => !t.isDirectStream && !t.isExternalStream).toList();
+
+    if (torrentsOnly.isEmpty) {
+      debugPrint('TorrentSearchScreen: Quick Play - no torrents found (only direct/external streams)');
+      setState(() {
+        _quickPlayPending = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No torrent sources found for Quick Play'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
     }
+
+    // Pick the first torrent (sorted by relevance)
+    selectedTorrent = torrentsOnly.first;
+    debugPrint('TorrentSearchScreen: Quick Play - selected torrent: ${selectedTorrent.displayTitle}');
 
     // Auto-play the selected torrent
     // Note: _quickPlayPending is still true, will be reset in _handleTorrentCardActivated
