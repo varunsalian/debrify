@@ -1126,6 +1126,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         showOnlyCached = true;
       }
 
+      // Filter out direct links for series when no specific episode is selected
+      // Direct links are individual episode streams that can't be added as a season/series pack
+      // Movies are fine since they're single files anyway
+      if (selection != null &&
+          selection.isSeries &&
+          selection.episode == null) {
+        final beforeFilterCount = filteredTorrents.length;
+
+        filteredTorrents = filteredTorrents
+            .where((torrent) => torrent.streamType == StreamType.torrent)
+            .toList(growable: false);
+
+        final filteredOutCount = beforeFilterCount - filteredTorrents.length;
+        if (filteredOutCount > 0) {
+          debugPrint(
+            'TorrentSearchScreen: Filtered out $filteredOutCount direct link streams for series pack search',
+          );
+        }
+      }
+
       // Filter by season when season is specified but episode is not
       // This ensures we only show torrents that include the requested season
       if (selection != null &&
@@ -1202,55 +1222,87 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
 
-      // Filter out season packs when a specific episode is requested
-      // Only apply this filter for TV series searches with episode specified
+      // When a specific episode is requested, filter and sort results:
+      // - Keep single episodes matching the exact episode pattern
+      // - Keep season packs that contain the requested season
+      // - Keep complete series packs
+      // - Sort: exact episode matches first, then packs
       if (selection != null &&
           selection.isSeries &&
           selection.episode != null) {
         final beforeFilterCount = filteredTorrents.length;
+        final requestedSeason = selection.season!;
+        final requestedEpisode = selection.episode!;
 
         // Build the expected episode pattern (e.g., "S05E01" or "5x1")
-        final season = selection.season!;
-        final episode = selection.episode!;
-        final expectedS = 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
-        final expectedSNoZero = 'S${season}E${episode}';
-        final expectedX = '${season}x${episode.toString().padLeft(2, '0')}';
-        final expectedXNoZero = '${season}x${episode}';
+        final expectedS = 'S${requestedSeason.toString().padLeft(2, '0')}E${requestedEpisode.toString().padLeft(2, '0')}';
+        final expectedSNoZero = 'S${requestedSeason}E${requestedEpisode}';
+        final expectedX = '${requestedSeason}x${requestedEpisode.toString().padLeft(2, '0')}';
+        final expectedXNoZero = '${requestedSeason}x${requestedEpisode}';
 
-        // Keep only single episode torrents that match the requested episode
+        // Helper to check if torrent name contains the exact episode pattern
+        bool hasExactEpisodeMatch(String name) {
+          final upperName = name.toUpperCase();
+          return upperName.contains(expectedS.toUpperCase()) ||
+                 upperName.contains(expectedSNoZero.toUpperCase()) ||
+                 upperName.contains(expectedX.toUpperCase()) ||
+                 upperName.contains(expectedXNoZero.toUpperCase());
+        }
+
+        // Helper to check if pack contains the requested season
+        bool packContainsSeason(Torrent torrent) {
+          switch (torrent.coverageType) {
+            case 'completeSeries':
+              return true; // Complete series contains all seasons
+            case 'multiSeasonPack':
+              if (torrent.startSeason != null && torrent.endSeason != null) {
+                return torrent.startSeason! <= requestedSeason &&
+                       torrent.endSeason! >= requestedSeason;
+              }
+              return true; // Assume it contains if we can't determine range
+            case 'seasonPack':
+              return torrent.seasonNumber == requestedSeason;
+            default:
+              return false;
+          }
+        }
+
+        // Filter: keep exact episode matches OR packs containing the season
         filteredTorrents = filteredTorrents
             .where((torrent) {
-              // Must be a single episode (not a pack)
-              if (torrent.coverageType != 'singleEpisode') return false;
-
-              // Check if torrent name contains the episode pattern
-              final name = torrent.name.toUpperCase();
-
-              // Check various episode formats: S05E01, S5E1, 5x01, 5x1
-              if (name.contains(expectedS.toUpperCase()) ||
-                  name.contains(expectedSNoZero.toUpperCase()) ||
-                  name.contains(expectedX.toUpperCase()) ||
-                  name.contains(expectedXNoZero.toUpperCase())) {
-                return true;
+              // Single episodes: must match the exact episode pattern
+              if (torrent.coverageType == 'singleEpisode' || torrent.coverageType == null) {
+                return hasExactEpisodeMatch(torrent.name);
               }
-
-              return false;
+              // Packs: must contain the requested season
+              return packContainsSeason(torrent);
             })
-            .toList(growable: false);
+            .toList();
+
+        // Sort: exact episode matches first (priority 0), then packs by coverage type
+        filteredTorrents.sort((a, b) {
+          int getPriority(Torrent t) {
+            // Exact episode match gets highest priority
+            if (hasExactEpisodeMatch(t.name)) return 0;
+            // Then by coverage type: season pack > multi-season > complete series
+            switch (t.coverageType) {
+              case 'seasonPack': return 1;
+              case 'multiSeasonPack': return 2;
+              case 'completeSeries': return 3;
+              default: return 4;
+            }
+          }
+          final priorityDiff = getPriority(a) - getPriority(b);
+          if (priorityDiff != 0) return priorityDiff;
+          // Within same priority, sort by seeders descending
+          return b.seeders - a.seeders;
+        });
 
         final afterFilterCount = filteredTorrents.length;
         debugPrint(
-          'TorrentSearchScreen: Episode filter applied for S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} - '
-          'filtered from $beforeFilterCount to $afterFilterCount torrents '
-          '(removed ${beforeFilterCount - afterFilterCount} season/complete series packs)',
+          'TorrentSearchScreen: Episode filter applied for S${requestedSeason.toString().padLeft(2, '0')}E${requestedEpisode.toString().padLeft(2, '0')} - '
+          'kept $afterFilterCount torrents from $beforeFilterCount (exact matches + packs containing season)',
         );
-
-        // Show helpful message if all results were filtered out
-        if (filteredTorrents.isEmpty && beforeFilterCount > 0) {
-          final episodeLabel = 'S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')}';
-          nextErrorMessage =
-              'No single episode torrents found for $episodeLabel. Found $beforeFilterCount season/series packs that were filtered out.';
-        }
       }
 
       if (!mounted || requestId != _activeSearchRequestId) {
@@ -1259,8 +1311,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final metadata = _buildTorrentMetadataMap(filteredTorrents);
 
+      // Always recalculate engine counts from filtered results
+      // This ensures counts match actual visible results after all filters
+      final Map<String, int> finalEngineCounts = {};
+      for (final torrent in filteredTorrents) {
+        final source = torrent.source.isNotEmpty ? torrent.source : 'unknown';
+        finalEngineCounts[source] = (finalEngineCounts[source] ?? 0) + 1;
+      }
+
       setState(() {
-        _engineCounts = Map<String, int>.from(result['engineCounts'] as Map);
+        _engineCounts = finalEngineCounts;
         _engineErrors = engineErrors;
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
