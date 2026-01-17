@@ -767,7 +767,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                   // Torrents button (first)
                   _buildActionButton(
                     icon: Icons.list_rounded,
-                    label: 'Torrents',
+                    label: 'Browse',
                     color: const Color(0xFF6366F1), // Indigo
                     isHighlighted: widget.isFocused && !_isQuickPlayButtonFocused,
                     onTap: widget.onSources,
