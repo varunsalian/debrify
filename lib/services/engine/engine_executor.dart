@@ -131,8 +131,8 @@ class EngineExecutor {
                 config.metadata.id,
                 searchType: searchType,
               );
-              // Only add if infohash is valid
-              if (torrent.infohash.isNotEmpty) {
+              // Only add if infohash is valid (not empty and not all zeros)
+              if (_isValidInfohash(torrent.infohash)) {
                 pageTorrents.add(torrent);
               }
             } catch (e) {
@@ -628,5 +628,20 @@ class EngineExecutor {
 
     // Fallback to original if unwrapping fails
     return responseJson;
+  }
+
+  /// Check if an infohash is valid.
+  ///
+  /// Rejects empty infohashes and all-zero placeholder infohashes
+  /// (e.g., PirateBay returns "0000000000000000000000000000000000000000"
+  /// when no results are found).
+  bool _isValidInfohash(String infohash) {
+    if (infohash.isEmpty) return false;
+
+    // Reject all-zero infohashes (placeholder for "no results")
+    final allZeros = RegExp(r'^0+$');
+    if (allZeros.hasMatch(infohash)) return false;
+
+    return true;
   }
 }
