@@ -16,9 +16,14 @@ import '../services/stremio_service.dart';
 /// - Dynamic filter dropdowns based on catalog extras (genre, etc.)
 /// - Grid/list of content items
 /// - Item selection triggers stream search callback
+/// - Quick Play and Sources buttons for each item
 class CatalogBrowser extends StatefulWidget {
-  /// Callback when user selects an item to search streams for
+  /// Callback when user selects an item to search streams for (Sources button)
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
+
+  /// Callback when user wants to quick play an item (Quick Play button)
+  /// If null, Quick Play button will fallback to onItemSelected behavior
+  final void Function(AdvancedSearchSelection selection)? onQuickPlay;
 
   /// Optional: Filter to show only this addon's catalogs
   /// If null, shows all available catalog addons
@@ -34,6 +39,7 @@ class CatalogBrowser extends StatefulWidget {
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
+    this.onQuickPlay,
     this.filterAddon,
     this.searchQuery,
     this.onRequestFocusAbove,
@@ -341,7 +347,24 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected!(selection);
   }
 
-  KeyEventResult _handleContentItemKey(int index, KeyEvent event) {
+  void _onQuickPlay(StremioMeta item) {
+    final selection = AdvancedSearchSelection(
+      imdbId: item.id,
+      isSeries: item.type == 'series',
+      title: item.name,
+      year: item.year,
+      contentType: item.type,
+    );
+
+    // Use onQuickPlay if available, otherwise fallback to onItemSelected
+    if (widget.onQuickPlay != null) {
+      widget.onQuickPlay!(selection);
+    } else if (widget.onItemSelected != null) {
+      widget.onItemSelected!(selection);
+    }
+  }
+
+  KeyEventResult _handleContentItemKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // List navigation (up/down only)
@@ -368,11 +391,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       }
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      _onItemTap(_content[index]);
-      return KeyEventResult.handled;
-    }
+    // Select/Enter is now handled within the card widget for button selection
+    // This handler only handles navigation
 
     return KeyEventResult.ignored;
   }
@@ -823,8 +843,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             focusNode: index < _contentFocusNodes.length
                 ? _contentFocusNodes[index]
                 : null,
-            onTap: () => _onItemTap(item),
-            onKeyEvent: (event) => _handleContentItemKey(index, event),
+            onQuickPlay: () => _onQuickPlay(item),
+            onSources: () => _onItemTap(item),
+            onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
+                _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
           ),
         );
       },
@@ -833,16 +855,19 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 }
 
 /// Horizontal card widget for displaying a catalog item (movie/series/channel)
+/// Features Quick Play and Sources buttons with DPAD navigation support
 class _CatalogItemCard extends StatefulWidget {
   final StremioMeta item;
   final FocusNode? focusNode;
-  final VoidCallback onTap;
-  final KeyEventResult Function(KeyEvent) onKeyEvent;
+  final VoidCallback onQuickPlay;
+  final VoidCallback onSources;
+  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
 
   const _CatalogItemCard({
     required this.item,
     this.focusNode,
-    required this.onTap,
+    required this.onQuickPlay,
+    required this.onSources,
     required this.onKeyEvent,
   });
 
@@ -852,6 +877,42 @@ class _CatalogItemCard extends StatefulWidget {
 
 class _CatalogItemCardState extends State<_CatalogItemCard> {
   bool _isFocused = false;
+  // For DPAD: track which button is focused (true = Quick Play, false = Sources)
+  bool _isQuickPlayButtonFocused = true;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Left/Right arrow navigation between buttons
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (!_isQuickPlayButtonFocused) {
+        setState(() => _isQuickPlayButtonFocused = true);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (_isQuickPlayButtonFocused) {
+        setState(() => _isQuickPlayButtonFocused = false);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // Select/Enter triggers the focused button
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      if (_isQuickPlayButtonFocused) {
+        widget.onQuickPlay();
+      } else {
+        widget.onSources();
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Pass other key events (up/down navigation) to parent
+    return widget.onKeyEvent(event, isQuickPlayFocused: _isQuickPlayButtonFocused);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -861,7 +922,13 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (focused) {
-        setState(() => _isFocused = focused);
+        setState(() {
+          _isFocused = focused;
+          // Reset to Quick Play button when card gains focus
+          if (focused) {
+            _isQuickPlayButtonFocused = true;
+          }
+        });
         if (focused) {
           Scrollable.ensureVisible(
             context,
@@ -870,94 +937,161 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
           );
         }
       },
-      onKeyEvent: (node, event) => widget.onKeyEvent(event),
+      onKeyEvent: _handleKeyEvent,
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isFocused
-                    ? colorScheme.primary
-                    : colorScheme.outline.withOpacity(0.2),
-                width: _isFocused ? 2 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                // Thumbnail
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 56,
-                    height: 80,
-                    child: _buildPoster(colorScheme),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Title
-                      Text(
-                        widget.item.name,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      // Metadata row
-                      Row(
-                        children: [
-                          _buildTypeBadge(widget.item.type),
-                          if (widget.item.year != null) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.item.year!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                          if (widget.item.imdbRating != null) ...[
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.star,
-                              size: 14,
-                              color: Colors.amber,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              widget.item.imdbRating!.toStringAsFixed(1),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Arrow
-                Icon(
-                  Icons.chevron_right,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ],
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isFocused
+                  ? colorScheme.primary
+                  : colorScheme.outline.withOpacity(0.2),
+              width: _isFocused ? 2 : 1,
             ),
           ),
+          child: Row(
+            children: [
+              // Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 56,
+                  height: 80,
+                  child: _buildPoster(colorScheme),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Title
+                    Text(
+                      widget.item.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Metadata row
+                    Row(
+                      children: [
+                        _buildTypeBadge(widget.item.type),
+                        if (widget.item.year != null) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.item.year!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        if (widget.item.imdbRating != null) ...[
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.star,
+                            size: 14,
+                            color: Colors.amber,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            widget.item.imdbRating!.toStringAsFixed(1),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Action buttons
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Quick Play button
+                  _buildActionButton(
+                    icon: Icons.play_arrow_rounded,
+                    label: 'Play',
+                    color: const Color(0xFF10B981), // Green
+                    isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                    onTap: widget.onQuickPlay,
+                  ),
+                  const SizedBox(width: 6),
+                  // Sources button
+                  _buildActionButton(
+                    icon: Icons.list_rounded,
+                    label: 'Sources',
+                    color: const Color(0xFF6366F1), // Indigo
+                    isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+                    onTap: widget.onSources,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isHighlighted,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isHighlighted ? color : color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isHighlighted ? color : color.withOpacity(0.3),
+            width: isHighlighted ? 2 : 1,
+          ),
+          boxShadow: isHighlighted
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.4),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isHighlighted ? Colors.white : color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isHighlighted ? Colors.white : color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );

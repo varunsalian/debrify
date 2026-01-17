@@ -193,6 +193,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final List<FocusNode> _cardFocusNodes = [];
   int _focusedCardIndex = -1; // -1 means no card is focused
 
+  // Quick Play state - auto-selects best torrent after search
+  bool _quickPlayPending = false;
+  AdvancedSearchSelection? _quickPlaySelection;
+
   // Search engine toggles - dynamic engine states
   Map<String, bool> _engineStates = {};
   List<DynamicEngine> _availableEngines = [];
@@ -2213,6 +2217,76 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _createAdvancedSelectionAndSearch();
   }
 
+  /// Handle Quick Play - searches and auto-selects best torrent
+  /// Priority:
+  /// - Movies: prefer direct links, then first torrent
+  /// - Series (all seasons): first torrent from results
+  /// - Other: first result
+  Future<void> _handleQuickPlay(AdvancedSearchSelection selection) async {
+    debugPrint('TorrentSearchScreen: Quick Play triggered for ${selection.title}');
+
+    // Set quick play pending state
+    setState(() {
+      _quickPlayPending = true;
+      _quickPlaySelection = selection;
+    });
+
+    // Trigger the same flow as regular catalog selection
+    await _handleCatalogItemSelected(selection);
+
+    // The search completion handler will check _quickPlayPending and auto-play
+  }
+
+  /// Called after search completes to check if Quick Play should auto-select
+  void _checkQuickPlayAfterSearch() {
+    if (!_quickPlayPending || _quickPlaySelection == null) return;
+
+    // Reset quick play state
+    final selection = _quickPlaySelection!;
+    setState(() {
+      _quickPlayPending = false;
+      _quickPlaySelection = null;
+    });
+
+    if (_torrents.isEmpty) {
+      debugPrint('TorrentSearchScreen: Quick Play - no torrents found');
+      // Show a snackbar to inform user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No sources found for Quick Play'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Find the best torrent based on the rules
+    Torrent? selectedTorrent;
+
+    if (!selection.isSeries) {
+      // Movies: prefer direct links
+      selectedTorrent = _torrents.firstWhere(
+        (t) => t.isDirectStream,
+        orElse: () => _torrents.first,
+      );
+      debugPrint('TorrentSearchScreen: Quick Play (movie) - selected ${selectedTorrent.isDirectStream ? "direct link" : "torrent"}: ${selectedTorrent.displayTitle}');
+    } else {
+      // Series: just pick the first result (which should be sorted by relevance)
+      selectedTorrent = _torrents.first;
+      debugPrint('TorrentSearchScreen: Quick Play (series) - selected: ${selectedTorrent.displayTitle}');
+    }
+
+    // Auto-play the selected torrent
+    if (selectedTorrent != null) {
+      // Find the index for the handler
+      final index = _torrents.indexOf(selectedTorrent);
+      debugPrint('TorrentSearchScreen: Quick Play - activating torrent at index $index');
+      _handleTorrentCardActivated(selectedTorrent, index >= 0 ? index : 0);
+    }
+  }
+
   // Clear IMDB selection
   void _clearImdbSelection() {
     setState(() {
@@ -3135,6 +3209,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _cardFocusNodes.isNotEmpty) {
           _cardFocusNodes[0].requestFocus();
+        }
+      });
+    }
+
+    // Check if Quick Play is pending and auto-select
+    if (_quickPlayPending) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _checkQuickPlayAfterSearch();
         }
       });
     }
@@ -9509,6 +9592,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           onItemSelected: (selection) {
                             _handleCatalogItemSelected(selection);
                           },
+                          onQuickPlay: (selection) {
+                            _handleQuickPlay(selection);
+                          },
                           onKeywordFocusNodeReady: (focusNode) {
                             _aggregatedKeywordFocusNode = focusNode;
                           },
@@ -9531,6 +9617,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           searchQuery: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
                           onItemSelected: (selection) {
                             _handleCatalogItemSelected(selection, updateSearchText: true);
+                          },
+                          onQuickPlay: (selection) {
+                            _handleQuickPlay(selection);
                           },
                           onRequestFocusAbove: () {
                             _providerAccordionFocusNode.requestFocus();
