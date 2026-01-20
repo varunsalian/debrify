@@ -3063,14 +3063,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Shows a dialog with all sources (engines + Stremio addons) for configuration
+  /// Sources shown are filtered based on the currently selected search source
   Future<void> _showSourcesDialog(BuildContext context) async {
-    // Fetch Stremio addons - only show torrent-searchable addons
-    // (supports streams + handles IMDB IDs + supports movies or series)
+    // Fetch Stremio addons - get all stream-capable addons
+    // (supports streams + supports movies or series)
+    // Filtering by ID type compatibility is done in the dialog based on selected source
     final stremioService = StremioService();
     final allAddons = await stremioService.getAddons();
     final streamAddons = allAddons.where((a) =>
         a.supportsStreams &&
-        a.handlesImdbIds &&
         (a.supportsMovies || a.supportsSeries)
     ).toList();
 
@@ -3089,6 +3090,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           await stremioService.setAddonEnabled(manifestUrl, enabled);
         },
         searchMode: _searchMode,
+        selectedSource: _selectedSource,
       ),
     );
 
@@ -12799,6 +12801,7 @@ class _SourcesDialog extends StatefulWidget {
   final void Function(String engineId, bool enabled) onEngineToggle;
   final Future<void> Function(String manifestUrl, bool enabled) onAddonToggle;
   final SearchMode searchMode;
+  final SearchSourceOption selectedSource;
 
   const _SourcesDialog({
     required this.availableEngines,
@@ -12807,6 +12810,7 @@ class _SourcesDialog extends StatefulWidget {
     required this.onEngineToggle,
     required this.onAddonToggle,
     required this.searchMode,
+    required this.selectedSource,
   });
 
   @override
@@ -12824,6 +12828,105 @@ class _SourcesDialogState extends State<_SourcesDialog> {
     _localAddonStates = {
       for (final addon in widget.streamAddons) addon.manifestUrl: addon.enabled,
     };
+  }
+
+  /// Get engines relevant to the selected search source
+  List<DynamicEngine> get _relevantEngines {
+    final source = widget.selectedSource;
+
+    if (source.type == SearchSourceType.keyword) {
+      // Keyword mode: show all keyword-capable engines
+      return widget.availableEngines.where((e) => e.supportsKeywordSearch).toList();
+    }
+
+    if (source.type == SearchSourceType.all) {
+      // All mode: show all engines
+      return widget.availableEngines.where((e) => e.supportsKeywordSearch).toList();
+    }
+
+    // Specific addon mode: check what ID types the addon uses
+    final addon = source.addon;
+    if (addon != null && addon.handlesImdbIds) {
+      // Addon uses IMDB IDs - show engines that support IMDB search
+      return widget.availableEngines.where((e) => e.supportsImdbSearch).toList();
+    }
+
+    // Non-IMDB addon (Kitsu, etc): no keyword engines support this
+    return [];
+  }
+
+  /// Get addons relevant to the selected search source
+  List<StremioAddon> get _relevantAddons {
+    final source = widget.selectedSource;
+
+    if (source.type == SearchSourceType.keyword) {
+      // Keyword mode: no addons needed for pure keyword search
+      return [];
+    }
+
+    if (source.type == SearchSourceType.all) {
+      // All mode: show all addons
+      return widget.streamAddons;
+    }
+
+    // Specific addon mode: filter by compatible idPrefixes
+    final sourceAddon = source.addon;
+    if (sourceAddon == null) return [];
+
+    final sourcePrefixes = sourceAddon.idPrefixes ?? [];
+    if (sourcePrefixes.isEmpty) {
+      // No restriction on source addon, show all that handle same ID types
+      // Default to IMDB-compatible addons
+      return widget.streamAddons.where((a) => a.handlesImdbIds).toList();
+    }
+
+    // Filter addons that share at least one idPrefix with the source
+    return widget.streamAddons.where((addon) {
+      final addonPrefixes = addon.idPrefixes;
+      if (addonPrefixes == null || addonPrefixes.isEmpty) {
+        // Addon accepts all IDs
+        return true;
+      }
+      // Check for overlapping prefixes
+      return addonPrefixes.any((p) => sourcePrefixes.contains(p));
+    }).toList();
+  }
+
+  /// Get the section title for engines based on context
+  String get _enginesSectionTitle {
+    final source = widget.selectedSource;
+    if (source.type == SearchSourceType.keyword) {
+      return 'Torrent Engines';
+    }
+    if (source.type == SearchSourceType.all) {
+      return 'Torrent Engines';
+    }
+    if (source.addon?.handlesImdbIds ?? false) {
+      return 'IMDB-Compatible Engines';
+    }
+    return 'Torrent Engines';
+  }
+
+  /// Get the section subtitle for addons based on context
+  String get _addonsSectionSubtitle {
+    final source = widget.selectedSource;
+    if (source.type == SearchSourceType.all) {
+      return 'Used for IMDB/catalog searches';
+    }
+    final addon = source.addon;
+    if (addon != null) {
+      final prefixes = addon.idPrefixes;
+      if (prefixes != null && prefixes.isNotEmpty) {
+        if (prefixes.any((p) => p == 'tt' || p.startsWith('tt'))) {
+          return 'IMDB-compatible stream sources';
+        }
+        if (prefixes.any((p) => p.startsWith('kitsu'))) {
+          return 'Kitsu-compatible stream sources';
+        }
+        return 'Compatible stream sources';
+      }
+    }
+    return 'Used for catalog searches';
   }
 
   @override
@@ -12872,59 +12975,72 @@ class _SourcesDialogState extends State<_SourcesDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Keyword Engines Section
-                    _buildSectionHeader(
-                      context,
-                      'Keyword Engines',
-                      '${widget.availableEngines.where((e) => e.supportsKeywordSearch && (_localEngineStates[e.name] ?? false)).length} enabled',
-                    ),
-                    const SizedBox(height: 12),
-                    ...widget.availableEngines
-                        .where((e) => e.supportsKeywordSearch)
-                        .map((engine) {
-                      final isEnabled = _localEngineStates[engine.name] ?? false;
-                      return _buildSourceTile(
+                    // Torrent Engines Section (only show if relevant)
+                    if (_relevantEngines.isNotEmpty) ...[
+                      _buildSectionHeader(
                         context,
-                        name: engine.displayName,
-                        isEnabled: isEnabled,
-                        onToggle: (value) {
-                          setState(() {
-                            _localEngineStates[engine.name] = value;
-                          });
-                          widget.onEngineToggle(engine.name, value);
-                        },
-                        badges: [
-                          _CapabilityBadge(label: 'Keyword', color: const Color(0xFF10B981)),
-                          if (engine.supportsImdbSearch)
-                            _CapabilityBadge(label: 'IMDB', color: const Color(0xFF8B5CF6)),
-                        ],
-                      );
-                    }),
+                        _enginesSectionTitle,
+                        '${_relevantEngines.where((e) => _localEngineStates[e.name] ?? false).length} enabled',
+                      ),
+                      const SizedBox(height: 12),
+                      ..._relevantEngines.map((engine) {
+                        final isEnabled = _localEngineStates[engine.name] ?? false;
+                        return _buildSourceTile(
+                          context,
+                          name: engine.displayName,
+                          isEnabled: isEnabled,
+                          onToggle: (value) {
+                            setState(() {
+                              _localEngineStates[engine.name] = value;
+                            });
+                            widget.onEngineToggle(engine.name, value);
+                          },
+                          badges: [
+                            if (engine.supportsKeywordSearch)
+                              _CapabilityBadge(label: 'Keyword', color: const Color(0xFF10B981)),
+                            if (engine.supportsImdbSearch)
+                              _CapabilityBadge(label: 'IMDB', color: const Color(0xFF8B5CF6)),
+                          ],
+                        );
+                      }),
+                    ],
 
-                    // Stremio Stream Addons Section (IMDB)
-                    if (widget.streamAddons.isNotEmpty) ...[
-                      const SizedBox(height: 24),
+                    // Stream Addons Section (only show if relevant)
+                    if (_relevantAddons.isNotEmpty) ...[
+                      if (_relevantEngines.isNotEmpty) const SizedBox(height: 24),
                       _buildSectionHeader(
                         context,
                         'Stream Addons',
-                        '${_localAddonStates.values.where((e) => e).length} enabled',
+                        '${_relevantAddons.where((a) => _localAddonStates[a.manifestUrl] ?? false).length} enabled',
                       ),
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
-                          'Used for IMDB/catalog searches',
+                          _addonsSectionSubtitle,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.white.withValues(alpha: 0.5),
                           ),
                         ),
                       ),
-                      ...widget.streamAddons.map((addon) {
+                      ..._relevantAddons.map((addon) {
                         final isEnabled = _localAddonStates[addon.manifestUrl] ?? false;
                         // Build badges based on actual addon capabilities
                         final List<Widget> addonBadges = [];
                         if (addon.handlesImdbIds) {
                           addonBadges.add(_CapabilityBadge(label: 'IMDB', color: const Color(0xFF8B5CF6)));
+                        }
+                        // Show non-IMDB ID prefixes as badges
+                        final idPrefixes = addon.idPrefixes;
+                        if (idPrefixes != null) {
+                          for (final prefix in idPrefixes) {
+                            if (prefix != 'tt' && !prefix.startsWith('tt')) {
+                              final label = prefix.replaceAll(':', '').toUpperCase();
+                              if (label.isNotEmpty) {
+                                addonBadges.add(_CapabilityBadge(label: label, color: const Color(0xFFF59E0B)));
+                              }
+                            }
+                          }
                         }
                         // Show each content type as separate badge
                         for (final type in addon.types) {
@@ -12947,8 +13063,40 @@ class _SourcesDialogState extends State<_SourcesDialog> {
                       }),
                     ],
 
-                    // No addons hint
-                    if (widget.streamAddons.isEmpty) ...[
+                    // No sources hint (when both sections empty)
+                    if (_relevantEngines.isEmpty && _relevantAddons.isEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: const Color(0xFFF59E0B),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'No compatible sources for "${widget.selectedSource.label}" search mode. Try selecting a different source.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Hint to add more addons (when in addon mode but no addons available)
+                    if (_relevantEngines.isNotEmpty && _relevantAddons.isEmpty && widget.selectedSource.type != SearchSourceType.keyword) ...[
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -12969,7 +13117,7 @@ class _SourcesDialogState extends State<_SourcesDialog> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                'Add Stremio addons in Settings to get more sources for IMDB searches.',
+                                'Add Stremio addons in Settings to get more stream sources.',
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: Colors.white.withValues(alpha: 0.7),
                                 ),
