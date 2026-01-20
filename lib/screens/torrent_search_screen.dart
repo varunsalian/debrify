@@ -78,6 +78,11 @@ class _TorrentSearchPreservedState {
   Map<String, int>? engineCounts;
   Map<String, String>? engineErrors;
   String? selectedEngineFilter;
+  // Multi-select provider filter state
+  Map<String, int>? directProviderCounts;
+  Map<String, int>? torrentProviderCounts;
+  Set<String>? selectedDirectProviders;
+  Set<String>? selectedTorrentProviders;
   String? sortBy;
   bool? sortAscending;
   TorrentFilterState? filters;
@@ -106,6 +111,10 @@ class _TorrentSearchPreservedState {
     engineCounts = null;
     engineErrors = null;
     selectedEngineFilter = null;
+    directProviderCounts = null;
+    torrentProviderCounts = null;
+    selectedDirectProviders = null;
+    selectedTorrentProviders = null;
     sortBy = null;
     sortAscending = null;
     filters = null;
@@ -178,7 +187,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Map<String, int> _engineCounts = {};
   Map<String, String> _engineErrors = {};
   Map<String, _TorrentMetadata> _torrentMetadata = {};
-  String? _selectedEngineFilter; // null means show all
+  String? _selectedEngineFilter; // null means show all (legacy, kept for compatibility)
+
+  // Multi-select provider filter state (by stream type)
+  Map<String, int> _directProviderCounts = {};   // provider -> direct stream count
+  Map<String, int> _torrentProviderCounts = {};  // provider -> torrent stream count
+  Set<String> _selectedDirectProviders = {};      // selected for direct
+  Set<String> _selectedTorrentProviders = {};     // selected for torrent
+  final FocusNode _directDropdownFocusNode = FocusNode(debugLabel: 'direct_dropdown');
+  final FocusNode _torrentDropdownFocusNode = FocusNode(debugLabel: 'torrent_dropdown');
+
   bool _isLoading = false;
   String _errorMessage = '';
   bool _hasSearched = false;
@@ -347,6 +365,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _engineCounts = _preservedState.engineCounts ?? {};
     _engineErrors = _preservedState.engineErrors ?? {};
     _selectedEngineFilter = _preservedState.selectedEngineFilter;
+    _directProviderCounts = _preservedState.directProviderCounts ?? {};
+    _torrentProviderCounts = _preservedState.torrentProviderCounts ?? {};
+    _selectedDirectProviders = _preservedState.selectedDirectProviders ?? {};
+    _selectedTorrentProviders = _preservedState.selectedTorrentProviders ?? {};
     _sortBy = _preservedState.sortBy ?? 'relevance';
     _sortAscending = _preservedState.sortAscending ?? false;
     _filters = _preservedState.filters ?? const TorrentFilterState.empty();
@@ -923,6 +945,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _preservedState.engineCounts = Map.from(_engineCounts);
     _preservedState.engineErrors = Map.from(_engineErrors);
     _preservedState.selectedEngineFilter = _selectedEngineFilter;
+    _preservedState.directProviderCounts = Map.from(_directProviderCounts);
+    _preservedState.torrentProviderCounts = Map.from(_torrentProviderCounts);
+    _preservedState.selectedDirectProviders = Set.from(_selectedDirectProviders);
+    _preservedState.selectedTorrentProviders = Set.from(_selectedTorrentProviders);
     _preservedState.sortBy = _sortBy;
     _preservedState.sortAscending = _sortAscending;
     _preservedState.filters = _filters;
@@ -950,6 +976,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
+    _directDropdownFocusNode.dispose();
+    _torrentDropdownFocusNode.dispose();
 
     // Dispose ValueNotifiers
     _searchFocused.dispose();
@@ -1015,6 +1043,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _torboxCacheStatus = null;
       _showingTorboxCachedOnly = false;
       _selectedEngineFilter = null; // Reset engine filter on new search
+      // Reset stream type provider filters on new search
+      _directProviderCounts = {};
+      _torrentProviderCounts = {};
+      _selectedDirectProviders = {};
+      _selectedTorrentProviders = {};
     });
 
     // Hide keyboard
@@ -1335,6 +1368,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final source = torrent.source.isNotEmpty ? torrent.source : 'unknown';
         finalEngineCounts[source] = (finalEngineCounts[source] ?? 0) + 1;
       }
+
+      // Calculate stream type provider counts for multi-select dropdowns
+      _calculateStreamTypeCounts(filteredTorrents);
 
       setState(() {
         _engineCounts = finalEngineCounts;
@@ -3257,21 +3293,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }) {
     final TorrentFilterState activeFilters = filtersOverride ?? _filters;
 
-    // First apply engine filter if active
-    List<Torrent> engineFiltered = source;
+    // First apply multi-select provider filter by stream type
+    List<Torrent> providerFiltered = source;
+    if (_selectedDirectProviders.isNotEmpty || _selectedTorrentProviders.isNotEmpty ||
+        _directProviderCounts.isNotEmpty || _torrentProviderCounts.isNotEmpty) {
+      providerFiltered = source.where((torrent) {
+        final providerName = torrent.source.isNotEmpty ? torrent.source : 'unknown';
+        if (torrent.streamType == StreamType.directUrl ||
+            torrent.streamType == StreamType.externalUrl) {
+          // Direct stream: check if provider is selected, or if no direct providers exist
+          return _directProviderCounts.isEmpty || _selectedDirectProviders.contains(providerName);
+        } else {
+          // Torrent: check if provider is selected, or if no torrent providers exist
+          return _torrentProviderCounts.isEmpty || _selectedTorrentProviders.contains(providerName);
+        }
+      }).toList();
+    }
+
+    // Legacy: Apply single engine filter if active (for compatibility)
     if (_selectedEngineFilter != null) {
-      engineFiltered = source
+      providerFiltered = providerFiltered
           .where((torrent) => torrent.source == _selectedEngineFilter)
           .toList();
     }
 
     // Then apply other filters
     if (activeFilters.isEmpty) {
-      return List<Torrent>.from(engineFiltered);
+      return List<Torrent>.from(providerFiltered);
     }
 
     final meta = metadataMap ?? _torrentMetadata;
-    return engineFiltered
+    return providerFiltered
         .where((torrent) {
           final info = meta[torrent.infohash];
           if (activeFilters.qualities.isNotEmpty) {
@@ -3306,6 +3358,67 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  /// Re-apply filters after provider selection changes
+  void _applyProviderFilter() {
+    final filtered = _applyFiltersToList(_allTorrents, metadataMap: _torrentMetadata);
+    setState(() {
+      _torrents = filtered;
+      _ensureFocusNodes();
+    });
+  }
+
+  /// Toggle a single direct provider's selection
+  void _toggleDirectProvider(String provider) {
+    setState(() {
+      if (_selectedDirectProviders.contains(provider)) {
+        _selectedDirectProviders.remove(provider);
+      } else {
+        _selectedDirectProviders.add(provider);
+      }
+    });
+    _applyProviderFilter();
+  }
+
+  /// Toggle a single torrent provider's selection
+  void _toggleTorrentProvider(String provider) {
+    setState(() {
+      if (_selectedTorrentProviders.contains(provider)) {
+        _selectedTorrentProviders.remove(provider);
+      } else {
+        _selectedTorrentProviders.add(provider);
+      }
+    });
+    _applyProviderFilter();
+  }
+
+  /// Toggle all direct providers (select all or deselect all)
+  void _toggleAllDirectProviders() {
+    setState(() {
+      if (_selectedDirectProviders.length == _directProviderCounts.length) {
+        // All selected, deselect all
+        _selectedDirectProviders.clear();
+      } else {
+        // Not all selected, select all
+        _selectedDirectProviders = _directProviderCounts.keys.toSet();
+      }
+    });
+    _applyProviderFilter();
+  }
+
+  /// Toggle all torrent providers (select all or deselect all)
+  void _toggleAllTorrentProviders() {
+    setState(() {
+      if (_selectedTorrentProviders.length == _torrentProviderCounts.length) {
+        // All selected, deselect all
+        _selectedTorrentProviders.clear();
+      } else {
+        // Not all selected, select all
+        _selectedTorrentProviders = _torrentProviderCounts.keys.toSet();
+      }
+    });
+    _applyProviderFilter();
+  }
+
   /// Builds metadata map, reusing cached entries when available
   Map<String, _TorrentMetadata> _buildTorrentMetadataMap(
     List<Torrent> torrents,
@@ -3327,6 +3440,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
     return map;
+  }
+
+  /// Calculates provider counts by stream type (direct vs torrent)
+  /// and initializes selections to include all providers by default
+  void _calculateStreamTypeCounts(List<Torrent> torrents) {
+    final directCounts = <String, int>{};
+    final torrentCounts = <String, int>{};
+
+    for (final torrent in torrents) {
+      final source = torrent.source.isNotEmpty ? torrent.source : 'unknown';
+
+      // directUrl and externalUrl both count as "direct"
+      if (torrent.streamType == StreamType.directUrl ||
+          torrent.streamType == StreamType.externalUrl) {
+        directCounts[source] = (directCounts[source] ?? 0) + 1;
+      } else {
+        // StreamType.torrent
+        torrentCounts[source] = (torrentCounts[source] ?? 0) + 1;
+      }
+    }
+
+    // Initialize selections to all providers (default all selected)
+    _directProviderCounts = directCounts;
+    _torrentProviderCounts = torrentCounts;
+    _selectedDirectProviders = directCounts.keys.toSet();
+    _selectedTorrentProviders = torrentCounts.keys.toSet();
   }
 
   QualityTier? _detectQualityTier(String? parsedQuality, String rawName) {
@@ -9426,6 +9565,58 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Builds the stream type filter dropdowns (Direct and Torrent)
+  Widget _buildStreamTypeFilters(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    // Check if we have any providers
+    final hasDirectProviders = _directProviderCounts.isNotEmpty;
+    final hasTorrentProviders = _torrentProviderCounts.isNotEmpty;
+
+    if (!hasDirectProviders && !hasTorrentProviders) {
+      return Text(
+        'No results',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        // Direct streams dropdown (only show if there are direct providers)
+        if (hasDirectProviders) ...[
+          _StreamTypeDropdown(
+            label: 'Direct',
+            icon: Icons.play_circle_outline,
+            providerCounts: _directProviderCounts,
+            selectedProviders: _selectedDirectProviders,
+            focusNode: _directDropdownFocusNode,
+            isTelevision: _isTelevision,
+            friendlyNameResolver: _friendlyEngineName,
+            onToggleProvider: _toggleDirectProvider,
+            onToggleAll: _toggleAllDirectProviders,
+          ),
+          if (hasTorrentProviders) const SizedBox(width: 8),
+        ],
+        // Torrent streams dropdown (only show if there are torrent providers)
+        if (hasTorrentProviders)
+          _StreamTypeDropdown(
+            label: 'Torrent',
+            icon: Icons.cloud_download_outlined,
+            providerCounts: _torrentProviderCounts,
+            selectedProviders: _selectedTorrentProviders,
+            focusNode: _torrentDropdownFocusNode,
+            isTelevision: _isTelevision,
+            friendlyNameResolver: _friendlyEngineName,
+            onToggleProvider: _toggleTorrentProvider,
+            onToggleAll: _toggleAllTorrentProviders,
+          ),
+      ],
+    );
+  }
+
   /// Derives a short name (2-4 chars) from an engine ID.
   ///
   /// Logic:
@@ -10388,9 +10579,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       ),
                                     ],
                                   ),
-                                  // Second row: Engine chips (if any)
+                                  // Second row: Stream type provider filters
                                   const SizedBox(height: 6),
-                                  _buildEngineStatusChips(context),
+                                  _buildStreamTypeFilters(context),
                                   // Active filters row
                                   if (_hasActiveFilters)
                                     Padding(
@@ -13229,6 +13420,439 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A TV-optimized dropdown for filtering by stream type providers
+///
+/// Supports:
+/// - Touch interactions (mobile)
+/// - Mouse click (desktop)
+/// - D-pad navigation (Android TV)
+class _StreamTypeDropdown extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Map<String, int> providerCounts;
+  final Set<String> selectedProviders;
+  final FocusNode focusNode;
+  final bool isTelevision;
+  final String Function(String) friendlyNameResolver;
+  final ValueChanged<String> onToggleProvider;
+  final VoidCallback onToggleAll;
+
+  const _StreamTypeDropdown({
+    required this.label,
+    required this.icon,
+    required this.providerCounts,
+    required this.selectedProviders,
+    required this.focusNode,
+    required this.isTelevision,
+    required this.friendlyNameResolver,
+    required this.onToggleProvider,
+    required this.onToggleAll,
+  });
+
+  @override
+  State<_StreamTypeDropdown> createState() => _StreamTypeDropdownState();
+}
+
+class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
+  bool _isFocused = false;
+  bool _isExpanded = false;
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_StreamTypeDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Rebuild overlay when selection changes so checkboxes update
+    if (_isExpanded && _overlayEntry != null) {
+      _overlayEntry!.markNeedsBuild();
+    }
+  }
+
+  void _onFocusChange() {
+    setState(() {
+      _isFocused = widget.focusNode.hasFocus;
+    });
+  }
+
+  void _toggleDropdown() {
+    if (_isExpanded) {
+      _removeOverlay();
+      setState(() => _isExpanded = false);
+    } else {
+      _showOverlay();
+      setState(() => _isExpanded = true);
+    }
+  }
+
+  void _showOverlay() {
+    _overlayEntry = _createOverlayEntry();
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  OverlayEntry _createOverlayEntry() {
+    final renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    const double minDropdownWidth = 200;
+    final dropdownWidth = size.width < minDropdownWidth ? minDropdownWidth : size.width;
+    final horizontalOffset = size.width - dropdownWidth;
+
+    return OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // Fullscreen barrier to detect taps outside
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                _removeOverlay();
+                setState(() => _isExpanded = false);
+                widget.focusNode.requestFocus();
+              },
+              child: const ColoredBox(color: Colors.transparent),
+            ),
+          ),
+          // The actual dropdown menu
+          Positioned(
+            width: dropdownWidth,
+            child: CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(horizontalOffset, size.height + 4),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(12),
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                child: _StreamTypeDropdownMenu(
+                  providerCounts: widget.providerCounts,
+                  selectedProviders: widget.selectedProviders,
+                  isTelevision: widget.isTelevision,
+                  friendlyNameResolver: widget.friendlyNameResolver,
+                  onToggleProvider: widget.onToggleProvider,
+                  onToggleAll: widget.onToggleAll,
+                  onClose: () {
+                    _removeOverlay();
+                    setState(() => _isExpanded = false);
+                    widget.focusNode.requestFocus();
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter) {
+        _toggleDropdown();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.escape && _isExpanded) {
+        _removeOverlay();
+        setState(() => _isExpanded = false);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final selectedCount = widget.selectedProviders.length;
+    final totalCount = widget.providerCounts.length;
+    final totalStreamCount = widget.providerCounts.values.fold(0, (sum, count) => sum + count);
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: Focus(
+        focusNode: widget.focusNode,
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          onTap: _toggleDropdown,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _isFocused
+                    ? colorScheme.primary
+                    : colorScheme.outline.withValues(alpha: 0.3),
+                width: _isFocused ? 2 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: colorScheme.primary.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  widget.icon,
+                  size: 16,
+                  color: colorScheme.onSurface,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${widget.label} - $totalStreamCount ($selectedCount/$totalCount)',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _isExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The dropdown menu for stream type provider selection
+class _StreamTypeDropdownMenu extends StatefulWidget {
+  final Map<String, int> providerCounts;
+  final Set<String> selectedProviders;
+  final bool isTelevision;
+  final String Function(String) friendlyNameResolver;
+  final ValueChanged<String> onToggleProvider;
+  final VoidCallback onToggleAll;
+  final VoidCallback onClose;
+
+  const _StreamTypeDropdownMenu({
+    required this.providerCounts,
+    required this.selectedProviders,
+    required this.isTelevision,
+    required this.friendlyNameResolver,
+    required this.onToggleProvider,
+    required this.onToggleAll,
+    required this.onClose,
+  });
+
+  @override
+  State<_StreamTypeDropdownMenu> createState() => _StreamTypeDropdownMenuState();
+}
+
+class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
+  late List<FocusNode> _itemFocusNodes;
+  int _focusedIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    // +1 for "Select All" item
+    _itemFocusNodes = List.generate(
+      widget.providerCounts.length + 1,
+      (i) => FocusNode(debugLabel: 'stream-provider-$i'),
+    );
+    // Auto-focus first item on TV
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_itemFocusNodes.isNotEmpty) {
+          _itemFocusNodes[0].requestFocus();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final node in _itemFocusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  KeyEventResult _handleItemKeyEvent(FocusNode node, KeyEvent event, int index) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        if (index == 0) {
+          widget.onToggleAll();
+        } else {
+          final providers = widget.providerCounts.keys.toList()..sort();
+          widget.onToggleProvider(providers[index - 1]);
+        }
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        widget.onClose();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp && index > 0) {
+        _itemFocusNodes[index - 1].requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+          index < _itemFocusNodes.length - 1) {
+        _itemFocusNodes[index + 1].requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final providers = widget.providerCounts.keys.toList()..sort();
+    final allSelected = widget.selectedProviders.length == widget.providerCounts.length;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 300),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: providers.length + 1, // +1 for "Select All"
+          itemBuilder: (context, index) {
+            final isFocused = _focusedIndex == index;
+
+            if (index == 0) {
+              // "Select All" item
+              return Focus(
+                focusNode: _itemFocusNodes[0],
+                onFocusChange: (focused) {
+                  setState(() => _focusedIndex = focused ? 0 : -1);
+                },
+                onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, 0),
+                child: InkWell(
+                  onTap: widget.onToggleAll,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isFocused
+                          ? colorScheme.primary.withValues(alpha: 0.2)
+                          : null,
+                      border: isFocused
+                          ? Border.all(color: colorScheme.primary, width: 2)
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          allSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                          size: 20,
+                          color: allSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Select All',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // Provider item
+            final provider = providers[index - 1];
+            final count = widget.providerCounts[provider] ?? 0;
+            final isSelected = widget.selectedProviders.contains(provider);
+            final friendlyName = widget.friendlyNameResolver(provider);
+
+            return Focus(
+              focusNode: _itemFocusNodes[index],
+              onFocusChange: (focused) {
+                setState(() => _focusedIndex = focused ? index : -1);
+              },
+              onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
+              child: InkWell(
+                onTap: () => widget.onToggleProvider(provider),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isFocused
+                        ? colorScheme.primary.withValues(alpha: 0.2)
+                        : null,
+                    border: isFocused
+                        ? Border.all(color: colorScheme.primary, width: 2)
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                        size: 20,
+                        color: isSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          friendlyName,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '($count)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
