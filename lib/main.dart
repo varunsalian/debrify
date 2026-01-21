@@ -1146,14 +1146,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
     final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
     if (!rd && !tb && !pikpak) {
-      return [0, 7];
+      return [0, 7]; // Home, Settings
     }
 
     final indices = <int>[0, 1, 2, 3];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
-    indices.add(7);
+    indices.add(7); // Settings
     return indices;
   }
 

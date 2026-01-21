@@ -48,6 +48,7 @@ import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
+import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/home_focus_controller.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
@@ -167,6 +168,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // CatalogBrowser GlobalKey (for DPAD navigation from Sources)
   final GlobalKey<CatalogBrowserState> _catalogBrowserKey = GlobalKey<CatalogBrowserState>();
+
+  // RedditResultsView GlobalKey (for DPAD navigation)
+  final GlobalKey<RedditResultsViewState> _redditResultsKey = GlobalKey<RedditResultsViewState>();
 
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
@@ -863,6 +867,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         case SearchSourceType.addon:
           // Addon mode - shows catalog browser for that addon
           _searchMode = SearchMode.browse;
+          break;
+        case SearchSourceType.reddit:
+          // Reddit mode - handles its own search, keep keyword mode for fallback
+          _searchMode = SearchMode.keyword;
           break;
       }
 
@@ -9868,6 +9876,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             controller: _searchController,
                             focusNode: _searchFocusNode,
                             searchMode: _searchMode,
+                            selectedSource: _selectedSource,
                             isTelevision: _isTelevision,
                             selectedImdbTitle: _selectedImdbTitle,
                             hasAutocompleteResults: _imdbAutocompleteResults.isNotEmpty,
@@ -9938,6 +9947,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 return;
                               }
 
+                              // Reddit mode: Just update state to trigger RedditResultsView
+                              // The view handles its own search via searchQuery prop
+                              if (_selectedSource.type == SearchSourceType.reddit) {
+                                setState(() {
+                                  // Just trigger rebuild - RedditResultsView uses didUpdateWidget
+                                });
+                                return;
+                              }
+
                               // Keyword mode: Direct torrent search
                               if (_selectedSource.type == SearchSourceType.keyword) {
                                 _searchTorrents(query);
@@ -9959,6 +9977,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 (_selectedSource.addon?.hasSearchableCatalogs ?? false),
                             disabledTooltip: "This addon doesn't support search",
                             // Direct focus navigation for "All" mode - focus aggregated results keyword card
+                            // Or for "Reddit" mode - focus first filter
                             onDownArrowPressed: (_selectedSource.type == SearchSourceType.all &&
                                     _searchController.text.isNotEmpty &&
                                     !_hasSearched &&
@@ -9967,7 +9986,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 ? () {
                                     _aggregatedKeywordFocusNode?.requestFocus();
                                   }
-                                : null,
+                                : (_selectedSource.type == SearchSourceType.reddit)
+                                    ? () {
+                                        _redditResultsKey.currentState?.focusFirstFilter();
+                                      }
+                                    : null,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -10125,7 +10148,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
 
-                    // Results and other views
+                    // Reddit mode - Reddit video results
+                    if (_selectedSource.type == SearchSourceType.reddit)
+                      RedditResultsView(
+                        key: _redditResultsKey,
+                        searchQuery: _searchController.text,
+                        isTelevision: _isTelevision,
+                      ),
+
+                    // Results and other views (not shown in Reddit mode - it handles its own content)
+                    if (_selectedSource.type != SearchSourceType.reddit)
                     Builder(
                       builder: (context) {
 
@@ -12405,6 +12437,7 @@ class _SearchTextField extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final SearchMode searchMode;
+  final SearchSourceOption selectedSource;
   final bool isTelevision;
   final ImdbTitleResult? selectedImdbTitle;
   final bool hasAutocompleteResults;
@@ -12425,6 +12458,7 @@ class _SearchTextField extends StatefulWidget {
     required this.controller,
     required this.focusNode,
     required this.searchMode,
+    required this.selectedSource,
     required this.isTelevision,
     required this.selectedImdbTitle,
     required this.hasAutocompleteResults,
@@ -12572,9 +12606,11 @@ class _SearchTextFieldState extends State<_SearchTextField> {
                 decoration: InputDecoration(
                   hintText: !widget.enabled
                       ? (widget.disabledTooltip ?? 'Search not available')
-                      : widget.searchMode == SearchMode.catalog
-                          ? 'Search catalog...'
-                          : 'Search all engines...',
+                      : widget.selectedSource.type == SearchSourceType.reddit
+                          ? 'Search Reddit Videos...'
+                          : widget.searchMode == SearchMode.catalog
+                              ? 'Search catalog...'
+                              : 'Search all engines...',
                   hintStyle: TextStyle(
                     color: Colors.white.withValues(alpha: widget.enabled ? 0.5 : 0.3),
                   ),

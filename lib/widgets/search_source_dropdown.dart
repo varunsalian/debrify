@@ -8,6 +8,7 @@ enum SearchSourceType {
   all,      // Search across all sources
   keyword,  // Keyword/torrent search
   addon,    // Specific addon catalog
+  reddit,   // Reddit video search
 }
 
 /// Represents a selectable search source option
@@ -36,6 +37,13 @@ class SearchSourceOption {
     type: SearchSourceType.keyword,
     label: 'Keyword',
     icon: Icons.search,
+  );
+
+  /// Create "Reddit" option
+  factory SearchSourceOption.reddit() => const SearchSourceOption(
+    type: SearchSourceType.reddit,
+    label: 'Reddit',
+    icon: Icons.play_circle_outline,
   );
 
   /// Create addon-specific option
@@ -480,6 +488,9 @@ class SearchSourceOptionsLoader {
     } catch (e) {
       debugPrint('SearchSourceOptionsLoader: Error loading addons: $e');
     }
+
+    // Reddit always goes last
+    options.add(SearchSourceOption.reddit());
 
     return options;
   }

@@ -16,6 +16,7 @@ import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
+import 'settings/reddit_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -197,6 +198,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.cloud_circle_rounded,
           onTap: _openPikPakSettings,
         ),
+        reddit: _ConnectionInfo(
+          title: 'Reddit',
+          connected: true,
+          status: 'Active',
+          caption: 'Browse video subreddits',
+          icon: Icons.reddit,
+          onTap: _openRedditSettings,
+        ),
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
@@ -240,6 +249,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (loggedOut == true) {
       _focusFirstCard();
     }
+  }
+
+  Future<void> _openRedditSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RedditSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _openStartupSettings() async {
@@ -685,12 +702,14 @@ class _ConnectionsSummary extends StatelessWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
+  final _ConnectionInfo reddit;
   final FocusNode? firstCardFocusNode;
 
   const _ConnectionsSummary({
     required this.realDebrid,
     required this.torbox,
     required this.pikpak,
+    required this.reddit,
     this.firstCardFocusNode,
   });
 
@@ -732,6 +751,10 @@ class _ConnectionsSummary extends StatelessWidget {
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(info: pikpak),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(info: reddit),
                 ),
               ],
             );
