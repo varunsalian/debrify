@@ -9977,7 +9977,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 (_selectedSource.addon?.hasSearchableCatalogs ?? false),
                             disabledTooltip: "This addon doesn't support search",
                             // Direct focus navigation for "All" mode - focus aggregated results keyword card
-                            // Or for "Reddit" mode - focus first filter
+                            // Navigate down to aggregated keyword button or source dropdown
                             onDownArrowPressed: (_selectedSource.type == SearchSourceType.all &&
                                     _searchController.text.isNotEmpty &&
                                     !_hasSearched &&
@@ -9988,7 +9988,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   }
                                 : (_selectedSource.type == SearchSourceType.reddit)
                                     ? () {
-                                        _redditResultsKey.currentState?.focusFirstFilter();
+                                        _sourceDropdownFocusNode.requestFocus();
                                       }
                                     : null,
                           ),
@@ -12486,13 +12486,25 @@ class _SearchTextFieldState extends State<_SearchTextField> {
   void initState() {
     super.initState();
     widget.focusNode.addListener(_onFocusChanged);
-    // Removed controller listener - not needed, clear button uses ValueListenableBuilder
+    // Set up key handler directly on the focusNode so it intercepts before TextField
+    widget.focusNode.onKeyEvent = _handleKeyEvent;
+  }
+
+  @override
+  void didUpdateWidget(covariant _SearchTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocusChanged);
+      oldWidget.focusNode.onKeyEvent = null;
+      widget.focusNode.addListener(_onFocusChanged);
+      widget.focusNode.onKeyEvent = _handleKeyEvent;
+    }
   }
 
   @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChanged);
-    // Removed controller listener cleanup
+    widget.focusNode.onKeyEvent = null;
     super.dispose();
   }
 
@@ -12504,6 +12516,80 @@ class _SearchTextFieldState extends State<_SearchTextField> {
       });
       widget.onFocusChange(focused);
     }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+
+    // Check cursor position
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart = !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd = !isSelectionValid ||
+        (selection.baseOffset == textLength && selection.extentOffset == textLength);
+
+    // On TV, handle Escape/Back to clear search when there's text
+    if (widget.isTelevision &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.goBack)) {
+      if (text.isNotEmpty) {
+        widget.onClearPressed();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Handle arrow down - navigate to next element when at end of text
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (isTextEmpty || isAtEnd) {
+        // Check autocomplete first
+        if (widget.hasAutocompleteResults && widget.hasAutocompleteFocusNodes) {
+          widget.autocompleteFocusNodes[0].requestFocus();
+          return KeyEventResult.handled;
+        }
+        // Check series mode
+        if (widget.isSeries && widget.selectedImdbTitle != null) {
+          widget.seasonInputFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // Use direct callback if provided (for Reddit/All mode)
+        if (widget.onDownArrowPressed != null) {
+          widget.onDownArrowPressed!();
+          return KeyEventResult.handled;
+        }
+        // Default: move to next focus
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).nextFocus();
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Handle arrow up - move to previous focus when at start
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).previousFocus();
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
+    // On TV, handle arrow right at end of text to trigger clear
+    if (widget.isTelevision && event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (text.isNotEmpty && isAtEnd) {
+        widget.onClearPressed();
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -12529,133 +12615,68 @@ class _SearchTextFieldState extends State<_SearchTextField> {
           ),
         ],
       ),
-      child: Shortcuts(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-        },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            NextFocusIntent: CallbackAction<NextFocusIntent>(
-              onInvoke: (intent) {
-                if (widget.hasAutocompleteResults && widget.hasAutocompleteFocusNodes) {
-                  widget.autocompleteFocusNodes[0].requestFocus();
-                  return null;
-                }
-                if (widget.isSeries && widget.selectedImdbTitle != null) {
-                  widget.seasonInputFocusNode.requestFocus();
-                  return null;
-                }
-                // Use direct focus callback if provided (for "All" mode navigation)
-                if (widget.onDownArrowPressed != null) {
-                  widget.onDownArrowPressed!();
-                  return null;
-                }
-                FocusScope.of(context).nextFocus();
-                return null;
+      // Key events are handled by focusNode.onKeyEvent set in initState
+      child: Tooltip(
+        message: widget.enabled ? '' : (widget.disabledTooltip ?? 'Search not available'),
+        waitDuration: const Duration(milliseconds: 500),
+        child: TextField(
+          controller: widget.controller,
+          focusNode: widget.focusNode,
+          onSubmitted: widget.enabled ? widget.onSubmitted : null,
+          enabled: widget.enabled,
+          style: TextStyle(
+            color: widget.enabled ? Colors.white : Colors.white.withValues(alpha: 0.4),
+          ),
+          decoration: InputDecoration(
+            hintText: !widget.enabled
+                ? (widget.disabledTooltip ?? 'Search not available')
+                : widget.selectedSource.type == SearchSourceType.reddit
+                    ? 'Search Reddit Videos...'
+                    : widget.searchMode == SearchMode.catalog
+                        ? 'Search catalog...'
+                        : 'Search all engines...',
+            hintStyle: TextStyle(
+              color: Colors.white.withValues(alpha: widget.enabled ? 0.5 : 0.3),
+            ),
+            prefixIcon: Icon(
+              widget.searchMode == SearchMode.catalog
+                  ? Icons.auto_awesome_outlined
+                  : Icons.search_rounded,
+              color: widget.enabled
+                  ? (widget.searchMode == SearchMode.catalog
+                      ? const Color(0xFF7C3AED)
+                      : const Color(0xFF6366F1))
+                  : Colors.white.withValues(alpha: 0.3),
+            ),
+            // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: widget.controller,
+              builder: (context, value, child) {
+                return value.text.isNotEmpty && widget.enabled
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.clear_rounded,
+                          color: Color(0xFFEF4444),
+                        ),
+                        onPressed: widget.onClearPressed,
+                      )
+                    : const SizedBox.shrink();
               },
             ),
-            PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-              onInvoke: (intent) {
-                FocusScope.of(context).previousFocus();
-                return null;
-              },
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
             ),
-          },
-          child: Focus(
-            focusNode: widget.focusNode,
-            onFocusChange: (_) {}, // Handled by listener
-            onKeyEvent: (node, event) {
-              // On TV, handle Escape/Back to clear search when there's text
-              if (widget.isTelevision &&
-                  event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.escape ||
-                      event.logicalKey == LogicalKeyboardKey.goBack)) {
-                if (widget.controller.text.isNotEmpty) {
-                  widget.onClearPressed();
-                  return KeyEventResult.handled;
-                }
-              }
-              // On TV, handle arrow right at end of text to trigger clear
-              if (widget.isTelevision &&
-                  event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                final text = widget.controller.text;
-                final selection = widget.controller.selection;
-                // Check if cursor is at end of text
-                if (text.isNotEmpty &&
-                    selection.isValid &&
-                    selection.isCollapsed &&
-                    selection.baseOffset >= text.length) {
-                  widget.onClearPressed();
-                  return KeyEventResult.handled;
-                }
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Tooltip(
-              message: widget.enabled ? '' : (widget.disabledTooltip ?? 'Search not available'),
-              waitDuration: const Duration(milliseconds: 500),
-              child: TextField(
-                controller: widget.controller,
-                onSubmitted: widget.enabled ? widget.onSubmitted : null,
-                enabled: widget.enabled,
-                style: TextStyle(
-                  color: widget.enabled ? Colors.white : Colors.white.withValues(alpha: 0.4),
-                ),
-                decoration: InputDecoration(
-                  hintText: !widget.enabled
-                      ? (widget.disabledTooltip ?? 'Search not available')
-                      : widget.selectedSource.type == SearchSourceType.reddit
-                          ? 'Search Reddit Videos...'
-                          : widget.searchMode == SearchMode.catalog
-                              ? 'Search catalog...'
-                              : 'Search all engines...',
-                  hintStyle: TextStyle(
-                    color: Colors.white.withValues(alpha: widget.enabled ? 0.5 : 0.3),
-                  ),
-                  prefixIcon: Icon(
-                    widget.searchMode == SearchMode.catalog
-                        ? Icons.auto_awesome_outlined
-                        : Icons.search_rounded,
-                    color: widget.enabled
-                        ? (widget.searchMode == SearchMode.catalog
-                            ? const Color(0xFF7C3AED)
-                            : const Color(0xFF6366F1))
-                        : Colors.white.withValues(alpha: 0.3),
-                  ),
-                  // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
-                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: widget.controller,
-                    builder: (context, value, child) {
-                      return value.text.isNotEmpty && widget.enabled
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.clear_rounded,
-                                color: Color(0xFFEF4444),
-                              ),
-                              onPressed: widget.onClearPressed,
-                            )
-                          : const SizedBox.shrink();
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: widget.enabled
-                      ? Theme.of(context).colorScheme.surfaceContainerHigh
-                      : Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-                onChanged: widget.enabled ? widget.onChanged : null,
-              ),
+            filled: true,
+            fillColor: widget.enabled
+                ? Theme.of(context).colorScheme.surfaceContainerHigh
+                : Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
             ),
           ),
+          onChanged: widget.enabled ? widget.onChanged : null,
         ),
       ),
     );
