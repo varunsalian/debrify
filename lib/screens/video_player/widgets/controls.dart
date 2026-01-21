@@ -394,11 +394,19 @@ class Controls extends StatelessWidget {
                                 isCompact: true,
                               ),
 
-                            // Orientation button
+                            // Random button
                             NetflixControlButton(
                               icon: Icons.shuffle_rounded,
                               label: 'Random',
                               onPressed: onRandom,
+                              isCompact: true,
+                            ),
+
+                            // Orientation toggle button
+                            NetflixControlButton(
+                              icon: Icons.screen_rotation_rounded,
+                              label: isLandscape ? 'Portrait' : 'Landscape',
+                              onPressed: onRotate,
                               isCompact: true,
                             ),
                           ],
