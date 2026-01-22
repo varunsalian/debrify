@@ -4,6 +4,7 @@ import '../../services/reddit_service.dart';
 import '../../services/reddit_embed_resolver_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
+import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'reddit_filters.dart';
 import 'reddit_video_card.dart';
@@ -324,6 +325,72 @@ class RedditResultsViewState extends State<RedditResultsView> {
     );
   }
 
+  Future<void> _downloadVideo(RedditVideoPost post) async {
+    // Prefer fallbackUrl (direct MP4) for downloads
+    String? downloadUrl = post.fallbackUrl ?? post.dashPlaylistUrl;
+
+    // Handle Redgifs posts - fetch actual video URL
+    if (downloadUrl == null && post.isRedgifs) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Fetching video URL...'),
+              ],
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      downloadUrl = await RedditEmbedResolverService.resolveVideoUrl(post.redgifsUrl!);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+
+    if (downloadUrl == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No downloadable video found')),
+        );
+      }
+      return;
+    }
+
+    // Generate filename from post title
+    final sanitizedTitle = post.title
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .trim();
+    final fileName = '${post.subreddit}_$sanitizedTitle.mp4';
+
+    try {
+      await DownloadService.instance.enqueueDownload(
+        url: downloadUrl,
+        fileName: fileName,
+        context: context,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to downloads')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e')),
+      );
+    }
+  }
+
   /// Focus the first filter (for DPAD navigation from search input)
   void focusFirstFilter() {
     _subredditFilterFocusNode.requestFocus();
@@ -346,6 +413,18 @@ class RedditResultsViewState extends State<RedditResultsView> {
             subredditFocusNode: _subredditFilterFocusNode,
             sortFocusNode: _sortFilterFocusNode,
             timeFocusNode: _timeFilterFocusNode,
+          ),
+
+        // Download hint
+        if (_posts.isNotEmpty && !widget.isTelevision)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              'Long press to download',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
 
         // Content
@@ -439,6 +518,7 @@ class RedditResultsViewState extends State<RedditResultsView> {
           return RedditVideoCard(
             post: _posts[index],
             onTap: () => _playVideo(_posts[index]),
+            onDownload: () => _downloadVideo(_posts[index]),
             focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
           );
         },

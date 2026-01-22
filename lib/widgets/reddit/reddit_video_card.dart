@@ -6,12 +6,14 @@ import '../../services/reddit_service.dart';
 class RedditVideoCard extends StatefulWidget {
   final RedditVideoPost post;
   final VoidCallback onTap;
+  final VoidCallback? onDownload;
   final FocusNode? focusNode;
 
   const RedditVideoCard({
     super.key,
     required this.post,
     required this.onTap,
+    this.onDownload,
     this.focusNode,
   });
 
@@ -87,6 +89,7 @@ class _RedditVideoCardState extends State<RedditVideoCard> {
       },
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onDownload,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
