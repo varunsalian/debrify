@@ -2225,7 +2225,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _searchController.text = selection.title;
       }
       _activeAdvancedSelection = selection;
-      debugPrint('TorrentSearchScreen: Catalog selection set - posterUrl: ${selection.posterUrl}');
       _imdbAutocompleteResults.clear();
       _imdbSearchError = null;
       _seriesControlsExpanded = selection.isSeries;
@@ -7807,7 +7806,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
             } catch (_) {}
 
-            debugPrint('TorrentSearchScreen: Adding to playlist - posterUrl: ${_activeAdvancedSelection?.posterUrl}');
             final added =
                 await StorageService.addPlaylistItemRaw({
                   'title': FileUtils.cleanPlaylistTitle(finalTitle),
@@ -7866,7 +7864,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
         break;
       case 'choose':
-        debugPrint('TorrentSearchScreen: CHOOSE dialog - selection at dialog show: imdbId=${_activeAdvancedSelection?.imdbId}, posterUrl=${_activeAdvancedSelection?.posterUrl}');
         await showDialog(
           context: context,
           builder: (ctx) {
@@ -8071,7 +8068,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       }
                                     } catch (_) {}
 
-                                    debugPrint('TorrentSearchScreen: DIALOG Adding to playlist - selection: $_activeAdvancedSelection, posterUrl: ${_activeAdvancedSelection?.posterUrl}, imdbId: ${_activeAdvancedSelection?.imdbId}');
                                     final added =
                                         await StorageService.addPlaylistItemRaw({
                                           'title': FileUtils.cleanPlaylistTitle(finalTitle),
