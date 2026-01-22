@@ -50,6 +50,9 @@ class RedditResultsViewState extends State<RedditResultsView> {
 
   String _lastSearchQuery = '';
 
+  // Auto-load counter to prevent rate limiting (max 3 auto-loads per search)
+  int _autoLoadCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +109,22 @@ class RedditResultsViewState extends State<RedditResultsView> {
     }
   }
 
+  /// Check if we need to auto-load more content (when list isn't scrollable)
+  void _checkAutoLoad() {
+    if (!mounted || !_hasMore || _autoLoadCount >= 3 || _isLoadingMore) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+
+      // If list isn't scrollable (content doesn't fill screen), load more
+      if (_scrollController.position.maxScrollExtent <= 0 && _hasMore && _autoLoadCount < 3) {
+        _autoLoadCount++;
+        debugPrint('RedditResultsView: Auto-loading more (attempt $_autoLoadCount/3)');
+        _loadMore();
+      }
+    });
+  }
+
   bool get _isSearching => widget.searchQuery.isNotEmpty;
 
   bool get _canLoad => _isSearching || _selectedSubreddit != null;
@@ -127,6 +146,7 @@ class RedditResultsViewState extends State<RedditResultsView> {
       _posts.clear();
       _afterCursor = null;
       _hasMore = true;
+      _autoLoadCount = 0;
     });
 
     // Dispose old focus nodes
@@ -183,6 +203,9 @@ class RedditResultsViewState extends State<RedditResultsView> {
         _afterCursor = result.after;
         _hasMore = result.hasMore;
       });
+
+      // Check if we need to auto-load more
+      _checkAutoLoad();
     } catch (e) {
       if (!mounted) return;
       debugPrint('RedditResultsView: Error - $e');
@@ -245,6 +268,9 @@ class RedditResultsViewState extends State<RedditResultsView> {
         _afterCursor = result.after;
         _hasMore = result.hasMore;
       });
+
+      // Check if we need to auto-load more
+      _checkAutoLoad();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingMore = false);
