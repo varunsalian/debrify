@@ -40,9 +40,18 @@ import androidx.media3.ui.SubtitleView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.media.audiofx.LoudnessEnhancer
+import android.net.Uri
+import androidx.media3.common.MimeTypes
 import com.debrify.app.MainActivity
 import com.debrify.app.R
+import com.debrify.app.subtitle.StremioSubtitle
+import com.debrify.app.subtitle.StremioSubtitleService
 import com.debrify.app.util.SubtitleSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -153,6 +162,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitlePreviewText: TextView? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
+
+    // Stremio external subtitles
+    private var stremioSubtitleService: StremioSubtitleService? = null
+    private val stremioSubtitles = mutableListOf<StremioSubtitle>()
+    private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
+    private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Focus navigation state - prevents focus recovery from interfering with active navigation
     private var isNavigating = false
@@ -307,6 +322,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
         setupBackPressHandler()
         setupMetadataReceiver()
+
+        // Initialize Stremio subtitle service
+        stremioSubtitleService = StremioSubtitleService(this)
 
         // Start playback
         playItem(currentIndex)
@@ -1340,6 +1358,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateTitle(item)
         playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
+
+        // Fetch Stremio subtitles for this item
+        fetchStremioSubtitles(item)
+    }
+
+    /**
+     * Fetch external subtitles from Stremio addons for the current item.
+     */
+    private fun fetchStremioSubtitles(item: PlaybackItem) {
+        val imdbId = payload?.imdbId
+        if (imdbId.isNullOrEmpty()) {
+            stremioSubtitles.clear()
+            currentStremioSubtitleIndex = -1
+            return
+        }
+
+        val type = if (payload?.contentType == "series") "series" else "movie"
+
+        subtitleScope.launch {
+            try {
+                val subtitles = stremioSubtitleService?.fetchSubtitles(
+                    type = type,
+                    imdbId = imdbId,
+                    season = item.season,
+                    episode = item.episode
+                ) ?: emptyList()
+
+                stremioSubtitles.clear()
+                stremioSubtitles.addAll(subtitles)
+                currentStremioSubtitleIndex = -1
+            } catch (e: Exception) {
+                android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e)
+                stremioSubtitles.clear()
+                currentStremioSubtitleIndex = -1
+            }
+        }
     }
 
     private fun playNext() {
@@ -1491,6 +1545,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateTitle(item)
         playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
+
+        // Fetch Stremio subtitles for this item (same as playMediaDirect)
+        fetchStremioSubtitles(item)
 
         // Start retry loop with attempt 0
         attemptPikPakPlaybackLoop(item, 0, myRetryId)
@@ -2803,11 +2860,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
+        // Add Stremio external subtitles to the track list
+        // These are marked with "⬇" prefix to indicate they're external/downloadable
+        val embeddedTrackCount = subtitleTracks.size
+
+        for ((index, sub) in stremioSubtitles.withIndex()) {
+            val label = "⬇ ${sub.displayName} (${sub.source})"
+            // Use null override to indicate this is an external subtitle
+            subtitleTracks.add(Pair(label, null))
+
+            // Check if this Stremio subtitle is currently selected
+            if (currentStremioSubtitleIndex == index) {
+                currentSubtitleTrackIndex = embeddedTrackCount + index
+            }
+        }
+
         // Check if no subtitle is currently selected (means "Off")
         val hasSelectedSubtitle = tracks?.groups?.any { group ->
             group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
         } ?: false
-        if (!hasSelectedSubtitle) {
+        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
             currentSubtitleTrackIndex = 0
         }
 
@@ -2991,8 +3063,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun applySelectedSubtitleTrack() {
         val ts = trackSelector ?: return
-        val override = subtitleTracks.getOrNull(currentSubtitleTrackIndex)?.second
+        val selectedTrack = subtitleTracks.getOrNull(currentSubtitleTrackIndex)
+        val label = selectedTrack?.first ?: ""
+        val override = selectedTrack?.second
 
+        // Check if this is a Stremio external subtitle (marked with ⬇ prefix)
+        if (label.startsWith("⬇")) {
+            // Calculate the Stremio subtitle index
+            // Count embedded tracks (including "Off" at index 0)
+            val embeddedTrackCount = subtitleTracks.count { !it.first.startsWith("⬇") }
+            val stremioIndex = currentSubtitleTrackIndex - embeddedTrackCount
+
+            if (stremioIndex >= 0 && stremioIndex < stremioSubtitles.size) {
+                // Disable embedded subtitles first
+                val params = ts.parameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                ts.parameters = params.build()
+
+                // Load Stremio subtitle
+                loadStremioSubtitle(stremioSubtitles[stremioIndex])
+                currentStremioSubtitleIndex = stremioIndex
+            }
+            return
+        }
+
+        // Clear Stremio subtitle selection
+        currentStremioSubtitleIndex = -1
+
+        // Handle embedded subtitle selection
         val params = ts.parameters.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
         if (override != null) {
@@ -3002,6 +3101,62 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         }
         ts.parameters = params.build()
+    }
+
+    /**
+     * Load an external Stremio subtitle into ExoPlayer.
+     * This rebuilds the media item with the subtitle configuration and seeks to the current position.
+     */
+    private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
+        val currentPlayer = player ?: return
+        val currentItem = currentPlayer.currentMediaItem ?: return
+        val currentPosition = currentPlayer.currentPosition
+        val wasPlaying = currentPlayer.isPlaying
+
+        // Extract path without query string for MIME type detection
+        val urlPath = subtitle.url.substringBefore("?").lowercase()
+
+        // Determine MIME type based on file extension in path (handles query strings)
+        val mimeType = when {
+            urlPath.contains(".srt") -> MimeTypes.APPLICATION_SUBRIP
+            urlPath.contains(".vtt") -> MimeTypes.TEXT_VTT
+            urlPath.contains(".ass") -> MimeTypes.TEXT_SSA
+            urlPath.contains(".ssa") -> MimeTypes.TEXT_SSA
+            urlPath.contains(".ttml") -> MimeTypes.APPLICATION_TTML
+            else -> MimeTypes.TEXT_VTT // Default to VTT for Stremio addons
+        }
+
+        // Build subtitle configuration
+        val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
+            .setMimeType(mimeType)
+            .setLanguage(subtitle.lang)
+            .setLabel(subtitle.displayName)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+
+        // Rebuild media item with subtitle configuration
+        val newMediaItem = currentItem.buildUpon()
+            .setSubtitleConfigurations(listOf(subtitleConfig))
+            .build()
+
+        // Set the new media item, preserving position
+        currentPlayer.setMediaItem(newMediaItem, currentPosition)
+        currentPlayer.prepare()
+
+        if (wasPlaying) {
+            currentPlayer.play()
+        }
+
+        // Enable subtitle track after loading
+        val ts = trackSelector
+        if (ts != null) {
+            val params = ts.parameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
+            ts.parameters = params
+        }
+
+        Toast.makeText(this, "Loading: ${subtitle.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     private fun applySubtitleSettings() {
@@ -3188,7 +3343,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             } else null
 
-            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}")
+            // Parse IMDB ID for external subtitles
+            val imdbId = obj.optString("imdbId").takeIf { it.isNotEmpty() }
+
+            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId")
 
             PlaybackPayload(
                 title = obj.optString("title"),
@@ -3199,7 +3357,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 seriesTitle = obj.optString("seriesTitle"),
                 nextEpisodeMap = nextEpisodeMap,
                 prevEpisodeMap = prevEpisodeMap,
-                collectionGroups = collectionGroups
+                collectionGroups = collectionGroups,
+                imdbId = imdbId
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
@@ -3270,6 +3429,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         metadataUpdateReceiver = null
+
+        // Cancel Stremio subtitle coroutine scope
+        subtitleScope.cancel()
+        stremioSubtitles.clear()
+        stremioSubtitleService = null
 
         // Clear all handlers
         progressHandler.removeCallbacksAndMessages(null)
@@ -3371,7 +3535,8 @@ private data class PlaybackPayload(
     val seriesTitle: String?,
     val nextEpisodeMap: Map<Int, Int> = emptyMap(),
     val prevEpisodeMap: Map<Int, Int> = emptyMap(),
-    val collectionGroups: List<JSONObject>? = null // Collection groups from Flutter
+    val collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
+    val imdbId: String? = null // IMDB ID for fetching external subtitles from Stremio addons
 )
 
 private data class PlaybackItem(

@@ -774,6 +774,7 @@ class _AndroidTvPlaybackPayload {
   final Map<int, int> nextEpisodeMap;
   final Map<int, int> prevEpisodeMap;
   final List<_AndroidTvCollectionGroup>? collectionGroups;
+  final String? imdbId;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -786,6 +787,7 @@ class _AndroidTvPlaybackPayload {
     this.nextEpisodeMap = const {},
     this.prevEpisodeMap = const {},
     this.collectionGroups,
+    this.imdbId,
   });
 
   Map<String, dynamic> toMap() {
@@ -798,11 +800,10 @@ class _AndroidTvPlaybackPayload {
       'seriesTitle': seriesTitle,
       'items': items.map((e) => e.toMap()).toList(),
       'seasons': seasons.map((e) => e.toMap()).toList(),
-      // Navigation maps for series playback (mirrors mobile video_player_screen.dart)
       'nextEpisodeMap': nextEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
       'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
-      // Collection groups for movie collections (dynamic groups)
       'collectionGroups': collectionGroups?.map((e) => e.toMap()).toList(),
+      'imdbId': imdbId,
     };
   }
 }
@@ -1142,6 +1143,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       nextEpisodeMap: navigationMaps.nextMap,
       prevEpisodeMap: navigationMaps.prevMap,
       collectionGroups: collectionGroups,
+      imdbId: args.contentImdbId,
     );
 
     return _AndroidTvPlaybackPayloadResult(
