@@ -342,6 +342,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       title: item.name,
       year: item.year,
       contentType: item.type,
+      posterUrl: item.poster,
     );
 
     widget.onItemSelected!(selection);
@@ -354,6 +355,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       title: item.name,
       year: item.year,
       contentType: item.type,
+      posterUrl: item.poster,
     );
 
     // Use onQuickPlay if available, otherwise fallback to onItemSelected

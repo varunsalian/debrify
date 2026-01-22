@@ -2189,6 +2189,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       season: season,
       episode: episode,
       contentType: _selectedImdbTitle!.contentType,
+      posterUrl: _selectedImdbTitle!.posterUrl,
     );
 
     debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}');
@@ -2217,12 +2218,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         title: selection.title,
         year: selection.year,
         contentType: selection.contentType,
+        posterUrl: selection.posterUrl,
       );
       _isSeries = selection.isSeries;
       if (updateSearchText) {
         _searchController.text = selection.title;
       }
       _activeAdvancedSelection = selection;
+      debugPrint('TorrentSearchScreen: Catalog selection set - posterUrl: ${selection.posterUrl}');
       _imdbAutocompleteResults.clear();
       _imdbSearchError = null;
       _seriesControlsExpanded = selection.isSeries;
@@ -5257,6 +5260,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Store catalog metadata for optimized playback
         if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
         if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
       });
       _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
     } else {
@@ -5280,6 +5284,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Store catalog metadata for optimized playback
         if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
         if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
       });
       _showPikPakSnack(
         added ? 'Added ${videoFiles.length} videos to playlist' : 'Already in playlist',
@@ -6801,6 +6806,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Store catalog metadata for optimized playback
         if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
         if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
       });
       _showTorboxSnack(
         added ? 'Added to playlist' : 'Already in playlist',
@@ -6821,6 +6827,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Store catalog metadata for optimized playback
       if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
       if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+      if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
     });
     _showTorboxSnack(
       added ? 'Added collection to playlist' : 'Already in playlist',
@@ -7800,6 +7807,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
             } catch (_) {}
 
+            debugPrint('TorrentSearchScreen: Adding to playlist - posterUrl: ${_activeAdvancedSelection?.posterUrl}');
             final added =
                 await StorageService.addPlaylistItemRaw({
                   'title': FileUtils.cleanPlaylistTitle(finalTitle),
@@ -7810,6 +7818,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   // Store catalog metadata for optimized playback
                   if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
                   if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+                  if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
                 });
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -7834,6 +7843,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   // Store catalog metadata for optimized playback
                   if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
                   if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+                  if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
                 });
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -7856,6 +7866,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
         break;
       case 'choose':
+        debugPrint('TorrentSearchScreen: CHOOSE dialog - selection at dialog show: imdbId=${_activeAdvancedSelection?.imdbId}, posterUrl=${_activeAdvancedSelection?.posterUrl}');
         await showDialog(
           context: context,
           builder: (ctx) {
@@ -8060,6 +8071,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       }
                                     } catch (_) {}
 
+                                    debugPrint('TorrentSearchScreen: DIALOG Adding to playlist - selection: $_activeAdvancedSelection, posterUrl: ${_activeAdvancedSelection?.posterUrl}, imdbId: ${_activeAdvancedSelection?.imdbId}');
                                     final added =
                                         await StorageService.addPlaylistItemRaw({
                                           'title': FileUtils.cleanPlaylistTitle(finalTitle),
@@ -8071,6 +8083,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           // Store catalog metadata for optimized playback
                                           if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
                                           if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+                                          if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
                                         });
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -8095,6 +8108,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           // Store catalog metadata for optimized playback
                                           if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
                                           if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
+                                          if (_activeAdvancedSelection?.posterUrl != null) 'posterUrl': _activeAdvancedSelection!.posterUrl,
                                         });
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(

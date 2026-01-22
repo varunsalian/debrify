@@ -1351,6 +1351,7 @@ class StorageService {
     print('   rdTorrentId: ${enriched['rdTorrentId']}');
     print('   torrent_hash: ${enriched['torrent_hash'] ?? 'null'}');
     print('   restrictedLink: ${enriched['restrictedLink'] ?? 'null'}');
+    print('   posterUrl: ${enriched['posterUrl'] ?? 'null'}');
     print(
       '   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}',
     );

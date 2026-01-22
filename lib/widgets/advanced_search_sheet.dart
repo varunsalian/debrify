@@ -285,6 +285,7 @@ class _AdvancedSearchSheetState extends State<AdvancedSearchSheet> {
       year: imdbSelection.year,
       season: season,
       episode: episode,
+      posterUrl: imdbSelection.posterUrl,
     );
 
     debugPrint(

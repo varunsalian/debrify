@@ -7,6 +7,8 @@ class AdvancedSearchSelection {
   final int? episode;
   /// Content type for Stremio streams: 'movie', 'series', 'tv', 'channel', etc.
   final String? contentType;
+  /// Poster image URL from catalog
+  final String? posterUrl;
 
   const AdvancedSearchSelection({
     required this.imdbId,
@@ -16,6 +18,7 @@ class AdvancedSearchSelection {
     this.season,
     this.episode,
     this.contentType,
+    this.posterUrl,
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)

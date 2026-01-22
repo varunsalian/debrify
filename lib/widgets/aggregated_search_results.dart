@@ -253,6 +253,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       title: item.name,
       year: item.year,
       contentType: item.type,
+      posterUrl: item.poster,
     );
     widget.onItemSelected?.call(selection);
   }
@@ -264,6 +265,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       title: item.name,
       year: item.year,
       contentType: item.type,
+      posterUrl: item.poster,
     );
     // Use onQuickPlay if available, otherwise fallback to onItemSelected
     if (widget.onQuickPlay != null) {
