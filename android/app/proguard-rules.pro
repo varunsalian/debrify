@@ -165,6 +165,11 @@
 -keep class com.debrify.app.download.MediaStoreDownloadService$** { *; }
 -keep class com.debrify.app.tv.AndroidTvTorrentPlayerActivity$** { *; }
 
+# Keep subtitle service and settings
+-keep class com.debrify.app.subtitle.StremioSubtitleService { *; }
+-keep class com.debrify.app.subtitle.StremioSubtitleService$** { *; }
+-keep class com.debrify.app.util.SubtitleSettings { *; }
+
 # Keep method channel result implementations
 -keepclassmembers class * {
     public void onSuccess(java.lang.Object);
