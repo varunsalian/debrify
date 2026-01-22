@@ -93,6 +93,14 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         }
       }
 
+      // Apply poster overrides for items that have saved custom posters
+      for (var item in favorites) {
+        final posterOverride = await StorageService.getPlaylistPosterOverride(item);
+        if (posterOverride != null && posterOverride.isNotEmpty) {
+          item['posterUrl'] = posterOverride;
+        }
+      }
+
       // Load progress data for all favorites using the same method as PlaylistScreen
       final progressMap = await StorageService.buildPlaylistProgressMap(favorites);
 
