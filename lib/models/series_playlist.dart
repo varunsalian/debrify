@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
 import '../screens/video_player_screen.dart';
 import '../services/episode_info_service.dart';
+import '../services/tvmaze_service.dart';
 
 /// Represents a group of duplicate episodes
 class DuplicateGroup {
@@ -201,11 +202,19 @@ class SeriesPlaylist {
   final List<SeriesEpisode> allEpisodes;
   final bool isSeries;
 
-  const SeriesPlaylist({
+  /// IMDB ID passed from catalog (for SeriesBrowser to use if tvmazeShowId not ready)
+  String? imdbId;
+
+  /// TVMaze show ID discovered during fetchEpisodeInfo (for SeriesBrowser reuse)
+  int? tvmazeShowId;
+
+  SeriesPlaylist({
     this.seriesTitle,
     required this.seasons,
     required this.allEpisodes,
     required this.isSeries,
+    this.imdbId,
+    this.tvmazeShowId,
   });
 
   int get totalEpisodes => allEpisodes.length;
@@ -605,10 +614,19 @@ class SeriesPlaylist {
 
   /// Fetch episode information for all episodes in the playlist
   /// Pass [playlistItem] to enable saved TVMaze mapping lookup
-  Future<void> fetchEpisodeInfo({Map<String, dynamic>? playlistItem}) async {
+  /// Pass [imdbId] to use direct IMDB lookup (faster and more accurate when available)
+  Future<void> fetchEpisodeInfo({
+    Map<String, dynamic>? playlistItem,
+    String? imdbId,
+  }) async {
     if (!isSeries) {
       debugPrint('SeriesPlaylist: Not a series, skipping TVMaze fetch');
       return;
+    }
+
+    // Store imdbId immediately so SeriesBrowser can use it even if IMDB lookup is slow
+    if (imdbId != null && imdbId.startsWith('tt')) {
+      this.imdbId = imdbId;
     }
 
     // Try to extract series title from filenames if not already set
@@ -617,14 +635,18 @@ class SeriesPlaylist {
       searchTitle = allEpisodes.first.seriesInfo.title;
     }
 
-    // Validate the series title before searching
-    if (!SeriesParser.isValidSeriesTitle(searchTitle)) {
+    // Validate the series title before searching (unless we have IMDB ID)
+    if (imdbId == null && !SeriesParser.isValidSeriesTitle(searchTitle)) {
       debugPrint('TVMaze: Cannot search - invalid title "$searchTitle"');
       return;
     }
 
-    final validSearchTitle = searchTitle!;
-    debugPrint('TVMaze: Searching for "$validSearchTitle"');
+    final validSearchTitle = searchTitle ?? '';
+    if (imdbId != null) {
+      debugPrint('TVMaze: Using IMDB ID "$imdbId" for direct lookup');
+    } else {
+      debugPrint('TVMaze: Searching for "$validSearchTitle"');
+    }
 
     // Check for saved TVMaze mapping first
     int? overrideShowId;
@@ -649,31 +671,50 @@ class SeriesPlaylist {
         if (showInfo != null) {
           debugPrint('TVMaze: Loaded show info using saved mapping');
         }
-      } else {
+      } else if (imdbId != null && imdbId.startsWith('tt')) {
+        // Use IMDB ID for direct lookup (most accurate)
+        showInfo = await _lookupByImdbId(imdbId);
+        if (showInfo != null) {
+          debugPrint('TVMaze: Loaded show info using IMDB ID "$imdbId"');
+          // Extract show ID for subsequent episode lookups (avoids title-based searches)
+          if (showInfo['id'] != null) {
+            overrideShowId = showInfo['id'] as int;
+            debugPrint('TVMaze: Extracted show ID $overrideShowId from IMDB lookup');
+          }
+        } else {
+          // Fallback to title search if IMDB lookup fails
+          debugPrint('TVMaze: IMDB lookup failed, falling back to title search');
+          if (validSearchTitle.isNotEmpty) {
+            showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
+            // Extract show ID for subsequent episode lookups
+            if (showInfo != null && showInfo['id'] != null) {
+              overrideShowId = showInfo['id'] as int;
+              debugPrint('TVMaze: Extracted show ID $overrideShowId from title fallback');
+            }
+          }
+        }
+      } else if (validSearchTitle.isNotEmpty) {
         // Fall back to searching by series title
         showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
+        // Extract show ID for subsequent episode lookups
+        if (showInfo != null && showInfo['id'] != null) {
+          overrideShowId = showInfo['id'] as int;
+          debugPrint('TVMaze: Extracted show ID $overrideShowId from title search');
+        }
       }
       // Found series info (no log needed, success assumed)
     } catch (e) {
       debugPrint('TVMaze: Series lookup failed: $e');
     }
 
-    // Get all episodes from TVMaze if available for title-only matching
+    // Fetch all episodes upfront when we have a show ID (much more efficient than per-episode API calls)
     List<Map<String, dynamic>> allTVMazeEpisodes = [];
-    bool hasTitleOnlyEpisodes = allEpisodes.any((ep) =>
-      ep.seriesInfo.season == null || ep.seriesInfo.episode == null
-    );
-
-    if (hasTitleOnlyEpisodes && showInfo != null) {
+    if (showInfo != null && overrideShowId != null) {
+      // Store show ID for SeriesBrowser reuse (avoids redundant title searches)
+      tvmazeShowId = overrideShowId;
       try {
-        if (overrideShowId != null) {
-          // Use the saved show ID directly
-          allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
-        } else {
-          // Fall back to searching by series title
-          allTVMazeEpisodes = await EpisodeInfoService.getAllEpisodes(validSearchTitle);
-        }
-        debugPrint('TVMaze: Got ${allTVMazeEpisodes.length} episodes for title matching');
+        allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
+        debugPrint('TVMaze: Fetched ${allTVMazeEpisodes.length} episodes upfront for show ID $overrideShowId');
       } catch (e) {
         debugPrint('TVMaze: Episode list failed: $e');
       }
@@ -692,18 +733,16 @@ class SeriesPlaylist {
           try {
             Map<String, dynamic>? episodeData;
 
-            if (overrideShowId != null) {
-              // Use saved show ID to get episode directly
-              final episodes = await _getEpisodesByShowId(overrideShowId);
-              // Find the specific episode
-              for (final ep in episodes) {
+            if (allTVMazeEpisodes.isNotEmpty) {
+              // Use pre-fetched episodes list (efficient - no API call per episode)
+              for (final ep in allTVMazeEpisodes) {
                 if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
                   episodeData = ep;
                   break;
                 }
               }
             } else {
-              // Fall back to searching by series title
+              // Fall back to searching by series title (only when we don't have show ID)
               episodeData = await EpisodeInfoService.getEpisodeInfo(
                 validSearchTitle,
                 episode.seriesInfo.season!,
@@ -948,6 +987,16 @@ class SeriesPlaylist {
       return await EpisodeInfoService.getShowById(showId);
     } catch (e) {
       debugPrint('Error getting show by ID: $e');
+      return null;
+    }
+  }
+
+  /// Helper method to look up show by IMDB ID from TVMaze
+  static Future<Map<String, dynamic>?> _lookupByImdbId(String imdbId) async {
+    try {
+      return await TVMazeService.lookupByImdbId(imdbId);
+    } catch (e) {
+      debugPrint('Error looking up show by IMDB ID: $e');
       return null;
     }
   }

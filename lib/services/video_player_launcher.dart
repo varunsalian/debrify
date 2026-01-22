@@ -312,6 +312,8 @@ class VideoPlayerLauncher {
         rdTorrentId: args.rdTorrentId,
         torboxTorrentId: args.torboxTorrentId,
         pikpakCollectionId: args.pikpakCollectionId,
+        contentImdbId: args.contentImdbId,
+        contentType: args.contentType,
       );
 
       return true;
@@ -332,10 +334,12 @@ class VideoPlayerLauncher {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? contentImdbId,
+    String? contentType,
   }) {
     debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
     debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
-    debugPrint('TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode');
+    debugPrint('TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode, imdbId=$contentImdbId');
 
     if (payload.contentType != _PlaybackContentType.series) {
       debugPrint('TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})');
@@ -354,11 +358,17 @@ class VideoPlayerLauncher {
     // Run in background - don't await
     () async {
       try {
+        // Determine forceSeries: prefer viewMode, then use contentType from catalog
+        bool? forceSeries = viewMode?.toForceSeries();
+        if (forceSeries == null && contentType != null) {
+          forceSeries = contentType == 'series';
+        }
+
         debugPrint('TVMazeAsync: Creating SeriesPlaylist from ${playlistEntries.length} entries');
         final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           playlistEntries,
           collectionTitle: payload.title,
-          forceSeries: viewMode?.toForceSeries(), // Convert viewMode to forceSeries
+          forceSeries: forceSeries,
         );
 
         debugPrint('TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}');
@@ -369,8 +379,8 @@ class VideoPlayerLauncher {
           return;
         }
 
-        debugPrint('TVMazeAsync: Calling fetchEpisodeInfo()...');
-        await seriesPlaylist.fetchEpisodeInfo();
+        debugPrint('TVMazeAsync: Calling fetchEpisodeInfo() with imdbId=$contentImdbId');
+        await seriesPlaylist.fetchEpisodeInfo(imdbId: contentImdbId);
         debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
 
         // Save series poster to playlist item (if we have series info)
@@ -1273,10 +1283,17 @@ class _AndroidTvPlaybackPayloadBuilder {
       return null;
     }
     try {
+      // Determine forceSeries: prefer viewMode, then use contentType from catalog
+      bool? forceSeries = args.viewMode?.toForceSeries();
+      if (forceSeries == null && args.contentType != null) {
+        // Use catalog content type: 'series' -> force series, 'movie' -> force not series
+        forceSeries = args.contentType == 'series';
+      }
+
       final playlist = SeriesPlaylist.fromPlaylistEntries(
         entries,
         collectionTitle: args.title, // Pass collection/torrent title as fallback
-        forceSeries: args.viewMode?.toForceSeries(), // Convert viewMode to forceSeries
+        forceSeries: forceSeries,
       );
       // DO NOT await fetchEpisodeInfo() here - TVMaze loading is now async
       // Metadata will be fetched and pushed separately after playback launches

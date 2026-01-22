@@ -195,10 +195,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.playlist == null || widget.playlist!.isEmpty) return null;
     if (_cachedSeriesPlaylist == null) {
       try {
+        // Determine forceSeries: prefer viewMode, then use contentType from catalog
+        bool? forceSeries = widget.viewMode?.toForceSeries();
+        if (forceSeries == null && widget.contentType != null) {
+          // Use catalog content type: 'series' -> force series, 'movie' -> force not series
+          forceSeries = widget.contentType == 'series';
+        }
+
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           widget.playlist!,
           collectionTitle: widget.title, // Pass video title as fallback
-          forceSeries: widget.viewMode?.toForceSeries(), // Convert viewMode to forceSeries
+          forceSeries: forceSeries,
         );
       } catch (e) {
         return null;
@@ -2030,8 +2037,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
       // Preload episode information in the background
+      // Pass IMDB ID from catalog for faster, more accurate lookup
       seriesPlaylist
-          .fetchEpisodeInfo(playlistItem: _constructPlaylistItemData())
+          .fetchEpisodeInfo(
+            playlistItem: _constructPlaylistItemData(),
+            imdbId: widget.contentImdbId,
+          )
           .then((_) async {
             // Extract poster URL from series data and save to playlist
             await _saveSeriesPosterToPlaylist(seriesPlaylist);

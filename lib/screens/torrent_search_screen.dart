@@ -555,6 +555,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         videoUrl: torrent.directUrl!,
         title: torrent.displayTitle,
         subtitle: torrent.source,
+        contentImdbId: _activeAdvancedSelection?.imdbId,
+        contentType: _activeAdvancedSelection?.contentType,
       ),
     );
   }
@@ -5077,6 +5079,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
               startIndex: 0,
               viewMode: PlaylistViewMode.sorted, // Single file - not series
+              contentImdbId: _activeAdvancedSelection?.imdbId,
+              contentType: _activeAdvancedSelection?.contentType,
             ),
           );
         }
@@ -5190,6 +5194,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         playlist: playlistEntries,
         startIndex: startIndex,
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+        contentImdbId: _activeAdvancedSelection?.imdbId,
+        contentType: _activeAdvancedSelection?.contentType,
       ),
     );
   }
@@ -7206,6 +7212,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             title: torrent.name,
             subtitle: Formatters.formatFileSize(file.size),
             viewMode: PlaylistViewMode.sorted, // Single file - not series
+            contentImdbId: _activeAdvancedSelection?.imdbId,
+            contentType: _activeAdvancedSelection?.contentType,
           ),
         );
       } catch (e) {
@@ -7327,6 +7335,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         playlist: playlistEntries,
         startIndex: startIndex,
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+        contentImdbId: _activeAdvancedSelection?.imdbId,
+        contentType: _activeAdvancedSelection?.contentType,
       ),
     );
   }
@@ -8452,6 +8462,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             videoUrl: videoUrl,
             title: finalTitle,
             viewMode: PlaylistViewMode.sorted, // Single file - not series
+            contentImdbId: _activeAdvancedSelection?.imdbId,
+            contentType: _activeAdvancedSelection?.contentType,
           ),
         );
       } else {
@@ -8927,6 +8939,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           playlist: entries.isNotEmpty ? entries : null,
           startIndex: 0,
           viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+          contentImdbId: _activeAdvancedSelection?.imdbId,
+          contentType: _activeAdvancedSelection?.contentType,
         ),
       );
     } catch (e) {

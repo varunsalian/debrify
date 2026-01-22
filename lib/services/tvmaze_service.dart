@@ -272,6 +272,88 @@ class TVMazeService {
     return null;
   }
 
+  /// Look up a TV show directly by IMDB ID
+  /// This is more accurate than searching by name when IMDB ID is available
+  static Future<Map<String, dynamic>?> lookupByImdbId(String imdbId) async {
+    if (imdbId.isEmpty || !imdbId.startsWith('tt')) {
+      debugPrint('TVMaze: Invalid IMDB ID "$imdbId"');
+      return null;
+    }
+
+    final cacheKey = 'imdb_$imdbId';
+
+    // Check in-memory cache first
+    if (_cache.containsKey(cacheKey)) {
+      debugPrint('🎯 TVMaze: Memory cache HIT for IMDB "$imdbId"');
+      return _cache[cacheKey];
+    }
+
+    // Check persistent cache
+    final persistedData = await TVMazeCacheService.get(cacheKey);
+    if (persistedData != null) {
+      debugPrint('💾 TVMaze: Persistent cache HIT for IMDB "$imdbId"');
+      _cache[cacheKey] = persistedData;
+      if (persistedData['id'] != null) {
+        _seriesIdCache[imdbId.toLowerCase()] = persistedData['id'] as int;
+      }
+      return persistedData;
+    }
+
+    debugPrint('❌ TVMaze: Cache MISS for IMDB "$imdbId", calling API...');
+
+    // Check availability first
+    if (!await isAvailable()) {
+      debugPrint('TVMaze: Service unavailable');
+      return null;
+    }
+
+    for (int attempt = 1; attempt <= _maxRetries; attempt++) {
+      try {
+        final url = '$_baseUrl/lookup/shows?imdb=$imdbId';
+        final response = await http.get(
+          Uri.parse(url),
+          headers: {'Accept': 'application/json'},
+        ).timeout(_timeout);
+
+        if (response.statusCode == 200) {
+          final show = json.decode(response.body) as Map<String, dynamic>;
+          _cache[cacheKey] = show;
+          if (show['id'] != null) {
+            _seriesIdCache[imdbId.toLowerCase()] = show['id'] as int;
+          }
+          // Save to persistent cache
+          await TVMazeCacheService.set(cacheKey, show);
+          debugPrint('✅ TVMaze: IMDB lookup success for "$imdbId" → ${show['name']}');
+          return show;
+        } else if (response.statusCode == 404) {
+          // Show not found in TVMaze
+          debugPrint('TVMaze: No show found for IMDB "$imdbId"');
+          _cache[cacheKey] = null;
+          return null;
+        } else if (response.statusCode == 429) {
+          // Rate limited, wait and retry
+          await Future.delayed(Duration(seconds: attempt * 2));
+          continue;
+        }
+      } catch (e) {
+        if (e is SocketException ||
+            e.toString().contains('HandshakeException') ||
+            e.toString().contains('Connection reset')) {
+          _isAvailable = false;
+          _lastAvailabilityCheck = DateTime.now();
+          break;
+        }
+        if (attempt < _maxRetries) {
+          await Future.delayed(Duration(seconds: attempt));
+          continue;
+        }
+      }
+    }
+
+    _cache[cacheKey] = null;
+    return null;
+  }
+
   /// Get episodes for a show by ID with retry logic
   static Future<List<Map<String, dynamic>>> getEpisodes(int showId) async {
     final cacheKey = 'episodes_$showId';

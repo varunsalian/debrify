@@ -119,30 +119,54 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     // Clear previous loading states for this season
     _loadingEpisodes.clear();
 
+    // Fetch all episodes ONCE upfront (avoid per-episode API calls)
+    List<Map<String, dynamic>> allEpisodes = [];
+
+    // Try to get show ID from: 1) SeriesPlaylist, 2) saved mapping, 3) IMDB lookup
+    int? showId = widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
+
+    // If no show ID yet but we have IMDB ID, do IMDB lookup
+    if (showId == null && widget.seriesPlaylist.imdbId != null) {
+      try {
+        final showInfo = await TVMazeService.lookupByImdbId(widget.seriesPlaylist.imdbId!);
+        if (showInfo != null && showInfo['id'] != null) {
+          showId = showInfo['id'] as int;
+          // Store for future use
+          widget.seriesPlaylist.tvmazeShowId = showId;
+        }
+      } catch (e) {
+        print('Error looking up show by IMDB ID: $e');
+      }
+    }
+
+    if (showId != null) {
+      try {
+        allEpisodes = await TVMazeService.getEpisodes(showId);
+      } catch (e) {
+        print('Error fetching episodes for show ID $showId: $e');
+      }
+    }
+
+    // Process each episode using pre-fetched list or fallback to title search
     for (final episode in selectedSeason.episodes) {
       if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
         final episodeKey = '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
         if (!_loadingEpisodes.contains(episodeKey)) {
           _loadingEpisodes.add(episodeKey);
-          _loadEpisodeInfo(episode);
+          _loadEpisodeInfo(episode, allEpisodes);
         }
       }
     }
   }
 
-  Future<void> _loadEpisodeInfo(SeriesEpisode episode) async {
+  Future<void> _loadEpisodeInfo(SeriesEpisode episode, List<Map<String, dynamic>> prefetchedEpisodes) async {
     if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
       try {
-        // Check if we have a saved TVMaze show ID override
-        final overrideShowId = await _getOverrideShowId();
-
         Map<String, dynamic>? episodeData;
 
-        if (overrideShowId != null) {
-          // Use the saved show ID directly
-          final episodes = await TVMazeService.getEpisodes(overrideShowId);
-          // Find the specific episode
-          for (final ep in episodes) {
+        if (prefetchedEpisodes.isNotEmpty) {
+          // Use pre-fetched episodes list (no API call)
+          for (final ep in prefetchedEpisodes) {
             if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
               episodeData = ep;
               break;
