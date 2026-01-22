@@ -3355,9 +3355,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _showTracksSheet(BuildContext context) async {
+    // Dynamically parse season/episode from current video's filename
+    final currentTitle = widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length
+        ? widget.playlist![_currentIndex].title
+        : widget.title;
+    final seriesInfo = SeriesParser.parseFilename(currentTitle);
+    final season = seriesInfo.season ?? widget.contentSeason;
+    final episode = seriesInfo.episode ?? widget.contentEpisode;
+
     debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=${widget.contentImdbId}, '
         'contentType=${widget.contentType}, '
-        'season=${widget.contentSeason}, episode=${widget.contentEpisode}');
+        'season=$season, episode=$episode (parsed from: $currentTitle)');
     await TracksSheet.show(
       context,
       _player,
@@ -3367,8 +3375,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
       contentImdbId: widget.contentImdbId,
       contentType: widget.contentType,
-      contentSeason: widget.contentSeason,
-      contentEpisode: widget.contentEpisode,
+      contentSeason: season,
+      contentEpisode: episode,
     );
   }
 
