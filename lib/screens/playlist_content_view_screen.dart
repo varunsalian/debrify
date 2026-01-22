@@ -3458,6 +3458,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        // Pass catalog metadata for optimized TVMaze lookup
+        contentImdbId: widget.playlistItem['imdbId'] as String?,
+        contentType: widget.playlistItem['contentType'] as String?,
       ),
     );
   }
@@ -3557,6 +3560,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        // Pass catalog metadata for optimized TVMaze lookup
+        contentImdbId: widget.playlistItem['imdbId'] as String?,
+        contentType: widget.playlistItem['contentType'] as String?,
       ),
     );
   }
@@ -3657,6 +3663,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        // Pass catalog metadata for optimized TVMaze lookup
+        contentImdbId: widget.playlistItem['imdbId'] as String?,
+        contentType: widget.playlistItem['contentType'] as String?,
       ),
     );
   }

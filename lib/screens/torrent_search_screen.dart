@@ -5254,6 +5254,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           'mime_type': file['mime_type'],
         },
         'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
+        // Store catalog metadata for optimized playback
+        if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
       });
       _showPikPakSnack(added ? 'Added to playlist' : 'Already in playlist', isError: !added);
     } else {
@@ -5274,6 +5277,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'pikpakFiles': filesMetadata,  // NEW: Full metadata for instant playback
         'pikpakFileIds': fileIds,       // KEEP: For backward compatibility and deduplication
         'count': videoFiles.length,
+        // Store catalog metadata for optimized playback
+        if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
       });
       _showPikPakSnack(
         added ? 'Added ${videoFiles.length} videos to playlist' : 'Already in playlist',
@@ -6792,6 +6798,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'torboxFileId': file.id,
         'torrent_hash': torrent.hash,
         'sizeBytes': file.size,
+        // Store catalog metadata for optimized playback
+        if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
       });
       _showTorboxSnack(
         added ? 'Added to playlist' : 'Already in playlist',
@@ -6809,6 +6818,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       'torboxFileIds': fileIds,
       'torrent_hash': torrent.hash,
       'count': videoFiles.length,
+      // Store catalog metadata for optimized playback
+      if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+      if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
     });
     _showTorboxSnack(
       added ? 'Added collection to playlist' : 'Already in playlist',
@@ -7795,6 +7807,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   'restrictedLink': links[0],
                   'rdTorrentId': result['torrentId']?.toString(),
                   'kind': 'single',
+                  // Store catalog metadata for optimized playback
+                  if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+                  if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
                 });
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -7816,6 +7831,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   'kind': 'collection',
                   'rdTorrentId': torrentId,
                   'count': links.length,
+                  // Store catalog metadata for optimized playback
+                  if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+                  if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
                 });
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -8050,6 +8068,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           'rdTorrentId': result['torrentId']
                                               ?.toString(),
                                           'kind': 'single',
+                                          // Store catalog metadata for optimized playback
+                                          if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+                                          if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
                                         });
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -8071,6 +8092,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           'kind': 'collection',
                                           'rdTorrentId': torrentId,
                                           'count': links.length,
+                                          // Store catalog metadata for optimized playback
+                                          if (_activeAdvancedSelection?.imdbId != null) 'imdbId': _activeAdvancedSelection!.imdbId,
+                                          if (_activeAdvancedSelection?.contentType != null) 'contentType': _activeAdvancedSelection!.contentType,
                                         });
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(

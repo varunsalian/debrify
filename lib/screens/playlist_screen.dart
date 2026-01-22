@@ -232,6 +232,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   title: finalTitle,
                   rdTorrentId: rdTorrentId,
                   viewMode: viewMode,
+                  contentImdbId: item['imdbId'] as String?,
+                  contentType: item['contentType'] as String?,
                 ),
               );
             } else {
@@ -491,6 +493,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             startIndex: 0,
             rdTorrentId: rdTorrentId,
             viewMode: viewMode,
+            contentImdbId: item['imdbId'] as String?,
+            contentType: item['contentType'] as String?,
           ),
         );
       } catch (e) {
@@ -523,6 +527,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         title: title,
         rdTorrentId: rdTorrentId,
         viewMode: viewMode,
+        contentImdbId: item['imdbId'] as String?,
+        contentType: item['contentType'] as String?,
       ),
     );
   }
@@ -588,6 +594,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             subtitle: subtitle,
             torboxTorrentId: torrentId.toString(),
             viewMode: viewMode,
+            contentImdbId: item['imdbId'] as String?,
+            contentType: item['contentType'] as String?,
           ),
         );
       } catch (e) {
@@ -840,6 +848,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           startIndex: startIndex,
           torboxTorrentId: torrentId.toString(),
           viewMode: viewMode,
+          contentImdbId: item['imdbId'] as String?,
+          contentType: item['contentType'] as String?,
         ),
       );
     } catch (e) {
@@ -956,6 +966,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             startIndex: 0,
             pikpakCollectionId: pikpakFileId,
             viewMode: viewMode,
+            contentImdbId: item['imdbId'] as String?,
+            contentType: item['contentType'] as String?,
           ),
         );
       } catch (e) {
@@ -1274,6 +1286,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           startIndex: startIndex,
           pikpakCollectionId: firstFileId,
           viewMode: viewMode,
+          contentImdbId: item['imdbId'] as String?,
+          contentType: item['contentType'] as String?,
         ),
       );
     } catch (e) {
