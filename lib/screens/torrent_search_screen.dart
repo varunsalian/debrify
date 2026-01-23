@@ -39,7 +39,6 @@ import '../widgets/channel_picker_dialog.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
-import '../widgets/advanced_search_sheet.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/catalog_browser.dart';
 import '../widgets/search_source_dropdown.dart';
@@ -145,7 +144,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Home screen DPAD navigation controller
   late final HomeFocusController _homeFocusController;
 
-  final FocusNode _advancedButtonFocusNode = FocusNode();
   final FocusNode _sortDropdownFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
@@ -157,10 +155,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _expandControlsFocusNode = FocusNode();
   final FocusNode _seasonInputFocusNode = FocusNode();
   final FocusNode _episodeInputFocusNode = FocusNode();
-  // Pooled autocomplete focus nodes (reused across searches to avoid GC pressure)
-  static const int _autocompleteFocusNodePoolSize = 15;
-  final List<FocusNode> _autocompleteFocusNodes = [];
-  Timer? _pendingAutocompleteFocusRequest; // For cancelling overlapping focus requests
   Timer? _scrollThrottleTimer; // For throttling ensureVisible calls
 
   // AggregatedSearchResults keyword card focus node (for direct focus from search field)
@@ -175,7 +169,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _providerAccordionFocused = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _advancedButtonFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _sortDropdownFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _sortDirectionFocused = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _filterButtonFocused = ValueNotifier<bool>(false);
@@ -242,15 +235,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoadingSourceOptions = false;
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
 
-  List<ImdbTitleResult> _imdbAutocompleteResults = [];
-  bool _isImdbSearching = false;
-  String? _imdbSearchError;
   ImdbTitleResult? _selectedImdbTitle;
   bool _isSeries = false;
   bool _imdbControlsCollapsed = false;
   bool _seriesControlsExpanded = false; // Whether to show Movie/Series chips and S/E inputs
-  Timer? _imdbSearchDebouncer;
-  int _imdbRequestId = 0; // Track request IDs to prevent race conditions
 
   // Back navigation state - track where user came from before searching
   bool _cameFromCatalogBrowse = false;
@@ -321,11 +309,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Focus listeners removed - now using onFocusChange callbacks directly in widgets
     // Exception: DropdownButton doesn't have onFocusChange, so we use a listener
     _sortDropdownFocusNode.addListener(_onSortDropdownFocusChange);
-
-    // Initialize pooled autocomplete focus nodes (reused across searches)
-    for (int i = 0; i < _autocompleteFocusNodePoolSize; i++) {
-      _autocompleteFocusNodes.add(FocusNode(debugLabel: 'imdb_autocomplete_$i'));
-    }
 
     // Track scroll position continuously so we can preserve it on dispose
     _resultsScrollController.addListener(_onScrollChanged);
@@ -894,9 +877,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       // Clear previous state when switching sources
-      _imdbAutocompleteResults.clear();
       _selectedImdbTitle = null;
-      _imdbSearchError = null;
       _activeAdvancedSelection = null;
       _seriesControlsExpanded = false;
 
@@ -924,8 +905,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Clear selection state
       _selectedImdbTitle = null;
       _activeAdvancedSelection = null;
-      _imdbAutocompleteResults.clear();
-      _imdbSearchError = null;
       _seriesControlsExpanded = false;
 
       // Restore previous search query (empty for homepage, or the query for aggregated results)
@@ -998,7 +977,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _searchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
     _homeFocusController.dispose();
-    _advancedButtonFocusNode.dispose();
     _sortDropdownFocusNode.dispose();
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
@@ -1009,7 +987,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Dispose ValueNotifiers
     _searchFocused.dispose();
     _providerAccordionFocused.dispose();
-    _advancedButtonFocused.dispose();
     _sortDropdownFocused.dispose();
     _sortDirectionFocused.dispose();
     _filterButtonFocused.dispose();
@@ -1031,13 +1008,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _episodeInputFocusNode.dispose();
     _seasonController.dispose();
     _episodeController.dispose();
-    _imdbSearchDebouncer?.cancel();
-    _pendingAutocompleteFocusRequest?.cancel();
     _scrollThrottleTimer?.cancel();
-    _imdbRequestId = 0; // Reset request ID
-    for (final node in _autocompleteFocusNodes) {
-      node.dispose();
-    }
 
     for (final node in _cardFocusNodes) {
       node.dispose();
@@ -1605,14 +1576,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // In IMDB mode, trigger autocomplete search
+    // In catalog mode, clear the active selection if user manually edits
     if (_searchMode == SearchMode.catalog) {
-      // On TV: Don't trigger autocomplete as user types (only on Enter/Submit)
-      // On non-TV: Trigger autocomplete as they type (current behavior)
-      if (!_isTelevision) {
-        _onImdbSearchTextChanged(value);
-      }
-      // If user manually edits, clear the active selection
       final trimmed = value.trim();
       if (_activeAdvancedSelection != null &&
           trimmed != _activeAdvancedSelection!.displayQuery) {
@@ -1632,283 +1597,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _activeAdvancedSelection = null;
       });
     }
-  }
-
-  Future<void> _openAdvancedSearchDialog() async {
-    final selection = await showModalBottomSheet<AdvancedSearchSelection>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) =>
-          AdvancedSearchSheet(initialSelection: _activeAdvancedSelection),
-    );
-
-    if (selection != null) {
-      setState(() {
-        _activeAdvancedSelection = selection;
-        _searchController.text = selection.displayQuery;
-      });
-      await _searchTorrents(selection.displayQuery);
-    }
-  }
-
-  Widget _buildAdvancedButton() {
-    final selection = _activeAdvancedSelection;
-    final label = selection == null ? 'Adv' : 'Adv*';
-    return Focus(
-      focusNode: _advancedButtonFocusNode,
-      onFocusChange: (focused) {
-        _advancedButtonFocused.value = focused; // No setState needed!
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
-          _openAdvancedSearchDialog();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Tooltip(
-        message: selection == null
-            ? 'Search via IMDb + Torrentio'
-            : 'Advanced Torrentio search active',
-        child: ValueListenableBuilder<bool>(
-          valueListenable: _advancedButtonFocused,
-          builder: (context, isFocused, child) => Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: isFocused
-                  ? Border.all(color: Colors.white, width: 2)
-                  : null,
-            ),
-            child: child,
-          ),
-          child: TextButton.icon(
-            onPressed: selection == null
-                ? _openAdvancedSearchDialog
-                : () async {
-                    await _openAdvancedSearchDialog();
-                  },
-            style: TextButton.styleFrom(
-              backgroundColor: selection == null
-                  ? const Color(0xFF1E3A8A)
-                  : const Color(0xFF7C3AED),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(64, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            icon: const Icon(Icons.auto_awesome_outlined, size: 16),
-            label: Text(label, style: const TextStyle(fontSize: 12)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Mode selector dropdown for Smart Search Mode
-  Widget _buildModeSelector() {
-    return Focus(
-      focusNode: _modeSelectorFocusNode,
-      onFocusChange: (focused) {
-        _modeSelectorFocused.value = focused; // No setState needed!
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
-          // Toggle between modes on select/enter
-          _toggleSearchMode();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ValueListenableBuilder<bool>(
-        valueListenable: _modeSelectorFocused,
-        builder: (context, isFocused, child) => Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: isFocused
-                ? Border.all(color: Colors.white, width: 2)
-                : null,
-          ),
-          child: child,
-        ),
-        child: PopupMenuButton<SearchMode>(
-          onSelected: (mode) {
-            setState(() {
-              _searchMode = mode;
-              // Clear autocomplete when switching modes
-              _imdbAutocompleteResults.clear();
-              _selectedImdbTitle = null;
-              _imdbSearchError = null;
-              _seriesControlsExpanded = false; // Reset expansion state
-              if (mode == SearchMode.keyword) {
-                // Clear IMDB-specific state when returning to keyword mode
-                _activeAdvancedSelection = null;
-                _isSeries = false;
-                _seasonController.clear();
-                _episodeController.clear();
-              }
-            });
-            // Reload engines for the new search mode
-            _loadDefaultSettings();
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: SearchMode.keyword,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: _searchMode == SearchMode.keyword
-                        ? const Color(0xFF7C3AED)
-                        : Colors.white70,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Keyword',
-                    style: TextStyle(
-                      color: _searchMode == SearchMode.keyword
-                          ? const Color(0xFF7C3AED)
-                          : Colors.white,
-                      fontWeight: _searchMode == SearchMode.keyword
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              value: SearchMode.catalog,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.auto_awesome_outlined,
-                    size: 18,
-                    color: _searchMode == SearchMode.catalog
-                        ? const Color(0xFF7C3AED)
-                        : Colors.white70,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Catalog',
-                    style: TextStyle(
-                      color: _searchMode == SearchMode.catalog
-                          ? const Color(0xFF7C3AED)
-                          : Colors.white,
-                      fontWeight: _searchMode == SearchMode.catalog
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              value: SearchMode.browse,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.explore_outlined,
-                    size: 18,
-                    color: _searchMode == SearchMode.browse
-                        ? const Color(0xFF7C3AED)
-                        : Colors.white70,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Browse',
-                    style: TextStyle(
-                      color: _searchMode == SearchMode.browse
-                          ? const Color(0xFF7C3AED)
-                          : Colors.white,
-                      fontWeight: _searchMode == SearchMode.browse
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: _searchMode == SearchMode.browse
-                  ? const Color(0xFF059669)
-                  : _searchMode == SearchMode.catalog
-                      ? const Color(0xFF7C3AED)
-                      : const Color(0xFF1E3A8A),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _searchMode == SearchMode.browse
-                      ? Icons.explore_outlined
-                      : _searchMode == SearchMode.catalog
-                          ? Icons.auto_awesome_outlined
-                          : Icons.search_rounded,
-                  size: 16,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _searchMode == SearchMode.browse
-                      ? 'Browse'
-                      : _searchMode == SearchMode.catalog
-                          ? 'Catalog'
-                          : 'Keyword',
-                  style: const TextStyle(fontSize: 12, color: Colors.white),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_drop_down_rounded,
-                  size: 18,
-                  color: Colors.white,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _toggleSearchMode() {
-    setState(() {
-      // Cycle through modes: keyword -> catalog -> browse -> keyword
-      switch (_searchMode) {
-        case SearchMode.keyword:
-          _searchMode = SearchMode.catalog;
-          break;
-        case SearchMode.catalog:
-          _searchMode = SearchMode.browse;
-          break;
-        case SearchMode.browse:
-          _searchMode = SearchMode.keyword;
-          break;
-      }
-      _imdbAutocompleteResults.clear();
-      _selectedImdbTitle = null;
-      _imdbSearchError = null;
-      _seriesControlsExpanded = false; // Reset expansion state
-      if (_searchMode == SearchMode.keyword) {
-        _activeAdvancedSelection = null;
-        _isSeries = false;
-        _seasonController.clear();
-        _episodeController.clear();
-      }
-    });
-    // Reload engines for the new search mode
-    _loadDefaultSettings();
   }
 
   /// Build the unified search source selector dropdown
@@ -1932,227 +1620,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       focusNode: _sourceDropdownFocusNode,
       isTelevision: _isTelevision,
     );
-  }
-
-  // IMDB autocomplete search with debouncing
-  void _onImdbSearchTextChanged(String query) {
-    // Cancel previous timer
-    _imdbSearchDebouncer?.cancel();
-
-    // Increment request ID to track the latest request
-    final requestId = ++_imdbRequestId;
-
-    final trimmedQuery = query.trim();
-
-    // Handle empty or short queries - consolidated setState
-    if (trimmedQuery.isEmpty || trimmedQuery.length < 2) {
-      setState(() {
-        _imdbAutocompleteResults.clear();
-        _imdbSearchError = trimmedQuery.isEmpty ? null : 'Enter at least 2 characters';
-        _isImdbSearching = false;
-      });
-      return;
-    }
-
-    // Don't show loading state immediately to prevent flicker
-    // It will be shown after debounce if search actually happens
-    if (_imdbSearchError != null) {
-      setState(() {
-        _imdbSearchError = null;
-      });
-    }
-
-    // Debounce: wait 500ms after user stops typing (increased from 300ms)
-    _imdbSearchDebouncer = Timer(const Duration(milliseconds: 500), () {
-      // Only show loading state when we're actually about to search
-      if (mounted) {
-        setState(() {
-          _isImdbSearching = true;
-        });
-      }
-      _performImdbAutocompleteSearch(trimmedQuery, requestId);
-    });
-  }
-
-  Future<void> _performImdbAutocompleteSearch(String query, int requestId) async {
-    try {
-      // Search both IMDbbot and Stremio catalogs in parallel
-      // Wrap each in error handling so one failure doesn't affect the other
-      final stremioService = StremioService();
-
-      final imdbFuture = ImdbLookupService.searchTitles(query).catchError((e) {
-        debugPrint('IMDB search error: $e');
-        return <ImdbTitleResult>[];
-      });
-
-      final stremioFuture = stremioService.searchCatalogs(query).catchError((e) {
-        debugPrint('Stremio catalog search error: $e');
-        return <StremioMeta>[];
-      });
-
-      final futures = await Future.wait([imdbFuture, stremioFuture]);
-
-      // Check if this is still the latest request
-      if (requestId != _imdbRequestId) {
-        return;
-      }
-
-      if (!mounted) return;
-
-      final imdbResults = futures[0] as List<ImdbTitleResult>;
-      final stremioResults = futures[1] as List<StremioMeta>;
-
-      // Convert Stremio results to ImdbTitleResult format (supports all content types)
-      final stremioConverted = stremioResults
-          .where((meta) => meta.id.isNotEmpty)
-          .map((meta) => ImdbTitleResult.fromStremioMeta(meta))
-          .toList();
-
-      // Merge and deduplicate by ID (IMDbbot results take priority for IMDB content)
-      final Map<String, ImdbTitleResult> resultMap = {};
-
-      // Add Stremio results first (lower priority for IMDB, only source for non-IMDB)
-      for (final result in stremioConverted) {
-        resultMap[result.imdbId] = result;
-      }
-
-      // Add IMDbbot results (higher priority, will overwrite Stremio for IMDB content)
-      for (final result in imdbResults) {
-        resultMap[result.imdbId] = result;
-      }
-
-      final mergedResults = resultMap.values.toList();
-
-      if (kDebugMode) {
-        debugPrint('IMDB search completed: "$query" (requestId: $requestId, '
-            'imdb: ${imdbResults.length}, stremio: ${stremioConverted.length}, merged: ${mergedResults.length})');
-      }
-
-      // Focus nodes are now pooled - no need to create/dispose on each search
-      // Just limit results to pool size
-      final limitedResults = mergedResults.take(_autocompleteFocusNodePoolSize).toList();
-
-      setState(() {
-        _imdbAutocompleteResults = limitedResults;
-        _isImdbSearching = false;
-        _imdbSearchError = limitedResults.isEmpty ? 'No IMDb matches found' : null;
-      });
-
-      // On TV: Auto-focus first result after results appear
-      // Cancel any pending focus request to avoid overlapping requests
-      if (_isTelevision && limitedResults.isNotEmpty) {
-        _pendingAutocompleteFocusRequest?.cancel();
-        _pendingAutocompleteFocusRequest = Timer(const Duration(milliseconds: 100), () {
-          if (mounted && _imdbAutocompleteResults.isNotEmpty) {
-            _autocompleteFocusNodes[0].requestFocus();
-          }
-        });
-      }
-    } catch (e) {
-      // Check if this is still the latest request before updating error state
-      if (requestId != _imdbRequestId) {
-        return;
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _imdbAutocompleteResults.clear();
-        _isImdbSearching = false;
-        _imdbSearchError = e.toString().replaceAll('Exception: ', '');
-      });
-    }
-  }
-
-  // Handle IMDB result selection
-  Future<void> _onImdbResultSelected(ImdbTitleResult result) async {
-
-    // Clear autocomplete immediately
-    setState(() {
-      _selectedImdbTitle = result;
-      _imdbAutocompleteResults.clear();
-      _imdbSearchError = null;
-      _isImdbSearching = true; // Show loading indicator while fetching details
-      _imdbControlsCollapsed = false; // Expand controls for new selection
-    });
-
-    try {
-      // Fetch title details to determine if it's a movie or series
-      final details = await ImdbLookupService.getTitleDetails(result.imdbId);
-
-      if (!mounted) return;
-
-      // Parse the response to determine type
-      bool isSeries = false;
-      if (details['short'] != null && details['short'] is Map) {
-        final shortData = details['short'] as Map<String, dynamic>;
-        final type = shortData['@type']?.toString() ?? '';
-        isSeries = type == 'TVSeries';
-      } else {
-        // Fallback if structure is different
-        isSeries = false;
-      }
-
-      // Extract available seasons from IMDbbot API for series
-      List<int>? availableSeasons;
-      if (isSeries) {
-        try {
-          final main = details['main'];
-          if (main != null && main is Map) {
-            final episodes = main['episodes'];
-            if (episodes != null && episodes is Map) {
-              final seasons = episodes['seasons'];
-              if (seasons != null && seasons is List) {
-                availableSeasons = seasons
-                    .map((s) => (s is Map) ? (s['number'] as int?) : null)
-                    .where((n) => n != null)
-                    .cast<int>()
-                    .toList();
-                debugPrint('TorrentSearchScreen: Extracted ${availableSeasons.length} seasons from IMDbbot API: $availableSeasons');
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('TorrentSearchScreen: Error extracting seasons from API: $e');
-          availableSeasons = null;
-        }
-      }
-
-      setState(() {
-        _isSeries = isSeries;
-        _availableSeasons = availableSeasons;
-        _selectedSeason = null; // Default to "All Seasons"
-        _seasonController.clear();
-        _episodeController.clear();
-        _isImdbSearching = false;
-        // For series, hide controls initially - user can expand to customize
-        _seriesControlsExpanded = !isSeries; // Movies don't need controls, series start collapsed
-      });
-
-      debugPrint('TorrentSearchScreen: IMDB title detected - isSeries=$isSeries, title=${_selectedImdbTitle?.title}');
-
-      // Search immediately for both movies and series
-      // For series, this will search with default params (null season/episode means all episodes)
-      // Users can refine the search later by expanding controls and setting season/episode
-      _createAdvancedSelectionAndSearch();
-    } catch (e) {
-      debugPrint('IMDB Smart Search: Error fetching title details: $e');
-
-      if (!mounted) return;
-
-      // On error, show type selector so user can manually choose
-      setState(() {
-        _isImdbSearching = false;
-        _imdbSearchError = 'Could not determine title type. Please select manually.';
-        // Default to movie on error
-        _isSeries = false;
-        _seasonController.clear();
-        _episodeController.clear();
-        _seriesControlsExpanded = true; // Show controls on error so user can manually choose
-      });
-
-      // Still allow search for movies by default
-      _createAdvancedSelectionAndSearch();
-    }
   }
 
   void _createAdvancedSelectionAndSearch() {
@@ -2242,8 +1709,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _searchController.text = selection.title;
       }
       _activeAdvancedSelection = selection;
-      _imdbAutocompleteResults.clear();
-      _imdbSearchError = null;
       _seriesControlsExpanded = selection.isSeries;
       _availableSeasons = null; // Reset before fetching
       _selectedSeason = null;
@@ -2380,129 +1845,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   // Clear IMDB selection
-  void _clearImdbSelection() {
-    setState(() {
-      _selectedImdbTitle = null;
-      _activeAdvancedSelection = null;
-      _isSeries = false;
-      _availableSeasons = null;
-      _selectedSeason = null;
-      _seasonController.clear();
-      _episodeController.clear();
-      _searchController.clear();
-      _imdbSearchError = null; // Clear any errors when clearing selection
-      _isImdbSearching = false; // Reset loading state
-      _imdbControlsCollapsed = false; // Expand controls when clearing
-      _seriesControlsExpanded = false; // Reset expansion state
-    });
-  }
-
-  // Build IMDB autocomplete dropdown
-  Widget _buildImdbAutocompleteDropdown() {
-    if (_imdbAutocompleteResults.isEmpty && !_isImdbSearching && _imdbSearchError == null) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 8, bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 8,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.5,
-      ),
-      child: _isImdbSearching
-          ? const Padding(
-              padding: EdgeInsets.all(32.0),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
-            )
-          : _imdbSearchError != null
-              ? Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    _imdbSearchError!,
-                    style: const TextStyle(color: Color(0xFFF87171)),
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    overflow: TextOverflow.visible,
-                  ),
-                )
-              : ListView.builder(
-                  // Removed shrinkWrap: true - parent has maxHeight constraint
-                  // shrinkWrap forces measuring all children, hurting performance
-                  padding: EdgeInsets.zero,
-                  itemCount: _imdbAutocompleteResults.length,
-                  itemBuilder: (context, index) {
-                    final result = _imdbAutocompleteResults[index];
-                    final focusNode = _autocompleteFocusNodes[index];
-                    return _ImdbAutocompleteItem(
-                      key: ValueKey(result.imdbId), // Add key for efficient rebuilds
-                      result: result,
-                      focusNode: focusNode,
-                      onSelected: () => _onImdbResultSelected(result),
-                      onKeyEvent: (event) => _handleAutocompleteKeyEvent(index, event),
-                    );
-                  },
-                ),
-    );
-  }
-
-  // Handle keyboard events for autocomplete items
-  KeyEventResult _handleAutocompleteKeyEvent(int index, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index > 0) {
-        _autocompleteFocusNodes[index - 1].requestFocus();
-      } else {
-        _searchFocusNode.requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _autocompleteFocusNodes.length - 1) {
-        _autocompleteFocusNodes[index + 1].requestFocus();
-      } else {
-        // Last autocomplete item - navigate to Season box if series is selected
-        if (_isSeries && _selectedImdbTitle != null) {
-          _seasonInputFocusNode.requestFocus();
-        }
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      _onImdbResultSelected(_imdbAutocompleteResults[index]);
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack) {
-      setState(() {
-        _imdbAutocompleteResults.clear();
-      });
-      _searchFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
   // Handle D-pad navigation for season dropdown
   KeyEventResult _handleSeasonDropdownKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -2680,74 +2022,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_imdbControlsCollapsed && !_isSeries) {
       return const SizedBox.shrink();
     }
-
-    // Show loading indicator while fetching title details
-    if (_isImdbSearching) {
-      return Container(
-        margin: const EdgeInsets.only(top: 8, bottom: 8),
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  const Color(0xFF7C3AED),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Detecting title type...',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Show error message if present
-    if (_imdbSearchError != null) {
-      return Container(
-        margin: const EdgeInsets.only(top: 8, bottom: 8),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.red.withValues(alpha: 0.3),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 16,
-              color: Colors.red,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _imdbSearchError!,
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 13,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 5,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     // For movies, don't show controls at all
     if (!_isSeries) {
       return const SizedBox.shrink();
@@ -9968,10 +9242,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             selectedSource: _selectedSource,
                             isTelevision: _isTelevision,
                             selectedImdbTitle: _selectedImdbTitle,
-                            hasAutocompleteResults: _imdbAutocompleteResults.isNotEmpty,
-                            hasAutocompleteFocusNodes: _autocompleteFocusNodes.isNotEmpty,
                             isSeries: _isSeries,
-                            autocompleteFocusNodes: _autocompleteFocusNodes,
                             seasonInputFocusNode: _seasonInputFocusNode,
                             onClearPressed: () {
                               // Reset search input (controllers can be cleared outside setState)
@@ -9979,12 +9250,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               _seasonController.clear();
                               _episodeController.clear();
 
-                              // Cancel any pending IMDB debounced search
-                              _imdbSearchDebouncer?.cancel();
-
                               // Invalidate any pending search requests
                               _activeSearchRequestId++;
-                              _imdbRequestId++;
 
                               // Reset all state inside setState for proper UI rebuild
                               setState(() {
@@ -9994,9 +9261,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _isSeries = false;
                                 _availableSeasons = null;
                                 _selectedSeason = null;
-                                _imdbAutocompleteResults.clear();
-                                _imdbSearchError = null;
-                                _isImdbSearching = false;
                                 _imdbControlsCollapsed = false;
                                 _seriesControlsExpanded = false;
 
@@ -10049,13 +9313,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               if (_selectedSource.type == SearchSourceType.keyword) {
                                 _searchTorrents(query);
                               } else if (_searchMode == SearchMode.catalog) {
-                                // On TV: Trigger autocomplete when Enter is pressed
-                                if (_isTelevision && _selectedImdbTitle == null) {
-                                  _onImdbSearchTextChanged(query);
-                                } else if (_selectedImdbTitle != null) {
-                                  // Already has selection, can re-search
+                                // In catalog mode, re-search if a title is already selected
+                                if (_selectedImdbTitle != null) {
                                   _createAdvancedSelectionAndSearch();
                                 }
+                                // If no title selected, catalog results are already visible
                               }
                             },
                             onFocusChange: (focused) {
@@ -10126,8 +9388,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
                     // IMDB Smart Search Mode UI components
                     if (_searchMode == SearchMode.catalog) ...[
-                      // Autocomplete dropdown
-                      _buildImdbAutocompleteDropdown(),
                       // Active selection chip
                       _buildImdbSelectionChip(),
                       // Type selector and S/E inputs
@@ -12529,10 +11789,7 @@ class _SearchTextField extends StatefulWidget {
   final SearchSourceOption selectedSource;
   final bool isTelevision;
   final ImdbTitleResult? selectedImdbTitle;
-  final bool hasAutocompleteResults;
-  final bool hasAutocompleteFocusNodes;
   final bool isSeries;
-  final List<FocusNode> autocompleteFocusNodes;
   final FocusNode seasonInputFocusNode;
   final VoidCallback onClearPressed;
   final ValueChanged<String> onChanged;
@@ -12550,10 +11807,7 @@ class _SearchTextField extends StatefulWidget {
     required this.selectedSource,
     required this.isTelevision,
     required this.selectedImdbTitle,
-    required this.hasAutocompleteResults,
-    required this.hasAutocompleteFocusNodes,
     required this.isSeries,
-    required this.autocompleteFocusNodes,
     required this.seasonInputFocusNode,
     required this.onClearPressed,
     required this.onChanged,
@@ -12635,11 +11889,6 @@ class _SearchTextFieldState extends State<_SearchTextField> {
     // Handle arrow down - navigate to next element when at end of text
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (isTextEmpty || isAtEnd) {
-        // Check autocomplete first
-        if (widget.hasAutocompleteResults && widget.hasAutocompleteFocusNodes) {
-          widget.autocompleteFocusNodes[0].requestFocus();
-          return KeyEventResult.handled;
-        }
         // Check series mode
         if (widget.isSeries && widget.selectedImdbTitle != null) {
           widget.seasonInputFocusNode.requestFocus();
@@ -12766,173 +12015,6 @@ class _SearchTextFieldState extends State<_SearchTextField> {
             ),
           ),
           onChanged: widget.enabled ? widget.onChanged : null,
-        ),
-      ),
-    );
-  }
-}
-
-// IMDB autocomplete item widget with DPAD support
-class _ImdbAutocompleteItem extends StatefulWidget {
-  final ImdbTitleResult result;
-  final FocusNode focusNode;
-  final VoidCallback onSelected;
-  final KeyEventResult Function(KeyEvent) onKeyEvent;
-
-  const _ImdbAutocompleteItem({
-    super.key,
-    required this.result,
-    required this.focusNode,
-    required this.onSelected,
-    required this.onKeyEvent,
-  });
-
-  @override
-  State<_ImdbAutocompleteItem> createState() => _ImdbAutocompleteItemState();
-}
-
-class _ImdbAutocompleteItemState extends State<_ImdbAutocompleteItem> {
-  bool _isFocused = false;
-  // Static timer shared across all autocomplete items to throttle scroll animations
-  static Timer? _scrollThrottleTimer;
-  // Track active instances to clean up static timer when last one disposes
-  static int _activeInstances = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _activeInstances++;
-    widget.focusNode.addListener(_onFocusChange);
-    _isFocused = widget.focusNode.hasFocus;
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    _activeInstances--;
-    // Cancel static timer when last instance disposes
-    if (_activeInstances == 0) {
-      _scrollThrottleTimer?.cancel();
-      _scrollThrottleTimer = null;
-    }
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ImdbAutocompleteItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_onFocusChange);
-      widget.focusNode.addListener(_onFocusChange);
-      _isFocused = widget.focusNode.hasFocus;
-    }
-  }
-
-  void _onFocusChange() {
-    if (!mounted) return;
-    final focused = widget.focusNode.hasFocus;
-    if (_isFocused != focused) {
-      setState(() {
-        _isFocused = focused;
-      });
-      // Scroll to visible with throttle to avoid overlapping animations
-      if (focused) {
-        _scrollThrottleTimer?.cancel();
-        _scrollThrottleTimer = Timer(const Duration(milliseconds: 50), () {
-          if (!mounted) return;
-          final ctx = context;
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 100),
-          );
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) => widget.onKeyEvent(event),
-      // Use Container instead of AnimatedContainer for instant feedback
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        decoration: BoxDecoration(
-          color: _isFocused
-              ? Colors.white.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: _isFocused
-                ? Colors.white.withValues(alpha: 0.8)
-                : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: ListTile(
-          onTap: widget.onSelected,
-          leading: widget.result.posterUrl != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.network(
-                    widget.result.posterUrl!,
-                    width: 40,
-                    height: 60,
-                    fit: BoxFit.cover,
-                    // Add cacheWidth/cacheHeight to reduce memory usage
-                    cacheWidth: 80,
-                    cacheHeight: 120,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: 40,
-                        height: 60,
-                        color: Colors.white.withValues(alpha: 0.1),
-                        child: const Icon(
-                          Icons.movie_outlined,
-                          color: Colors.white54,
-                        ),
-                      );
-                    },
-                  ),
-                )
-              : Container(
-                  width: 40,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Icon(
-                    Icons.movie_outlined,
-                    color: Colors.white54,
-                  ),
-                ),
-          title: Text(
-            widget.result.title,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: _isFocused ? FontWeight.w600 : FontWeight.normal,
-              fontSize: 14,
-            ),
-          ),
-          subtitle: widget.result.year != null
-              ? Text(
-                  widget.result.year!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 12,
-                  ),
-                )
-              : null,
-          trailing: _isFocused
-              ? Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: Colors.white.withValues(alpha: 0.6),
-                )
-              : null,
         ),
       ),
     );
