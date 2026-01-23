@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/app_migration_service.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/initial_setup_flow.dart';
 import '../main.dart';
@@ -92,6 +93,9 @@ class _AppInitializerState extends State<AppInitializer>
       FocusManager.instance.highlightStrategy =
           FocusHighlightStrategy.alwaysTraditional;
     }
+
+    // Run app migrations (auto-add Cinemeta addon on fresh install or update)
+    await AppMigrationService.runMigrations();
 
     // Check if onboarding has been completed
     final hasCompleted = await StorageService.isInitialSetupComplete();

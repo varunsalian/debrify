@@ -424,26 +424,6 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                             return null;
                           },
                         ),
-                    ActivateIntent: CallbackAction<ActivateIntent>(
-                      onInvoke: (_) {
-                        // Find the focused widget and activate it
-                        final focusedChild = FocusScope.of(
-                          innerContext,
-                        ).focusedChild;
-                        if (focusedChild != null) {
-                          final primaryFocus =
-                              FocusManager.instance.primaryFocus;
-                          if (primaryFocus != null) {
-                            // Trigger activation via Actions
-                            Actions.maybeInvoke(
-                              primaryFocus.context!,
-                              const ActivateIntent(),
-                            );
-                          }
-                        }
-                        return null;
-                      },
-                    ),
                   },
                   child: Dialog(
                     insetPadding: EdgeInsets.symmetric(
