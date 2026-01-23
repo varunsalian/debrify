@@ -450,6 +450,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Restore focus to the torrent card at the given index or for the given torrent.
+  /// Used after dialogs close to prevent focus from jumping to wrong elements on Android TV.
+  void _restoreFocusToCard(int index, [Torrent? torrent]) {
+    if (!_isTelevision) return; // Only needed for TV DPAD navigation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // If index is invalid but torrent is provided, find the index
+      int targetIndex = index;
+      if (targetIndex < 0 && torrent != null) {
+        targetIndex = _torrents.indexWhere((t) => t.infohash == torrent.infohash);
+      }
+      if (targetIndex >= 0 && targetIndex < _cardFocusNodes.length) {
+        _cardFocusNodes[targetIndex].requestFocus();
+      }
+    });
+  }
+
   bool get _bothServicesEnabled {
     return _realDebridIntegrationEnabled &&
         _torboxIntegrationEnabled &&
@@ -4728,6 +4745,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autofocus: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               // Navigate to the specific PikPak folder
                               MainPageBridge.openPikPakFolder?.call(fileId, torrentName);
                             },
@@ -4743,6 +4761,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autofocus: false,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _playPikPakVideos(videoFiles, torrentName);
                             },
                           ),
@@ -4754,6 +4773,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _downloadPikPakFiles(fileId, torrentName);
                             },
                           ),
@@ -4767,6 +4787,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: hasVideo,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _addPikPakToPlaylist(videoFiles, torrentName, fileId);
                             },
                           ),
@@ -4778,6 +4799,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               final keyword = _searchController.text.trim();
                               _addTorrentToChannel(torrent, keyword);
                             },
@@ -4788,7 +4810,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _restoreFocusToCard(-1, torrent);
+                    },
                     child: const Text('Close', style: TextStyle(color: Colors.white54)),
                   ),
                 ],
@@ -6695,6 +6720,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autofocus: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               // Open the torrent in Torbox tab
                               MainPageBridge.openTorboxFolder?.call(torboxTorrent);
                             },
@@ -6710,6 +6736,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             autofocus: false,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _playTorboxTorrent(torboxTorrent);
                             },
                           ),
@@ -6721,6 +6748,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _showTorboxDownloadOptions(torboxTorrent);
                             },
                           ),
@@ -6732,6 +6760,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: apiKey != null && apiKey.isNotEmpty,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               if (apiKey != null && apiKey.isNotEmpty) {
                                 _copyTorboxZipLink(torboxTorrent, apiKey);
                               }
@@ -6747,6 +6776,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: hasVideo,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               _addTorboxTorrentToPlaylist(torboxTorrent);
                             },
                           ),
@@ -6758,6 +6788,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: true,
                             onTap: () {
                               Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
                               final keyword = _searchController.text.trim();
                               // Use the torrent parameter directly since it's already the correct Torrent type
                               _addTorrentToChannel(torrent, keyword);
@@ -6769,7 +6800,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _restoreFocusToCard(-1, torrent);
+                    },
                     child: const Text(
                       'Close',
                       style: TextStyle(color: Colors.white54),
@@ -7969,6 +8003,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 autofocus: !isRarArchive,
                                 onTap: () {
                                   Navigator.of(ctx).pop();
+                                  _restoreFocusToCard(index);
                                   // Create RDTorrent object and open it in Real-Debrid tab
                                   final rdTorrent = RDTorrent(
                                     id: result['torrentId'].toString(),
@@ -8016,6 +8051,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 enabled: true,
                                 onTap: () async {
                                   Navigator.of(ctx).pop();
+                                  _restoreFocusToCard(index);
                                   // RAR archives: always download the single link directly
                                   if (isRarArchive) {
                                     _downloadFile(downloadLink, torrentName);
@@ -8049,6 +8085,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 enabled: hasAnyVideo,
                                 onTap: () async {
                                   Navigator.of(ctx).pop();
+                                  _restoreFocusToCard(index);
                                   if (!hasAnyVideo) return;
                                   if (links.length == 1) {
                                     String finalTitle = torrentName;
@@ -8127,6 +8164,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 enabled: true,
                                 onTap: () {
                                   Navigator.of(ctx).pop();
+                                  _restoreFocusToCard(index);
                                   final keyword = _searchController.text.trim();
                                   if (index >= 0 && index < _torrents.length) {
                                     _addTorrentToChannel(_torrents[index], keyword);
@@ -8139,7 +8177,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                       const SizedBox(height: 12),
                       TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _restoreFocusToCard(index);
+                        },
                         child: const Text(
                           'Cancel',
                           style: TextStyle(color: Colors.white54),
