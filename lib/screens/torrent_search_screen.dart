@@ -217,6 +217,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _quickPlayPending = false;
   AdvancedSearchSelection? _quickPlaySelection;
 
+  // Quick Play retry state - for trying multiple torrents on cache failure
+  List<Torrent> _quickPlayTorrentsList = [];
+  int _quickPlayCurrentIndex = 0;
+  bool _quickPlayTryMultiple = false;
+  int _quickPlayMaxRetries = 3;
+
   // Search engine toggles - dynamic engine states
   Map<String, bool> _engineStates = {};
   List<DynamicEngine> _availableEngines = [];
@@ -1781,10 +1787,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Called after search completes to check if Quick Play should auto-select
-  void _checkQuickPlayAfterSearch() {
+  Future<void> _checkQuickPlayAfterSearch() async {
     if (!_quickPlayPending || _quickPlaySelection == null) return;
 
-    final selection = _quickPlaySelection!;
     // Note: Keep _quickPlayPending = true so _handleTorrentCardActivated knows to skip dialog
     setState(() {
       _quickPlaySelection = null;
@@ -1830,9 +1835,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    // Load Quick Play retry settings
+    _quickPlayTryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
+    _quickPlayMaxRetries = await StorageService.getQuickPlayMaxRetries();
+
+    if (!mounted) return;
+
+    // Store the full list of torrents for potential retries
+    _quickPlayTorrentsList = torrentsOnly;
+    _quickPlayCurrentIndex = 0;
+
     // Pick the first torrent (sorted by relevance)
     selectedTorrent = torrentsOnly.first;
     debugPrint('TorrentSearchScreen: Quick Play - selected torrent: ${selectedTorrent.displayTitle}');
+    debugPrint('TorrentSearchScreen: Quick Play - try multiple: $_quickPlayTryMultiple, max retries: $_quickPlayMaxRetries');
 
     // Auto-play the selected torrent
     // Note: _quickPlayPending is still true, will be reset in _handleTorrentCardActivated
@@ -5180,11 +5196,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
+      // Reset Quick Play retry state on success
+      if (forcePlay) {
+        _resetQuickPlayState();
+      }
+
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay);
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
+
+      // Check if this is a cache-related error and Quick Play with retry is enabled
+      final errorStr = e.toString().toLowerCase();
+      final isCacheError = errorStr.contains('not readily available') ||
+          errorStr.contains('file is not available') ||
+          errorStr.contains('no files found');
+
+      if (forcePlay && isCacheError && _tryNextQuickPlayTorrent(provider: 'debrid')) {
+        return; // Next torrent is being tried
+      }
+
+      // Reset Quick Play state on non-cache error
+      if (forcePlay) {
+        _resetQuickPlayState();
+      }
 
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5614,6 +5650,70 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Tries the next torrent in Quick Play mode when current one fails cache check.
+  /// Returns true if there's a next torrent to try, false if exhausted.
+  bool _tryNextQuickPlayTorrent({required String provider}) {
+    if (!_quickPlayTryMultiple) return false;
+    if (_quickPlayTorrentsList.isEmpty) return false;
+
+    _quickPlayCurrentIndex++;
+
+    // Check if we've exhausted retries
+    if (_quickPlayCurrentIndex >= _quickPlayMaxRetries ||
+        _quickPlayCurrentIndex >= _quickPlayTorrentsList.length) {
+      debugPrint('TorrentSearchScreen: Quick Play - exhausted retries ($_quickPlayCurrentIndex/$_quickPlayMaxRetries)');
+      _resetQuickPlayState();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No cached torrents found after trying $_quickPlayCurrentIndex sources'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return false;
+    }
+
+    // Get next torrent
+    final nextTorrent = _quickPlayTorrentsList[_quickPlayCurrentIndex];
+    final nextIndex = _torrents.indexOf(nextTorrent);
+    debugPrint('TorrentSearchScreen: Quick Play - trying torrent ${_quickPlayCurrentIndex + 1}/$_quickPlayMaxRetries: ${nextTorrent.displayTitle}');
+
+    // Show brief feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Not cached, trying next torrent (${_quickPlayCurrentIndex + 1}/$_quickPlayMaxRetries)...'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+
+    // Set quickPlayPending back to true so forcePlay works for the next torrent
+    if (!mounted) return false;
+    setState(() {
+      _quickPlayPending = true;
+    });
+
+    // Trigger the next torrent based on provider
+    if (provider == 'torbox') {
+      _addToTorbox(nextTorrent.infohash, nextTorrent.name, forcePlay: true);
+    } else if (provider == 'debrid') {
+      _addToRealDebrid(nextTorrent.infohash, nextTorrent.name, nextIndex >= 0 ? nextIndex : 0, forcePlay: true);
+    }
+
+    return true;
+  }
+
+  /// Resets Quick Play state after completion or failure
+  void _resetQuickPlayState() {
+    setState(() {
+      _quickPlayPending = false;
+      _quickPlayTorrentsList = [];
+      _quickPlayCurrentIndex = 0;
+    });
+  }
+
   Future<void> _addToTorbox(String infohash, String torrentName, {bool forcePlay = false}) async {
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -5641,6 +5741,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!success) {
         final error = (response['error'] ?? '').toString();
         if (error == 'DOWNLOAD_NOT_CACHED') {
+          // If Quick Play with retry enabled, try next torrent
+          if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) {
+            return; // Next torrent is being tried
+          }
           _showTorboxSnack(
             'This torrent is not cached on Torbox. Please try a different torrent.',
             isError: true,
@@ -5700,6 +5804,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       if (!mounted) return;
+      // Reset Quick Play retry state on success
+      if (forcePlay) {
+        _resetQuickPlayState();
+      }
       final torrent = _findTorrentByInfohash(infohash, torrentName);
       await _showTorboxPostAddOptions(torboxTorrent, torrent, forcePlay: forcePlay);
     } catch (e) {
@@ -5710,6 +5818,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'Failed to add torrent: ${_formatTorboxError(e)}',
         isError: true,
       );
+      // Reset Quick Play state on non-cache error
+      if (forcePlay) {
+        _resetQuickPlayState();
+      }
     }
   }
 

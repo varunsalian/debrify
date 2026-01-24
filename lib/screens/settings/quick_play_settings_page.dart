@@ -23,6 +23,13 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   bool _vrAutoDetectFormat = true;
   bool _vrShowDialog = true;
 
+  // Cache Fallback Settings
+  bool _tryMultipleTorrents = false;
+  int _maxRetries = 3;
+
+  // Default provider (to hide cache fallback for PikPak)
+  String _defaultProvider = 'none';
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +42,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     final vrDefaultStereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
     final vrAutoDetectFormat = await StorageService.getQuickPlayVrAutoDetectFormat();
     final vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+    final tryMultipleTorrents = await StorageService.getQuickPlayTryMultipleTorrents();
+    final maxRetries = await StorageService.getQuickPlayMaxRetries();
+    final defaultProvider = await StorageService.getDefaultTorrentProvider();
 
     if (!mounted) return;
 
@@ -44,6 +54,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _vrDefaultStereoMode = vrDefaultStereoMode;
       _vrAutoDetectFormat = vrAutoDetectFormat;
       _vrShowDialog = vrShowDialog;
+      _tryMultipleTorrents = tryMultipleTorrents;
+      _maxRetries = maxRetries;
+      _defaultProvider = defaultProvider;
       _loading = false;
     });
   }
@@ -73,6 +86,16 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     await StorageService.setQuickPlayVrShowDialog(showDialog);
   }
 
+  Future<void> _setTryMultipleTorrents(bool tryMultiple) async {
+    setState(() => _tryMultipleTorrents = tryMultiple);
+    await StorageService.setQuickPlayTryMultipleTorrents(tryMultiple);
+  }
+
+  Future<void> _setMaxRetries(int maxRetries) async {
+    setState(() => _maxRetries = maxRetries);
+    await StorageService.setQuickPlayMaxRetries(maxRetries);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -100,6 +123,11 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           children: [
             _buildHeader(context),
             const SizedBox(height: 24),
+            // Cache Fallback section (hide for PikPak - not supported)
+            if (_defaultProvider != 'pikpak') ...[
+              _buildCacheFallbackSection(context),
+              const SizedBox(height: 24),
+            ],
             // VR Playback section (Android only)
             if (Platform.isAndroid) ...[
               _buildVrSection(context),
@@ -156,6 +184,129 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCacheFallbackSection(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cached_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Cache Fallback',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          // Description
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Control what happens when a torrent is not cached on your debrid service.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+
+          // Try Multiple Torrents toggle
+          _buildCheckboxTile(
+            context,
+            title: 'Try multiple torrents',
+            subtitle: _tryMultipleTorrents
+                ? 'If first torrent is not cached, try up to $_maxRetries torrents'
+                : 'Stop immediately if first torrent is not cached',
+            value: _tryMultipleTorrents,
+            onChanged: _setTryMultipleTorrents,
+          ),
+
+          // Max retries slider (only visible when try multiple is enabled)
+          if (_tryMultipleTorrents) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Max torrents to try',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$_maxRetries',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: theme.colorScheme.primary,
+                      inactiveTrackColor: theme.colorScheme.primary.withValues(alpha: 0.2),
+                      thumbColor: theme.colorScheme.primary,
+                      overlayColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    ),
+                    child: Slider(
+                      value: _maxRetries.toDouble(),
+                      min: 2,
+                      max: 10,
+                      divisions: 8,
+                      label: '$_maxRetries',
+                      onChanged: (value) => _setMaxRetries(value.round()),
+                    ),
+                  ),
+                  Text(
+                    'Higher values increase chance of finding cached content but may take longer',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

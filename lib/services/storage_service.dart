@@ -170,6 +170,11 @@ class StorageService {
   static const String _quickPlayVrAutoDetectFormatKey = 'quick_play_vr_auto_detect_format';
   static const String _quickPlayVrShowDialogKey = 'quick_play_vr_show_dialog';
 
+  // Quick Play Cache Fallback Settings
+  // When enabled, if first torrent is not cached, try next torrents until one works
+  static const String _quickPlayTryMultipleTorrentsKey = 'quick_play_try_multiple_torrents';
+  static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
+
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
@@ -2871,6 +2876,40 @@ class StorageService {
     await prefs.remove(_quickPlayVrDefaultStereoModeKey);
     await prefs.remove(_quickPlayVrAutoDetectFormatKey);
     await prefs.remove(_quickPlayVrShowDialogKey);
+  }
+
+  // Quick Play Cache Fallback Settings methods
+
+  /// Get whether to try multiple torrents if first is not cached
+  /// Default: false (stop on first uncached - current behavior)
+  static Future<bool> getQuickPlayTryMultipleTorrents() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? false;
+  }
+
+  static Future<void> setQuickPlayTryMultipleTorrents(bool tryMultiple) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
+  }
+
+  /// Get max number of torrents to try before giving up
+  /// Default: 3, Range: 2-10
+  static Future<int> getQuickPlayMaxRetries() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_quickPlayMaxRetriesKey) ?? 3;
+  }
+
+  static Future<void> setQuickPlayMaxRetries(int maxRetries) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Clamp between 2 and 10
+    await prefs.setInt(_quickPlayMaxRetriesKey, maxRetries.clamp(2, 10));
+  }
+
+  /// Clear all Quick Play Cache Fallback settings
+  static Future<void> clearQuickPlayCacheFallbackSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_quickPlayTryMultipleTorrentsKey);
+    await prefs.remove(_quickPlayMaxRetriesKey);
   }
 }
 
