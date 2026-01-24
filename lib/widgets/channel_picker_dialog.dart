@@ -4,6 +4,7 @@ import '../models/debrify_tv_channel_record.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
+import '../utils/dialog_tap_guard.dart';
 
 /// Result returned when user selects or creates a channel
 class ChannelPickerResult {
@@ -496,6 +497,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                       (event.logicalKey == LogicalKeyboardKey.select ||
                           event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.space)) {
+                    DialogTapGuard.markKeyAction();
                     _cancelCreate();
                     return KeyEventResult.handled;
                   }
@@ -539,6 +541,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                       (event.logicalKey == LogicalKeyboardKey.select ||
                           event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.space)) {
+                    DialogTapGuard.markKeyAction();
                     _createChannel();
                     return KeyEventResult.handled;
                   }
@@ -626,13 +629,17 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
+          DialogTapGuard.markKeyAction();
           widget.onTap();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
       child: InkWell(
-        onTap: widget.onTap,
+        onTap: () {
+          if (DialogTapGuard.shouldIgnoreTap()) return;
+          widget.onTap();
+        },
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           padding: const EdgeInsets.all(14),

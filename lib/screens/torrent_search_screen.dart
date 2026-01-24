@@ -54,6 +54,8 @@ import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
 import 'dart:async';
 
+import '../utils/dialog_tap_guard.dart';
+
 // Search mode for torrent search
 enum SearchMode { keyword, catalog, browse }
 
@@ -485,6 +487,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleTorrentCardActivated(Torrent torrent, int index) async {
+    debugPrint('[TorrentSearch] _handleTorrentCardActivated called for index $index: ${torrent.displayTitle}');
+
     // Check if this is a Quick Play action (to skip dialog if multiple services)
     final isQuickPlay = _quickPlayPending;
     if (isQuickPlay) {
@@ -10457,7 +10461,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       isCached: _torboxResultIsCached(torrent.infohash),
       // Only show cache badge if we actually checked cache status (not just assuming cached)
       cacheService: (_torboxCacheCheckEnabled && _torboxCacheStatus != null && _torboxResultIsCached(torrent.infohash)) ? 'torbox' : null,
-      onTap: () => _handleTorrentCardActivated(torrent, index),
+      onTap: () {
+        debugPrint('[TorrentResultRow $index] onTap triggered');
+        if (DialogTapGuard.shouldIgnoreTap()) return;
+        _handleTorrentCardActivated(torrent, index);
+      },
       // Long press shows provider selection dialog (useful when default is set)
       onLongPress: _multipleServicesEnabled
           ? () => _showServiceSelectionDialog(torrent, index)
@@ -10529,7 +10537,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         builder: (context) {
           final isFocused = Focus.of(context).hasFocus;
           return GestureDetector(
-            onTap: () => _handleTorrentCardActivated(torrent, index),
+            onTap: () {
+              debugPrint('[CompactCard $index] GestureDetector.onTap triggered');
+              if (DialogTapGuard.shouldIgnoreTap()) return;
+              _handleTorrentCardActivated(torrent, index);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -10820,7 +10832,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
                     focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
-                    onTap: () => _handleTorrentCardActivated(torrent, index),
+                    onTap: () {
+                      debugPrint('[StreamCard $index] InkWell.onTap triggered');
+                      if (DialogTapGuard.shouldIgnoreTap()) return;
+                      _handleTorrentCardActivated(torrent, index);
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
@@ -11232,6 +11248,7 @@ class _TorrentCardState extends State<_TorrentCard> {
     if (!mounted) return;
     final focused = widget.focusNode.hasFocus;
     if (_isFocused != focused) {
+      debugPrint('[TorrentCard ${widget.index}] Focus changed: $_isFocused -> $focused');
       setState(() {
         _isFocused = focused;
       });
@@ -11260,11 +11277,15 @@ class _TorrentCardState extends State<_TorrentCard> {
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
+        // DEBUG: Log all key events on torrent cards
+        debugPrint('[TorrentCard ${widget.index}] KeyEvent: ${event.runtimeType} - ${event.logicalKey.keyLabel}');
+
         // Handle OK/Select/Enter press
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
+          debugPrint('[TorrentCard ${widget.index}] ACTIVATING card via KeyDownEvent');
           widget.onCardActivated();
           return KeyEventResult.handled;
         }
@@ -11428,7 +11449,11 @@ class _TorrentCardState extends State<_TorrentCard> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(12),
                           focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
-                          onTap: widget.onCardActivated,
+                          onTap: () {
+                            debugPrint('[_TorrentCard ${widget.index}] InkWell.onTap triggered');
+                            if (DialogTapGuard.shouldIgnoreTap()) return;
+                            widget.onCardActivated();
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
@@ -11898,6 +11923,7 @@ class _DebridActionTileState extends State<_DebridActionTile> {
     return Focus(
       autofocus: widget.autofocus,
       onFocusChange: (focused) {
+        debugPrint('[DebridActionTile "${widget.title}"] Focus changed: $_focused -> $focused');
         if (mounted) {
           setState(() {
             _focused = focused;
@@ -11905,18 +11931,26 @@ class _DebridActionTileState extends State<_DebridActionTile> {
         }
       },
       onKeyEvent: (node, event) {
+        // DEBUG: Log all key events on action tiles
+        debugPrint('[DebridActionTile "${widget.title}"] KeyEvent: ${event.runtimeType} - ${event.logicalKey.keyLabel}');
+
         if (widget.enabled &&
             event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
+          debugPrint('[DebridActionTile "${widget.title}"] EXECUTING onTap via KeyDownEvent');
+          DialogTapGuard.markKeyAction(); // Prevent tap event from activating underlying widget
           widget.onTap();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
       child: InkWell(
-        onTap: widget.enabled ? widget.onTap : null,
+        onTap: widget.enabled ? () {
+          debugPrint('[DebridActionTile "${widget.title}"] EXECUTING onTap via touch/click');
+          widget.onTap();
+        } : null,
         borderRadius: BorderRadius.circular(16),
         child: Opacity(
           opacity: widget.enabled ? 1.0 : 0.45,
