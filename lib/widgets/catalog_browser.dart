@@ -89,6 +89,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   final FocusNode _genreDropdownFocusNode = FocusNode(debugLabel: 'genre_dropdown');
   List<FocusNode> _contentFocusNodes = [];
 
+  // Focus state trackers for visual indicators
+  final ValueNotifier<bool> _providerDropdownFocused = ValueNotifier(false);
+  final ValueNotifier<bool> _catalogDropdownFocused = ValueNotifier(false);
+  final ValueNotifier<bool> _genreDropdownFocused = ValueNotifier(false);
+
   /// Public method to request focus on the first dropdown (provider dropdown)
   /// Called from parent when navigating down from Sources
   void requestFocusOnFirstDropdown() {
@@ -100,6 +105,93 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     super.initState();
     _loadAddons();
     _scrollController.addListener(_onScroll);
+    // Set up focus listeners for visual indicators
+    _providerDropdownFocusNode.addListener(() {
+      _providerDropdownFocused.value = _providerDropdownFocusNode.hasFocus;
+    });
+    _catalogDropdownFocusNode.addListener(() {
+      _catalogDropdownFocused.value = _catalogDropdownFocusNode.hasFocus;
+    });
+    _genreDropdownFocusNode.addListener(() {
+      _genreDropdownFocused.value = _genreDropdownFocusNode.hasFocus;
+    });
+    // Set up key event handlers for arrow navigation
+    _providerDropdownFocusNode.onKeyEvent = _handleProviderDropdownKeyEvent;
+    _catalogDropdownFocusNode.onKeyEvent = _handleCatalogDropdownKeyEvent;
+    _genreDropdownFocusNode.onKeyEvent = _handleGenreDropdownKeyEvent;
+  }
+
+  KeyEventResult _handleProviderDropdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Up arrow: navigate to Sources above
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onRequestFocusAbove?.call();
+      return KeyEventResult.handled;
+    }
+    // Down arrow: navigate to first content item
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_contentFocusNodes.isNotEmpty) {
+        _contentFocusNodes[0].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    // Right arrow: navigate to catalog dropdown
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _catalogDropdownFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleCatalogDropdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Up arrow: navigate to Sources above
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onRequestFocusAbove?.call();
+      return KeyEventResult.handled;
+    }
+    // Left arrow: navigate to provider dropdown
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _providerDropdownFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    // Down arrow: navigate to first content item
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_contentFocusNodes.isNotEmpty) {
+        _contentFocusNodes[0].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    // Right arrow: navigate to genre dropdown if available
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (_selectedCatalog?.supportsGenre ?? false) {
+        _genreDropdownFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleGenreDropdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Up arrow: navigate to Sources above
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onRequestFocusAbove?.call();
+      return KeyEventResult.handled;
+    }
+    // Left arrow: navigate to catalog dropdown
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _catalogDropdownFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    // Down arrow: navigate to first content item
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_contentFocusNodes.isNotEmpty) {
+        _contentFocusNodes[0].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -137,6 +229,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _providerDropdownFocusNode.dispose();
     _catalogDropdownFocusNode.dispose();
     _genreDropdownFocusNode.dispose();
+    _providerDropdownFocused.dispose();
+    _catalogDropdownFocused.dispose();
+    _genreDropdownFocused.dispose();
     for (final node in _contentFocusNodes) {
       node.dispose();
     }
@@ -376,12 +471,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     // List navigation (up/down only)
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (index == 0) {
-        // Move to genre dropdown or catalog dropdown
-        if (_selectedCatalog?.supportsGenre ?? false) {
-          FocusScope.of(context).requestFocus(_genreDropdownFocusNode);
-        } else {
-          FocusScope.of(context).requestFocus(_catalogDropdownFocusNode);
-        }
+        // Move to provider dropdown (first dropdown in the row)
+        _providerDropdownFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
       if (index > 0 && index - 1 < _contentFocusNodes.length) {
@@ -507,151 +598,147 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   }
 
   Widget _buildProviderDropdown() {
-    return Focus(
-      focusNode: _providerDropdownFocusNode,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          // Up arrow: navigate to Sources above
-          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            widget.onRequestFocusAbove?.call();
-            return KeyEventResult.handled;
-          }
-          // Down arrow: navigate to catalog dropdown
-          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            FocusScope.of(context).requestFocus(_catalogDropdownFocusNode);
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<StremioAddon>(
-            value: _selectedAddon,
-            isExpanded: true,
-            dropdownColor: const Color(0xFF1E293B),
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Colors.white.withValues(alpha: 0.7),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _providerDropdownFocused,
+      builder: (context, isFocused, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isFocused
+                  ? const Color(0xFF3B82F6)
+                  : Colors.white.withValues(alpha: 0.1),
+              width: isFocused ? 2 : 1,
             ),
-            hint: Text(
-              'Select Provider',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-            items: _addons.map((addon) {
-              return DropdownMenuItem(
-                value: addon,
-                child: Row(
-                  children: [
-                    _buildProviderIcon(addon),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        addon.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: _onAddonChanged,
+                  ]
+                : null,
           ),
-        ),
-      ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<StremioAddon>(
+              value: _selectedAddon,
+              focusNode: _providerDropdownFocusNode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              hint: Text(
+                'Select Provider',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+              items: _addons.map((addon) {
+                return DropdownMenuItem(
+                  value: addon,
+                  child: Row(
+                    children: [
+                      _buildProviderIcon(addon),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          addon.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: _onAddonChanged,
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildCatalogDropdown() {
     final catalogs = _selectedAddon?.catalogs ?? [];
 
-    return Focus(
-      focusNode: _catalogDropdownFocusNode,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          // Up arrow: navigate to provider dropdown
-          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            FocusScope.of(context).requestFocus(_providerDropdownFocusNode);
-            return KeyEventResult.handled;
-          }
-          // Down arrow: navigate to genre dropdown or first content item
-          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            if (_selectedCatalog?.supportsGenre ?? false) {
-              FocusScope.of(context).requestFocus(_genreDropdownFocusNode);
-            } else if (_contentFocusNodes.isNotEmpty) {
-              FocusScope.of(context).requestFocus(_contentFocusNodes[0]);
-            }
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<StremioAddonCatalog>(
-            value: _selectedCatalog,
-            isExpanded: true,
-            dropdownColor: const Color(0xFF1E293B),
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Colors.white.withValues(alpha: 0.7),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _catalogDropdownFocused,
+      builder: (context, isFocused, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isFocused
+                  ? const Color(0xFF3B82F6)
+                  : Colors.white.withValues(alpha: 0.1),
+              width: isFocused ? 2 : 1,
             ),
-            hint: Text(
-              'Select Catalog',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-            items: catalogs.map((catalog) {
-              return DropdownMenuItem(
-                value: catalog,
-                child: Row(
-                  children: [
-                    _buildTypeIcon(catalog.type),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        // Append type to distinguish catalogs with same name (e.g., "Popular Movies" vs "Popular Series")
-                        catalog.type.isNotEmpty
-                            ? '${catalog.name} (${catalog.type[0].toUpperCase()}${catalog.type.substring(1)})'
-                            : catalog.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: _onCatalogChanged,
+                  ]
+                : null,
           ),
-        ),
-      ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<StremioAddonCatalog>(
+              value: _selectedCatalog,
+              focusNode: _catalogDropdownFocusNode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+              hint: Text(
+                'Select Catalog',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ),
+              items: catalogs.map((catalog) {
+                return DropdownMenuItem(
+                  value: catalog,
+                  child: Row(
+                    children: [
+                      _buildTypeIcon(catalog.type),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          // Append type to distinguish catalogs with same name (e.g., "Popular Movies" vs "Popular Series")
+                          catalog.type.isNotEmpty
+                              ? '${catalog.name} (${catalog.type[0].toUpperCase()}${catalog.type.substring(1)})'
+                              : catalog.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: _onCatalogChanged,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -659,73 +746,71 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     final genreOptions = _selectedCatalog?.genreOptions ?? [];
     if (genreOptions.isEmpty) return const SizedBox.shrink();
 
-    return Focus(
-      focusNode: _genreDropdownFocusNode,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          // Up arrow: navigate to catalog dropdown
-          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            FocusScope.of(context).requestFocus(_catalogDropdownFocusNode);
-            return KeyEventResult.handled;
-          }
-          // Down arrow: navigate to first content item
-          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            if (_contentFocusNodes.isNotEmpty) {
-              FocusScope.of(context).requestFocus(_contentFocusNodes[0]);
-            }
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _genreDropdownFocused,
+      builder: (context, isFocused, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isFocused
+                  ? const Color(0xFF3B82F6)
+                  : Colors.white.withValues(alpha: 0.1),
+              width: isFocused ? 2 : 1,
+            ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
           ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String?>(
-            value: _selectedGenre,
-            isExpanded: true,
-            dropdownColor: const Color(0xFF1E293B),
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-            hint: Text(
-              'All Genres',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _selectedGenre,
+              focusNode: _genreDropdownFocusNode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withValues(alpha: 0.7),
               ),
-            ),
-            items: [
-              DropdownMenuItem<String?>(
-                value: null,
-                child: Text(
-                  'All Genres',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
+              hint: Text(
+                'All Genres',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
                 ),
               ),
-              ...genreOptions.map((genre) {
-                return DropdownMenuItem(
-                  value: genre,
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
                   child: Text(
-                    genre,
-                    style: const TextStyle(color: Colors.white),
+                    'All Genres',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
                   ),
-                );
-              }),
-            ],
-            onChanged: _onGenreChanged,
+                ),
+                ...genreOptions.map((genre) {
+                  return DropdownMenuItem(
+                    value: genre,
+                    child: Text(
+                      genre,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  );
+                }),
+              ],
+              onChanged: _onGenreChanged,
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

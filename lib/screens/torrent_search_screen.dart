@@ -323,6 +323,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Focus listeners removed - now using onFocusChange callbacks directly in widgets
     // Exception: DropdownButton doesn't have onFocusChange, so we use a listener
     _sortDropdownFocusNode.addListener(_onSortDropdownFocusChange);
+    // Add arrow key navigation for sort dropdown (Enter/Select handled by DropdownButton itself)
+    _sortDropdownFocusNode.onKeyEvent = _handleSortDropdownKeyEvent;
 
     // Track scroll position continuously so we can preserve it on dispose
     _resultsScrollController.addListener(_onScrollChanged);
@@ -407,6 +409,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_sortDropdownFocusNode.hasFocus && _isTelevision) {
       _scrollToFocusNode(_sortDropdownFocusNode);
     }
+  }
+
+  KeyEventResult _handleSortDropdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // Left arrow: go to torrent/direct dropdown or back button
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (_torrentProviderCounts.isNotEmpty) {
+        _torrentDropdownFocusNode.requestFocus();
+      } else if (_directProviderCounts.isNotEmpty) {
+        _directDropdownFocusNode.requestFocus();
+      } else if (_cameFromCatalogBrowse) {
+        _backButtonFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    // Right arrow: go to sort direction
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _sortDirectionFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    // Up arrow: go to search bar
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    // Down arrow: go to first result
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_cardFocusNodes.isNotEmpty) {
+        _cardFocusNodes[0].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    // Let Enter/Select pass through to DropdownButton
+    return KeyEventResult.ignored;
   }
 
   void _onScrollChanged() {
@@ -7697,6 +7733,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       const SizedBox(height: 12),
                       TextButton(
                         onPressed: () {
+                          DialogTapGuard.markKeyAction();
                           Navigator.of(ctx).pop();
                           _restoreFocusToCard(index);
                         },
@@ -10128,6 +10165,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                               // Enter/Select: activate back
                                               if (event.logicalKey == LogicalKeyboardKey.enter ||
                                                   event.logicalKey == LogicalKeyboardKey.select) {
+                                                DialogTapGuard.markKeyAction();
                                                 _goBackToCatalog();
                                                 return KeyEventResult.handled;
                                               }
@@ -10137,7 +10175,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                               builder: (context) {
                                                 final isFocused = Focus.of(context).hasFocus;
                                                 return InkWell(
-                                                  onTap: _goBackToCatalog,
+                                                  onTap: () {
+                                                    if (DialogTapGuard.shouldIgnoreTap()) return;
+                                                    _goBackToCatalog();
+                                                  },
                                                   borderRadius: BorderRadius.circular(4),
                                                   child: Container(
                                                     padding: const EdgeInsets.all(4),
@@ -10176,75 +10217,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         ),
                                       const Spacer(),
                                       // Sort dropdown with arrow key navigation
-                                      Focus(
-                                        focusNode: _sortDropdownFocusNode,
-                                        onKeyEvent: (node, event) {
-                                          if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                                          // Left arrow: go to torrent/direct dropdown or back button
-                                          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                            if (_torrentProviderCounts.isNotEmpty) {
-                                              _torrentDropdownFocusNode.requestFocus();
-                                            } else if (_directProviderCounts.isNotEmpty) {
-                                              _directDropdownFocusNode.requestFocus();
-                                            } else if (_cameFromCatalogBrowse) {
-                                              _backButtonFocusNode.requestFocus();
-                                            }
-                                            return KeyEventResult.handled;
-                                          }
-                                          // Right arrow: go to sort direction
-                                          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                            _sortDirectionFocusNode.requestFocus();
-                                            return KeyEventResult.handled;
-                                          }
-                                          // Up arrow: go to search bar
-                                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                            _searchFocusNode.requestFocus();
-                                            return KeyEventResult.handled;
-                                          }
-                                          // Down arrow: go to first result
-                                          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                            if (_cardFocusNodes.isNotEmpty) {
-                                              _cardFocusNodes[0].requestFocus();
-                                            }
-                                            return KeyEventResult.handled;
-                                          }
-                                          return KeyEventResult.ignored;
-                                        },
-                                        onFocusChange: (focused) {
-                                          _sortDropdownFocused.value = focused;
-                                          if (focused && _isTelevision) _scrollToFocusNode(_sortDropdownFocusNode);
-                                        },
-                                        child: ValueListenableBuilder<bool>(
-                                          valueListenable: _sortDropdownFocused,
-                                          builder: (context, isFocused, child) => Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null,
-                                            ),
-                                            child: child,
+                                      // Using Shortcuts widget to handle arrow keys without blocking DropdownButton's Enter key handling
+                                      ValueListenableBuilder<bool>(
+                                        valueListenable: _sortDropdownFocused,
+                                        builder: (context, isFocused, child) => Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null,
                                           ),
-                                          child: DropdownButton<String>(
-                                            value: _sortBy,
-                                            onChanged: (String? newValue) {
-                                              if (newValue != null) {
-                                                setState(() {
-                                                  _sortBy = newValue;
-                                                });
-                                                _sortTorrents(reuseMetadata: true);
-                                              }
-                                            },
-                                            items: const [
-                                              DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 11))),
-                                              DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 11))),
-                                              DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 11))),
-                                              DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 11))),
-                                              DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 11))),
-                                            ],
-                                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11),
-                                            underline: Container(),
-                                            isDense: true,
-                                            icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
-                                          ),
+                                          child: child,
+                                        ),
+                                        child: DropdownButton<String>(
+                                          value: _sortBy,
+                                          focusNode: _sortDropdownFocusNode,
+                                          onChanged: (String? newValue) {
+                                            // Mark key action to prevent ghost tap on result cards
+                                            DialogTapGuard.markKeyAction();
+                                            if (newValue != null) {
+                                              setState(() {
+                                                _sortBy = newValue;
+                                              });
+                                              _sortTorrents(reuseMetadata: true);
+                                            }
+                                          },
+                                          items: const [
+                                            DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 11))),
+                                            DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 11))),
+                                            DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 11))),
+                                            DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 11))),
+                                            DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 11))),
+                                          ],
+                                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11),
+                                          underline: Container(),
+                                          isDense: true,
+                                          icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
                                         ),
                                       ),
                                       // Sort direction
@@ -10257,6 +10263,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         onKeyEvent: (node, event) {
                                           if (event is! KeyDownEvent) return KeyEventResult.ignored;
                                           if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
+                                            DialogTapGuard.markKeyAction();
                                             setState(() => _sortAscending = !_sortAscending);
                                             _sortTorrents(reuseMetadata: true);
                                             return KeyEventResult.handled;
@@ -10296,6 +10303,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           ),
                                           child: IconButton(
                                             onPressed: () {
+                                              if (DialogTapGuard.shouldIgnoreTap()) return;
                                               setState(() => _sortAscending = !_sortAscending);
                                               _sortTorrents(reuseMetadata: true);
                                             },
@@ -10315,6 +10323,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         onKeyEvent: (node, event) {
                                           if (event is! KeyDownEvent) return KeyEventResult.ignored;
                                           if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
+                                            DialogTapGuard.markKeyAction();
                                             if (!(_allTorrents.isEmpty && !_hasActiveFilters)) _openFiltersSheet();
                                             return KeyEventResult.handled;
                                           }
@@ -10347,7 +10356,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             child: child,
                                           ),
                                           child: IconButton(
-                                            onPressed: (_allTorrents.isEmpty && !_hasActiveFilters) ? null : _openFiltersSheet,
+                                            onPressed: (_allTorrents.isEmpty && !_hasActiveFilters) ? null : () {
+                                              if (DialogTapGuard.shouldIgnoreTap()) return;
+                                              _openFiltersSheet();
+                                            },
                                             icon: Stack(
                                               clipBehavior: Clip.none,
                                               children: [
