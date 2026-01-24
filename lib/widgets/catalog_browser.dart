@@ -25,6 +25,9 @@ class CatalogBrowser extends StatefulWidget {
   /// If null, Quick Play button will fallback to onItemSelected behavior
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
 
+  /// Whether to show the Quick Play button (hide when PikPak is default provider)
+  final bool showQuickPlay;
+
   /// Optional: Filter to show only this addon's catalogs
   /// If null, shows all available catalog addons
   final StremioAddon? filterAddon;
@@ -40,6 +43,7 @@ class CatalogBrowser extends StatefulWidget {
     super.key,
     this.onItemSelected,
     this.onQuickPlay,
+    this.showQuickPlay = true,
     this.filterAddon,
     this.searchQuery,
     this.onRequestFocusAbove,
@@ -849,6 +853,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             onSources: () => _onItemTap(item),
             onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
                 _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+            showQuickPlay: widget.showQuickPlay,
           ),
         );
       },
@@ -864,6 +869,7 @@ class _CatalogItemCard extends StatefulWidget {
   final VoidCallback onQuickPlay;
   final VoidCallback onSources;
   final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final bool showQuickPlay;
 
   const _CatalogItemCard({
     required this.item,
@@ -871,6 +877,7 @@ class _CatalogItemCard extends StatefulWidget {
     required this.onQuickPlay,
     required this.onSources,
     required this.onKeyEvent,
+    this.showQuickPlay = true,
   });
 
   @override
@@ -1020,13 +1027,14 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               onTap: widget.onSources,
             ),
             const SizedBox(width: 6),
-            _buildActionButton(
-              icon: Icons.play_arrow_rounded,
-              label: 'Quick Play',
-              color: const Color(0xFF10B981),
-              isHighlighted: _isFocused && _isQuickPlayButtonFocused,
-              onTap: widget.onQuickPlay,
-            ),
+            if (widget.showQuickPlay)
+              _buildActionButton(
+                icon: Icons.play_arrow_rounded,
+                label: 'Quick Play',
+                color: const Color(0xFF10B981),
+                isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                onTap: widget.onQuickPlay,
+              ),
           ],
         ),
       ],
@@ -1089,16 +1097,18 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 onTap: widget.onSources,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.play_arrow_rounded,
-                label: 'Quick Play',
-                color: const Color(0xFF10B981),
-                isHighlighted: _isFocused && _isQuickPlayButtonFocused,
-                onTap: widget.onQuickPlay,
+            if (widget.showQuickPlay) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Quick Play',
+                  color: const Color(0xFF10B981),
+                  isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                  onTap: widget.onQuickPlay,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ],

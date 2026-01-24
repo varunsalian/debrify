@@ -205,6 +205,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _realDebridIntegrationEnabled = true;
   bool _torboxIntegrationEnabled = true;
   bool _pikpakEnabled = false;
+  String _defaultTorrentProvider = 'none';
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
   bool _isBulkAdding = false;
@@ -812,6 +813,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final defaultProvider = await StorageService.getDefaultTorrentProvider();
     if (!mounted) return;
     setState(() {
       _apiKey = rdKey;
@@ -819,6 +821,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _realDebridIntegrationEnabled = rdEnabled;
       _torboxIntegrationEnabled = torboxEnabled;
       _pikpakEnabled = pikpakEnabled;
+      _defaultTorrentProvider = defaultProvider;
     });
   }
 
@@ -1790,6 +1793,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _checkQuickPlayAfterSearch() async {
     if (!_quickPlayPending || _quickPlaySelection == null) return;
 
+    // Save title for filtering before clearing selection
+    final searchTitle = _quickPlaySelection!.title;
+
     // Note: Keep _quickPlayPending = true so _handleTorrentCardActivated knows to skip dialog
     setState(() {
       _quickPlaySelection = null;
@@ -1841,12 +1847,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     if (!mounted) return;
 
+    // Filter torrents by title match to avoid collections/packs
+    // Uses word-based matching to handle dots, underscores, etc.
+    final titleMatched = torrentsOnly.where((t) {
+      return _torrentMatchesTitle(t.name, searchTitle);
+    }).toList();
+
+    // Use title-matched torrents if available, otherwise fall back to all
+    final torrentsForQuickPlay = titleMatched.isNotEmpty ? titleMatched : torrentsOnly;
+
     // Store the full list of torrents for potential retries
-    _quickPlayTorrentsList = torrentsOnly;
+    _quickPlayTorrentsList = torrentsForQuickPlay;
     _quickPlayCurrentIndex = 0;
 
     // Pick the first torrent (sorted by relevance)
-    selectedTorrent = torrentsOnly.first;
+    selectedTorrent = torrentsForQuickPlay.first;
     debugPrint('TorrentSearchScreen: Quick Play - selected torrent: ${selectedTorrent.displayTitle}');
     debugPrint('TorrentSearchScreen: Quick Play - try multiple: $_quickPlayTryMultiple, max retries: $_quickPlayMaxRetries');
 
@@ -5714,6 +5729,52 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  /// Checks if a torrent name matches the search title using word-based matching.
+  /// This is more robust than substring matching as it handles dots, underscores,
+  /// and other separators commonly used in torrent names.
+  bool _torrentMatchesTitle(String torrentName, String searchTitle) {
+    // Common articles/words to skip when matching
+    const skipWords = {'the', 'a', 'an', 'and', 'of', 'in', 'to', 'for'};
+
+    // Normalize: replace common separators with spaces, lowercase
+    String normalize(String s) {
+      return s
+          .toLowerCase()
+          .replaceAll(RegExp(r'[._\-\[\]\(\)]'), ' ')  // Replace separators with spaces
+          .replaceAll(RegExp(r'\s+'), ' ')             // Collapse multiple spaces
+          .trim();
+    }
+
+    // Use only the first line of torrent name (the actual title)
+    // Some sources include filename and metadata on subsequent lines
+    final firstLine = torrentName.split('\n').first;
+    final normalizedName = normalize(firstLine);
+    final normalizedTitle = normalize(searchTitle);
+
+    // Extract significant words from the title (skip articles and very short words)
+    final titleWords = normalizedTitle
+        .split(' ')
+        .where((w) => w.length > 1 && !skipWords.contains(w))
+        .toList();
+
+    // If no significant words, fall back to simple contains check
+    if (titleWords.isEmpty) {
+      return normalizedName.contains(normalizedTitle);
+    }
+
+    // Check if all significant title words appear in the torrent name
+    for (final word in titleWords) {
+      // Use word boundary check to avoid partial matches
+      // e.g., "red" shouldn't match "redeemed"
+      final wordPattern = RegExp(r'\b' + RegExp.escape(word) + r'\b');
+      if (!wordPattern.hasMatch(normalizedName)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   Future<void> _addToTorbox(String infohash, String torrentName, {bool forcePlay = false}) async {
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -9539,6 +9600,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           onQuickPlay: (selection) {
                             _handleQuickPlay(selection);
                           },
+                          showQuickPlay: _defaultTorrentProvider != 'pikpak',
                           onKeywordFocusNodeReady: (focusNode) {
                             _aggregatedKeywordFocusNode = focusNode;
                           },
@@ -9565,6 +9627,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           onQuickPlay: (selection) {
                             _handleQuickPlay(selection);
                           },
+                          showQuickPlay: _defaultTorrentProvider != 'pikpak',
                           onRequestFocusAbove: () {
                             _providerAccordionFocusNode.requestFocus();
                           },

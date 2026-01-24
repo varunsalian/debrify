@@ -29,6 +29,9 @@ class AggregatedSearchResults extends StatefulWidget {
   /// If null, Quick Play button will fallback to onItemSelected behavior
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
 
+  /// Whether to show the Quick Play button (hide when PikPak is default provider)
+  final bool showQuickPlay;
+
   /// Whether running on TV
   final bool isTelevision;
 
@@ -44,6 +47,7 @@ class AggregatedSearchResults extends StatefulWidget {
     required this.onKeywordSearch,
     this.onItemSelected,
     this.onQuickPlay,
+    this.showQuickPlay = true,
     this.isTelevision = false,
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
@@ -462,6 +466,7 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         },
                         onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
                             _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
+                        showQuickPlay: widget.showQuickPlay,
                       ),
                     ),
                   );
@@ -613,6 +618,7 @@ class _CatalogResultCard extends StatefulWidget {
   final VoidCallback onSources;
   final ValueChanged<bool> onFocusChange;
   final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final bool showQuickPlay;
 
   const _CatalogResultCard({
     required this.item,
@@ -622,6 +628,7 @@ class _CatalogResultCard extends StatefulWidget {
     required this.onSources,
     required this.onFocusChange,
     required this.onKeyEvent,
+    this.showQuickPlay = true,
   });
 
   @override
@@ -762,14 +769,16 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
               isHighlighted: widget.isFocused && !_isQuickPlayButtonFocused,
               onTap: widget.onSources,
             ),
-            const SizedBox(width: 6),
-            _buildActionButton(
-              icon: Icons.play_arrow_rounded,
-              label: 'Quick Play',
-              color: const Color(0xFF10B981),
-              isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
-              onTap: widget.onQuickPlay,
-            ),
+            if (widget.showQuickPlay) ...[
+              const SizedBox(width: 6),
+              _buildActionButton(
+                icon: Icons.play_arrow_rounded,
+                label: 'Quick Play',
+                color: const Color(0xFF10B981),
+                isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
+                onTap: widget.onQuickPlay,
+              ),
+            ],
           ],
         ),
       ],
@@ -832,16 +841,18 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 onTap: widget.onSources,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.play_arrow_rounded,
-                label: 'Quick Play',
-                color: const Color(0xFF10B981),
-                isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
-                onTap: widget.onQuickPlay,
+            if (widget.showQuickPlay) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Quick Play',
+                  color: const Color(0xFF10B981),
+                  isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
+                  onTap: widget.onQuickPlay,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ],
