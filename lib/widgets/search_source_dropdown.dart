@@ -200,6 +200,12 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
                     setState(() => _isExpanded = false);
                     _focusNode.requestFocus();
                   },
+                  onLeftArrowPressed: () {
+                    _removeOverlay();
+                    setState(() => _isExpanded = false);
+                    // Go to search box via parent callback
+                    widget.onLeftArrowPressed?.call();
+                  },
                 ),
               ),
             ),
@@ -314,6 +320,7 @@ class _DropdownMenu extends StatefulWidget {
   final bool isTelevision;
   final ValueChanged<SearchSourceOption> onSelected;
   final VoidCallback onClose;
+  final VoidCallback? onLeftArrowPressed;
 
   const _DropdownMenu({
     required this.options,
@@ -321,6 +328,7 @@ class _DropdownMenu extends StatefulWidget {
     required this.isTelevision,
     required this.onSelected,
     required this.onClose,
+    this.onLeftArrowPressed,
   });
 
   @override
@@ -329,6 +337,7 @@ class _DropdownMenu extends StatefulWidget {
 
 class _DropdownMenuState extends State<_DropdownMenu> {
   late List<FocusNode> _itemFocusNodes;
+  late List<GlobalKey> _itemKeys;
   int _focusedIndex = -1;
 
   @override
@@ -338,14 +347,30 @@ class _DropdownMenuState extends State<_DropdownMenu> {
       widget.options.length,
       (i) => FocusNode(),
     );
-    // Auto-focus the selected item on TV
-    if (widget.isTelevision) {
-      final selectedIndex = widget.options.indexOf(widget.selectedOption);
-      if (selectedIndex >= 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _itemFocusNodes[selectedIndex].requestFocus();
-        });
+    _itemKeys = List.generate(
+      widget.options.length,
+      (i) => GlobalKey(),
+    );
+    // Always auto-focus the selected item when dropdown opens
+    final selectedIndex = widget.options.indexOf(widget.selectedOption);
+    final indexToFocus = selectedIndex >= 0 ? selectedIndex : 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_itemFocusNodes.isNotEmpty) {
+        _itemFocusNodes[indexToFocus].requestFocus();
+        _scrollToItem(indexToFocus);
       }
+    });
+  }
+
+  void _scrollToItem(int index) {
+    final key = _itemKeys[index];
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+      );
     }
   }
 
@@ -365,19 +390,38 @@ class _DropdownMenuState extends State<_DropdownMenu> {
         widget.onSelected(widget.options[index]);
         return KeyEventResult.handled;
       }
-      // Escape closes menu
-      if (event.logicalKey == LogicalKeyboardKey.escape) {
+      // Escape or Back closes menu
+      if (event.logicalKey == LogicalKeyboardKey.escape ||
+          event.logicalKey == LogicalKeyboardKey.goBack) {
         widget.onClose();
         return KeyEventResult.handled;
       }
       // Arrow navigation
-      if (event.logicalKey == LogicalKeyboardKey.arrowUp && index > 0) {
-        _itemFocusNodes[index - 1].requestFocus();
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (index > 0) {
+          _itemFocusNodes[index - 1].requestFocus();
+        } else {
+          // At first item, close dropdown and return focus to trigger
+          widget.onClose();
+        }
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-          index < widget.options.length - 1) {
-        _itemFocusNodes[index + 1].requestFocus();
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (index < widget.options.length - 1) {
+          _itemFocusNodes[index + 1].requestFocus();
+        }
+        // At last item, just stay (don't escape)
+        return KeyEventResult.handled;
+      }
+      // Left arrow: close dropdown and go to search box
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (widget.onLeftArrowPressed != null) {
+          widget.onLeftArrowPressed!();
+        }
+        return KeyEventResult.handled;
+      }
+      // Block right arrow
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
         return KeyEventResult.handled;
       }
     }
@@ -389,11 +433,14 @@ class _DropdownMenuState extends State<_DropdownMenu> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 300),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: ListView.builder(
+    // Use FocusScope to trap focus within the dropdown
+    return FocusScope(
+      autofocus: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 300),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: ListView.builder(
           shrinkWrap: true,
           padding: const EdgeInsets.symmetric(vertical: 8),
           itemCount: widget.options.length,
@@ -402,11 +449,15 @@ class _DropdownMenuState extends State<_DropdownMenu> {
             final isSelected = option == widget.selectedOption;
 
             return Focus(
+              key: _itemKeys[index],
               focusNode: _itemFocusNodes[index],
               onFocusChange: (focused) {
                 setState(() {
                   _focusedIndex = focused ? index : -1;
                 });
+                if (focused) {
+                  _scrollToItem(index);
+                }
               },
               onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
               child: InkWell(
@@ -473,6 +524,7 @@ class _DropdownMenuState extends State<_DropdownMenu> {
             );
           },
         ),
+      ),
       ),
     );
   }
