@@ -150,6 +150,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _sortDirectionFocusNode = FocusNode();
   final FocusNode _filterButtonFocusNode = FocusNode();
   final FocusNode _clearFiltersButtonFocusNode = FocusNode();
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'back_button');
 
   // IMDB Smart Search Mode focus nodes
   final FocusNode _modeSelectorFocusNode = FocusNode();
@@ -998,6 +999,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sortDirectionFocusNode.dispose();
     _filterButtonFocusNode.dispose();
     _clearFiltersButtonFocusNode.dispose();
+    _backButtonFocusNode.dispose();
     _directDropdownFocusNode.dispose();
     _torrentDropdownFocusNode.dispose();
 
@@ -2673,8 +2675,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _ensureFocusNodes();
     });
 
-    // Auto-focus first result on TV after search
-    if (_isTelevision && _cardFocusNodes.isNotEmpty) {
+    // Auto-focus first result after search (for DPAD/keyboard navigation)
+    if (_cardFocusNodes.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _cardFocusNodes.isNotEmpty) {
           _cardFocusNodes[0].requestFocus();
@@ -9213,6 +9215,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             friendlyNameResolver: _friendlyEngineName,
             onToggleProvider: _toggleDirectProvider,
             onToggleAll: _toggleAllDirectProviders,
+            onLeftArrowPressed: _cameFromCatalogBrowse
+                ? () => _backButtonFocusNode.requestFocus()
+                : null,
+            onRightArrowPressed: hasTorrentProviders
+                ? () => _torrentDropdownFocusNode.requestFocus()
+                : () => _sortDropdownFocusNode.requestFocus(),
+            onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+            onDownArrowPressed: () {
+              if (_cardFocusNodes.isNotEmpty) {
+                _cardFocusNodes[0].requestFocus();
+              }
+            },
           ),
           if (hasTorrentProviders) const SizedBox(width: 8),
         ],
@@ -9228,6 +9242,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             friendlyNameResolver: _friendlyEngineName,
             onToggleProvider: _toggleTorrentProvider,
             onToggleAll: _toggleAllTorrentProviders,
+            onLeftArrowPressed: hasDirectProviders
+                ? () => _directDropdownFocusNode.requestFocus()
+                : (_cameFromCatalogBrowse
+                    ? () => _backButtonFocusNode.requestFocus()
+                    : null),
+            onRightArrowPressed: () => _sortDropdownFocusNode.requestFocus(),
+            onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+            onDownArrowPressed: () {
+              if (_cardFocusNodes.isNotEmpty) {
+                _cardFocusNodes[0].requestFocus();
+              }
+            },
           ),
       ],
     );
@@ -10065,39 +10091,76 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // First row: Results count + Sort controls
+                                  // All controls in single row
                                   Row(
                                     children: [
                                       // Back button (only if came from catalog browse)
                                       if (_cameFromCatalogBrowse)
                                         Padding(
                                           padding: const EdgeInsets.only(right: 8),
-                                          child: InkWell(
-                                            onTap: _goBackToCatalog,
-                                            borderRadius: BorderRadius.circular(4),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: const Icon(
-                                                Icons.arrow_back_rounded,
-                                                color: Colors.white,
-                                                size: 16,
-                                              ),
+                                          child: Focus(
+                                            focusNode: _backButtonFocusNode,
+                                            onKeyEvent: (node, event) {
+                                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                              // Up arrow: go to search bar
+                                              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                                _searchFocusNode.requestFocus();
+                                                return KeyEventResult.handled;
+                                              }
+                                              // Down arrow: go to first result
+                                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                                if (_cardFocusNodes.isNotEmpty) {
+                                                  _cardFocusNodes[0].requestFocus();
+                                                }
+                                                return KeyEventResult.handled;
+                                              }
+                                              // Right arrow: go to direct dropdown > torrent dropdown > sort dropdown
+                                              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                                if (_directProviderCounts.isNotEmpty) {
+                                                  _directDropdownFocusNode.requestFocus();
+                                                } else if (_torrentProviderCounts.isNotEmpty) {
+                                                  _torrentDropdownFocusNode.requestFocus();
+                                                } else {
+                                                  _sortDropdownFocusNode.requestFocus();
+                                                }
+                                                return KeyEventResult.handled;
+                                              }
+                                              // Enter/Select: activate back
+                                              if (event.logicalKey == LogicalKeyboardKey.enter ||
+                                                  event.logicalKey == LogicalKeyboardKey.select) {
+                                                _goBackToCatalog();
+                                                return KeyEventResult.handled;
+                                              }
+                                              return KeyEventResult.ignored;
+                                            },
+                                            child: Builder(
+                                              builder: (context) {
+                                                final isFocused = Focus.of(context).hasFocus;
+                                                return InkWell(
+                                                  onTap: _goBackToCatalog,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white.withValues(alpha: 0.1),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: isFocused
+                                                          ? Border.all(color: const Color(0xFF3B82F6), width: 2)
+                                                          : null,
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.arrow_back_rounded,
+                                                      color: Colors.white,
+                                                      size: 16,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
                                           ),
                                         ),
-                                      // Results count
-                                      Text(
-                                        '${_torrents.length} Result${_torrents.length == 1 ? '' : 's'}',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      ),
+                                      // Stream type filters (Torrent/Direct dropdowns)
+                                      _buildStreamTypeFilters(context),
                                       if (_showingTorboxCachedOnly)
                                         Container(
                                           margin: const EdgeInsets.only(left: 6),
@@ -10112,29 +10175,77 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           ),
                                         ),
                                       const Spacer(),
-                                      // Sort dropdown
-                                      DropdownButton<String>(
-                                        value: _sortBy,
+                                      // Sort dropdown with arrow key navigation
+                                      Focus(
                                         focusNode: _sortDropdownFocusNode,
-                                        onChanged: (String? newValue) {
-                                          if (newValue != null) {
-                                            setState(() {
-                                              _sortBy = newValue;
-                                            });
-                                            _sortTorrents(reuseMetadata: true);
+                                        onKeyEvent: (node, event) {
+                                          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                          // Left arrow: go to torrent/direct dropdown or back button
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                            if (_torrentProviderCounts.isNotEmpty) {
+                                              _torrentDropdownFocusNode.requestFocus();
+                                            } else if (_directProviderCounts.isNotEmpty) {
+                                              _directDropdownFocusNode.requestFocus();
+                                            } else if (_cameFromCatalogBrowse) {
+                                              _backButtonFocusNode.requestFocus();
+                                            }
+                                            return KeyEventResult.handled;
                                           }
+                                          // Right arrow: go to sort direction
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                            _sortDirectionFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Up arrow: go to search bar
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                            _searchFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Down arrow: go to first result
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                            if (_cardFocusNodes.isNotEmpty) {
+                                              _cardFocusNodes[0].requestFocus();
+                                            }
+                                            return KeyEventResult.handled;
+                                          }
+                                          return KeyEventResult.ignored;
                                         },
-                                        items: const [
-                                          DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 11))),
-                                        ],
-                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11),
-                                        underline: Container(),
-                                        isDense: true,
-                                        icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                                        onFocusChange: (focused) {
+                                          _sortDropdownFocused.value = focused;
+                                          if (focused && _isTelevision) _scrollToFocusNode(_sortDropdownFocusNode);
+                                        },
+                                        child: ValueListenableBuilder<bool>(
+                                          valueListenable: _sortDropdownFocused,
+                                          builder: (context, isFocused, child) => Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: isFocused ? Border.all(color: const Color(0xFF3B82F6), width: 2) : null,
+                                            ),
+                                            child: child,
+                                          ),
+                                          child: DropdownButton<String>(
+                                            value: _sortBy,
+                                            onChanged: (String? newValue) {
+                                              if (newValue != null) {
+                                                setState(() {
+                                                  _sortBy = newValue;
+                                                });
+                                                _sortTorrents(reuseMetadata: true);
+                                              }
+                                            },
+                                            items: const [
+                                              DropdownMenuItem(value: 'relevance', child: Text('Relevance', style: TextStyle(fontSize: 11))),
+                                              DropdownMenuItem(value: 'name', child: Text('Name', style: TextStyle(fontSize: 11))),
+                                              DropdownMenuItem(value: 'size', child: Text('Size', style: TextStyle(fontSize: 11))),
+                                              DropdownMenuItem(value: 'seeders', child: Text('Seeders', style: TextStyle(fontSize: 11))),
+                                              DropdownMenuItem(value: 'date', child: Text('Date', style: TextStyle(fontSize: 11))),
+                                            ],
+                                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11),
+                                            underline: Container(),
+                                            isDense: true,
+                                            icon: Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
+                                          ),
+                                        ),
                                       ),
                                       // Sort direction
                                       Focus(
@@ -10144,9 +10255,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           if (focused && _isTelevision) _scrollToFocusNode(_sortDirectionFocusNode);
                                         },
                                         onKeyEvent: (node, event) {
-                                          if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                                          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                          if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
                                             setState(() => _sortAscending = !_sortAscending);
                                             _sortTorrents(reuseMetadata: true);
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Left arrow: go to sort dropdown
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                            _sortDropdownFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Right arrow: go to filter button
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                            _filterButtonFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Up arrow: go to search bar
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                            _searchFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Down arrow: go to first result
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                            if (_cardFocusNodes.isNotEmpty) {
+                                              _cardFocusNodes[0].requestFocus();
+                                            }
                                             return KeyEventResult.handled;
                                           }
                                           return KeyEventResult.ignored;
@@ -10179,8 +10313,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           if (focused && _isTelevision) _scrollToFocusNode(_filterButtonFocusNode);
                                         },
                                         onKeyEvent: (node, event) {
-                                          if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) {
+                                          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                          if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
                                             if (!(_allTorrents.isEmpty && !_hasActiveFilters)) _openFiltersSheet();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Left arrow: go to sort direction
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                            _sortDirectionFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Up arrow: go to search bar
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                            _searchFocusNode.requestFocus();
+                                            return KeyEventResult.handled;
+                                          }
+                                          // Down arrow: go to first result
+                                          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                            if (_cardFocusNodes.isNotEmpty) {
+                                              _cardFocusNodes[0].requestFocus();
+                                            }
                                             return KeyEventResult.handled;
                                           }
                                           return KeyEventResult.ignored;
@@ -10211,9 +10363,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       ),
                                     ],
                                   ),
-                                  // Second row: Stream type provider filters
-                                  const SizedBox(height: 6),
-                                  _buildStreamTypeFilters(context),
                                   // Active filters row
                                   if (_hasActiveFilters)
                                     Padding(
@@ -10508,7 +10657,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ? () => _showServiceSelectionDialog(torrent, index)
           : null,
       onNavigateUp: index == 0
-          ? () => _filterButtonFocusNode.requestFocus()
+          ? () {
+              // Navigate to first header control: back button > direct dropdown > torrent dropdown > sort dropdown
+              if (_cameFromCatalogBrowse) {
+                _backButtonFocusNode.requestFocus();
+              } else if (_directProviderCounts.isNotEmpty) {
+                _directDropdownFocusNode.requestFocus();
+              } else if (_torrentProviderCounts.isNotEmpty) {
+                _torrentDropdownFocusNode.requestFocus();
+              } else {
+                _sortDropdownFocusNode.requestFocus();
+              }
+            }
           : () {
               if (index > 0 && index - 1 < _cardFocusNodes.length) {
                 _cardFocusNodes[index - 1].requestFocus();
@@ -10554,7 +10714,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Handle up navigation
           if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
             if (index == 0) {
-              _filterButtonFocusNode.requestFocus();
+              // Navigate to first header control: back button > direct dropdown > torrent dropdown > sort dropdown
+              if (_cameFromCatalogBrowse) {
+                _backButtonFocusNode.requestFocus();
+              } else if (_directProviderCounts.isNotEmpty) {
+                _directDropdownFocusNode.requestFocus();
+              } else if (_torrentProviderCounts.isNotEmpty) {
+                _torrentDropdownFocusNode.requestFocus();
+              } else {
+                _sortDropdownFocusNode.requestFocus();
+              }
             } else if (index > 0 && index - 1 < _cardFocusNodes.length) {
               _cardFocusNodes[index - 1].requestFocus();
             }
@@ -11219,6 +11388,8 @@ class _TorrentCard extends StatefulWidget {
     required this.searchFocusNode,
     required this.episodeInputFocusNode,
     required this.filterButtonFocusNode,
+    required this.backButtonFocusNode,
+    required this.cameFromCatalogBrowse,
   });
 
   final Torrent torrent;
@@ -11250,6 +11421,8 @@ class _TorrentCard extends StatefulWidget {
   final FocusNode searchFocusNode;
   final FocusNode episodeInputFocusNode;
   final FocusNode filterButtonFocusNode;
+  final FocusNode backButtonFocusNode;
+  final bool cameFromCatalogBrowse;
 
   @override
   State<_TorrentCard> createState() => _TorrentCardState();
@@ -11326,12 +11499,16 @@ class _TorrentCardState extends State<_TorrentCard> {
           widget.onCardActivated();
           return KeyEventResult.handled;
         }
-        // Handle Arrow Up from first card - navigate to filter button in sort/filter row
+        // Handle Arrow Up from first card - navigate to header controls
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.arrowUp &&
             widget.index == 0) {
-          // Navigate to the filter button in the sort/filter row
-          widget.filterButtonFocusNode.requestFocus();
+          // Navigate to back button if came from catalog, otherwise torrent dropdown
+          if (widget.cameFromCatalogBrowse) {
+            widget.backButtonFocusNode.requestFocus();
+          } else {
+            widget.filterButtonFocusNode.requestFocus();
+          }
           return KeyEventResult.handled;
         }
         // Handle Back/Escape to return to search field (TV shortcut)
@@ -13153,6 +13330,10 @@ class _StreamTypeDropdown extends StatefulWidget {
   final String Function(String) friendlyNameResolver;
   final ValueChanged<String> onToggleProvider;
   final VoidCallback onToggleAll;
+  final VoidCallback? onLeftArrowPressed;
+  final VoidCallback? onRightArrowPressed;
+  final VoidCallback? onUpArrowPressed;
+  final VoidCallback? onDownArrowPressed;
 
   const _StreamTypeDropdown({
     required this.label,
@@ -13164,6 +13345,10 @@ class _StreamTypeDropdown extends StatefulWidget {
     required this.friendlyNameResolver,
     required this.onToggleProvider,
     required this.onToggleAll,
+    this.onLeftArrowPressed,
+    this.onRightArrowPressed,
+    this.onUpArrowPressed,
+    this.onDownArrowPressed,
   });
 
   @override
@@ -13290,6 +13475,33 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
         setState(() => _isExpanded = false);
         return KeyEventResult.handled;
       }
+      // Arrow key navigation (only when dropdown is not expanded)
+      if (!_isExpanded) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (widget.onLeftArrowPressed != null) {
+            widget.onLeftArrowPressed!();
+            return KeyEventResult.handled;
+          }
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (widget.onRightArrowPressed != null) {
+            widget.onRightArrowPressed!();
+            return KeyEventResult.handled;
+          }
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (widget.onUpArrowPressed != null) {
+            widget.onUpArrowPressed!();
+            return KeyEventResult.handled;
+          }
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (widget.onDownArrowPressed != null) {
+            widget.onDownArrowPressed!();
+            return KeyEventResult.handled;
+          }
+        }
+      }
     }
     return KeyEventResult.ignored;
   }
@@ -13392,23 +13604,41 @@ class _StreamTypeDropdownMenu extends StatefulWidget {
 
 class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
   late List<FocusNode> _itemFocusNodes;
+  late List<GlobalKey> _itemKeys;
   int _focusedIndex = -1;
 
   @override
   void initState() {
     super.initState();
     // +1 for "Select All" item
+    final itemCount = widget.providerCounts.length + 1;
     _itemFocusNodes = List.generate(
-      widget.providerCounts.length + 1,
+      itemCount,
       (i) => FocusNode(debugLabel: 'stream-provider-$i'),
     );
-    // Auto-focus first item on TV
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_itemFocusNodes.isNotEmpty) {
-          _itemFocusNodes[0].requestFocus();
-        }
-      });
+    _itemKeys = List.generate(
+      itemCount,
+      (i) => GlobalKey(),
+    );
+    // Always auto-focus first item when dropdown opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_itemFocusNodes.isNotEmpty) {
+        _itemFocusNodes[0].requestFocus();
+        _scrollToItem(0);
+      }
+    });
+  }
+
+  void _scrollToItem(int index) {
+    if (index < 0 || index >= _itemKeys.length) return;
+    final key = _itemKeys[index];
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+      );
     }
   }
 
@@ -13422,6 +13652,7 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
 
   KeyEventResult _handleItemKeyEvent(FocusNode node, KeyEvent event, int index) {
     if (event is KeyDownEvent) {
+      // Select/Enter/Space toggles the item
       if (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.space) {
@@ -13433,17 +13664,37 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
         }
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.escape) {
+      // Escape or Back closes dropdown
+      if (event.logicalKey == LogicalKeyboardKey.escape ||
+          event.logicalKey == LogicalKeyboardKey.goBack) {
         widget.onClose();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowUp && index > 0) {
-        _itemFocusNodes[index - 1].requestFocus();
+      // Left arrow closes dropdown
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        widget.onClose();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-          index < _itemFocusNodes.length - 1) {
-        _itemFocusNodes[index + 1].requestFocus();
+      // Block right arrow within dropdown
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.handled;
+      }
+      // Up arrow navigation
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (index > 0) {
+          _itemFocusNodes[index - 1].requestFocus();
+        } else {
+          // At first item, close dropdown
+          widget.onClose();
+        }
+        return KeyEventResult.handled;
+      }
+      // Down arrow navigation
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (index < _itemFocusNodes.length - 1) {
+          _itemFocusNodes[index + 1].requestFocus();
+        }
+        // At last item, just stay
         return KeyEventResult.handled;
       }
     }
@@ -13457,27 +13708,81 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
     final providers = widget.providerCounts.keys.toList()..sort();
     final allSelected = widget.selectedProviders.length == widget.providerCounts.length;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 300),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: ListView.builder(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: providers.length + 1, // +1 for "Select All"
-          itemBuilder: (context, index) {
-            final isFocused = _focusedIndex == index;
+    // Use FocusScope to trap focus within the dropdown
+    return FocusScope(
+      autofocus: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 300),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: providers.length + 1, // +1 for "Select All"
+            itemBuilder: (context, index) {
+              final isFocused = _focusedIndex == index;
 
-            if (index == 0) {
-              // "Select All" item
+              if (index == 0) {
+                // "Select All" item
+                return Focus(
+                  key: _itemKeys[0],
+                  focusNode: _itemFocusNodes[0],
+                  onFocusChange: (focused) {
+                    setState(() => _focusedIndex = focused ? 0 : -1);
+                    if (focused) _scrollToItem(0);
+                  },
+                  onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, 0),
+                  child: InkWell(
+                    onTap: widget.onToggleAll,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isFocused
+                            ? colorScheme.primary.withValues(alpha: 0.2)
+                            : null,
+                        border: isFocused
+                            ? Border.all(color: colorScheme.primary, width: 2)
+                            : null,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            allSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                            size: 20,
+                            color: allSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Select All',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              // Provider item
+              final provider = providers[index - 1];
+              final count = widget.providerCounts[provider] ?? 0;
+              final isSelected = widget.selectedProviders.contains(provider);
+              final friendlyName = widget.friendlyNameResolver(provider);
+
               return Focus(
-                focusNode: _itemFocusNodes[0],
+                key: _itemKeys[index],
+                focusNode: _itemFocusNodes[index],
                 onFocusChange: (focused) {
-                  setState(() => _focusedIndex = focused ? 0 : -1);
+                  setState(() => _focusedIndex = focused ? index : -1);
+                  if (focused) _scrollToItem(index);
                 },
-                onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, 0),
+                onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
                 child: InkWell(
-                  onTap: widget.onToggleAll,
+                  onTap: () => widget.onToggleProvider(provider),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -13492,16 +13797,23 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
                     child: Row(
                       children: [
                         Icon(
-                          allSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                          isSelected ? Icons.check_box : Icons.check_box_outline_blank,
                           size: 20,
-                          color: allSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
+                          color: isSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            friendlyName,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
                         Text(
-                          'Select All',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
+                          '($count)',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -13509,61 +13821,8 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
                   ),
                 ),
               );
-            }
-
-            // Provider item
-            final provider = providers[index - 1];
-            final count = widget.providerCounts[provider] ?? 0;
-            final isSelected = widget.selectedProviders.contains(provider);
-            final friendlyName = widget.friendlyNameResolver(provider);
-
-            return Focus(
-              focusNode: _itemFocusNodes[index],
-              onFocusChange: (focused) {
-                setState(() => _focusedIndex = focused ? index : -1);
-              },
-              onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
-              child: InkWell(
-                onTap: () => widget.onToggleProvider(provider),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isFocused
-                        ? colorScheme.primary.withValues(alpha: 0.2)
-                        : null,
-                    border: isFocused
-                        ? Border.all(color: colorScheme.primary, width: 2)
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                        size: 20,
-                        color: isSelected ? const Color(0xFF10B981) : colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          friendlyName,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '($count)',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+            },
+          ),
         ),
       ),
     );
