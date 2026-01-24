@@ -78,6 +78,8 @@ class SearchSourceDropdown extends StatefulWidget {
   final ValueChanged<SearchSourceOption> onChanged;
   final FocusNode? focusNode;
   final bool isTelevision;
+  /// Callback when left arrow is pressed (for DPAD navigation back to search bar)
+  final VoidCallback? onLeftArrowPressed;
 
   const SearchSourceDropdown({
     super.key,
@@ -86,6 +88,7 @@ class SearchSourceDropdown extends StatefulWidget {
     required this.onChanged,
     this.focusNode,
     this.isTelevision = false,
+    this.onLeftArrowPressed,
   });
 
   @override
@@ -219,6 +222,13 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
         _removeOverlay();
         setState(() => _isExpanded = false);
         return KeyEventResult.handled;
+      }
+      // Left arrow: go back to search bar (clear button or text field)
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft && !_isExpanded) {
+        if (widget.onLeftArrowPressed != null) {
+          widget.onLeftArrowPressed!();
+          return KeyEventResult.handled;
+        }
       }
     }
     return KeyEventResult.ignored;

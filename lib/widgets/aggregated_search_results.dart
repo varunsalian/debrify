@@ -54,10 +54,10 @@ class AggregatedSearchResults extends StatefulWidget {
   });
 
   @override
-  State<AggregatedSearchResults> createState() => _AggregatedSearchResultsState();
+  State<AggregatedSearchResults> createState() => AggregatedSearchResultsState();
 }
 
-class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
+class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   final StremioService _stremioService = StremioService.instance;
   final ScrollController _scrollController = ScrollController();
 
@@ -91,6 +91,24 @@ class _AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     // Initial search without debounce
     _performSearch();
   }
+
+  /// Request focus on the first result card (for DPAD navigation from Sources)
+  /// Returns true if focus was set, false if no results to focus
+  bool requestFocusOnFirstResult() {
+    if (_resultFocusNodes.isNotEmpty) {
+      _resultFocusNodes[0].requestFocus();
+      return true;
+    }
+    return false;
+  }
+
+  /// Request focus on the keyword search card (for DPAD navigation from Sources)
+  void requestFocusOnKeywordCard() {
+    _keywordSearchFocusNode.requestFocus();
+  }
+
+  /// Check if there are results to navigate to
+  bool get hasResults => _results.isNotEmpty;
 
   @override
   void didUpdateWidget(AggregatedSearchResults oldWidget) {

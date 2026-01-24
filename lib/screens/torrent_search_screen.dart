@@ -165,6 +165,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // CatalogBrowser GlobalKey (for DPAD navigation from Sources)
   final GlobalKey<CatalogBrowserState> _catalogBrowserKey = GlobalKey<CatalogBrowserState>();
 
+  // AggregatedSearchResults GlobalKey (for DPAD navigation from Sources)
+  final GlobalKey<AggregatedSearchResultsState> _aggregatedResultsKey = GlobalKey<AggregatedSearchResultsState>();
+
   // RedditResultsView GlobalKey (for DPAD navigation)
   final GlobalKey<RedditResultsViewState> _redditResultsKey = GlobalKey<RedditResultsViewState>();
 
@@ -243,6 +246,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   List<SearchSourceOption> _availableSourceOptions = [];
   bool _isLoadingSourceOptions = false;
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
+  final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
 
   ImdbTitleResult? _selectedImdbTitle;
   bool _isSeries = false;
@@ -1012,6 +1016,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Dispose Unified Search Source resources
     _sourceDropdownFocusNode.dispose();
+    _clearButtonFocusNode.dispose();
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -1632,6 +1637,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onChanged: _onSearchSourceChanged,
       focusNode: _sourceDropdownFocusNode,
       isTelevision: _isTelevision,
+      // Left arrow: go back to clear button if text exists, otherwise text field
+      onLeftArrowPressed: () {
+        if (_searchController.text.isNotEmpty) {
+          _clearButtonFocusNode.requestFocus();
+        } else {
+          _searchFocusNode.requestFocus();
+        }
+      },
     );
   }
 
@@ -2303,6 +2316,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
+          // Handle Up arrow to go back to search bar
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _searchFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+
           // Handle Left arrow to navigate to TV sidebar
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
             if (_isTelevision && MainPageBridge.focusTvSidebar != null) {
@@ -2312,8 +2331,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             return KeyEventResult.ignored;
           }
 
-          // Handle Down arrow to navigate to catalog browser or home sections
+          // Handle Down arrow to navigate to aggregated results, catalog browser, or home sections
           if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            // Check if AggregatedSearchResults is visible (All mode with query, not doing torrent search)
+            final isAggregatedVisible = _selectedSource.type == SearchSourceType.all &&
+                _searchController.text.isNotEmpty &&
+                !_hasSearched &&
+                !_isLoading;
+
+            if (isAggregatedVisible && _aggregatedResultsKey.currentState != null) {
+              // Try to focus first result, fall back to keyword card
+              if (!_aggregatedResultsKey.currentState!.requestFocusOnFirstResult()) {
+                _aggregatedResultsKey.currentState!.requestFocusOnKeywordCard();
+              }
+              return KeyEventResult.handled;
+            }
+
             // Check if CatalogBrowser is visible (addon mode with catalogs, not searched)
             final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
                 _selectedSource.addon != null &&
@@ -9537,21 +9570,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: _selectedSource.type != SearchSourceType.addon ||
                                 (_selectedSource.addon?.hasSearchableCatalogs ?? false),
                             disabledTooltip: "This addon doesn't support search",
-                            // Direct focus navigation for "All" mode - focus aggregated results keyword card
-                            // Navigate down to aggregated keyword button or source dropdown
-                            onDownArrowPressed: (_selectedSource.type == SearchSourceType.all &&
-                                    _searchController.text.isNotEmpty &&
-                                    !_hasSearched &&
-                                    !_isLoading &&
-                                    _aggregatedKeywordFocusNode != null)
-                                ? () {
-                                    _aggregatedKeywordFocusNode?.requestFocus();
-                                  }
-                                : (_selectedSource.type == SearchSourceType.reddit)
-                                    ? () {
-                                        _sourceDropdownFocusNode.requestFocus();
-                                      }
-                                    : null,
+                            // Down arrow from search bar: go to Sources if visible, else to results
+                            onDownArrowPressed: () {
+                              // Sources accordion is visible when: !_hasSearched || _torrents.isEmpty
+                              final isSourcesVisible = !_hasSearched || _torrents.isEmpty;
+                              if (isSourcesVisible) {
+                                _providerAccordionFocusNode.requestFocus();
+                              } else if (_cardFocusNodes.isNotEmpty) {
+                                // Focus first result card
+                                _cardFocusNodes.first.requestFocus();
+                              }
+                            },
+                            // Clear button focus node for DPAD navigation
+                            clearButtonFocusNode: _clearButtonFocusNode,
+                            // Right arrow from clear button: go to dropdown
+                            onRightArrowFromClearButton: () {
+                              _sourceDropdownFocusNode.requestFocus();
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -9625,6 +9660,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         key: const ValueKey('aggregated_offstage'),
                         offstage: _searchController.text.isEmpty || _hasSearched || _isLoading,
                         child: AggregatedSearchResults(
+                          key: _aggregatedResultsKey,
                           // Freeze query while offstage to prevent reload/scroll reset
                           query: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
                           isTelevision: _isTelevision,
@@ -9642,7 +9678,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _aggregatedKeywordFocusNode = focusNode;
                           },
                           onRequestFocusAbove: () {
-                            _searchFocusNode.requestFocus();
+                            // Go back to Sources accordion
+                            _providerAccordionFocusNode.requestFocus();
                           },
                         ),
                       ),
@@ -12041,6 +12078,10 @@ class _SearchTextField extends StatefulWidget {
   final String? disabledTooltip;
   /// Callback when down arrow is pressed (for direct focus navigation in "All" mode)
   final VoidCallback? onDownArrowPressed;
+  /// Focus node for the clear button (for DPAD navigation)
+  final FocusNode? clearButtonFocusNode;
+  /// Callback when right arrow is pressed from clear button (to move to dropdown)
+  final VoidCallback? onRightArrowFromClearButton;
 
   const _SearchTextField({
     required this.controller,
@@ -12058,6 +12099,8 @@ class _SearchTextField extends StatefulWidget {
     this.enabled = true,
     this.disabledTooltip,
     this.onDownArrowPressed,
+    this.clearButtonFocusNode,
+    this.onRightArrowFromClearButton,
   });
 
   @override
@@ -12161,10 +12204,16 @@ class _SearchTextFieldState extends State<_SearchTextField> {
       }
     }
 
-    // On TV, handle arrow right at end of text to trigger clear
-    if (widget.isTelevision && event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (text.isNotEmpty && isAtEnd) {
-        widget.onClearPressed();
+    // Handle arrow right at end of text - focus clear button or dropdown
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (isTextEmpty || isAtEnd) {
+        if (text.isNotEmpty && widget.clearButtonFocusNode != null) {
+          // Text exists: go to clear button first
+          widget.clearButtonFocusNode!.requestFocus();
+        } else if (widget.onRightArrowFromClearButton != null) {
+          // No text: go directly to dropdown
+          widget.onRightArrowFromClearButton!();
+        }
         return KeyEventResult.handled;
       }
     }
@@ -12232,15 +12281,59 @@ class _SearchTextFieldState extends State<_SearchTextField> {
             suffixIcon: ValueListenableBuilder<TextEditingValue>(
               valueListenable: widget.controller,
               builder: (context, value, child) {
-                return value.text.isNotEmpty && widget.enabled
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.clear_rounded,
-                          color: Color(0xFFEF4444),
+                if (value.text.isEmpty || !widget.enabled) {
+                  return const SizedBox.shrink();
+                }
+                // Make clear button focusable for DPAD navigation
+                return Focus(
+                  focusNode: widget.clearButtonFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                    // Left arrow: go back to text field
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      widget.focusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    // Right arrow: go to dropdown
+                    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                      if (widget.onRightArrowFromClearButton != null) {
+                        widget.onRightArrowFromClearButton!();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    // Enter/Select: trigger clear
+                    if (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.select ||
+                        event.logicalKey == LogicalKeyboardKey.space) {
+                      widget.onClearPressed();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: Builder(
+                    builder: (context) {
+                      final isFocused = Focus.of(context).hasFocus;
+                      return Container(
+                        decoration: isFocused
+                            ? BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFF6366F1),
+                                  width: 2,
+                                ),
+                              )
+                            : null,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.clear_rounded,
+                            color: Color(0xFFEF4444),
+                          ),
+                          onPressed: widget.onClearPressed,
                         ),
-                        onPressed: widget.onClearPressed,
-                      )
-                    : const SizedBox.shrink();
+                      );
+                    },
+                  ),
+                );
               },
             ),
             border: OutlineInputBorder(
