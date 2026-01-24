@@ -1819,29 +1819,62 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // Find the best torrent based on the rules
+    // Find the best source based on availability and provider configuration
     Torrent? selectedTorrent;
 
-    // Filter to only actual torrents (exclude direct/external streams)
+    // Filter sources by type
     final torrentsOnly = _torrents.where((t) => !t.isDirectStream && !t.isExternalStream).toList();
+    final directStreams = _torrents.where((t) => t.isDirectStream).toList();
 
-    if (torrentsOnly.isEmpty) {
-      debugPrint('TorrentSearchScreen: Quick Play - no torrents found (only direct/external streams)');
+    // Check if a debrid provider is configured (needed for torrents)
+    final hasDebridProvider = (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) ||
+        (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty);
+
+    // Decide which source type to use:
+    // - If debrid configured and torrents available → use torrents
+    // - If no debrid OR no torrents → use direct streams if available
+    final useTorrents = hasDebridProvider && torrentsOnly.isNotEmpty;
+    final useDirectStreams = !useTorrents && directStreams.isNotEmpty;
+
+    if (!useTorrents && !useDirectStreams) {
+      // No playable sources
+      final reason = torrentsOnly.isNotEmpty && !hasDebridProvider
+          ? 'Torrents found but no debrid provider configured'
+          : 'No playable sources found';
+      debugPrint('TorrentSearchScreen: Quick Play - $reason');
       setState(() {
         _quickPlayPending = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No torrent sources found for Quick Play'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(torrentsOnly.isNotEmpty && !hasDebridProvider
+                ? 'Configure a debrid provider to play torrents'
+                : 'No playable sources found for Quick Play'),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
       return;
     }
 
-    // Load Quick Play retry settings
+    // Use direct stream if that's what we decided
+    if (useDirectStreams) {
+      debugPrint('TorrentSearchScreen: Quick Play - using direct stream${!hasDebridProvider ? " (no debrid configured)" : ""}');
+      selectedTorrent = directStreams.first;
+      final index = _torrents.indexOf(selectedTorrent!);
+      debugPrint('TorrentSearchScreen: Quick Play - playing direct stream: ${selectedTorrent.displayTitle}');
+
+      // Reset quick play state before playing direct stream (no retry logic for direct)
+      setState(() {
+        _quickPlayPending = false;
+      });
+
+      _handleTorrentCardActivated(selectedTorrent, index >= 0 ? index : 0);
+      return;
+    }
+
+    // Load Quick Play retry settings (only applies to torrents)
     _quickPlayTryMultiple = await StorageService.getQuickPlayTryMultipleTorrents();
     _quickPlayMaxRetries = await StorageService.getQuickPlayMaxRetries();
 
