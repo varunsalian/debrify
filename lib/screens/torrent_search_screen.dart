@@ -9792,41 +9792,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ],
                     ),
-
-                    // Helper text for IMDB mode on TV
-                    if (_searchMode == SearchMode.catalog && _isTelevision && _selectedImdbTitle == null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Color(0xFF7C3AED),
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Type a title and press Enter to search IMDB',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
                     // IMDB Smart Search Mode UI components
                     if (_searchMode == SearchMode.catalog) ...[
                       // Active selection chip
