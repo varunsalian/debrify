@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/movie_collection.dart';
+import '../services/external_player_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../screens/video_player_screen.dart';
@@ -238,6 +241,16 @@ class VideoPlayerLauncher {
       }
     }
 
+    // Check if external player is enabled
+    final externalPlayerEnabled = await StorageService.getExternalPlayerEnabled();
+    if (externalPlayerEnabled) {
+      final launched = await _launchWithExternalPlayer(context, args);
+      if (launched) {
+        return;
+      }
+      // If external player failed, fall through to in-app player
+    }
+
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
     if (isTv) {
       final launched = await _launchOnAndroidTv(args);
@@ -249,6 +262,65 @@ class VideoPlayerLauncher {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => args.toWidget()),
     );
+  }
+
+  /// Launch video with external player based on platform
+  /// Returns true if successfully launched, false if should fall back to in-app player
+  static Future<bool> _launchWithExternalPlayer(
+    BuildContext context,
+    VideoPlayerLaunchArgs args,
+  ) async {
+    final url = args.videoUrl;
+    final title = args.title;
+
+    if (Platform.isMacOS) {
+      // macOS: Use configured external player
+      final result = await ExternalPlayerService.launchWithPreferredPlayer(
+        url,
+        title: title,
+      );
+
+      if (result.success) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return true;
+      } else {
+        // Show error but fall back to in-app player
+        debugPrint('External player failed: ${result.errorMessage}');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return false;
+      }
+    } else if (Platform.isAndroid) {
+      // Android: Show Intent chooser for video player apps
+      try {
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: url,
+          type: 'video/*',
+        );
+        await intent.launch();
+        return true;
+      } catch (e) {
+        debugPrint('Failed to launch external player on Android: $e');
+        return false;
+      }
+    }
+
+    // Other platforms: not supported, use in-app player
+    return false;
   }
 
   static Future<bool> _isAndroidTv(bool Function()? override) async {

@@ -16,7 +16,6 @@ import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/external_player_service.dart';
 import '../../services/download_service.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
@@ -4144,86 +4143,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     }
   }
 
-  /// Open file with external player
-  Future<void> _openWithExternalPlayer(RDFileNode node) async {
-    if ((_currentTorrent == null && _currentWebDownload == null) || node.isFolder) return;
-
-    final key = _apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    final files = _currentFiles;
-    if (node.linkIndex >= 0 && node.linkIndex < files.length) {
-      final torboxFile = files[node.linkIndex];
-
-      try {
-        // Show loading
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => const Center(child: CircularProgressIndicator()),
-        );
-
-        String downloadUrl;
-        if (_currentTorrent != null) {
-          downloadUrl = await TorboxService.requestFileDownloadLink(
-            apiKey: key,
-            torrentId: _currentTorrent!.id,
-            fileId: torboxFile.id,
-          );
-        } else {
-          downloadUrl = await TorboxService.requestWebDownloadFileLink(
-            apiKey: key,
-            webId: _currentWebDownload!.id,
-            fileId: torboxFile.id,
-          );
-        }
-
-        if (!mounted) return;
-        Navigator.of(context).pop(); // Close loading
-
-        // Launch with external player
-        if (Platform.isAndroid) {
-          // On Android, use intent with video MIME type to show video player chooser
-          final intent = AndroidIntent(
-            action: 'action_view',
-            data: downloadUrl,
-            type: 'video/*',
-          );
-          await intent.launch();
-          _showSnackBar('Opening with external player...', isError: false);
-        } else if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-          // Desktop: Use external player service
-          final result = await ExternalPlayerService.launchWithPreferredPlayer(
-            downloadUrl,
-            title: node.name,
-          );
-          if (result.success) {
-            _showSnackBar('Opening with ${result.usedPlayer?.displayName ?? "external player"}...', isError: false);
-          } else {
-            _showSnackBar(result.errorMessage ?? 'Could not open external player');
-          }
-        } else {
-          // iOS: Use url_launcher
-          final Uri uri = Uri.parse(downloadUrl);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
-            _showSnackBar('Opening with external player...', isError: false);
-          } else {
-            _showSnackBar('Could not open external player');
-          }
-        }
-      } catch (e) {
-        if (!mounted) return;
-        Navigator.of(context).pop(); // Close loading if still open
-        _showSnackBar('Failed to open: ${_formatTorboxError(e)}');
-      }
-    }
-  }
-
   /// Show DeoVR format selection dialog and launch
   Future<void> _openWithDeoVR(RDFileNode node) async {
     if ((_currentTorrent == null && _currentWebDownload == null) || node.isFolder) return;
@@ -6256,8 +6175,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       _addFileOrFolderToPlaylist(node);
                     } else if (value == 'copy_link') {
                       _copyFileLink(node);
-                    } else if (value == 'open_external') {
-                      _openWithExternalPlayer(node);
                     } else if (value == 'deovr') {
                       _openWithDeoVR(node);
                     }
@@ -6293,17 +6210,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                             Icon(Icons.link, size: 18, color: Colors.orange),
                             SizedBox(width: 12),
                             Text('Copy Link'),
-                          ],
-                        ),
-                      ),
-                    if (isVideo)
-                      const PopupMenuItem(
-                        value: 'open_external',
-                        child: Row(
-                          children: [
-                            Icon(Icons.open_in_new, size: 18, color: Colors.purple),
-                            SizedBox(width: 12),
-                            Text('Open with External Player'),
                           ],
                         ),
                       ),

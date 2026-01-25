@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../models/external_player.dart';
 import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
 
@@ -16,6 +15,7 @@ class ExternalPlayerSettingsPage extends StatefulWidget {
 class _ExternalPlayerSettingsPageState
     extends State<ExternalPlayerSettingsPage> {
   bool _loading = true;
+  bool _externalPlayerEnabled = false;
   ExternalPlayer _selectedPlayer = ExternalPlayer.systemDefault;
   Map<ExternalPlayer, bool> _installedPlayers = {};
 
@@ -46,18 +46,27 @@ class _ExternalPlayerSettingsPageState
     });
 
     try {
-      // Load installed players
-      final installed = await ExternalPlayerService.detectInstalledPlayers();
+      // Load enabled setting (works on all platforms)
+      final enabled = await StorageService.getExternalPlayerEnabled();
 
-      // Load current settings
-      final preferredKey = await StorageService.getPreferredExternalPlayer();
-      final customAppPath = await StorageService.getCustomExternalPlayerPath();
-      final customAppName = await StorageService.getCustomExternalPlayerName();
-      final customCommand = await StorageService.getCustomExternalPlayerCommand();
+      // Load macOS-specific settings
+      Map<ExternalPlayer, bool> installed = {};
+      String preferredKey = 'system_default';
+      String? customAppPath;
+      String? customAppName;
+      String? customCommand;
 
-      _commandController.text = customCommand ?? '';
+      if (Platform.isMacOS) {
+        installed = await ExternalPlayerService.detectInstalledPlayers();
+        preferredKey = await StorageService.getPreferredExternalPlayer();
+        customAppPath = await StorageService.getCustomExternalPlayerPath();
+        customAppName = await StorageService.getCustomExternalPlayerName();
+        customCommand = await StorageService.getCustomExternalPlayerCommand();
+        _commandController.text = customCommand ?? '';
+      }
 
       setState(() {
+        _externalPlayerEnabled = enabled;
         _installedPlayers = installed;
         _selectedPlayer = ExternalPlayerExtension.fromStorageKey(preferredKey);
         _customAppPath = customAppPath;
@@ -72,6 +81,21 @@ class _ExternalPlayerSettingsPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load settings: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleExternalPlayer(bool enabled) async {
+    try {
+      await StorageService.setExternalPlayerEnabled(enabled);
+      setState(() {
+        _externalPlayerEnabled = enabled;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
         );
       }
     }
@@ -310,7 +334,10 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isMacOS) {
+    // Check if platform is supported (macOS or Android)
+    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid;
+
+    if (!isSupportedPlatform) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('External Player'),
@@ -322,13 +349,13 @@ class _ExternalPlayerSettingsPageState
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.desktop_mac_rounded,
+                  Icons.block_rounded,
                   size: 64,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'External player settings are only available on macOS',
+                  'External player is not available on this platform',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -363,87 +390,144 @@ class _ExternalPlayerSettingsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header card
+            // Header card with enable toggle
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Row(
+                child: Column(
                   children: [
-                    Icon(
-                      Icons.open_in_new_rounded,
-                      size: 48,
-                      color: theme.colorScheme.primary,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          size: 48,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'External Player',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                Platform.isMacOS
+                                    ? 'Open videos in your preferred external player'
+                                    : 'Open videos in an external video player app',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'External Player',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Choose which video player to use when opening files externally',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 16),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Enable External Player'),
+                      subtitle: Text(
+                        _externalPlayerEnabled
+                            ? 'Videos will open in external player'
+                            : 'Videos will play in the app',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
+                      value: _externalPlayerEnabled,
+                      onChanged: _toggleExternalPlayer,
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
 
-            // Player selection card
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(
-                      'Preferred Player',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+            // Android-specific info
+            if (Platform.isAndroid) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // macOS-specific player selection (only show when enabled)
+            if (Platform.isMacOS && _externalPlayerEnabled) ...[
+              const SizedBox(height: 16),
+
+              // Player selection card
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        'Preferred Player',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  // System Default
-                  _buildPlayerTile(ExternalPlayer.systemDefault),
-                  const Divider(height: 1),
-                  // VLC
-                  _buildPlayerTile(ExternalPlayer.vlc),
-                  const Divider(height: 1),
-                  // IINA
-                  _buildPlayerTile(ExternalPlayer.iina),
-                  const Divider(height: 1),
-                  // mpv
-                  _buildPlayerTile(ExternalPlayer.mpv),
-                  const Divider(height: 1),
-                  // QuickTime
-                  _buildPlayerTile(ExternalPlayer.quickTime),
-                  const Divider(height: 1),
-                  // Infuse
-                  _buildPlayerTile(ExternalPlayer.infuse),
-                  const Divider(height: 1),
-                  // Custom App
-                  _buildPlayerTile(ExternalPlayer.customApp),
-                  const Divider(height: 1),
-                  // Custom Command
-                  _buildPlayerTile(ExternalPlayer.customCommand),
-                  const SizedBox(height: 8),
-                ],
+                    // System Default
+                    _buildPlayerTile(ExternalPlayer.systemDefault),
+                    const Divider(height: 1),
+                    // VLC
+                    _buildPlayerTile(ExternalPlayer.vlc),
+                    const Divider(height: 1),
+                    // IINA
+                    _buildPlayerTile(ExternalPlayer.iina),
+                    const Divider(height: 1),
+                    // mpv
+                    _buildPlayerTile(ExternalPlayer.mpv),
+                    const Divider(height: 1),
+                    // QuickTime
+                    _buildPlayerTile(ExternalPlayer.quickTime),
+                    const Divider(height: 1),
+                    // Infuse
+                    _buildPlayerTile(ExternalPlayer.infuse),
+                    const Divider(height: 1),
+                    // Custom App
+                    _buildPlayerTile(ExternalPlayer.customApp),
+                    const Divider(height: 1),
+                    // Custom Command
+                    _buildPlayerTile(ExternalPlayer.customCommand),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-            ),
-            // Custom App configuration (only shown when selected)
-            if (_selectedPlayer == ExternalPlayer.customApp) ...[
+            ],
+            // Custom App configuration (only shown when selected on macOS)
+            if (Platform.isMacOS && _externalPlayerEnabled && _selectedPlayer == ExternalPlayer.customApp) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -539,8 +623,8 @@ class _ExternalPlayerSettingsPageState
                 ),
               ),
             ],
-            // Custom Command configuration (only shown when selected)
-            if (_selectedPlayer == ExternalPlayer.customCommand) ...[
+            // Custom Command configuration (only shown when selected on macOS)
+            if (Platform.isMacOS && _externalPlayerEnabled && _selectedPlayer == ExternalPlayer.customCommand) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -661,34 +745,36 @@ class _ExternalPlayerSettingsPageState
                 ),
               ),
             ],
-            const SizedBox(height: 16),
 
-            // Info card
-            Card(
-              color: theme.colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: theme.colorScheme.onPrimaryContainer,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
+            // Info card (macOS only, when enabled)
+            if (Platform.isMacOS && _externalPlayerEnabled) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

@@ -75,6 +75,7 @@ class StorageService {
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
 
   // External Player settings
+  static const String _externalPlayerEnabledKey = 'external_player_enabled';
   static const String _externalPlayerPreferredKey = 'external_player_preferred';
   static const String _externalPlayerCustomPathKey = 'external_player_custom_path';
   static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
@@ -2920,6 +2921,19 @@ class StorageService {
 
   // External Player Settings methods
 
+  /// Get whether external player is enabled
+  /// Returns false by default
+  static Future<bool> getExternalPlayerEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_externalPlayerEnabledKey) ?? false;
+  }
+
+  /// Set whether external player is enabled
+  static Future<void> setExternalPlayerEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_externalPlayerEnabledKey, enabled);
+  }
+
   /// Get preferred external player key
   /// Returns 'system_default' if not set
   static Future<String> getPreferredExternalPlayer() async {
@@ -2985,6 +2999,7 @@ class StorageService {
   /// Clear all external player settings
   static Future<void> clearExternalPlayerSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_externalPlayerEnabledKey);
     await prefs.remove(_externalPlayerPreferredKey);
     await prefs.remove(_externalPlayerCustomPathKey);
     await prefs.remove(_externalPlayerCustomNameKey);
