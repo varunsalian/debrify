@@ -704,7 +704,7 @@ class _SettingsHeader extends StatelessWidget {
   }
 }
 
-class _ConnectionsSummary extends StatelessWidget {
+class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
@@ -718,6 +718,34 @@ class _ConnectionsSummary extends StatelessWidget {
     required this.reddit,
     this.firstCardFocusNode,
   });
+
+  @override
+  State<_ConnectionsSummary> createState() => _ConnectionsSummaryState();
+}
+
+class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
+  // Focus nodes for grid navigation
+  // Layout: [realDebrid, torbox]
+  //         [pikpak,     reddit]
+  late final FocusNode _torboxFocusNode;
+  late final FocusNode _pikpakFocusNode;
+  late final FocusNode _redditFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
+    _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
+    _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
+  }
+
+  @override
+  void dispose() {
+    _torboxFocusNode.dispose();
+    _pikpakFocusNode.dispose();
+    _redditFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -739,28 +767,54 @@ class _ConnectionsSummary extends StatelessWidget {
             final double itemWidth = wide
                 ? (constraints.maxWidth - 12) / 2
                 : constraints.maxWidth;
+            // Grid layout (wide):
+            // [RD]      [Torbox]
+            // [PikPak]  [Reddit]
             return Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
+                // Row 1: Real Debrid (left), Torbox (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
-                    info: realDebrid,
-                    focusNode: firstCardFocusNode,
+                    info: widget.realDebrid,
+                    focusNode: widget.firstCardFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _torboxFocusNode : null,
+                    downNeighbor: _pikpakFocusNode,
                   ),
                 ),
                 SizedBox(
                   width: itemWidth,
-                  child: _ConnectionCard(info: torbox),
+                  child: _ConnectionCard(
+                    info: widget.torbox,
+                    focusNode: _torboxFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? widget.firstCardFocusNode : null,
+                    downNeighbor: wide ? _redditFocusNode : _pikpakFocusNode,
+                  ),
+                ),
+                // Row 2: PikPak (left), Reddit (right)
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.pikpak,
+                    focusNode: _pikpakFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _redditFocusNode : null,
+                    upNeighbor: widget.firstCardFocusNode,
+                  ),
                 ),
                 SizedBox(
                   width: itemWidth,
-                  child: _ConnectionCard(info: pikpak),
-                ),
-                SizedBox(
-                  width: itemWidth,
-                  child: _ConnectionCard(info: reddit),
+                  child: _ConnectionCard(
+                    info: widget.reddit,
+                    focusNode: _redditFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _pikpakFocusNode : null,
+                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
+                  ),
                 ),
               ],
             );
@@ -792,7 +846,21 @@ class _ConnectionInfo {
 class _ConnectionCard extends StatelessWidget {
   final _ConnectionInfo info;
   final FocusNode? focusNode;
-  const _ConnectionCard({required this.info, this.focusNode});
+  final bool isLeftColumn;
+  final FocusNode? leftNeighbor;
+  final FocusNode? rightNeighbor;
+  final FocusNode? upNeighbor;
+  final FocusNode? downNeighbor;
+
+  const _ConnectionCard({
+    required this.info,
+    this.focusNode,
+    this.isLeftColumn = true,
+    this.leftNeighbor,
+    this.rightNeighbor,
+    this.upNeighbor,
+    this.downNeighbor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -805,12 +873,34 @@ class _ConnectionCard extends StatelessWidget {
 
     return Focus(
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            MainPageBridge.focusTvSidebar != null) {
-          MainPageBridge.focusTvSidebar!();
-          return KeyEventResult.handled;
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (leftNeighbor != null) {
+            leftNeighbor!.requestFocus();
+            return KeyEventResult.handled;
+          } else if (isLeftColumn && MainPageBridge.focusTvSidebar != null) {
+            // Left column with no left neighbor: open sidebar
+            MainPageBridge.focusTvSidebar!();
+            return KeyEventResult.handled;
+          }
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (rightNeighbor != null) {
+            rightNeighbor!.requestFocus();
+            return KeyEventResult.handled;
+          }
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (upNeighbor != null) {
+            upNeighbor!.requestFocus();
+            return KeyEventResult.handled;
+          }
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (downNeighbor != null) {
+            downNeighbor!.requestFocus();
+            return KeyEventResult.handled;
+          }
         }
+
         return KeyEventResult.ignored;
       },
       child: Material(

@@ -57,12 +57,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
       reverseCurve: Curves.easeInCubic,
     );
 
-    // Request initial focus on the current menu item after first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        requestFocus();
-      }
-    });
+    // NOTE: Removed auto-focus on first frame - sidebar should only open when user
+    // explicitly navigates to it (DPAD left). Auto-focusing caused sidebar to
+    // expand on app launch which is not desired behavior.
   }
 
   void _initFocusNodes() {
