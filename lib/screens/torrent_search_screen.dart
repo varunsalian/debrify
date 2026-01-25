@@ -1675,9 +1675,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onChanged: _onSearchSourceChanged,
       focusNode: _sourceDropdownFocusNode,
       isTelevision: _isTelevision,
-      // Left arrow: go to TV sidebar
+      // Left arrow: go to TV sidebar (if available)
       onLeftArrowPressed: () {
-        if (_isTelevision && MainPageBridge.focusTvSidebar != null) {
+        if (MainPageBridge.focusTvSidebar != null) {
           MainPageBridge.focusTvSidebar!();
         }
       },
