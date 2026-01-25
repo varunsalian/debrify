@@ -34,6 +34,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   List<Map<String, dynamic>> _allItems = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   // Search state
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -62,10 +65,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     MainPageBridge.playPlaylistItem = _playItem;
 
     // Register TV sidebar focus handler (tab index 1 = Playlist)
-    MainPageBridge.registerTvContentFocusHandler(1, () {
+    _tvContentFocusHandler = () {
       // Focus search button as entry point
       _searchFocusNode.requestFocus();
-    });
+    };
+    MainPageBridge.registerTvContentFocusHandler(1, _tvContentFocusHandler!);
 
     // Check if there's a pending auto-play item
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,7 +84,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void dispose() {
     // Clear static callback to prevent memory leak
     MainPageBridge.playPlaylistItem = null;
-    MainPageBridge.unregisterTvContentFocusHandler(1);
+    if (_tvContentFocusHandler != null) {
+      MainPageBridge.unregisterTvContentFocusHandler(1, _tvContentFocusHandler!);
+    }
     // Remove listener before disposing controller
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();

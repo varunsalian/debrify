@@ -65,6 +65,9 @@ enum _FolderViewMode { raw, sortedAZ, seriesArrange }
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   _DebridDownloadsView _selectedView = _DebridDownloadsView.torrents;
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   // Torrent Downloads data
   final List<RDTorrent> _torrents = [];
   final ScrollController _torrentScrollController = ScrollController();
@@ -147,10 +150,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Displayed in a tab
       MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 4 = Real Debrid)
-      MainPageBridge.registerTvContentFocusHandler(4, () {
+      _tvContentFocusHandler = () {
         // Focus search button as entry point
         _searchButtonFocusNode.requestFocus();
-      });
+      };
+      MainPageBridge.registerTvContentFocusHandler(4, _tvContentFocusHandler!);
     }
 
     // If asked to show options for a specific torrent, open after init
@@ -215,7 +219,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('realdebrid');
-      MainPageBridge.unregisterTvContentFocusHandler(4);
+      if (_tvContentFocusHandler != null) {
+        MainPageBridge.unregisterTvContentFocusHandler(4, _tvContentFocusHandler!);
+      }
     }
 
     _torrentScrollController.dispose();

@@ -39,6 +39,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Focus node for the first connection card (Real-Debrid) for TV navigation
   final FocusNode _firstCardFocusNode = FocusNode(debugLabel: 'firstCardFocus');
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   bool _realDebridConnected = false;
   String _realDebridStatus = 'Not connected';
   String _realDebridCaption = 'Tap to connect';
@@ -59,14 +62,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSummaries();
 
     // Register TV sidebar focus handler (tab index 7 = Settings)
-    MainPageBridge.registerTvContentFocusHandler(7, () {
+    _tvContentFocusHandler = () {
       _firstCardFocusNode.requestFocus();
-    });
+    };
+    MainPageBridge.registerTvContentFocusHandler(7, _tvContentFocusHandler!);
   }
 
   @override
   void dispose() {
-    MainPageBridge.unregisterTvContentFocusHandler(7);
+    if (_tvContentFocusHandler != null) {
+      MainPageBridge.unregisterTvContentFocusHandler(7, _tvContentFocusHandler!);
+    }
     _firstCardFocusNode.dispose();
     super.dispose();
   }

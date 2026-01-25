@@ -159,8 +159,11 @@ class MainPageBridge {
   }
 
   /// Unregister a screen's content focus handler. Call in dispose.
-  static void unregisterTvContentFocusHandler(int tabIndex) {
-    _tvContentFocusHandlers.remove(tabIndex);
+  /// Only removes if the handler matches (prevents race condition when widget rebuilds).
+  static void unregisterTvContentFocusHandler(int tabIndex, VoidCallback handler) {
+    if (_tvContentFocusHandlers[tabIndex] == handler) {
+      _tvContentFocusHandlers.remove(tabIndex);
+    }
   }
 
   /// Set the currently active tab index. Call from main.dart when tab changes.

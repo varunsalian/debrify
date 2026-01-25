@@ -335,9 +335,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
 
     // Register TV sidebar focus handler (tab index 0 = Home/TorrentSearch)
-    MainPageBridge.registerTvContentFocusHandler(0, () {
-      _providerAccordionFocusNode.requestFocus();
-    });
+    MainPageBridge.registerTvContentFocusHandler(0, _handleTvContentFocus);
 
     _loadApiKeys();
     _loadSearchSourceOptions();
@@ -1078,12 +1076,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _engineTileFocusNodes.clear();
     _engineTileFocusStates.clear();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
-    MainPageBridge.unregisterTvContentFocusHandler(0);
+    MainPageBridge.unregisterTvContentFocusHandler(0, _handleTvContentFocus);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
     MainPageBridge.handlePikPakResult = null;
     _listAnimationController.dispose();
     super.dispose();
+  }
+
+  /// Handle focus request from TV sidebar - intelligently focuses the right element
+  void _handleTvContentFocus() {
+    // Check if dropdown/Sources row is visible
+    final isSourcesRowVisible = !_hasSearched || _torrents.isEmpty;
+
+    if (isSourcesRowVisible) {
+      // Focus the dropdown (leftmost element in the row)
+      _sourceDropdownFocusNode.requestFocus();
+      return;
+    }
+
+    // If we have search results, focus the first result card
+    if (_cardFocusNodes.isNotEmpty) {
+      _cardFocusNodes[0].requestFocus();
+      return;
+    }
+
+    // Fallback to search bar
+    _searchFocusNode.requestFocus();
   }
 
   Future<void> _searchTorrents(String query) async {

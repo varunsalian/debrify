@@ -236,6 +236,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   late final FocusNode _channelSearchFocusNode;
   final FocusNode _quickPlayFocusNode = FocusNode(debugLabel: 'DebrifyTVQuickPlay');
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   // Progress UI state
   final ValueNotifier<List<String>> _progress = ValueNotifier<List<String>>([]);
   BuildContext? _progressSheetContext;
@@ -261,10 +264,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
 
     // Register TV sidebar focus handler (tab index 3 = Debrify TV)
-    MainPageBridge.registerTvContentFocusHandler(3, () {
-      // Focus Quick Play button as entry point (always visible)
+    _tvContentFocusHandler = () {
       _quickPlayFocusNode.requestFocus();
-    });
+    };
+    MainPageBridge.registerTvContentFocusHandler(3, _tvContentFocusHandler!);
 
     // Check if this is a startup auto-launch or pending auto-play from home screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -277,7 +280,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   void dispose() {
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
-    MainPageBridge.unregisterTvContentFocusHandler(3);
+    if (_tvContentFocusHandler != null) {
+      MainPageBridge.unregisterTvContentFocusHandler(3, _tvContentFocusHandler!);
+    }
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _prefetchStopRequested = true;
     _stopPrefetch();
@@ -6980,6 +6985,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           icon: Icons.play_arrow_rounded,
                           label: 'Quick Play',
                           backgroundColor: const Color(0xFFE50914),
+                          focusNode: _quickPlayFocusNode,
                         ),
                         const SizedBox(width: 12),
                         // Import button

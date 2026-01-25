@@ -39,6 +39,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _files = [];
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   bool _isLoading = false;
   bool _initialLoad = true;
   String _errorMessage = '';
@@ -123,10 +126,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } else {
       MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 6 = PikPak)
-      MainPageBridge.registerTvContentFocusHandler(6, () {
+      _tvContentFocusHandler = () {
         // Focus search button as entry point
         _searchButtonFocusNode.requestFocus();
-      });
+      };
+      MainPageBridge.registerTvContentFocusHandler(6, _tvContentFocusHandler!);
     }
   }
 
@@ -145,7 +149,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('pikpak');
-      MainPageBridge.unregisterTvContentFocusHandler(6);
+      if (_tvContentFocusHandler != null) {
+        MainPageBridge.unregisterTvContentFocusHandler(6, _tvContentFocusHandler!);
+      }
     }
 
     _scrollController.dispose();

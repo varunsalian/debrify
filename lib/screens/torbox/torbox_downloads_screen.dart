@@ -55,6 +55,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final List<TorboxTorrent> _torrents = [];
   final TextEditingController _magnetController = TextEditingController();
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   bool _isLoading = false;
   bool _isLoadingMore = false;
   bool _hasMore = true;
@@ -128,10 +131,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     } else {
       MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 5 = Torbox)
-      MainPageBridge.registerTvContentFocusHandler(5, () {
+      _tvContentFocusHandler = () {
         // Focus search button as entry point
         _searchButtonFocusNode.requestFocus();
-      });
+      };
+      MainPageBridge.registerTvContentFocusHandler(5, _tvContentFocusHandler!);
     }
   }
 
@@ -840,7 +844,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('torbox');
-      MainPageBridge.unregisterTvContentFocusHandler(5);
+      if (_tvContentFocusHandler != null) {
+        MainPageBridge.unregisterTvContentFocusHandler(5, _tvContentFocusHandler!);
+      }
     }
 
     _scrollController.dispose();

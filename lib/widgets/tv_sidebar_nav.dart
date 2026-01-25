@@ -121,9 +121,6 @@ class TvSidebarNavState extends State<TvSidebarNav>
     // Collapse sidebar
     _collapse();
 
-    // Unfocus current menu item to ensure clean state
-    FocusManager.instance.primaryFocus?.unfocus();
-
     // Wait for page transition animation to complete before focusing content
     Future.delayed(const Duration(milliseconds: _pageTransitionDelay), () {
       if (mounted) {
@@ -144,9 +141,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
   /// Move focus from sidebar to content without changing the current tab
   void _moveToContent() {
     _collapse();
-    FocusManager.instance.primaryFocus?.unfocus();
 
-    // Small delay to ensure sidebar is collapsed
+    // Small delay to ensure sidebar is collapsed and screen is ready
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         _focusContent();
