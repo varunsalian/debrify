@@ -80,6 +80,12 @@ class SearchSourceDropdown extends StatefulWidget {
   final bool isTelevision;
   /// Callback when left arrow is pressed (for DPAD navigation back to search bar)
   final VoidCallback? onLeftArrowPressed;
+  /// Callback when right arrow is pressed (for DPAD navigation to Sources)
+  final VoidCallback? onRightArrowPressed;
+  /// Callback when down arrow is pressed (for DPAD navigation)
+  final VoidCallback? onDownArrowPressed;
+  /// Callback when up arrow is pressed (for DPAD navigation to search bar)
+  final VoidCallback? onUpArrowPressed;
 
   const SearchSourceDropdown({
     super.key,
@@ -89,6 +95,9 @@ class SearchSourceDropdown extends StatefulWidget {
     this.focusNode,
     this.isTelevision = false,
     this.onLeftArrowPressed,
+    this.onRightArrowPressed,
+    this.onDownArrowPressed,
+    this.onUpArrowPressed,
   });
 
   @override
@@ -156,8 +165,6 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
     // Minimum width for dropdown to prevent text wrapping
     const double minDropdownWidth = 220;
     final dropdownWidth = size.width < minDropdownWidth ? minDropdownWidth : size.width;
-    // Offset to align right edge if dropdown is wider than trigger
-    final horizontalOffset = size.width - dropdownWidth;
 
     return OverlayEntry(
       builder: (context) => Stack(
@@ -174,13 +181,13 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
               child: const ColoredBox(color: Colors.transparent),
             ),
           ),
-          // The actual dropdown menu
+          // The actual dropdown menu (aligned to left edge of trigger)
           Positioned(
             width: dropdownWidth,
             child: CompositedTransformFollower(
               link: _layerLink,
               showWhenUnlinked: false,
-              offset: Offset(horizontalOffset, size.height + 4),
+              offset: Offset(0, size.height + 4),
               child: Material(
                 elevation: 8,
                 borderRadius: BorderRadius.circular(12),
@@ -233,6 +240,27 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
       if (event.logicalKey == LogicalKeyboardKey.arrowLeft && !_isExpanded) {
         if (widget.onLeftArrowPressed != null) {
           widget.onLeftArrowPressed!();
+          return KeyEventResult.handled;
+        }
+      }
+      // Right arrow: navigate to Sources
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight && !_isExpanded) {
+        if (widget.onRightArrowPressed != null) {
+          widget.onRightArrowPressed!();
+          return KeyEventResult.handled;
+        }
+      }
+      // Down arrow: navigate down
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown && !_isExpanded) {
+        if (widget.onDownArrowPressed != null) {
+          widget.onDownArrowPressed!();
+          return KeyEventResult.handled;
+        }
+      }
+      // Up arrow: navigate to search bar
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp && !_isExpanded) {
+        if (widget.onUpArrowPressed != null) {
+          widget.onUpArrowPressed!();
           return KeyEventResult.handled;
         }
       }

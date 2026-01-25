@@ -319,17 +319,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Logo
+              // Debrify App Icon
               Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.4),
@@ -338,10 +333,14 @@ class TvSidebarNavState extends State<TvSidebarNav>
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 24,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
               // App name (visible when expanded)

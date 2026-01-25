@@ -1675,12 +1675,45 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onChanged: _onSearchSourceChanged,
       focusNode: _sourceDropdownFocusNode,
       isTelevision: _isTelevision,
-      // Left arrow: go back to clear button if text exists, otherwise text field
+      // Left arrow: go to TV sidebar
       onLeftArrowPressed: () {
-        if (_searchController.text.isNotEmpty) {
-          _clearButtonFocusNode.requestFocus();
+        if (_isTelevision && MainPageBridge.focusTvSidebar != null) {
+          MainPageBridge.focusTvSidebar!();
+        }
+      },
+      // Right arrow: go to Sources accordion
+      onRightArrowPressed: () {
+        _providerAccordionFocusNode.requestFocus();
+      },
+      // Up arrow: go to search bar
+      onUpArrowPressed: () {
+        _searchFocusNode.requestFocus();
+      },
+      // Down arrow: go to content below (same as Sources accordion behavior)
+      onDownArrowPressed: () {
+        // Check if AggregatedSearchResults is visible
+        final isAggregatedVisible = _selectedSource.type == SearchSourceType.all &&
+            _searchController.text.isNotEmpty &&
+            !_hasSearched &&
+            !_isLoading;
+
+        if (isAggregatedVisible && _aggregatedResultsKey.currentState != null) {
+          // Focus keyword card ("Tap to search") - it's always present when aggregated results are visible
+          _aggregatedResultsKey.currentState!.requestFocusOnKeywordCard();
+          return;
+        }
+
+        // Check if CatalogBrowser is visible
+        final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
+            _selectedSource.addon != null &&
+            _selectedSource.addon!.supportsCatalogs &&
+            !_hasSearched &&
+            !_isLoading;
+
+        if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
+          _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
         } else {
-          _searchFocusNode.requestFocus();
+          _homeFocusController.focusFirstHomeSection();
         }
       },
     );
@@ -2360,13 +2393,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             return KeyEventResult.handled;
           }
 
-          // Handle Left arrow to navigate to TV sidebar
+          // Handle Left arrow to navigate to dropdown selector
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            if (_isTelevision && MainPageBridge.focusTvSidebar != null) {
-              MainPageBridge.focusTvSidebar!();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
+            _sourceDropdownFocusNode.requestFocus();
+            return KeyEventResult.handled;
           }
 
           // Handle Down arrow to navigate to aggregated results, catalog browser, or home sections
@@ -2431,71 +2461,79 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: child,
             ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.tune_rounded,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                // Show engine count based on mode
-                Text(
-                  'Sources',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Keyword engines badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '$keywordEngineCount',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF10B981),
-                      fontWeight: FontWeight.w600,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Hide badges on small screens (< 180px width)
+                final showBadges = constraints.maxWidth > 180;
+                return Row(
+                  children: [
+                    Icon(
+                      Icons.tune_rounded,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 20,
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    '+',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 12,
+                    const SizedBox(width: 10),
+                    // Show engine count based on mode
+                    Text(
+                      'Sources',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
                     ),
-                  ),
-                ),
-                // IMDB engines badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '$imdbEngineCount',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF8B5CF6),
-                      fontWeight: FontWeight.w600,
+                    if (showBadges) ...[
+                      const SizedBox(width: 8),
+                      // Keyword engines badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$keywordEngineCount',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF10B981),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          '+',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      // IMDB engines badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$imdbEngineCount',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF8B5CF6),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      size: 20,
                     ),
-                  ),
-                ),
-                const Spacer(),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                  size: 20,
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -2716,6 +2754,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _cardFocusNodes.isNotEmpty) {
           _cardFocusNodes[0].requestFocus();
+        }
+      });
+    } else {
+      // No results - focus search bar so user can try a different query
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _searchFocusNode.requestFocus();
         }
       });
     }
@@ -9633,12 +9678,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             enabled: _selectedSource.type != SearchSourceType.addon ||
                                 (_selectedSource.addon?.hasSearchableCatalogs ?? false),
                             disabledTooltip: "This addon doesn't support search",
-                            // Down arrow from search bar: go to Sources if visible, else to results
+                            // Down arrow from search bar: go to dropdown/Sources row if visible, else to results
                             onDownArrowPressed: () {
-                              // Sources accordion is visible when: !_hasSearched || _torrents.isEmpty
-                              final isSourcesVisible = !_hasSearched || _torrents.isEmpty;
-                              if (isSourcesVisible) {
-                                _providerAccordionFocusNode.requestFocus();
+                              // Dropdown/Sources row is visible when: !_hasSearched || _torrents.isEmpty
+                              final isSourcesRowVisible = !_hasSearched || _torrents.isEmpty;
+                              if (isSourcesRowVisible) {
+                                _sourceDropdownFocusNode.requestFocus();
                               } else if (_cardFocusNodes.isNotEmpty) {
                                 // Focus first result card
                                 _cardFocusNodes.first.requestFocus();
@@ -9646,16 +9691,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             },
                             // Clear button focus node for DPAD navigation
                             clearButtonFocusNode: _clearButtonFocusNode,
-                            // Right arrow from clear button: go to dropdown
-                            onRightArrowFromClearButton: () {
-                              _sourceDropdownFocusNode.requestFocus();
-                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 140),
-                          child: _buildSearchSourceSelector(),
                         ),
                       ],
                     ),
@@ -9702,10 +9738,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       _buildImdbTypeAndEpisodeControls(),
                     ],
 
-                    // Search Engine Toggles - hide after search to save space
+                    // Dropdown + Sources Row - hide after search to save space
                     if (!_hasSearched || _torrents.isEmpty) ...[
                       const SizedBox(height: 16),
-                      _buildProvidersAccordion(context),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          // On small screens (< 300px), use compact layout
+                          final isCompact = constraints.maxWidth < 300;
+                          return Row(
+                            children: [
+                              // Search source dropdown - flexible width
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: isCompact ? 100 : 140,
+                                  minWidth: 80,
+                                ),
+                                child: _buildSearchSourceSelector(),
+                              ),
+                              SizedBox(width: isCompact ? 8 : 12),
+                              // Sources accordion (expandable)
+                              Expanded(
+                                child: _buildProvidersAccordion(context),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                     ], // end else (non-browse mode)
                   ],
@@ -9741,7 +9799,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _aggregatedKeywordFocusNode = focusNode;
                           },
                           onRequestFocusAbove: () {
-                            // Go back to Sources accordion
+                            // Go back to Sources row (focuses Sources, left arrow goes to dropdown)
                             _providerAccordionFocusNode.requestFocus();
                           },
                         ),
