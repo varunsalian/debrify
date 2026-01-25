@@ -16,6 +16,7 @@ import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/external_player_service.dart';
 import '../../services/download_service.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
@@ -4194,8 +4195,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           );
           await intent.launch();
           _showSnackBar('Opening with external player...', isError: false);
+        } else if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+          // Desktop: Use external player service
+          final result = await ExternalPlayerService.launchWithPreferredPlayer(
+            downloadUrl,
+            title: node.name,
+          );
+          if (result.success) {
+            _showSnackBar('Opening with ${result.usedPlayer?.displayName ?? "external player"}...', isError: false);
+          } else {
+            _showSnackBar(result.errorMessage ?? 'Could not open external player');
+          }
         } else {
-          // On other platforms, use url_launcher
+          // iOS: Use url_launcher
           final Uri uri = Uri.parse(downloadUrl);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);

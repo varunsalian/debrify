@@ -74,6 +74,12 @@ class StorageService {
   static const String _redditFavoriteSubredditsKey = 'reddit_favorite_subreddits';
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
 
+  // External Player settings
+  static const String _externalPlayerPreferredKey = 'external_player_preferred';
+  static const String _externalPlayerCustomPathKey = 'external_player_custom_path';
+  static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
+  static const String _externalPlayerCustomCommandKey = 'external_player_custom_command';
+
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
   static const String _pikpakEmailKey = 'pikpak_email';
@@ -2910,6 +2916,79 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_quickPlayTryMultipleTorrentsKey);
     await prefs.remove(_quickPlayMaxRetriesKey);
+  }
+
+  // External Player Settings methods
+
+  /// Get preferred external player key
+  /// Returns 'system_default' if not set
+  static Future<String> getPreferredExternalPlayer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_externalPlayerPreferredKey) ?? 'system_default';
+  }
+
+  /// Set preferred external player key
+  static Future<void> setPreferredExternalPlayer(String playerKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_externalPlayerPreferredKey, playerKey);
+  }
+
+  /// Get custom external player path (for custom player option)
+  static Future<String?> getCustomExternalPlayerPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_externalPlayerCustomPathKey);
+  }
+
+  /// Set custom external player path
+  static Future<void> setCustomExternalPlayerPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.isEmpty) {
+      await prefs.remove(_externalPlayerCustomPathKey);
+    } else {
+      await prefs.setString(_externalPlayerCustomPathKey, path);
+    }
+  }
+
+  /// Get custom external player display name
+  static Future<String?> getCustomExternalPlayerName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_externalPlayerCustomNameKey);
+  }
+
+  /// Set custom external player display name
+  static Future<void> setCustomExternalPlayerName(String? name) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (name == null || name.isEmpty) {
+      await prefs.remove(_externalPlayerCustomNameKey);
+    } else {
+      await prefs.setString(_externalPlayerCustomNameKey, name);
+    }
+  }
+
+  /// Get custom external player command template
+  /// Should contain {url} placeholder, optionally {title}
+  static Future<String?> getCustomExternalPlayerCommand() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_externalPlayerCustomCommandKey);
+  }
+
+  /// Set custom external player command template
+  static Future<void> setCustomExternalPlayerCommand(String? command) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (command == null || command.isEmpty) {
+      await prefs.remove(_externalPlayerCustomCommandKey);
+    } else {
+      await prefs.setString(_externalPlayerCustomCommandKey, command);
+    }
+  }
+
+  /// Clear all external player settings
+  static Future<void> clearExternalPlayerSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_externalPlayerPreferredKey);
+    await prefs.remove(_externalPlayerCustomPathKey);
+    await prefs.remove(_externalPlayerCustomNameKey);
+    await prefs.remove(_externalPlayerCustomCommandKey);
   }
 }
 

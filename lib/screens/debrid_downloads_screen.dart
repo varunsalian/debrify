@@ -11,6 +11,7 @@ import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../services/external_player_service.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -5930,8 +5931,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
         await intent.launch();
         _showSuccess('Opening with external player...');
+      } else if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        // Desktop: Use external player service
+        final result = await ExternalPlayerService.launchWithPreferredPlayer(
+          downloadUrl,
+          title: node.name,
+        );
+        if (result.success) {
+          _showSuccess('Opening with ${result.usedPlayer?.displayName ?? "external player"}...');
+        } else {
+          _showError(result.errorMessage ?? 'Could not open external player');
+        }
       } else {
-        // On other platforms, use url_launcher
+        // iOS: Use url_launcher
         final Uri uri = Uri.parse(downloadUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
