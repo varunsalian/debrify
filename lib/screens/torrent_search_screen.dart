@@ -427,9 +427,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _sortDirectionFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    // Up arrow: go to search bar
+    // Up arrow: go to season dropdown (if series) or search bar
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _searchFocusNode.requestFocus();
+      if (_isSeries) {
+        _seasonInputFocusNode.requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
       return KeyEventResult.handled;
     }
     // Down arrow: go to first result
@@ -2068,17 +2072,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return KeyEventResult.handled;
     }
 
-    // Arrow Down -> Episode field (if visible) or first result card
+    // Arrow Right -> Episode field (if visible/season selected)
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (_selectedSeason != null && hasSeasonData) {
+        _episodeInputFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Arrow Down -> Episode field (if visible) or filter row
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       // If episode input is visible, navigate to it
       if (_selectedSeason != null && hasSeasonData) {
         _episodeInputFocusNode.requestFocus();
-      } else if (_torrents.isNotEmpty && _cardFocusNodes.isNotEmpty) {
-        // Navigate to first result card
-        _cardFocusNodes[0].requestFocus();
-        setState(() {
-          _focusedCardIndex = 0;
-        });
+      } else {
+        // Navigate to filter row: back button > direct dropdown > torrent dropdown > sort dropdown
+        if (_cameFromCatalogBrowse) {
+          _backButtonFocusNode.requestFocus();
+        } else if (_directProviderCounts.isNotEmpty) {
+          _directDropdownFocusNode.requestFocus();
+        } else if (_torrentProviderCounts.isNotEmpty) {
+          _torrentDropdownFocusNode.requestFocus();
+        } else {
+          _sortDropdownFocusNode.requestFocus();
+        }
       }
       return KeyEventResult.handled;
     }
@@ -2188,19 +2205,31 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   KeyEventResult _handleEpisodeInputKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Arrow Left or Arrow Up -> Season field
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+    // Arrow Left -> Season field
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       _seasonInputFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
 
-    // Arrow Down -> Navigate to first torrent result if available
+    // Arrow Up -> Search field
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    // Arrow Down -> Navigate to filter row
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_cardFocusNodes.isNotEmpty) {
-        _cardFocusNodes[0].requestFocus();
-        return KeyEventResult.handled;
+      // Navigate to filter row: back button > direct dropdown > torrent dropdown > sort dropdown
+      if (_cameFromCatalogBrowse) {
+        _backButtonFocusNode.requestFocus();
+      } else if (_directProviderCounts.isNotEmpty) {
+        _directDropdownFocusNode.requestFocus();
+      } else if (_torrentProviderCounts.isNotEmpty) {
+        _torrentDropdownFocusNode.requestFocus();
+      } else {
+        _sortDropdownFocusNode.requestFocus();
       }
+      return KeyEventResult.handled;
     }
 
     // Escape/Back -> Search field
@@ -9359,7 +9388,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             onRightArrowPressed: hasTorrentProviders
                 ? () => _torrentDropdownFocusNode.requestFocus()
                 : () => _sortDropdownFocusNode.requestFocus(),
-            onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+            onUpArrowPressed: () {
+              if (_isSeries) {
+                _seasonInputFocusNode.requestFocus();
+              } else {
+                _searchFocusNode.requestFocus();
+              }
+            },
             onDownArrowPressed: () {
               if (_cardFocusNodes.isNotEmpty) {
                 _cardFocusNodes[0].requestFocus();
@@ -9386,7 +9421,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ? () => _backButtonFocusNode.requestFocus()
                     : null),
             onRightArrowPressed: () => _sortDropdownFocusNode.requestFocus(),
-            onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+            onUpArrowPressed: () {
+              if (_isSeries) {
+                _seasonInputFocusNode.requestFocus();
+              } else {
+                _searchFocusNode.requestFocus();
+              }
+            },
             onDownArrowPressed: () {
               if (_cardFocusNodes.isNotEmpty) {
                 _cardFocusNodes[0].requestFocus();
@@ -10253,9 +10294,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             focusNode: _backButtonFocusNode,
                                             onKeyEvent: (node, event) {
                                               if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                                              // Up arrow: go to search bar
+                                              // Up arrow: go to season dropdown (if series) or search bar
                                               if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                                _searchFocusNode.requestFocus();
+                                                if (_isSeries) {
+                                                  _seasonInputFocusNode.requestFocus();
+                                                } else {
+                                                  _searchFocusNode.requestFocus();
+                                                }
                                                 return KeyEventResult.handled;
                                               }
                                               // Down arrow: go to first result
@@ -10392,9 +10437,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             _filterButtonFocusNode.requestFocus();
                                             return KeyEventResult.handled;
                                           }
-                                          // Up arrow: go to search bar
+                                          // Up arrow: go to season dropdown (if series) or search bar
                                           if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                            _searchFocusNode.requestFocus();
+                                            if (_isSeries) {
+                                              _seasonInputFocusNode.requestFocus();
+                                            } else {
+                                              _searchFocusNode.requestFocus();
+                                            }
                                             return KeyEventResult.handled;
                                           }
                                           // Down arrow: go to first result
@@ -10446,9 +10495,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             _sortDirectionFocusNode.requestFocus();
                                             return KeyEventResult.handled;
                                           }
-                                          // Up arrow: go to search bar
+                                          // Up arrow: go to season dropdown (if series) or search bar
                                           if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                            _searchFocusNode.requestFocus();
+                                            if (_isSeries) {
+                                              _seasonInputFocusNode.requestFocus();
+                                            } else {
+                                              _searchFocusNode.requestFocus();
+                                            }
                                             return KeyEventResult.handled;
                                           }
                                           // Down arrow: go to first result
