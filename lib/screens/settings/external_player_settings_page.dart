@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
@@ -27,6 +28,8 @@ class _ExternalPlayerSettingsPageState
   String? _customAppName;
   String? _customCommand;
   final TextEditingController _commandController = TextEditingController();
+  final FocusNode _commandFocusNode = FocusNode();
+  bool _commandFocused = false;
   String? _commandError;
 
   // DeoVR settings (Android)
@@ -35,15 +38,60 @@ class _ExternalPlayerSettingsPageState
   bool _vrAutoDetectFormat = true;
   bool _vrShowDialog = true;
 
+  // DeoVR FocusNodes for DPAD navigation
+  final FocusNode _screenTypeFocusNode = FocusNode();
+  final FocusNode _stereoModeFocusNode = FocusNode();
+  final FocusNode _autoDetectFocusNode = FocusNode();
+  final FocusNode _showDialogFocusNode = FocusNode();
+  bool _screenTypeFocused = false;
+  bool _stereoModeFocused = false;
+  bool _autoDetectFocused = false;
+  bool _showDialogFocused = false;
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _commandFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _commandFocused = _commandFocusNode.hasFocus;
+      });
+    });
+    _screenTypeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _screenTypeFocused = _screenTypeFocusNode.hasFocus;
+      });
+    });
+    _stereoModeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _stereoModeFocused = _stereoModeFocusNode.hasFocus;
+      });
+    });
+    _autoDetectFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _autoDetectFocused = _autoDetectFocusNode.hasFocus;
+      });
+    });
+    _showDialogFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _showDialogFocused = _showDialogFocusNode.hasFocus;
+      });
+    });
   }
 
   @override
   void dispose() {
     _commandController.dispose();
+    _commandFocusNode.dispose();
+    _screenTypeFocusNode.dispose();
+    _stereoModeFocusNode.dispose();
+    _autoDetectFocusNode.dispose();
+    _showDialogFocusNode.dispose();
     super.dispose();
   }
 
@@ -480,54 +528,93 @@ class _ExternalPlayerSettingsPageState
     required String value,
     required Map<String, String> items,
     required Function(String) onChanged,
+    FocusNode? focusNode,
+    bool isFocused = false,
   }) {
     final theme = Theme.of(context);
 
-    return Row(
-      children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: theme.textTheme.bodyMedium,
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          NextFocusIntent: CallbackAction<NextFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).nextFocus();
+              return null;
+            },
           ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.3),
+          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).previousFocus();
+              return null;
+            },
+          ),
+        },
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium,
               ),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: value,
-                isExpanded: true,
-                icon: Icon(
-                  Icons.keyboard_arrow_down,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-                items: items.entries
-                    .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(
-                            e.value,
-                            style: theme.textTheme.bodyMedium,
+            Expanded(
+              flex: 3,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isFocused
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outline.withValues(alpha: 0.3),
+                    width: isFocused ? 2 : 1,
+                  ),
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) onChanged(v);
-                },
+                        ]
+                      : null,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: value,
+                    focusNode: focusNode,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    items: items.entries
+                        .map((e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(
+                                e.value,
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) onChanged(v);
+                    },
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -537,42 +624,90 @@ class _ExternalPlayerSettingsPageState
     required String subtitle,
     required bool value,
     required Function(bool) onChanged,
+    FocusNode? focusNode,
+    bool isFocused = false,
   }) {
     final theme = Theme.of(context);
 
-    return InkWell(
-      onTap: () => onChanged(!value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Checkbox(
-              value: value,
-              onChanged: (v) => onChanged(v ?? false),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          NextFocusIntent: CallbackAction<NextFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).nextFocus();
+              return null;
+            },
+          ),
+          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).previousFocus();
+              return null;
+            },
+          ),
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: isFocused
+                ? Border.all(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  )
+                : null,
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
+                  ]
+                : null,
+          ),
+          child: InkWell(
+            focusNode: focusNode,
+            onTap: () => onChanged(!value),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: value,
+                    onChanged: (v) => onChanged(v ?? false),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
                   ),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          subtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -920,25 +1055,72 @@ class _ExternalPlayerSettingsPageState
                         ),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _commandController,
-                        decoration: InputDecoration(
-                          labelText: 'Command',
-                          hintText: 'vlc --fullscreen {url}',
-                          helperText: 'Use {url} for video URL, {title} for title',
-                          helperMaxLines: 2,
-                          errorText: _commandError,
-                          border: const OutlineInputBorder(),
-                          prefixIcon: const Icon(Icons.terminal_rounded),
-                        ),
-                        maxLines: 1,
-                        onChanged: (_) {
-                          if (_commandError != null) {
-                            setState(() {
-                              _commandError = null;
-                            });
-                          }
+                      Shortcuts(
+                        shortcuts: const <ShortcutActivator, Intent>{
+                          SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+                          SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
                         },
+                        child: Actions(
+                          actions: <Type, Action<Intent>>{
+                            NextFocusIntent: CallbackAction<NextFocusIntent>(
+                              onInvoke: (intent) {
+                                FocusScope.of(context).nextFocus();
+                                return null;
+                              },
+                            ),
+                            PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                              onInvoke: (intent) {
+                                FocusScope.of(context).previousFocus();
+                                return null;
+                              },
+                            ),
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOutCubic,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border: _commandFocused
+                                  ? Border.all(
+                                      color: theme.colorScheme.primary,
+                                      width: 1.8,
+                                    )
+                                  : null,
+                              boxShadow: _commandFocused
+                                  ? [
+                                      BoxShadow(
+                                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: TextField(
+                              controller: _commandController,
+                              focusNode: _commandFocusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Command',
+                                hintText: 'vlc --fullscreen {url}',
+                                helperText: 'Use {url} for video URL, {title} for title',
+                                helperMaxLines: 2,
+                                errorText: _commandError,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                prefixIcon: const Icon(Icons.terminal_rounded),
+                              ),
+                              maxLines: 1,
+                              onChanged: (_) {
+                                if (_commandError != null) {
+                                  setState(() {
+                                    _commandError = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -1094,6 +1276,8 @@ class _ExternalPlayerSettingsPageState
                             value: _vrDefaultScreenType,
                             items: deovr.screenTypeLabels,
                             onChanged: _setVrDefaultScreenType,
+                            focusNode: _screenTypeFocusNode,
+                            isFocused: _screenTypeFocused,
                           ),
                           const SizedBox(height: 12),
 
@@ -1104,6 +1288,8 @@ class _ExternalPlayerSettingsPageState
                             value: _vrDefaultStereoMode,
                             items: deovr.stereoModeLabels,
                             onChanged: _setVrDefaultStereoMode,
+                            focusNode: _stereoModeFocusNode,
+                            isFocused: _stereoModeFocused,
                           ),
                         ],
                       ),
@@ -1116,6 +1302,8 @@ class _ExternalPlayerSettingsPageState
                       subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
                       value: _vrAutoDetectFormat,
                       onChanged: _setVrAutoDetectFormat,
+                      focusNode: _autoDetectFocusNode,
+                      isFocused: _autoDetectFocused,
                     ),
                     _buildCheckboxTile(
                       context,
@@ -1123,6 +1311,8 @@ class _ExternalPlayerSettingsPageState
                       subtitle: 'Confirm VR format before launching DeoVR',
                       value: _vrShowDialog,
                       onChanged: _setVrShowDialog,
+                      focusNode: _showDialogFocusNode,
+                      isFocused: _showDialogFocused,
                     ),
                   ],
                 ),
