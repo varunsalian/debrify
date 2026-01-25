@@ -45,17 +45,40 @@ class AdaptivePlaylistSection extends StatefulWidget {
   });
 
   @override
-  State<AdaptivePlaylistSection> createState() => _AdaptivePlaylistSectionState();
+  State<AdaptivePlaylistSection> createState() => AdaptivePlaylistSectionState();
 }
 
-class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
+/// State is public so parent can call requestFocusOnFirstItem()
+class AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
   bool _hasNotifiedRestore = false;
   final ScrollController _scrollController = ScrollController();
 
+  // Focus nodes for each card item
+  final List<FocusNode> _cardFocusNodes = [];
+
+  /// Whether this section has items
+  bool get hasItems => widget.items.isNotEmpty;
+
+  /// Request focus on the first item in this section
+  /// Returns true if focus was requested successfully
+  bool requestFocusOnFirstItem() {
+    if (_cardFocusNodes.isEmpty) return false;
+    _cardFocusNodes[0].requestFocus();
+    return true;
+  }
+
+  /// Request focus on the last item in this section
+  /// Returns true if focus was requested successfully
+  bool requestFocusOnLastItem() {
+    if (_cardFocusNodes.isEmpty) return false;
+    _cardFocusNodes.last.requestFocus();
+    return true;
+  }
+
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _ensureFocusNodes();
   }
 
   @override
@@ -64,9 +87,34 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
     if (!oldWidget.shouldRestoreFocus && widget.shouldRestoreFocus) {
       _hasNotifiedRestore = false;
     }
+    // Update focus nodes if item count changed
+    _ensureFocusNodes();
   }
 
-  String _getDedupeKey(Map<String, dynamic> item) {
+  void _ensureFocusNodes() {
+    final neededCount = widget.items.length;
+
+    // Dispose extra nodes
+    while (_cardFocusNodes.length > neededCount) {
+      _cardFocusNodes.removeLast().dispose();
+    }
+
+    // Add new nodes
+    while (_cardFocusNodes.length < neededCount) {
+      _cardFocusNodes.add(FocusNode(debugLabel: 'playlist_card_${_cardFocusNodes.length}'));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final node in _cardFocusNodes) {
+      node.dispose();
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+String _getDedupeKey(Map<String, dynamic> item) {
     final provider = (item['provider'] as String? ?? 'realdebrid').toLowerCase();
     final rdTorrentId = item['rdTorrentId'] as String?;
     final torrentHash = item['torrent_hash'] as String?;
@@ -237,6 +285,9 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
     final bool shouldAutofocus = (widget.shouldAutofocusFirst && index == 0) ||
                                 (widget.shouldRestoreFocus && widget.targetFocusIndex == index);
 
+    // Get focus node for this card (with bounds check)
+    final focusNode = index < _cardFocusNodes.length ? _cardFocusNodes[index] : null;
+
     return RepaintBoundary(
       child: PlaylistGridCard(
         key: ValueKey('playlist_$dedupeKey'),
@@ -249,6 +300,7 @@ class _AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
         onClearProgress: widget.onItemClearProgress != null ? () => widget.onItemClearProgress!(item) : null,
         onToggleFavorite: widget.onItemToggleFavorite != null ? () => widget.onItemToggleFavorite!(item) : null,
         autofocus: shouldAutofocus,
+        focusNode: focusNode,
         onFocusChanged: (focused) {
           if (focused && widget.shouldRestoreFocus && widget.targetFocusIndex == index && !_hasNotifiedRestore) {
             _hasNotifiedRestore = true;

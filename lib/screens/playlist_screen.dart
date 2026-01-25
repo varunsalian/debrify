@@ -53,6 +53,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   // Prevent concurrent deletion operations
   bool _isDeletionInProgress = false;
 
+  // GlobalKeys for playlist sections (for TV focus management)
+  final GlobalKey<AdaptivePlaylistSectionState> _favoritesSectionKey = GlobalKey();
+  final GlobalKey<AdaptivePlaylistSectionState> _allItemsSectionKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -66,7 +70,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     // Register TV sidebar focus handler (tab index 1 = Playlist)
     _tvContentFocusHandler = () {
-      // Focus search button as entry point
+      // Priority: 1) First card in Favorites, 2) First card in All Items, 3) Search button
+      // Try favorites section first
+      if (_favoritesSectionKey.currentState != null &&
+          _favoritesSectionKey.currentState!.hasItems) {
+        if (_favoritesSectionKey.currentState!.requestFocusOnFirstItem()) {
+          return;
+        }
+      }
+      // Try all items section
+      if (_allItemsSectionKey.currentState != null &&
+          _allItemsSectionKey.currentState!.hasItems) {
+        if (_allItemsSectionKey.currentState!.requestFocusOnFirstItem()) {
+          return;
+        }
+      }
+      // Fallback to search button
       _searchFocusNode.requestFocus();
     };
     MainPageBridge.registerTvContentFocusHandler(1, _tvContentFocusHandler!);
@@ -1810,6 +1829,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         SliverToBoxAdapter(
                           child: RepaintBoundary(
                             child: AdaptivePlaylistSection(
+                              key: _favoritesSectionKey,
                               sectionTitle: 'Favorites',
                               sectionIcon: Icons.star_rounded,
                               sectionIconColor: const Color(0xFFFFD700),
@@ -1840,6 +1860,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       SliverToBoxAdapter(
                         child: RepaintBoundary(
                           child: AdaptivePlaylistSection(
+                            key: _allItemsSectionKey,
                             sectionTitle: favoriteItems.isNotEmpty ? 'All Items' : '',
                             sectionIcon: favoriteItems.isNotEmpty ? Icons.grid_view_rounded : null,
                             sectionIconColor: const Color(0xFF6366F1),
@@ -1884,8 +1905,23 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       autofocus: true, // Search button gets initial focus
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          // Handle left arrow for TV sidebar
+          // Handle left arrow - go to last card in Favorites/All Items, then sidebar
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            // Try favorites section last item first
+            if (_favoritesSectionKey.currentState != null &&
+                _favoritesSectionKey.currentState!.hasItems) {
+              if (_favoritesSectionKey.currentState!.requestFocusOnLastItem()) {
+                return KeyEventResult.handled;
+              }
+            }
+            // Try all items section last item
+            if (_allItemsSectionKey.currentState != null &&
+                _allItemsSectionKey.currentState!.hasItems) {
+              if (_allItemsSectionKey.currentState!.requestFocusOnLastItem()) {
+                return KeyEventResult.handled;
+              }
+            }
+            // Fallback to sidebar
             if (MainPageBridge.focusTvSidebar != null) {
               MainPageBridge.focusTvSidebar!();
               return KeyEventResult.handled;

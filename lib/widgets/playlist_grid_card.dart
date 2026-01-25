@@ -22,6 +22,7 @@ class PlaylistGridCard extends StatefulWidget {
   final VoidCallback? onToggleFavorite;
   final bool autofocus;
   final void Function(bool focused)? onFocusChanged;
+  final FocusNode? focusNode; // External focus node for parent control
 
   const PlaylistGridCard({
     super.key,
@@ -35,6 +36,7 @@ class PlaylistGridCard extends StatefulWidget {
     this.onToggleFavorite,
     this.autofocus = false,
     this.onFocusChanged,
+    this.focusNode,
   });
 
   @override
@@ -197,6 +199,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
       onEnter: (_) => _updateHoverState(true),
       onExit: (_) => _updateHoverState(false),
       child: Focus(
+        focusNode: widget.focusNode,
         autofocus: widget.autofocus,
         onFocusChange: _updateFocusState,
         onKeyEvent: (node, event) {
