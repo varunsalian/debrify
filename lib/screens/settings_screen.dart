@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -596,13 +594,12 @@ class _SettingsLayout extends StatelessWidget {
                 subtitle: 'Decide what happens on app launch',
                 onTap: onOpenStartupSettings,
               ),
-              if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
-                _SettingsTile(
-                  icon: Icons.open_in_new_rounded,
-                  title: 'External Player',
-                  subtitle: 'Configure preferred video player',
-                  onTap: onOpenExternalPlayerSettings,
-                ),
+              _SettingsTile(
+                icon: Icons.open_in_new_rounded,
+                title: 'External Player',
+                subtitle: 'Configure preferred video player',
+                onTap: onOpenExternalPlayerSettings,
+              ),
             ],
           ),
           const SizedBox(height: 24),
