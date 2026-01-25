@@ -88,6 +88,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   final FocusNode _catalogDropdownFocusNode = FocusNode(debugLabel: 'catalog_dropdown');
   final FocusNode _genreDropdownFocusNode = FocusNode(debugLabel: 'genre_dropdown');
   List<FocusNode> _contentFocusNodes = [];
+  int _focusedContentIndex = -1; // Track last focused content item for sidebar navigation
 
   // Focus state trackers for visual indicators
   final ValueNotifier<bool> _providerDropdownFocused = ValueNotifier(false);
@@ -99,6 +100,25 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   void requestFocusOnFirstDropdown() {
     _providerDropdownFocusNode.requestFocus();
   }
+
+  /// Public method to request focus on the last focused content item
+  /// Called from parent when returning from sidebar navigation
+  /// Returns true if focus was restored to a content item, false otherwise
+  bool requestFocusOnLastItem() {
+    if (_focusedContentIndex >= 0 && _focusedContentIndex < _contentFocusNodes.length) {
+      _contentFocusNodes[_focusedContentIndex].requestFocus();
+      return true;
+    }
+    // Fallback to first content item if available
+    if (_contentFocusNodes.isNotEmpty) {
+      _contentFocusNodes[0].requestFocus();
+      return true;
+    }
+    return false;
+  }
+
+  /// Check if content list has any items that can receive focus
+  bool get hasContentItems => _contentFocusNodes.isNotEmpty;
 
   @override
   void initState() {
@@ -380,7 +400,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     if (neededCount > currentCount) {
       // Add focus nodes for new items only
       for (int i = currentCount; i < neededCount; i++) {
-        _contentFocusNodes.add(FocusNode(debugLabel: 'content_item_$i'));
+        final node = FocusNode(debugLabel: 'content_item_$i');
+        // Track focused content index for sidebar navigation
+        final capturedIndex = i;
+        node.addListener(() {
+          if (node.hasFocus && mounted) {
+            _focusedContentIndex = capturedIndex;
+          }
+        });
+        _contentFocusNodes.add(node);
       }
     } else if (neededCount < currentCount) {
       // Content was reset (new catalog/filter) - dispose extra nodes and trim list
@@ -388,6 +416,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _contentFocusNodes[i].dispose();
       }
       _contentFocusNodes = _contentFocusNodes.sublist(0, neededCount);
+      // Reset focused index if it's now out of bounds
+      if (_focusedContentIndex >= neededCount) {
+        _focusedContentIndex = -1;
+      }
     }
   }
 

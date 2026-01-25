@@ -1093,6 +1093,33 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Handle focus request from TV sidebar - intelligently focuses the right element
   void _handleTvContentFocus() {
+    // Check if AggregatedSearchResults is visible (All mode with query, browsing catalog results)
+    final isAggregatedVisible = _selectedSource.type == SearchSourceType.all &&
+        _searchController.text.isNotEmpty &&
+        !_hasSearched &&
+        !_isLoading;
+
+    if (isAggregatedVisible && _aggregatedResultsKey.currentState != null) {
+      // Try to restore focus to last focused result
+      if (_aggregatedResultsKey.currentState!.requestFocusOnLastResult()) {
+        return;
+      }
+    }
+
+    // Check if CatalogBrowser is visible (addon browsing mode)
+    final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
+        _searchMode == SearchMode.browse;
+
+    if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
+      // Try to restore focus to last focused catalog item
+      if (_catalogBrowserKey.currentState!.requestFocusOnLastItem()) {
+        return;
+      }
+      // Fallback to first dropdown if no content items
+      _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+      return;
+    }
+
     // Check if dropdown/Sources row is visible
     final isSourcesRowVisible = !_hasSearched || _torrents.isEmpty;
 

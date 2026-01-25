@@ -102,6 +102,28 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     return false;
   }
 
+  /// Request focus on the last focused result card (for sidebar navigation)
+  /// Returns true if focus was restored, false if no valid target
+  bool requestFocusOnLastResult() {
+    // If keyword card was last focused, focus it
+    if (_focusedIndex == -1) {
+      _keywordSearchFocusNode.requestFocus();
+      return true;
+    }
+    // If a result was last focused, restore focus to it
+    if (_focusedIndex >= 0 && _focusedIndex < _resultFocusNodes.length) {
+      _resultFocusNodes[_focusedIndex].requestFocus();
+      return true;
+    }
+    // Fallback to first result or keyword card
+    if (_resultFocusNodes.isNotEmpty) {
+      _resultFocusNodes[0].requestFocus();
+      return true;
+    }
+    _keywordSearchFocusNode.requestFocus();
+    return true;
+  }
+
   /// Request focus on the keyword search card (for DPAD navigation from Sources)
   void requestFocusOnKeywordCard() {
     _keywordSearchFocusNode.requestFocus();
