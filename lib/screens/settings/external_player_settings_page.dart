@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
+import '../../utils/deovr_utils.dart' as deovr;
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
   const ExternalPlayerSettingsPage({super.key});
@@ -15,18 +16,24 @@ class ExternalPlayerSettingsPage extends StatefulWidget {
 class _ExternalPlayerSettingsPageState
     extends State<ExternalPlayerSettingsPage> {
   bool _loading = true;
-  bool _externalPlayerEnabled = false;
+
+  // Default player mode: 'debrify', 'external', 'deovr'
+  String _defaultPlayerMode = 'debrify';
+
+  // macOS external player settings
   ExternalPlayer _selectedPlayer = ExternalPlayer.systemDefault;
   Map<ExternalPlayer, bool> _installedPlayers = {};
-
-  // Custom App state
   String? _customAppPath;
   String? _customAppName;
-
-  // Custom Command state
   String? _customCommand;
   final TextEditingController _commandController = TextEditingController();
   String? _commandError;
+
+  // DeoVR settings (Android)
+  String _vrDefaultScreenType = 'dome';
+  String _vrDefaultStereoMode = 'sbs';
+  bool _vrAutoDetectFormat = true;
+  bool _vrShowDialog = true;
 
   @override
   void initState() {
@@ -46,8 +53,8 @@ class _ExternalPlayerSettingsPageState
     });
 
     try {
-      // Load enabled setting (works on all platforms)
-      final enabled = await StorageService.getExternalPlayerEnabled();
+      // Load default player mode
+      final mode = await StorageService.getDefaultPlayerMode();
 
       // Load macOS-specific settings
       Map<ExternalPlayer, bool> installed = {};
@@ -65,13 +72,30 @@ class _ExternalPlayerSettingsPageState
         _commandController.text = customCommand ?? '';
       }
 
+      // Load DeoVR settings (Android)
+      String vrScreenType = 'dome';
+      String vrStereoMode = 'sbs';
+      bool vrAutoDetect = true;
+      bool vrShowDialog = true;
+
+      if (Platform.isAndroid) {
+        vrScreenType = await StorageService.getQuickPlayVrDefaultScreenType();
+        vrStereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+        vrAutoDetect = await StorageService.getQuickPlayVrAutoDetectFormat();
+        vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+      }
+
       setState(() {
-        _externalPlayerEnabled = enabled;
+        _defaultPlayerMode = mode;
         _installedPlayers = installed;
         _selectedPlayer = ExternalPlayerExtension.fromStorageKey(preferredKey);
         _customAppPath = customAppPath;
         _customAppName = customAppName;
         _customCommand = customCommand;
+        _vrDefaultScreenType = vrScreenType;
+        _vrDefaultStereoMode = vrStereoMode;
+        _vrAutoDetectFormat = vrAutoDetect;
+        _vrShowDialog = vrShowDialog;
         _loading = false;
       });
     } catch (e) {
@@ -86,11 +110,11 @@ class _ExternalPlayerSettingsPageState
     }
   }
 
-  Future<void> _toggleExternalPlayer(bool enabled) async {
+  Future<void> _setDefaultPlayerMode(String mode) async {
     try {
-      await StorageService.setExternalPlayerEnabled(enabled);
+      await StorageService.setDefaultPlayerMode(mode);
       setState(() {
-        _externalPlayerEnabled = enabled;
+        _defaultPlayerMode = mode;
       });
     } catch (e) {
       if (mounted) {
@@ -127,7 +151,6 @@ class _ExternalPlayerSettingsPageState
       if (result != null && result.files.isNotEmpty) {
         final path = result.files.first.path;
         if (path != null) {
-          // Extract app name from path
           final appName = path.split('/').last.replaceAll('.app', '');
 
           await StorageService.setCustomExternalPlayerPath(path);
@@ -155,7 +178,6 @@ class _ExternalPlayerSettingsPageState
       await StorageService.setCustomExternalPlayerPath(null);
       await StorageService.setCustomExternalPlayerName(null);
 
-      // If custom app was selected, switch to system default
       if (_selectedPlayer == ExternalPlayer.customApp) {
         await StorageService.setPreferredExternalPlayer('system_default');
         setState(() {
@@ -179,7 +201,6 @@ class _ExternalPlayerSettingsPageState
   Future<void> _saveCustomCommand() async {
     final command = _commandController.text.trim();
 
-    // Validate command
     final validation = ExternalPlayerService.validateCustomCommand(command);
     if (!validation.isValid) {
       setState(() {
@@ -216,7 +237,6 @@ class _ExternalPlayerSettingsPageState
     try {
       await StorageService.setCustomExternalPlayerCommand(null);
 
-      // If custom command was selected, switch to system default
       if (_selectedPlayer == ExternalPlayer.customCommand) {
         await StorageService.setPreferredExternalPlayer('system_default');
         setState(() {
@@ -238,6 +258,27 @@ class _ExternalPlayerSettingsPageState
     }
   }
 
+  // DeoVR settings setters
+  Future<void> _setVrDefaultScreenType(String screenType) async {
+    setState(() => _vrDefaultScreenType = screenType);
+    await StorageService.setQuickPlayVrDefaultScreenType(screenType);
+  }
+
+  Future<void> _setVrDefaultStereoMode(String stereoMode) async {
+    setState(() => _vrDefaultStereoMode = stereoMode);
+    await StorageService.setQuickPlayVrDefaultStereoMode(stereoMode);
+  }
+
+  Future<void> _setVrAutoDetectFormat(bool autoDetect) async {
+    setState(() => _vrAutoDetectFormat = autoDetect);
+    await StorageService.setQuickPlayVrAutoDetectFormat(autoDetect);
+  }
+
+  Future<void> _setVrShowDialog(bool showDialog) async {
+    setState(() => _vrShowDialog = showDialog);
+    await StorageService.setQuickPlayVrShowDialog(showDialog);
+  }
+
   Widget _buildPlayerTile(ExternalPlayer player) {
     final theme = Theme.of(context);
     final isInstalled = _installedPlayers[player] ?? false;
@@ -245,7 +286,6 @@ class _ExternalPlayerSettingsPageState
     final isCustomCommand = player == ExternalPlayer.customCommand;
     final isSystemDefault = player == ExternalPlayer.systemDefault;
 
-    // Determine if player can be selected
     bool canSelect;
     if (isSystemDefault) {
       canSelect = true;
@@ -271,7 +311,6 @@ class _ExternalPlayerSettingsPageState
       }
     } else if (isCustomCommand) {
       if (_customCommand != null && _customCommand!.isNotEmpty) {
-        // Show truncated command
         final displayCmd = _customCommand!.length > 40
             ? '${_customCommand!.substring(0, 40)}...'
             : _customCommand!;
@@ -332,9 +371,215 @@ class _ExternalPlayerSettingsPageState
     );
   }
 
+  Widget _buildPlayerModeOption(
+    BuildContext context, {
+    required String value,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    bool recommended = false,
+    bool disabled = false,
+  }) {
+    final theme = Theme.of(context);
+    final isSelected = _defaultPlayerMode == value;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: disabled ? null : () => _setDefaultPlayerMode(value),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Radio<String>(
+                value: value,
+                groupValue: _defaultPlayerMode,
+                onChanged: disabled ? null : (v) => _setDefaultPlayerMode(v!),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : disabled
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            color: disabled
+                                ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                                : null,
+                          ),
+                        ),
+                        if (recommended) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Default',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: disabled
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownSetting(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required Map<String, String> items,
+    required Function(String) onChanged,
+  }) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.outline.withValues(alpha: 0.3),
+              ),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: value,
+                isExpanded: true,
+                icon: Icon(
+                  Icons.keyboard_arrow_down,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                items: items.entries
+                    .map((e) => DropdownMenuItem(
+                          value: e.key,
+                          child: Text(
+                            e.value,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) onChanged(v);
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCheckboxTile(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required bool value,
+    required Function(bool) onChanged,
+  }) {
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: (v) => onChanged(v ?? false),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Check if platform is supported (macOS or Android)
     final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid;
 
     if (!isSupportedPlatform) {
@@ -390,68 +635,98 @@ class _ExternalPlayerSettingsPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header card with enable toggle
+            // Header card
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.open_in_new_rounded,
-                          size: 48,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'External Player',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                Platform.isMacOS
-                                    ? 'Open videos in your preferred external player'
-                                    : 'Open videos in an external video player app',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      Icons.open_in_new_rounded,
+                      size: 48,
+                      color: theme.colorScheme.primary,
                     ),
-                    const SizedBox(height: 16),
-                    const Divider(height: 1),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Enable External Player'),
-                      subtitle: Text(
-                        _externalPlayerEnabled
-                            ? 'Videos will open in external player'
-                            : 'Videos will play in the app',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'External Player',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Choose which player to use for video playback',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                      value: _externalPlayerEnabled,
-                      onChanged: _toggleExternalPlayer,
                     ),
                   ],
                 ),
               ),
             ),
 
-            // Android-specific info
-            if (Platform.isAndroid) ...[
+            const SizedBox(height: 16),
+
+            // Default Player Mode Selection
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Default Player',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choose which player to use when playing videos',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildPlayerModeOption(
+                      context,
+                      value: 'debrify',
+                      title: 'Debrify Player',
+                      subtitle: 'Use the built-in video player',
+                      icon: Icons.play_circle_filled_rounded,
+                      recommended: true,
+                    ),
+                    _buildPlayerModeOption(
+                      context,
+                      value: 'external',
+                      title: 'External Player',
+                      subtitle: Platform.isMacOS
+                          ? 'Open videos in your preferred external player'
+                          : 'Choose which app to use when opening videos',
+                      icon: Icons.open_in_new_rounded,
+                    ),
+                    _buildPlayerModeOption(
+                      context,
+                      value: 'deovr',
+                      title: 'DeoVR',
+                      subtitle: 'Use this only on VR devices',
+                      icon: Icons.vrpano,
+                      disabled: !Platform.isAndroid,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Android External Player info
+            if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
               const SizedBox(height: 16),
               Card(
                 color: theme.colorScheme.primaryContainer,
@@ -480,11 +755,9 @@ class _ExternalPlayerSettingsPageState
               ),
             ],
 
-            // macOS-specific player selection (only show when enabled)
-            if (Platform.isMacOS && _externalPlayerEnabled) ...[
+            // macOS-specific player selection
+            if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
               const SizedBox(height: 16),
-
-              // Player selection card
               Card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,36 +771,29 @@ class _ExternalPlayerSettingsPageState
                         ),
                       ),
                     ),
-                    // System Default
                     _buildPlayerTile(ExternalPlayer.systemDefault),
                     const Divider(height: 1),
-                    // VLC
                     _buildPlayerTile(ExternalPlayer.vlc),
                     const Divider(height: 1),
-                    // IINA
                     _buildPlayerTile(ExternalPlayer.iina),
                     const Divider(height: 1),
-                    // mpv
                     _buildPlayerTile(ExternalPlayer.mpv),
                     const Divider(height: 1),
-                    // QuickTime
                     _buildPlayerTile(ExternalPlayer.quickTime),
                     const Divider(height: 1),
-                    // Infuse
                     _buildPlayerTile(ExternalPlayer.infuse),
                     const Divider(height: 1),
-                    // Custom App
                     _buildPlayerTile(ExternalPlayer.customApp),
                     const Divider(height: 1),
-                    // Custom Command
                     _buildPlayerTile(ExternalPlayer.customCommand),
                     const SizedBox(height: 8),
                   ],
                 ),
               ),
             ],
-            // Custom App configuration (only shown when selected on macOS)
-            if (Platform.isMacOS && _externalPlayerEnabled && _selectedPlayer == ExternalPlayer.customApp) ...[
+
+            // Custom App configuration (macOS only, when selected)
+            if (Platform.isMacOS && _defaultPlayerMode == 'external' && _selectedPlayer == ExternalPlayer.customApp) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -604,9 +870,7 @@ class _ExternalPlayerSettingsPageState
                             child: FilledButton.icon(
                               onPressed: _browseForCustomApp,
                               icon: const Icon(Icons.folder_open_rounded),
-                              label: Text(_customAppPath == null
-                                  ? 'Browse'
-                                  : 'Change'),
+                              label: Text(_customAppPath == null ? 'Browse' : 'Change'),
                             ),
                           ),
                           if (_customAppPath != null) ...[
@@ -623,8 +887,9 @@ class _ExternalPlayerSettingsPageState
                 ),
               ),
             ],
-            // Custom Command configuration (only shown when selected on macOS)
-            if (Platform.isMacOS && _externalPlayerEnabled && _selectedPlayer == ExternalPlayer.customCommand) ...[
+
+            // Custom Command configuration (macOS only, when selected)
+            if (Platform.isMacOS && _defaultPlayerMode == 'external' && _selectedPlayer == ExternalPlayer.customCommand) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -668,7 +933,6 @@ class _ExternalPlayerSettingsPageState
                         ),
                         maxLines: 1,
                         onChanged: (_) {
-                          // Clear error when typing
                           if (_commandError != null) {
                             setState(() {
                               _commandError = null;
@@ -686,8 +950,7 @@ class _ExternalPlayerSettingsPageState
                               label: const Text('Save Command'),
                             ),
                           ),
-                          if (_customCommand != null &&
-                              _customCommand!.isNotEmpty) ...[
+                          if (_customCommand != null && _customCommand!.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             OutlinedButton(
                               onPressed: _clearCustomCommand,
@@ -697,7 +960,6 @@ class _ExternalPlayerSettingsPageState
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Examples
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -746,8 +1008,8 @@ class _ExternalPlayerSettingsPageState
               ),
             ],
 
-            // Info card (macOS only, when enabled)
-            if (Platform.isMacOS && _externalPlayerEnabled) ...[
+            // macOS external player info
+            if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
               const SizedBox(height: 16),
               Card(
                 color: theme.colorScheme.primaryContainer,
@@ -765,6 +1027,124 @@ class _ExternalPlayerSettingsPageState
                       Expanded(
                         child: Text(
                           'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // DeoVR settings (Android only, when selected)
+            if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.vrpano,
+                            color: theme.colorScheme.primary,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'DeoVR Settings',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // VR Format Settings
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Default VR Format',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Used when format cannot be detected from filename',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Screen Type dropdown
+                          _buildDropdownSetting(
+                            context,
+                            label: 'Screen Type',
+                            value: _vrDefaultScreenType,
+                            items: deovr.screenTypeLabels,
+                            onChanged: _setVrDefaultScreenType,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Stereo Mode dropdown
+                          _buildDropdownSetting(
+                            context,
+                            label: 'Stereo Mode',
+                            value: _vrDefaultStereoMode,
+                            items: deovr.stereoModeLabels,
+                            onChanged: _setVrDefaultStereoMode,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // Checkboxes
+                    _buildCheckboxTile(
+                      context,
+                      title: 'Auto-detect format from filename',
+                      subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
+                      value: _vrAutoDetectFormat,
+                      onChanged: _setVrAutoDetectFormat,
+                    ),
+                    _buildCheckboxTile(
+                      context,
+                      title: 'Show format selection dialog',
+                      subtitle: 'Confirm VR format before launching DeoVR',
+                      value: _vrShowDialog,
+                      onChanged: _setVrShowDialog,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'DeoVR must be installed on your device. All videos will open in DeoVR with the selected VR format settings.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
                           ),

@@ -75,7 +75,8 @@ class StorageService {
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
 
   // External Player settings
-  static const String _externalPlayerEnabledKey = 'external_player_enabled';
+  // Default player mode: 'debrify' (app player), 'external' (external player), 'deovr' (DeoVR on Android)
+  static const String _defaultPlayerModeKey = 'default_player_mode';
   static const String _externalPlayerPreferredKey = 'external_player_preferred';
   static const String _externalPlayerCustomPathKey = 'external_player_custom_path';
   static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
@@ -2921,17 +2922,19 @@ class StorageService {
 
   // External Player Settings methods
 
-  /// Get whether external player is enabled
-  /// Returns false by default
-  static Future<bool> getExternalPlayerEnabled() async {
+  /// Get default player mode
+  /// Returns 'debrify' (built-in player) by default
+  /// Valid values: 'debrify', 'external', 'deovr'
+  static Future<String> getDefaultPlayerMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_externalPlayerEnabledKey) ?? false;
+    return prefs.getString(_defaultPlayerModeKey) ?? 'debrify';
   }
 
-  /// Set whether external player is enabled
-  static Future<void> setExternalPlayerEnabled(bool enabled) async {
+  /// Set default player mode
+  /// Valid values: 'debrify', 'external', 'deovr'
+  static Future<void> setDefaultPlayerMode(String mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_externalPlayerEnabledKey, enabled);
+    await prefs.setString(_defaultPlayerModeKey, mode);
   }
 
   /// Get preferred external player key
@@ -2999,7 +3002,7 @@ class StorageService {
   /// Clear all external player settings
   static Future<void> clearExternalPlayerSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_externalPlayerEnabledKey);
+    await prefs.remove(_defaultPlayerModeKey);
     await prefs.remove(_externalPlayerPreferredKey);
     await prefs.remove(_externalPlayerCustomPathKey);
     await prefs.remove(_externalPlayerCustomNameKey);

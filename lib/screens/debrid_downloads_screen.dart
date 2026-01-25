@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:android_intent_plus/android_intent.dart';
-import 'package:http/http.dart' as http;
+
 import '../models/playlist_view_mode.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
@@ -15,13 +14,11 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
-import '../utils/deovr_utils.dart' as deovr;
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
-import 'dart:ui'; // Added for ImageFilter
 import '../widgets/file_selection_dialog.dart';
 import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
@@ -2412,8 +2409,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                             : _addNodeFileToPlaylist(node);
                       } else if (value == 'copy_link') {
                         _copyNodeDownloadLink(node);
-                      } else if (value == 'deovr') {
-                        _openWithDeoVR(node);
                       }
                     },
                     itemBuilder: (context) => [
@@ -2440,18 +2435,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               ),
                               SizedBox(width: 12),
                               Text('Add to Playlist'),
-                            ],
-                          ),
-                        ),
-                      // DeoVR option for VR devices
-                      if (isVideo && !isFolder && Platform.isAndroid)
-                        const PopupMenuItem(
-                          value: 'deovr',
-                          child: Row(
-                            children: [
-                              Icon(Icons.vrpano, size: 18, color: Colors.teal),
-                              SizedBox(width: 12),
-                              Text('Open with DeoVR'),
                             ],
                           ),
                         ),
@@ -5876,160 +5859,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _showSuccess('Download link copied to clipboard');
     } catch (e) {
       _showError('Failed to get download link: $e');
-    }
-  }
-
-  /// Show DeoVR format selection dialog and launch
-  Future<void> _openWithDeoVR(RDFileNode node) async {
-    if (_apiKey == null || _currentTorrentId == null) return;
-
-    // Detect format from title
-    final detected = deovr.detectVRFormat(node.name);
-
-    String selectedScreenType = detected.screenType;
-    String selectedStereoMode = detected.stereoMode;
-
-    // Show format selection dialog
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('DeoVR Format'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                node.name,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 16),
-              const Text('Screen Type', style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: selectedScreenType,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                items: deovr.screenTypeLabels.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => selectedScreenType = value);
-                },
-              ),
-              const SizedBox(height: 16),
-              const Text('Stereo Mode', style: TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: selectedStereoMode,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                items: deovr.stereoModeLabels.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => selectedStereoMode = value);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(true),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Play'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result != true || !mounted) return;
-
-    // User confirmed - now upload and launch
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-
-      // Unrestrict the file's link
-      final downloadUrl = await DebridService.getFileDownloadUrl(
-        _apiKey!,
-        _currentTorrentId!,
-        node.linkIndex,
-      );
-
-      // Generate DeoVR JSON with selected format
-      final json = deovr.generateDeoVRJson(
-        videoUrl: downloadUrl,
-        title: node.name,
-        screenType: selectedScreenType,
-        stereoMode: selectedStereoMode,
-      );
-      final jsonString = jsonEncode(json);
-
-      debugPrint('DeoVR JSON content: $jsonString');
-
-      // Upload JSON to jsonblob.com
-      final response = await http.post(
-        Uri.parse('https://jsonblob.com/api/jsonBlob'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonString,
-      );
-
-      if (response.statusCode != 201) {
-        throw Exception('Failed to upload JSON: ${response.statusCode}');
-      }
-
-      final location = response.headers['location'];
-      if (location == null) {
-        throw Exception('No location header in response');
-      }
-
-      final jsonUrl = 'https://jsonblob.com$location';
-      debugPrint('DeoVR JSON uploaded to: $jsonUrl');
-
-      // Close loading indicator
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      // Launch DeoVR with the public URL
-      final deOvrUri = 'deovr://$jsonUrl';
-      debugPrint('Launching DeoVR with URI: $deOvrUri');
-
-      final intent = AndroidIntent(
-        action: 'action_view',
-        data: deOvrUri,
-      );
-      await intent.launch();
-      _showSuccess('Launching DeoVR...');
-    } catch (e) {
-      // Close loading indicator if still open
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      _showError('Failed to open with DeoVR: $e');
     }
   }
 }

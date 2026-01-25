@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/movie_collection.dart';
 import '../services/external_player_service.dart';
+import '../utils/deovr_utils.dart' as deovr;
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../screens/video_player_screen.dart';
@@ -241,14 +243,21 @@ class VideoPlayerLauncher {
       }
     }
 
-    // Check if external player is enabled
-    final externalPlayerEnabled = await StorageService.getExternalPlayerEnabled();
-    if (externalPlayerEnabled) {
+    // Check default player mode
+    final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
+
+    if (defaultPlayerMode == 'external') {
       final launched = await _launchWithExternalPlayer(context, args);
       if (launched) {
         return;
       }
       // If external player failed, fall through to in-app player
+    } else if (defaultPlayerMode == 'deovr' && Platform.isAndroid) {
+      final launched = await _launchWithDeoVR(context, args);
+      if (launched) {
+        return;
+      }
+      // If DeoVR failed, fall through to in-app player
     }
 
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
@@ -321,6 +330,200 @@ class VideoPlayerLauncher {
 
     // Other platforms: not supported, use in-app player
     return false;
+  }
+
+  /// Launch video with DeoVR player (Android only)
+  /// Returns true if successfully launched, false if should fall back to in-app player
+  static Future<bool> _launchWithDeoVR(
+    BuildContext context,
+    VideoPlayerLaunchArgs args,
+  ) async {
+    final url = args.videoUrl;
+    final title = args.title;
+
+    try {
+      // Load VR settings
+      final vrAutoDetectFormat = await StorageService.getQuickPlayVrAutoDetectFormat();
+      final vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+      final vrDefaultScreenType = await StorageService.getQuickPlayVrDefaultScreenType();
+      final vrDefaultStereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+
+      // Detect or use default format
+      String selectedScreenType = vrDefaultScreenType;
+      String selectedStereoMode = vrDefaultStereoMode;
+
+      if (vrAutoDetectFormat) {
+        final detected = deovr.detectVRFormat(title);
+        selectedScreenType = detected.screenType;
+        selectedStereoMode = detected.stereoMode;
+      }
+
+      // Show format selection dialog if enabled
+      if (vrShowDialog && context.mounted) {
+        final result = await _showDeoVRFormatDialog(
+          context,
+          title: title,
+          initialScreenType: selectedScreenType,
+          initialStereoMode: selectedStereoMode,
+        );
+
+        if (result == null) {
+          // User cancelled
+          return false;
+        }
+
+        selectedScreenType = result.screenType;
+        selectedStereoMode = result.stereoMode;
+      }
+
+      // Generate DeoVR JSON
+      final json = deovr.generateDeoVRJson(
+        videoUrl: url,
+        title: title,
+        screenType: selectedScreenType,
+        stereoMode: selectedStereoMode,
+      );
+      final jsonString = jsonEncode(json);
+
+      debugPrint('DeoVR JSON content: $jsonString');
+
+      // Upload JSON to jsonblob.com
+      final response = await http.post(
+        Uri.parse('https://jsonblob.com/api/jsonBlob'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonString,
+      );
+
+      if (response.statusCode != 201) {
+        throw Exception('Failed to upload JSON: ${response.statusCode}');
+      }
+
+      final location = response.headers['location'];
+      if (location == null) {
+        throw Exception('No location header in response');
+      }
+
+      final jsonUrl = 'https://jsonblob.com$location';
+      debugPrint('DeoVR JSON uploaded to: $jsonUrl');
+
+      // Launch DeoVR with the public URL
+      final deOvrUri = 'deovr://$jsonUrl';
+      debugPrint('Launching DeoVR with URI: $deOvrUri');
+
+      final intent = AndroidIntent(
+        action: 'action_view',
+        data: deOvrUri,
+      );
+      await intent.launch();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Launching DeoVR...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Failed to launch DeoVR: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open DeoVR: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  /// Show DeoVR format selection dialog
+  static Future<({String screenType, String stereoMode})?> _showDeoVRFormatDialog(
+    BuildContext context, {
+    required String title,
+    required String initialScreenType,
+    required String initialStereoMode,
+  }) async {
+    String selectedScreenType = initialScreenType;
+    String selectedStereoMode = initialStereoMode;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('DeoVR Format'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 16),
+              const Text('Screen Type', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedScreenType,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: deovr.screenTypeLabels.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => selectedScreenType = value);
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('Stereo Mode', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedStereoMode,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                items: deovr.stereoModeLabels.entries
+                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => selectedStereoMode = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Play'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != true) {
+      return null;
+    }
+
+    return (screenType: selectedScreenType, stereoMode: selectedStereoMode);
   }
 
   static Future<bool> _isAndroidTv(bool Function()? override) async {
