@@ -477,6 +477,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     while (_cardFocusNodes.length < _torrents.length) {
       final index = _cardFocusNodes.length;
       final node = FocusNode(debugLabel: 'torrent-card-$index');
+      // Track focused card index for sidebar navigation
+      final capturedIndex = index;
+      node.addListener(() {
+        if (node.hasFocus && mounted) {
+          _focusedCardIndex = capturedIndex;
+        }
+      });
       _cardFocusNodes.add(node);
     }
   }
@@ -1095,9 +1102,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // If we have search results, focus the first result card
+    // If we have search results, restore focus to last focused card or first card
     if (_cardFocusNodes.isNotEmpty) {
-      _cardFocusNodes[0].requestFocus();
+      final targetIndex = (_focusedCardIndex >= 0 && _focusedCardIndex < _cardFocusNodes.length)
+          ? _focusedCardIndex
+          : 0;
+      _cardFocusNodes[targetIndex].requestFocus();
       return;
     }
 

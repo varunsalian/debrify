@@ -79,8 +79,8 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
         _isFocused = focused;
       });
 
-      // Auto-scroll on focus for TV
-      if (focused && widget.isTelevision) {
+      // Auto-scroll on focus for keyboard/DPAD navigation
+      if (focused) {
         _ensureVisible();
       }
     }
