@@ -82,6 +82,11 @@ class StorageService {
   static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
   static const String _externalPlayerCustomCommandKey = 'external_player_custom_command';
 
+  // Debrify Player default settings
+  static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
+  static const String _playerDefaultAspectIndexTvKey = 'player_default_aspect_index_tv';
+  static const String _playerNightModeIndexKey = 'player_night_mode_index';
+
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
   static const String _pikpakEmailKey = 'pikpak_email';
@@ -3007,6 +3012,50 @@ class StorageService {
     await prefs.remove(_externalPlayerCustomPathKey);
     await prefs.remove(_externalPlayerCustomNameKey);
     await prefs.remove(_externalPlayerCustomCommandKey);
+  }
+
+  // Debrify Player Default Settings
+
+  /// Get default aspect ratio index for Flutter/mobile player
+  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4
+  /// Default: 2 (Fit Width)
+  static Future<int> getPlayerDefaultAspectIndex() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_playerDefaultAspectIndexKey) ?? 2;
+  }
+
+  /// Set default aspect ratio index for Flutter/mobile player
+  static Future<void> setPlayerDefaultAspectIndex(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playerDefaultAspectIndexKey, index);
+  }
+
+  /// Get default aspect ratio index for Android TV player
+  /// 0=Fit, 1=Fill, 2=Zoom
+  /// Default: 0 (Fit)
+  static Future<int> getPlayerDefaultAspectIndexTv() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_playerDefaultAspectIndexTvKey) ?? 0;
+  }
+
+  /// Set default aspect ratio index for Android TV player
+  static Future<void> setPlayerDefaultAspectIndexTv(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playerDefaultAspectIndexTvKey, index);
+  }
+
+  /// Get night mode index (Android TV only)
+  /// 0=Off, 1=Low, 2=Medium, 3=High, 4=Higher, 5=Extreme, 6=Max, 7=Sleeping Baby
+  /// Default: 2 (Medium)
+  static Future<int> getPlayerNightModeIndex() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_playerNightModeIndexKey) ?? 2;
+  }
+
+  /// Set night mode index (Android TV only)
+  static Future<void> setPlayerNightModeIndex(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_playerNightModeIndexKey, index);
   }
 }
 

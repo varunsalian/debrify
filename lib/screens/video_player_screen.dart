@@ -400,6 +400,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _initializePlayer() async {
+    // Load default player settings
+    await _loadPlayerDefaults();
+
     // Determine the initial URL and index
     String initialUrl = widget.videoUrl;
     int initialIndex = 0;
@@ -1148,6 +1151,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _subtitleSettings = settings;
       });
     }
+  }
+
+  /// Load default player settings (aspect)
+  Future<void> _loadPlayerDefaults() async {
+    // Load default aspect index
+    final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
+    const aspects = AspectMode.values;
+    _aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
+
+    debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
 
   /// Update subtitle style settings

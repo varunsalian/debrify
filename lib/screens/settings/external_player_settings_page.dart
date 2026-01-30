@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/android_native_downloader.dart';
 import '../../utils/deovr_utils.dart' as deovr;
+import '../video_player/services/subtitle_settings_service.dart';
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
   const ExternalPlayerSettingsPage({super.key});
@@ -37,6 +39,27 @@ class _ExternalPlayerSettingsPageState
   String _vrDefaultStereoMode = 'sbs';
   bool _vrAutoDetectFormat = true;
   bool _vrShowDialog = true;
+
+  // Debrify Player default settings
+  bool _isAndroidTv = false;
+  int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
+  int _nightModeIndex = 2; // Medium
+  int _subtitleSizeIndex = 2; // Medium
+  int _subtitleStyleIndex = 1; // Outline
+  int _subtitleColorIndex = 0; // White
+  int _subtitleBgIndex = 0; // None
+
+  // Debrify Player FocusNodes for DPAD navigation
+  final FocusNode _aspectFocusNode = FocusNode();
+  final FocusNode _subtitleSizeFocusNode = FocusNode();
+  final FocusNode _subtitleStyleFocusNode = FocusNode();
+  final FocusNode _subtitleColorFocusNode = FocusNode();
+  final FocusNode _subtitleBgFocusNode = FocusNode();
+  bool _aspectFocused = false;
+  bool _subtitleSizeFocused = false;
+  bool _subtitleStyleFocused = false;
+  bool _subtitleColorFocused = false;
+  bool _subtitleBgFocused = false;
 
   // DeoVR FocusNodes for DPAD navigation
   final FocusNode _screenTypeFocusNode = FocusNode();
@@ -82,6 +105,37 @@ class _ExternalPlayerSettingsPageState
         _showDialogFocused = _showDialogFocusNode.hasFocus;
       });
     });
+    // Debrify Player focus listeners
+    _aspectFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _aspectFocused = _aspectFocusNode.hasFocus;
+      });
+    });
+    _subtitleSizeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleSizeFocused = _subtitleSizeFocusNode.hasFocus;
+      });
+    });
+    _subtitleStyleFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleStyleFocused = _subtitleStyleFocusNode.hasFocus;
+      });
+    });
+    _subtitleColorFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleColorFocused = _subtitleColorFocusNode.hasFocus;
+      });
+    });
+    _subtitleBgFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleBgFocused = _subtitleBgFocusNode.hasFocus;
+      });
+    });
   }
 
   @override
@@ -92,6 +146,12 @@ class _ExternalPlayerSettingsPageState
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
     _showDialogFocusNode.dispose();
+    // Debrify Player focus nodes
+    _aspectFocusNode.dispose();
+    _subtitleSizeFocusNode.dispose();
+    _subtitleStyleFocusNode.dispose();
+    _subtitleColorFocusNode.dispose();
+    _subtitleBgFocusNode.dispose();
     super.dispose();
   }
 
@@ -133,6 +193,25 @@ class _ExternalPlayerSettingsPageState
         vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
       }
 
+      // Check if running on Android TV
+      bool isAndroidTv = false;
+      if (Platform.isAndroid) {
+        try {
+          isAndroidTv = await AndroidNativeDownloader.isTelevision();
+        } catch (_) {
+          isAndroidTv = false;
+        }
+      }
+
+      // Load Debrify Player default settings (use platform-specific aspect setting)
+      final defaultAspectIndex = isAndroidTv
+          ? await StorageService.getPlayerDefaultAspectIndexTv()
+          : await StorageService.getPlayerDefaultAspectIndex();
+      final nightModeIndex = await StorageService.getPlayerNightModeIndex();
+
+      // Load subtitle settings
+      final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
+
       setState(() {
         _defaultPlayerMode = mode;
         _installedPlayers = installed;
@@ -144,6 +223,13 @@ class _ExternalPlayerSettingsPageState
         _vrDefaultStereoMode = vrStereoMode;
         _vrAutoDetectFormat = vrAutoDetect;
         _vrShowDialog = vrShowDialog;
+        _isAndroidTv = isAndroidTv;
+        _defaultAspectIndex = defaultAspectIndex;
+        _nightModeIndex = nightModeIndex;
+        _subtitleSizeIndex = subtitleSettings.sizeIndex;
+        _subtitleStyleIndex = subtitleSettings.styleIndex;
+        _subtitleColorIndex = subtitleSettings.colorIndex;
+        _subtitleBgIndex = subtitleSettings.bgIndex;
         _loading = false;
       });
     } catch (e) {
@@ -326,6 +412,51 @@ class _ExternalPlayerSettingsPageState
     setState(() => _vrShowDialog = showDialog);
     await StorageService.setQuickPlayVrShowDialog(showDialog);
   }
+
+  // Debrify Player settings setters
+  Future<void> _setDefaultAspectIndex(int index) async {
+    setState(() => _defaultAspectIndex = index);
+    // Use platform-specific storage key
+    if (_isAndroidTv) {
+      await StorageService.setPlayerDefaultAspectIndexTv(index);
+    } else {
+      await StorageService.setPlayerDefaultAspectIndex(index);
+    }
+  }
+
+  Future<void> _setNightModeIndex(int index) async {
+    setState(() => _nightModeIndex = index);
+    await StorageService.setPlayerNightModeIndex(index);
+  }
+
+  Future<void> _setSubtitleSizeIndex(int index) async {
+    setState(() => _subtitleSizeIndex = index);
+    await SubtitleSettingsService.instance.setSizeIndex(index);
+  }
+
+  Future<void> _setSubtitleStyleIndex(int index) async {
+    setState(() => _subtitleStyleIndex = index);
+    await SubtitleSettingsService.instance.setStyleIndex(index);
+  }
+
+  Future<void> _setSubtitleColorIndex(int index) async {
+    setState(() => _subtitleColorIndex = index);
+    await SubtitleSettingsService.instance.setColorIndex(index);
+  }
+
+  Future<void> _setSubtitleBgIndex(int index) async {
+    setState(() => _subtitleBgIndex = index);
+    await SubtitleSettingsService.instance.setBgIndex(index);
+  }
+
+  // Aspect labels
+  List<String> get _aspectLabels => _isAndroidTv
+      ? ['Fit', 'Fill', 'Zoom']
+      : ['Contain', 'Cover', 'Fit Width', 'Fit Height', '16:9', '4:3', '21:9', '1:1', '3:2', '5:4'];
+
+  static const List<String> _nightModeLabels = [
+    'Off', 'Low', 'Medium', 'High', 'Higher', 'Extreme', 'Max', 'Sleeping Baby'
+  ];
 
   Widget _buildPlayerTile(ExternalPlayer player) {
     final theme = Theme.of(context);
@@ -713,6 +844,99 @@ class _ExternalPlayerSettingsPageState
     );
   }
 
+  Widget _buildSettingDropdown(
+    BuildContext context, {
+    required String label,
+    required int value,
+    required List<String> items,
+    required Function(int) onChanged,
+    FocusNode? focusNode,
+    bool isFocused = false,
+  }) {
+    final theme = Theme.of(context);
+
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          NextFocusIntent: CallbackAction<NextFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).nextFocus();
+              return null;
+            },
+          ),
+          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+            onInvoke: (intent) {
+              FocusScope.of(context).previousFocus();
+              return null;
+            },
+          ),
+        },
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isFocused
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outline.withValues(alpha: 0.3),
+                    width: isFocused ? 2 : 1,
+                  ),
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: value.clamp(0, items.length - 1),
+                    focusNode: focusNode,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    items: List.generate(items.length, (index) {
+                      return DropdownMenuItem<int>(
+                        value: index,
+                        child: Text(items[index]),
+                      );
+                    }),
+                    onChanged: (v) {
+                      if (v != null) onChanged(v);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid;
@@ -720,7 +944,7 @@ class _ExternalPlayerSettingsPageState
     if (!isSupportedPlatform) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('External Player'),
+          title: const Text('Player Settings'),
         ),
         body: Center(
           child: Padding(
@@ -735,7 +959,7 @@ class _ExternalPlayerSettingsPageState
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'External player is not available on this platform',
+                  'Player settings are not available on this platform',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -751,7 +975,7 @@ class _ExternalPlayerSettingsPageState
     if (_loading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('External Player'),
+          title: const Text('Player Settings'),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
@@ -763,7 +987,7 @@ class _ExternalPlayerSettingsPageState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('External Player'),
+        title: const Text('Player Settings'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -787,7 +1011,7 @@ class _ExternalPlayerSettingsPageState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'External Player',
+                            'Player Settings',
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
@@ -859,6 +1083,277 @@ class _ExternalPlayerSettingsPageState
                 ),
               ),
             ),
+
+            // Debrify Player settings (only when Debrify Player is selected)
+            if (_defaultPlayerMode == 'debrify') ...[
+              const SizedBox(height: 16),
+
+              // Playback Defaults
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Playback Defaults',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Default settings when video playback starts',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Default Aspect
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Default Aspect',
+                        value: _defaultAspectIndex,
+                        items: _aspectLabels,
+                        onChanged: (index) => _setDefaultAspectIndex(index),
+                        focusNode: _aspectFocusNode,
+                        isFocused: _aspectFocused,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Subtitle Appearance
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Subtitle Appearance',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Customize how subtitles look',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Size
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Size',
+                        value: _subtitleSizeIndex,
+                        items: SubtitleSize.options.map((o) => o.label).toList(),
+                        onChanged: (index) => _setSubtitleSizeIndex(index),
+                        focusNode: _subtitleSizeFocusNode,
+                        isFocused: _subtitleSizeFocused,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Style
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Style',
+                        value: _subtitleStyleIndex,
+                        items: SubtitleStyle.options.map((o) => o.label).toList(),
+                        onChanged: (index) => _setSubtitleStyleIndex(index),
+                        focusNode: _subtitleStyleFocusNode,
+                        isFocused: _subtitleStyleFocused,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Color
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Color',
+                        value: _subtitleColorIndex,
+                        items: SubtitleColor.options.map((o) => o.label).toList(),
+                        onChanged: (index) => _setSubtitleColorIndex(index),
+                        focusNode: _subtitleColorFocusNode,
+                        isFocused: _subtitleColorFocused,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Background
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Background',
+                        value: _subtitleBgIndex,
+                        items: SubtitleBackground.options.map((o) => o.label).toList(),
+                        onChanged: (index) => _setSubtitleBgIndex(index),
+                        focusNode: _subtitleBgFocusNode,
+                        isFocused: _subtitleBgFocused,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Preview
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Sample Subtitle',
+                            style: TextStyle(
+                              fontSize: SubtitleSize.options[_subtitleSizeIndex].sizePx * 0.4,
+                              color: SubtitleColor.options[_subtitleColorIndex].color,
+                              fontWeight: FontWeight.w600,
+                              shadows: SubtitleStyle.options[_subtitleStyleIndex].shadows,
+                              backgroundColor: SubtitleBackground.options[_subtitleBgIndex].color,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Night Mode (Android TV only)
+              if (_isAndroidTv) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.nightlight_round,
+                              color: theme.colorScheme.primary,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Night Mode',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Boosts quiet sounds for late-night viewing without disturbing others',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...List.generate(_nightModeLabels.length, (index) {
+                          final isSelected = _nightModeIndex == index;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Focus(
+                              onKeyEvent: (node, event) {
+                                if (event is KeyDownEvent) {
+                                  if (event.logicalKey == LogicalKeyboardKey.select ||
+                                      event.logicalKey == LogicalKeyboardKey.enter ||
+                                      event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+                                    _setNightModeIndex(index);
+                                    return KeyEventResult.handled;
+                                  }
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: Builder(
+                                builder: (context) {
+                                  final isFocused = Focus.of(context).hasFocus;
+                                  return InkWell(
+                                    onTap: () => _setNightModeIndex(index),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 160),
+                                      curve: Curves.easeOutCubic,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isFocused
+                                              ? theme.colorScheme.primary
+                                              : isSelected
+                                                  ? theme.colorScheme.primary
+                                                  : theme.colorScheme.outline.withValues(alpha: 0.3),
+                                          width: isFocused || isSelected ? 2 : 1,
+                                        ),
+                                        boxShadow: isFocused
+                                            ? [
+                                                BoxShadow(
+                                                  color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                                                  blurRadius: 12,
+                                                  offset: const Offset(0, 4),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Radio<int>(
+                                            value: index,
+                                            groupValue: _nightModeIndex,
+                                            onChanged: (v) => _setNightModeIndex(v!),
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            _nightModeLabels[index],
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                          ),
+                                          if (index == 2) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'Recommended',
+                                                style: theme.textTheme.labelSmall?.copyWith(
+                                                  color: theme.colorScheme.primary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
 
             // Android External Player info
             if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[

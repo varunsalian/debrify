@@ -596,7 +596,7 @@ class _SettingsLayout extends StatelessWidget {
               ),
               _SettingsTile(
                 icon: Icons.open_in_new_rounded,
-                title: 'External Player',
+                title: 'Player Settings',
                 subtitle: 'Configure preferred video player',
                 onTap: onOpenExternalPlayerSettings,
               ),

@@ -284,6 +284,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Load default player settings from Flutter's SharedPreferences
+        loadPlayerDefaults()
+
         // Parse payload from temp file (avoids Android's ~1MB Intent size limit)
         val payloadPath = intent.getStringExtra("payloadPath")
         val rawPayload = if (payloadPath != null) {
@@ -3209,6 +3212,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("AndroidTvPlayer", "Error releasing LoudnessEnhancer", e)
         }
         loudnessEnhancer = null
+    }
+
+    /**
+     * Load default player settings from Flutter's SharedPreferences.
+     * Keys are prefixed with "flutter." as per flutter shared_preferences package.
+     */
+    private fun loadPlayerDefaults() {
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
+
+            // Load aspect index for TV (separate from mobile)
+            // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
+            resizeModeIndex = prefs.getLong("flutter.player_default_aspect_index_tv", 0L).toInt()
+                .coerceIn(0, resizeModes.lastIndex)
+
+            // Load night mode index (default: 2 = Medium)
+            nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 2L).toInt()
+                .coerceIn(0, nightModeGains.lastIndex)
+
+            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex")
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
+            // Keep default values
+        }
     }
 
     private fun showNightModeDialog() {

@@ -324,6 +324,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_torbox_tv_player);
 
+        // Load default player settings from Flutter's SharedPreferences
+        loadPlayerDefaults();
+
         playerView = findViewById(R.id.player_view);
         titleView = findViewById(R.id.player_title);
         hintView = findViewById(R.id.player_hint);
@@ -1045,6 +1048,31 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 android.util.Log.e("TorboxTvPlayer", "Error releasing LoudnessEnhancer", e);
             }
             loudnessEnhancer = null;
+        }
+    }
+
+    /**
+     * Load default player settings from Flutter's SharedPreferences.
+     * Keys are prefixed with "flutter." as per flutter shared_preferences package.
+     */
+    private void loadPlayerDefaults() {
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences(
+                "FlutterSharedPreferences", android.content.Context.MODE_PRIVATE);
+
+            // Load aspect index for TV (separate from mobile)
+            // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
+            resizeModeIndex = (int) prefs.getLong("flutter.player_default_aspect_index_tv", 0);
+            resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
+
+            // Load night mode index (default: 2 = Medium)
+            nightModeIndex = (int) prefs.getLong("flutter.player_night_mode_index", 2);
+            nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
+
+            android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex);
+        } catch (Exception e) {
+            android.util.Log.e("TorboxTvPlayer", "Error loading player defaults", e);
+            // Keep default values
         }
     }
 
