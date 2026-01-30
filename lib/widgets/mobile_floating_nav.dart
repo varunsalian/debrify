@@ -133,9 +133,6 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final currentItem = widget.items[widget.currentIndex];
-    final currentGradient = _getGradientForIndex(widget.currentIndex);
     // Account for Android system navigation bar
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
@@ -214,7 +211,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
           ),
         ),
 
-        // Main FAB button
+        // Main FAB button - pill shaped with text
         Positioned(
           bottom: 16 + bottomPadding,
           right: 16,
@@ -226,48 +223,58 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                 return Transform.scale(
                   scale: _scaleAnimation.value,
                   child: Container(
-                    width: 52,
-                    height: 52,
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
+                      gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: _isExpanded
-                            ? [const Color(0xFF374151), const Color(0xFF1F2937)]
-                            : currentGradient,
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                       ),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(22),
                       boxShadow: [
                         BoxShadow(
-                          color: (_isExpanded ? Colors.black : currentGradient[0])
-                              .withValues(alpha: 0.4),
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.4),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                           spreadRadius: 0,
                         ),
                         BoxShadow(
-                          color: (_isExpanded ? Colors.black : currentGradient[1])
-                              .withValues(alpha: 0.2),
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                           spreadRadius: -4,
                         ),
                       ],
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Menu/close icon
-                        RotationTransition(
-                          turns: _rotateAnimation,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              _isExpanded ? Icons.close_rounded : Icons.menu_rounded,
-                              key: ValueKey(_isExpanded),
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                        // Animated icon
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (child, animation) {
+                            return RotationTransition(
+                              turns: Tween(begin: 0.5, end: 1.0).animate(animation),
+                              child: FadeTransition(opacity: animation, child: child),
+                            );
+                          },
+                          child: Icon(
+                            _isExpanded ? Icons.close_rounded : Icons.apps_rounded,
+                            key: ValueKey(_isExpanded),
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Text label
+                        const Text(
+                          'Menu',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],
