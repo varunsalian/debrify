@@ -90,6 +90,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'torbox-view-mode');
+  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'torbox-first-item');
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'torbox-back');
+
+  // Flag to focus first item after data loads (set by TV content focus handler)
+  bool _shouldFocusOnLoad = false;
 
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
@@ -128,8 +133,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 5 = Torbox)
       _tvContentFocusHandler = () {
-        // Focus search button as entry point
-        _searchButtonFocusNode.requestFocus();
+        // Set flag to focus after data loads
+        _shouldFocusOnLoad = true;
+        // Try to focus now in case data is already loaded
+        _focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(5, _tvContentFocusHandler!);
     }
@@ -143,6 +150,33 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _initialActionHandled = false;
       _maybeTriggerInitialAction();
     }
+  }
+
+  /// Focus first item if data is loaded, otherwise focus search button
+  void _focusFirstItemOrFallback() {
+    if (!_shouldFocusOnLoad) return;
+
+    // Use post-frame callback to ensure widgets are built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_shouldFocusOnLoad) return;
+
+      // Check if we're in folder view
+      if (_currentViewNodes != null && _currentViewNodes!.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (_selectedView == _TorboxDownloadsView.torrents && _torrents.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (_selectedView == _TorboxDownloadsView.webDownloads && _webDownloads.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (!_isLoading && !_isLoadingWebDownloads) {
+        // No items and not loading - focus fallback
+        _shouldFocusOnLoad = false;
+        _searchButtonFocusNode.requestFocus();
+      }
+      // If still loading, keep the flag set - will be called again after load
+    });
   }
 
   /// Download files from a torrent with file selection dialog
@@ -852,6 +886,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _webNameController.dispose();
     _webPasswordController.dispose();
     _viewModeDropdownFocusNode.dispose();
+    _firstItemFocusNode.dispose();
+    _backButtonFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
@@ -987,6 +1023,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         }
       });
 
+      // Focus first item if navigated from sidebar
+      _focusFirstItemOrFallback();
+
       _maybeTriggerInitialAction();
 
       if (shouldFetchMore) {
@@ -1055,6 +1094,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         _isLoadingWebDownloads = false;
         _isLoadingMoreWebDownloads = false;
       });
+
+      // Focus first item if navigated from sidebar
+      _focusFirstItemOrFallback();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -4503,6 +4545,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Navigate into a torrent (show its folder structure)
   void _navigateIntoTorrent(TorboxTorrent torrent) {
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
+
     print('🔍 Navigating into torrent: id=${torrent.id}, name=${torrent.name}');
     print('   Files count: ${torrent.files.length}');
     print('   Sample files:');
@@ -4549,10 +4594,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _currentFolderNode = tree;
       _currentViewNodes = transformedNodes;
     });
+
+    // Focus first item after navigation
+    _focusFirstItemOrFallback();
   }
 
   /// Navigate into a web download (show its folder structure)
   void _navigateIntoWebDownload(TorboxWebDownload webDownload) {
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
+
     // Build folder tree for this web download
     final tree = TorboxFolderTreeBuilder.buildTree(webDownload.files);
 
@@ -4590,11 +4641,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _currentFolderNode = tree;
       _currentViewNodes = transformedNodes;
     });
+
+    // Focus first item after navigation
+    _focusFirstItemOrFallback();
   }
 
   /// Navigate into a subfolder within current torrent/web download
   void _navigateIntoFolder(RDFileNode folderNode) {
     if (!folderNode.isFolder) return;
+
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
 
     // Apply view mode to folder children
     // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
@@ -4629,6 +4686,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _currentFolderNode = folderNode;
       _currentViewNodes = transformedChildren;
     });
+
+    // Focus first item after navigation
+    _focusFirstItemOrFallback();
   }
 
   /// Navigate up one level (back button)
@@ -4998,41 +5058,53 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ),
         ),
       ),
-      child: DropdownButtonFormField<_FolderViewMode>(
-        focusNode: _viewModeDropdownFocusNode,
-        autofocus: true,
-        isExpanded: true,
-        value: mode,
-        decoration: InputDecoration(
-          labelText: 'View Mode',
-          prefixIcon: Icon(
-            mode == _FolderViewMode.raw
-                ? Icons.view_list
-                : mode == _FolderViewMode.sortedAZ
-                    ? Icons.sort_by_alpha
-                    : Icons.video_library,
-            color: theme.colorScheme.primary,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        ),
-        items: const [
-          DropdownMenuItem(
-            value: _FolderViewMode.raw,
-            child: Text('Raw'),
-          ),
-          DropdownMenuItem(
-            value: _FolderViewMode.sortedAZ,
-            child: Text('Sort (A-Z)'),
-          ),
-        ],
-        onChanged: (value) {
-          if (value != null) _setViewMode(value);
+      child: Focus(
+        skipTraversal: true,
+        onKeyEvent: (node, event) {
+          // Navigate to back button on up arrow
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _backButtonFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         },
+        child: DropdownButtonFormField<_FolderViewMode>(
+          focusNode: _viewModeDropdownFocusNode,
+          autofocus: true,
+          isExpanded: true,
+          value: mode,
+          decoration: InputDecoration(
+            labelText: 'View Mode',
+            prefixIcon: Icon(
+              mode == _FolderViewMode.raw
+                  ? Icons.view_list
+                  : mode == _FolderViewMode.sortedAZ
+                      ? Icons.sort_by_alpha
+                      : Icons.video_library,
+              color: theme.colorScheme.primary,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: _FolderViewMode.raw,
+              child: Text('Raw'),
+            ),
+            DropdownMenuItem(
+              value: _FolderViewMode.sortedAZ,
+              child: Text('Sort (A-Z)'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) _setViewMode(value);
+          },
+        ),
       ),
     );
   }
@@ -5355,6 +5427,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     return Scaffold(
       appBar: _isAtRoot ? null : AppBar(
         leading: IconButton(
+          focusNode: _backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
           onPressed: () => _handleBackNavigation(),
           tooltip: 'Back',
@@ -5650,9 +5723,18 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               children: [
                 Expanded(
                   child: FilledButton.icon(
+                    focusNode: index == 0 ? _firstItemFocusNode : null,
                     onPressed: () => _navigateIntoWebDownload(webDownload),
                     icon: const Icon(Icons.folder_open, size: 18),
                     label: const Text('Open'),
+                    style: FilledButton.styleFrom().copyWith(
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Colors.white, width: 3);
+                        }
+                        return null;
+                      }),
+                    ),
                   ),
                 ),
                 if (videoCount > 0) ...[
@@ -5664,6 +5746,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       label: const Text('Play'),
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.green.shade700,
+                      ).copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
                       ),
                     ),
                   ),
@@ -5796,9 +5885,18 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               children: [
                 Expanded(
                   child: FilledButton.icon(
+                    focusNode: index == 0 ? _firstItemFocusNode : null,
                     onPressed: () => _navigateIntoTorrent(torrent),
                     icon: const Icon(Icons.folder_open, size: 18),
                     label: const Text('Open'),
+                    style: FilledButton.styleFrom().copyWith(
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Colors.white, width: 3);
+                        }
+                        return null;
+                      }),
+                    ),
                   ),
                 ),
                 if (videoCount > 0) ...[
@@ -5810,6 +5908,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       label: const Text('Play'),
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.green.shade700,
+                      ).copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
                       ),
                     ),
                   ),
@@ -5958,9 +6063,18 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 if (isFolder) ...[
                   Expanded(
                     child: FilledButton.icon(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
                       onPressed: () => _navigateIntoFolder(node),
                       icon: const Icon(Icons.folder_open, size: 18),
                       label: const Text('Open'),
+                      style: FilledButton.styleFrom().copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
                     ),
                   ),
                   if (TorboxFolderTreeBuilder.hasVideoFiles(node)) ...[
@@ -5972,6 +6086,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         label: const Text('Play'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
+                        ).copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
                         ),
                       ),
                     ),
@@ -5979,9 +6100,38 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ] else if (isVideo) ...[
                   Expanded(
                     child: FilledButton.icon(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
                       onPressed: () => _playVideoFile(node),
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Play'),
+                      style: FilledButton.styleFrom().copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  // Non-video files get a Download button
+                  Expanded(
+                    child: FilledButton.icon(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
+                      onPressed: () => _downloadFileOrFolder(node),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Download'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                      ).copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
                     ),
                   ),
                 ],
@@ -6330,6 +6480,13 @@ class _TorboxTorrentCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ).copyWith(
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: Colors.white, width: 3);
+          }
+          return null;
+        }),
       ),
     );
   }

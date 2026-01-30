@@ -93,6 +93,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final FocusNode _addLinkButtonFocusNode = FocusNode(
     debugLabel: 'pikpak-add-link',
   );
+  final FocusNode _firstItemFocusNode = FocusNode(
+    debugLabel: 'pikpak-first-item',
+  );
+
+  // Flag to focus first item after data loads (set by TV content focus handler)
+  bool _shouldFocusOnLoad = false;
 
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
@@ -127,8 +133,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 6 = PikPak)
       _tvContentFocusHandler = () {
-        // Focus search button as entry point
-        _searchButtonFocusNode.requestFocus();
+        // Set flag to focus after data loads
+        _shouldFocusOnLoad = true;
+        // Try to focus now in case data is already loaded
+        _focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(6, _tvContentFocusHandler!);
     }
@@ -140,6 +148,26 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _scrollController.position.maxScrollExtent - 200) {
       _loadMoreFiles();
     }
+  }
+
+  /// Focus first item if data is loaded, otherwise focus add button
+  void _focusFirstItemOrFallback() {
+    if (!_shouldFocusOnLoad) return;
+
+    // Use post-frame callback to ensure widgets are built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_shouldFocusOnLoad) return;
+
+      if (_files.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (!_isLoading) {
+        // No items and not loading - focus fallback
+        _shouldFocusOnLoad = false;
+        _addLinkButtonFocusNode.requestFocus();
+      }
+      // If still loading, keep the flag set - will be called again after load
+    });
   }
 
   @override
@@ -162,6 +190,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _settingsButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
     _addLinkButtonFocusNode.dispose();
+    _firstItemFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
@@ -316,6 +345,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _isLoading = false;
         _initialLoad = false;
       });
+
+      // Focus first item if navigated from sidebar
+      _focusFirstItemOrFallback();
     } catch (e) {
       print('Error loading PikPak files: $e');
       if (!mounted) return;
@@ -425,6 +457,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   void _navigateIntoFolder(String folderId, String folderName) {
+    // Focus first item after folder contents load
+    _shouldFocusOnLoad = true;
+
     setState(() {
       // Push current folder to stack before navigating
       _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
@@ -501,6 +536,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return;
     }
 
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
+
     try {
       final typedFiles = virtualFiles.cast<Map<String, dynamic>>();
       setState(() {
@@ -510,6 +548,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _files.clear();
         _files.addAll(_virtualFolderFiles);
       });
+
+      // Focus first item after navigation
+      _focusFirstItemOrFallback();
     } catch (e) {
       print('Error navigating into virtual folder: $e');
       _showSnackBar('Failed to open virtual folder: $e', isError: true);
@@ -1339,41 +1380,53 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ),
         ),
       ),
-      child: DropdownButtonFormField<_FolderViewMode>(
-        focusNode: _viewModeDropdownFocusNode,
-        autofocus: true,
-        isExpanded: true,
-        value: mode,
-        decoration: InputDecoration(
-          labelText: 'View Mode',
-          prefixIcon: Icon(
-            mode == _FolderViewMode.raw
-                ? Icons.view_list
-                : mode == _FolderViewMode.sortedAZ
-                    ? Icons.sort_by_alpha
-                    : Icons.video_library,
-            color: theme.colorScheme.primary,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        ),
-        items: const [
-          DropdownMenuItem(
-            value: _FolderViewMode.raw,
-            child: Text('Raw'),
-          ),
-          DropdownMenuItem(
-            value: _FolderViewMode.sortedAZ,
-            child: Text('Sort (A-Z)'),
-          ),
-        ],
-        onChanged: (value) {
-          if (value != null) _setViewMode(value);
+      child: Focus(
+        skipTraversal: true,
+        onKeyEvent: (node, event) {
+          // Navigate to back button on up arrow
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _backButtonFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         },
+        child: DropdownButtonFormField<_FolderViewMode>(
+          focusNode: _viewModeDropdownFocusNode,
+          autofocus: true,
+          isExpanded: true,
+          value: mode,
+          decoration: InputDecoration(
+            labelText: 'View Mode',
+            prefixIcon: Icon(
+              mode == _FolderViewMode.raw
+                  ? Icons.view_list
+                  : mode == _FolderViewMode.sortedAZ
+                      ? Icons.sort_by_alpha
+                      : Icons.video_library,
+              color: theme.colorScheme.primary,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: _FolderViewMode.raw,
+              child: Text('Raw'),
+            ),
+            DropdownMenuItem(
+              value: _FolderViewMode.sortedAZ,
+              child: Text('Sort (A-Z)'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) _setViewMode(value);
+          },
+        ),
       ),
     );
   }
@@ -1806,6 +1859,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   },
                   icon: const Icon(Icons.settings),
                   label: const Text('Go to Settings'),
+                  style: FilledButton.styleFrom().copyWith(
+                    side: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.focused)) {
+                        return const BorderSide(color: Colors.white, width: 3);
+                      }
+                      return null;
+                    }),
+                  ),
                 ),
               ],
             ),
@@ -1845,6 +1906,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   onPressed: _refreshFiles,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry'),
+                  style: FilledButton.styleFrom().copyWith(
+                    side: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.focused)) {
+                        return const BorderSide(color: Colors.white, width: 3);
+                      }
+                      return null;
+                    }),
+                  ),
                 ),
               ],
             ),
@@ -2055,12 +2124,20 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     // Virtual Season folder - just open it
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
                         onPressed: () => _navigateIntoVirtualFolder(file),
                         icon: const Icon(Icons.folder_open, size: 18),
                         label: const Text('Open'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.purple.shade700,
+                        ).copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
                         ),
                       ),
                     ),
@@ -2068,10 +2145,19 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   ] else if (isFolder) ...[
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0, // Auto-focus first item's button
                         onPressed: () => _navigateIntoFolder(file['id'], name),
                         icon: const Icon(Icons.folder_open, size: 18),
                         label: const Text('Open'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2082,6 +2168,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         label: const Text('Play'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
+                        ).copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
                         ),
                       ),
                     ),
@@ -2089,10 +2182,19 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   ] else if (isVideo && isComplete) ...[
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0, // Auto-focus first item's button
                         onPressed: () => _playFile(file),
                         icon: const Icon(Icons.play_arrow, size: 18),
                         label: const Text('Play'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

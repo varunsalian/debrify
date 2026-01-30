@@ -110,6 +110,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
+  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'rd-first-item');
+
+  // Flag to focus first item after data loads (set by TV content focus handler)
+  bool _shouldFocusOnLoad = false;
 
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
@@ -148,8 +152,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
       // Register TV sidebar focus handler (tab index 4 = Real Debrid)
       _tvContentFocusHandler = () {
-        // Focus search button as entry point
-        _searchButtonFocusNode.requestFocus();
+        // Set flag to focus after data loads
+        _shouldFocusOnLoad = true;
+        // Try to focus now in case data is already loaded
+        _focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(4, _tvContentFocusHandler!);
     }
@@ -181,6 +187,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
+  /// Focus first item if data is loaded, otherwise focus search button
+  void _focusFirstItemOrFallback() {
+    if (!_shouldFocusOnLoad) return;
+
+    // Use post-frame callback to ensure widgets are built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_shouldFocusOnLoad) return;
+
+      // Check if we're in folder view
+      if (_currentViewNodes != null && _currentViewNodes!.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (_selectedView == _DebridDownloadsView.torrents && _torrents.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (_selectedView == _DebridDownloadsView.ddl && _downloads.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (!_isLoadingTorrents && !_isLoadingDownloads && !_isLoadingFolder) {
+        // No items and not loading - focus fallback
+        _shouldFocusOnLoad = false;
+        _searchButtonFocusNode.requestFocus();
+      }
+      // If still loading, keep the flag set - will be called again after load
+    });
+  }
 
   void _showDownloadMoreOptions(DebridDownload download) {
     final canStream = download.streamable == 1;
@@ -230,6 +262,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _backButtonFocusNode.dispose();
     _refreshButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
+    _firstItemFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
@@ -359,7 +392,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _torrentPage++;
           _isLoadingTorrents = false;
         });
-
+        // Focus first item if navigated from sidebar
+        _focusFirstItemOrFallback();
       }
     } catch (e) {
       if (mounted) {
@@ -452,6 +486,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _downloadPage++;
           _isLoadingDownloads = false;
         });
+        // Focus first item if navigated from sidebar
+        _focusFirstItemOrFallback();
       }
     } catch (e) {
       if (mounted) {
@@ -1284,6 +1320,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
     if (_apiKey == null) return;
 
+    // Focus first item after folder contents load
+    _shouldFocusOnLoad = true;
+
     setState(() {
       _isLoadingFolder = true;
     });
@@ -1401,6 +1440,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _isLoadingFolder = false;
       });
 
+      // Focus first item after folder contents load
+      _focusFirstItemOrFallback();
     } catch (e) {
       setState(() {
         _isLoadingFolder = false;
@@ -1412,6 +1453,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Navigate into a folder
   void _navigateIntoFolder(RDFileNode folder) {
     if (!folder.isFolder) return;
+
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
 
     // Apply view mode to folder children
     // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
@@ -1442,6 +1486,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _currentViewNodes = transformedChildren;
     });
 
+    // Focus first item after navigation
+    _focusFirstItemOrFallback();
   }
 
   /// Navigate up one level
@@ -2131,41 +2177,53 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
         ),
       ),
-      child: DropdownButtonFormField<_FolderViewMode>(
-        focusNode: _viewModeDropdownFocusNode,
-        autofocus: true,
-        isExpanded: true,
-        value: mode,
-        decoration: InputDecoration(
-          labelText: 'View Mode',
-          prefixIcon: Icon(
-            mode == _FolderViewMode.raw
-                ? Icons.view_list
-                : mode == _FolderViewMode.sortedAZ
-                    ? Icons.sort_by_alpha
-                    : Icons.video_library,
-            color: theme.colorScheme.primary,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        ),
-        items: const [
-          DropdownMenuItem(
-            value: _FolderViewMode.raw,
-            child: Text('Raw'),
-          ),
-          DropdownMenuItem(
-            value: _FolderViewMode.sortedAZ,
-            child: Text('Sort (A-Z)'),
-          ),
-        ],
-        onChanged: (value) {
-          if (value != null) _setViewMode(value);
+      child: Focus(
+        skipTraversal: true,
+        onKeyEvent: (node, event) {
+          // Navigate to back button on up arrow
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _backButtonFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
         },
+        child: DropdownButtonFormField<_FolderViewMode>(
+          focusNode: _viewModeDropdownFocusNode,
+          autofocus: true,
+          isExpanded: true,
+          value: mode,
+          decoration: InputDecoration(
+            labelText: 'View Mode',
+            prefixIcon: Icon(
+              mode == _FolderViewMode.raw
+                  ? Icons.view_list
+                  : mode == _FolderViewMode.sortedAZ
+                      ? Icons.sort_by_alpha
+                      : Icons.video_library,
+              color: theme.colorScheme.primary,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: _FolderViewMode.raw,
+              child: Text('Raw'),
+            ),
+            DropdownMenuItem(
+              value: _FolderViewMode.sortedAZ,
+              child: Text('Sort (A-Z)'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) _setViewMode(value);
+          },
+        ),
       ),
     );
   }
@@ -2355,10 +2413,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   if (isFolder) ...[
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
                         onPressed: () => _navigateIntoFolder(node),
                         icon: const Icon(Icons.folder_open, size: 18),
                         label: const Text('Open'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2369,6 +2436,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         label: const Text('Play'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
+                        ).copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
                         ),
                       ),
                     ),
@@ -2376,10 +2450,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   ] else if (isVideo) ...[
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
                         onPressed: () => _playFile(node),
                         icon: const Icon(Icons.play_arrow, size: 18),
                         label: const Text('Play'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2387,10 +2470,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     // Non-video files get a Download button
                     Expanded(
                       child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
                         onPressed: () => _downloadFile(node),
                         icon: const Icon(Icons.download, size: 18),
                         label: const Text('Download'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2796,7 +2888,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             final download = _downloads[index];
             return KeyedSubtree(
               key: ValueKey(download.id),
-              child: _buildDownloadCard(download),
+              child: _buildDownloadCard(download, index),
             );
           },
         ),
@@ -2893,10 +2985,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 // Always show Open and Play buttons for all torrents
                 Expanded(
                   child: FilledButton.icon(
+                    focusNode: index == 0 ? _firstItemFocusNode : null,
                     autofocus: index == 0,
                     onPressed: () => _navigateIntoTorrent(torrent),
                     icon: const Icon(Icons.folder_open, size: 18),
                     label: const Text('Open'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                    ).copyWith(
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Colors.white, width: 3);
+                        }
+                        return null;
+                      }),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2907,6 +3010,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     label: const Text('Play'),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
+                    ).copyWith(
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Colors.white, width: 3);
+                        }
+                        return null;
+                      }),
                     ),
                   ),
                 ),
@@ -2992,6 +3102,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ).copyWith(
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: Colors.white, width: 3);
+          }
+          return null;
+        }),
       ),
     );
   }
@@ -3283,7 +3400,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
-  Widget _buildDownloadCard(DebridDownload download) {
+  Widget _buildDownloadCard(DebridDownload download, int index) {
     final canStream = download.streamable == 1;
     final isVideo = FileUtils.isVideoFile(download.filename);
 
@@ -3355,20 +3472,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 if (canStream) ...[
                   Expanded(
                     child: FilledButton.icon(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
                       onPressed: () => _handlePlayDownload(download),
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Play'),
+                      style: FilledButton.styleFrom().copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                 ],
                 Expanded(
                   child: FilledButton.icon(
+                    focusNode: index == 0 && !canStream ? _firstItemFocusNode : null,
                     onPressed: () => _handleQueueDownload(download),
                     icon: const Icon(Icons.download, size: 18),
                     label: const Text('Download'),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
+                    ).copyWith(
+                      side: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.focused)) {
+                          return const BorderSide(color: Colors.white, width: 3);
+                        }
+                        return null;
+                      }),
                     ),
                   ),
                 ),
