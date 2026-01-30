@@ -3444,6 +3444,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         TextButton(
                           autofocus: true,
                           onPressed: () {
+                            DialogTapGuard.markKeyAction();
                             setDialogState(() {
                               showingTimeoutOptions = false;
                             });
@@ -3452,6 +3453,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                         TextButton(
                           onPressed: () {
+                            DialogTapGuard.markKeyAction();
                             cancelled = true;
                             Navigator.of(dialogContext).pop();
                             _showPikPakSnack('You can find it in PikPak Files later');
@@ -3460,6 +3462,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                         TextButton(
                           onPressed: () {
+                            DialogTapGuard.markKeyAction();
                             cancelled = true;
                             Navigator.of(dialogContext).pop();
                           },
@@ -3471,6 +3474,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         TextButton(
                           autofocus: true,
                           onPressed: () {
+                            DialogTapGuard.markKeyAction();
                             cancelled = true;
                             Navigator.of(dialogContext).pop();
                             _showPikPakSnack('Added to PikPak. You can find it in PikPak Files.');
