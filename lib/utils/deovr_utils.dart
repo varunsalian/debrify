@@ -26,7 +26,7 @@ bool isVrContent(String title) {
   if (RegExp(r'\b360\b|_360').hasMatch(titleUpper)) {
     screenType = 'sphere';
   } else if (RegExp(r'FISHEYE\s*190|FISHEYE190|_FISHEYE190').hasMatch(titleUpper)) {
-    screenType = 'rf52';
+    screenType = 'fisheye';
   } else if (RegExp(r'MKX\s*200|MKX200|_MKX200').hasMatch(titleUpper)) {
     screenType = 'mkx200';
   } else if (RegExp(r'VRCA\s*220|VRCA220|_VRCA220').hasMatch(titleUpper)) {
