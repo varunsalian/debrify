@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/main_page_bridge.dart';
 import '../widgets/shimmer.dart';
 
 class DownloadsScreen extends StatefulWidget {
@@ -39,13 +40,24 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   final Set<String> _moveFailed = {};
   final Set<String> _busyGroupIds = {};
 
+  // Focus state for Add button
+  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'downloads-add-button');
+  bool _addButtonFocused = false;
 
+  // TV content focus handler
+  VoidCallback? _tvContentFocusHandler;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _init();
+
+    // Register TV content focus handler (tab index 2 = Downloads)
+    _tvContentFocusHandler = () {
+      _addButtonFocusNode.requestFocus();
+    };
+    MainPageBridge.registerTvContentFocusHandler(2, _tvContentFocusHandler!);
   }
 
   Future<void> _init() async {
@@ -269,6 +281,10 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   @override
   void dispose() {
+    if (_tvContentFocusHandler != null) {
+      MainPageBridge.unregisterTvContentFocusHandler(2, _tvContentFocusHandler!);
+    }
+    _addButtonFocusNode.dispose();
     _tabController.dispose();
     _progressSub.cancel();
     _statusSub.cancel();
@@ -671,65 +687,97 @@ class _DownloadsScreenState extends State<DownloadsScreen>
         Positioned(
           left: 16,
           bottom: 16 + MediaQuery.of(context).padding.bottom,
-          child: GestureDetector(
-            onTap: () async {
-              final data = await Clipboard.getData('text/plain');
-              String? clipboardUrl;
+          child: FocusableActionDetector(
+            focusNode: _addButtonFocusNode,
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+            },
+            actions: <Type, Action<Intent>>{
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (intent) async {
+                  final data = await Clipboard.getData('text/plain');
+                  String? clipboardUrl;
+                  if (data?.text != null && data!.text!.isNotEmpty) {
+                    final url = data.text!.trim();
+                    if (_isDownloadLink(url)) {
+                      clipboardUrl = url;
+                    }
+                  }
+                  await _showAddDialog(initialUrl: clipboardUrl);
+                  return null;
+                },
+              ),
+            },
+            onShowFocusHighlight: (focused) {
+              setState(() => _addButtonFocused = focused);
+            },
+            child: GestureDetector(
+              onTap: () async {
+                final data = await Clipboard.getData('text/plain');
+                String? clipboardUrl;
 
-              if (data?.text != null && data!.text!.isNotEmpty) {
-                final url = data.text!.trim();
-                if (_isDownloadLink(url)) {
-                  clipboardUrl = url;
-                  if (mounted) {
-                    final uri = Uri.tryParse(url);
-                    final fileName = uri?.path.split('/').last ?? 'file';
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Found download link in clipboard: $fileName'),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
+                if (data?.text != null && data!.text!.isNotEmpty) {
+                  final url = data.text!.trim();
+                  if (_isDownloadLink(url)) {
+                    clipboardUrl = url;
+                    if (mounted) {
+                      final uri = Uri.tryParse(url);
+                      final fileName = uri?.path.split('/').last ?? 'file';
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Found download link in clipboard: $fileName'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   }
                 }
-              }
 
-              await _showAddDialog(initialUrl: clipboardUrl);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.5),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                await _showAddDialog(initialUrl: clipboardUrl);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _addButtonFocused
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF10B981).withValues(alpha: 0.5),
+                    width: _addButtonFocused ? 2 : 1,
                   ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.add_rounded,
-                    color: const Color(0xFF10B981),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Add',
-                    style: TextStyle(
-                      color: Color(0xFF10B981),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _addButtonFocused
+                          ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                          : Colors.black.withValues(alpha: 0.3),
+                      blurRadius: _addButtonFocused ? 12 : 8,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.add_rounded,
+                      color: const Color(0xFF10B981),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Add',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1527,7 +1575,7 @@ String formatEta(Duration? eta) {
   return '${eta.inSeconds}s';
 }
 
-class _TorrentGroupList extends StatelessWidget {
+class _TorrentGroupList extends StatefulWidget {
   final List<TorrentDownloadGroup> groups;
   final Set<String> busyGroupIds;
   final bool isFinishedTab;
@@ -1547,48 +1595,89 @@ class _TorrentGroupList extends StatelessWidget {
   });
 
   @override
+  State<_TorrentGroupList> createState() => _TorrentGroupListState();
+}
+
+class _TorrentGroupListState extends State<_TorrentGroupList> {
+  // Track which item index is currently focused
+  int? _focusedIndex;
+
+  static const _shortcuts = <ShortcutActivator, Intent>{
+    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+  };
+
+  @override
   Widget build(BuildContext context) {
-    if (groups.isEmpty) {
+    if (widget.groups.isEmpty) {
       return const Center(child: Text('No downloads'));
     }
 
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: groups.length,
+      itemCount: widget.groups.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final group = groups[index];
-        final bool isBusy = busyGroupIds.contains(group.id);
+        final group = widget.groups[index];
+        final bool isBusy = widget.busyGroupIds.contains(group.id);
         final bool isIOS = Platform.isIOS;
 
         // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
-        final bool canPause = !isIOS && !isFinishedTab && !isBusy && !group.hasTorboxNonResumable && onPauseAll != null &&
+        final bool canPause = !isIOS && !widget.isFinishedTab && !isBusy && !group.hasTorboxNonResumable && widget.onPauseAll != null &&
             (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
-        final bool canResume = !isIOS && !isFinishedTab && !isBusy && !group.hasTorboxNonResumable && onResumeAll != null &&
+        final bool canResume = !isIOS && !widget.isFinishedTab && !isBusy && !group.hasTorboxNonResumable && widget.onResumeAll != null &&
             group.pausedFiles > 0;
-        final bool canCancel = !isBusy && onCancelAll != null &&
+        final bool canCancel = !isBusy && widget.onCancelAll != null &&
             (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
 
-        VoidCallback? pause = canPause ? () => onPauseAll!(group) : null;
-        VoidCallback? resume = canResume ? () => onResumeAll!(group) : null;
-        VoidCallback? cancel = canCancel ? () => onCancelAll!(group) : null;
+        VoidCallback? pause = canPause ? () => widget.onPauseAll!(group) : null;
+        VoidCallback? resume = canResume ? () => widget.onResumeAll!(group) : null;
+        VoidCallback? cancel = canCancel ? () => widget.onCancelAll!(group) : null;
 
         // Show info when TorBox group is active but pause is unavailable
         final bool showTorboxInfo = group.hasTorboxNonResumable &&
-            !isFinishedTab &&
+            !widget.isFinishedTab &&
             !Platform.isIOS &&
             (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
 
-        return PressableScale(
-          onTap: () => onOpenGroup(group),
-          child: _TorrentGroupCard(
-            group: group,
-            isBusy: isBusy,
-            isFinished: isFinishedTab,
-            onPauseAll: pause,
-            onResumeAll: resume,
-            onCancelAll: cancel,
-            showTorboxPauseInfo: showTorboxInfo,
+        final bool isFocused = _focusedIndex == index;
+
+        return FocusableActionDetector(
+          shortcuts: _shortcuts,
+          actions: <Type, Action<Intent>>{
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (intent) {
+                widget.onOpenGroup(group);
+                return null;
+              },
+            ),
+          },
+          onShowFocusHighlight: (focused) {
+            setState(() {
+              _focusedIndex = focused ? index : (_focusedIndex == index ? null : _focusedIndex);
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: isFocused
+                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                  : null,
+            ),
+            child: PressableScale(
+              onTap: () => widget.onOpenGroup(group),
+              child: _TorrentGroupCard(
+                group: group,
+                isBusy: isBusy,
+                isFinished: widget.isFinishedTab,
+                onPauseAll: pause,
+                onResumeAll: resume,
+                onCancelAll: cancel,
+                showTorboxPauseInfo: showTorboxInfo,
+              ),
+            ),
           ),
         );
       },
