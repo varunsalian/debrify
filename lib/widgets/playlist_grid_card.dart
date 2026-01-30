@@ -23,6 +23,10 @@ class PlaylistGridCard extends StatefulWidget {
   final bool autofocus;
   final void Function(bool focused)? onFocusChanged;
   final FocusNode? focusNode; // External focus node for parent control
+  /// Called when up arrow is pressed (for cross-section navigation)
+  final VoidCallback? onUpArrowPressed;
+  /// Called when down arrow is pressed (for cross-section navigation)
+  final VoidCallback? onDownArrowPressed;
 
   const PlaylistGridCard({
     super.key,
@@ -37,6 +41,8 @@ class PlaylistGridCard extends StatefulWidget {
     this.autofocus = false,
     this.onFocusChanged,
     this.focusNode,
+    this.onUpArrowPressed,
+    this.onDownArrowPressed,
   });
 
   @override
@@ -213,11 +219,18 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               return KeyEventResult.handled;
             }
 
-            // Allow arrow keys to propagate for grid navigation
-            // Don't handle them here - let GridView's focus traversal handle it
-            if (key == LogicalKeyboardKey.arrowUp ||
-                key == LogicalKeyboardKey.arrowDown ||
-                key == LogicalKeyboardKey.arrowLeft ||
+            // Handle up/down for cross-section navigation (TV horizontal rows)
+            if (key == LogicalKeyboardKey.arrowUp && widget.onUpArrowPressed != null) {
+              widget.onUpArrowPressed!();
+              return KeyEventResult.handled;
+            }
+            if (key == LogicalKeyboardKey.arrowDown && widget.onDownArrowPressed != null) {
+              widget.onDownArrowPressed!();
+              return KeyEventResult.handled;
+            }
+
+            // Allow left/right arrow keys to propagate for horizontal scrolling
+            if (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.arrowRight) {
               return KeyEventResult.ignored;
             }

@@ -24,6 +24,10 @@ class AdaptivePlaylistSection extends StatefulWidget {
   final int? targetFocusIndex;
   final bool shouldRestoreFocus;
   final VoidCallback? onFocusRestored;
+  /// Called when up arrow is pressed from any card in this section
+  final VoidCallback? onUpArrowPressed;
+  /// Called when down arrow is pressed from any card in this section
+  final VoidCallback? onDownArrowPressed;
 
   const AdaptivePlaylistSection({
     super.key,
@@ -42,6 +46,8 @@ class AdaptivePlaylistSection extends StatefulWidget {
     this.targetFocusIndex,
     this.shouldRestoreFocus = false,
     this.onFocusRestored,
+    this.onUpArrowPressed,
+    this.onDownArrowPressed,
   });
 
   @override
@@ -161,22 +167,27 @@ String _getDedupeKey(Map<String, dynamic> item) {
       return const SizedBox.shrink();
     }
 
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isTV = _isTV(screenWidth);
+    // Use LayoutBuilder to get actual available width (accounts for sidebar)
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final isTV = _isTV(availableWidth);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (widget.sectionTitle.isNotEmpty) ...[
-          _buildSectionHeader(),
-          const SizedBox(height: 16),
-        ],
-        if (isTV)
-          _buildHorizontalRow(screenWidth)
-        else
-          _buildGrid(screenWidth),
-      ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.sectionTitle.isNotEmpty) ...[
+              _buildSectionHeader(),
+              const SizedBox(height: 16),
+            ],
+            if (isTV)
+              _buildHorizontalRow(availableWidth)
+            else
+              _buildGrid(availableWidth),
+          ],
+        );
+      },
     );
   }
 
@@ -235,7 +246,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        clipBehavior: Clip.none, // Allow scale animation to overflow
+        clipBehavior: Clip.hardEdge, // Clip to prevent overflow beyond container
         cacheExtent: 500, // Pre-cache items for smoother scrolling
         itemCount: widget.items.length,
         itemBuilder: (context, index) {
@@ -301,6 +312,8 @@ String _getDedupeKey(Map<String, dynamic> item) {
         onToggleFavorite: widget.onItemToggleFavorite != null ? () => widget.onItemToggleFavorite!(item) : null,
         autofocus: shouldAutofocus,
         focusNode: focusNode,
+        onUpArrowPressed: widget.onUpArrowPressed,
+        onDownArrowPressed: widget.onDownArrowPressed,
         onFocusChanged: (focused) {
           if (focused && widget.shouldRestoreFocus && widget.targetFocusIndex == index && !_hasNotifiedRestore) {
             _hasNotifiedRestore = true;

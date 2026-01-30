@@ -1850,6 +1850,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                   _targetFocusIndex = null;
                                 });
                               },
+                              // UP from Favorites -> Search button
+                              onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+                              // DOWN from Favorites -> First item in All Items
+                              onDownArrowPressed: () {
+                                _allItemsSectionKey.currentState?.requestFocusOnFirstItem();
+                              },
                             ),
                           ),
                         ),
@@ -1880,6 +1886,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 _shouldRestoreFocus = false;
                                 _targetFocusIndex = null;
                               });
+                            },
+                            // UP from All Items -> First item in Favorites (if exists), else Search
+                            onUpArrowPressed: () {
+                              if (_favoritesSectionKey.currentState != null &&
+                                  _favoritesSectionKey.currentState!.hasItems) {
+                                _favoritesSectionKey.currentState!.requestFocusOnFirstItem();
+                              } else {
+                                _searchFocusNode.requestFocus();
+                              }
                             },
                           ),
                         ),
@@ -1925,6 +1940,23 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             if (MainPageBridge.focusTvSidebar != null) {
               MainPageBridge.focusTvSidebar!();
               return KeyEventResult.handled;
+            }
+          }
+          // Handle down arrow - go to first card in Favorites, then All Items
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            // Try favorites section first item
+            if (_favoritesSectionKey.currentState != null &&
+                _favoritesSectionKey.currentState!.hasItems) {
+              if (_favoritesSectionKey.currentState!.requestFocusOnFirstItem()) {
+                return KeyEventResult.handled;
+              }
+            }
+            // Try all items section first item
+            if (_allItemsSectionKey.currentState != null &&
+                _allItemsSectionKey.currentState!.hasItems) {
+              if (_allItemsSectionKey.currentState!.requestFocusOnFirstItem()) {
+                return KeyEventResult.handled;
+              }
             }
           }
           if (event.logicalKey == LogicalKeyboardKey.select ||
