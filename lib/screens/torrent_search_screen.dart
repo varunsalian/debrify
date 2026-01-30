@@ -48,6 +48,7 @@ import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
+import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/home_focus_controller.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
@@ -171,6 +172,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // RedditResultsView GlobalKey (for DPAD navigation)
   final GlobalKey<RedditResultsViewState> _redditResultsKey = GlobalKey<RedditResultsViewState>();
+
+  // IptvResultsView GlobalKey (for DPAD navigation)
+  final GlobalKey<IptvResultsViewState> _iptvResultsKey = GlobalKey<IptvResultsViewState>();
 
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
@@ -937,6 +941,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Reddit mode - handles its own search, keep keyword mode for fallback
           _searchMode = SearchMode.keyword;
           break;
+        case SearchSourceType.iptv:
+          // IPTV mode - handles its own search, keep keyword mode for fallback
+          _searchMode = SearchMode.keyword;
+          break;
       }
 
       // Clear previous state when switching sources
@@ -1692,6 +1700,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    // IPTV mode: Trigger rebuild so IptvResultsView gets updated searchQuery
+    if (_selectedSource.type == SearchSourceType.iptv) {
+      setState(() {});
+      return;
+    }
+
     // In catalog mode, clear the active selection if user manually edits
     if (_searchMode == SearchMode.catalog) {
       final trimmed = value.trim();
@@ -1772,9 +1786,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
         if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
           _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
-        } else {
-          _homeFocusController.focusFirstHomeSection();
+          return;
         }
+
+        // Check if IPTV is visible
+        if (_selectedSource.type == SearchSourceType.iptv && _iptvResultsKey.currentState != null) {
+          _iptvResultsKey.currentState!.focusFirstFilter();
+          return;
+        }
+
+        // Check if Reddit is visible
+        if (_selectedSource.type == SearchSourceType.reddit && _redditResultsKey.currentState != null) {
+          _redditResultsKey.currentState!.focusFirstFilter();
+          return;
+        }
+
+        _homeFocusController.focusFirstHomeSection();
       },
     );
   }
@@ -9941,8 +9968,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         isTelevision: _isTelevision,
                       ),
 
-                    // Results and other views (not shown in Reddit mode - it handles its own content)
-                    if (_selectedSource.type != SearchSourceType.reddit)
+                    // IPTV mode - IPTV M3U channels
+                    if (_selectedSource.type == SearchSourceType.iptv)
+                      IptvResultsView(
+                        key: _iptvResultsKey,
+                        searchQuery: _searchController.text,
+                        isTelevision: _isTelevision,
+                        onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
+                      ),
+
+                    // Results and other views (not shown in Reddit/IPTV mode - they handle their own content)
+                    if (_selectedSource.type != SearchSourceType.reddit && _selectedSource.type != SearchSourceType.iptv)
                     Builder(
                       builder: (context) {
 

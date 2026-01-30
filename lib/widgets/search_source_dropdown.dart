@@ -9,6 +9,7 @@ enum SearchSourceType {
   keyword,  // Keyword/torrent search
   addon,    // Specific addon catalog
   reddit,   // Reddit video search
+  iptv,     // IPTV M3U playlists
 }
 
 /// Represents a selectable search source option
@@ -44,6 +45,13 @@ class SearchSourceOption {
     type: SearchSourceType.reddit,
     label: 'Reddit',
     icon: Icons.play_circle_outline,
+  );
+
+  /// Create "IPTV" option
+  factory SearchSourceOption.iptv() => const SearchSourceOption(
+    type: SearchSourceType.iptv,
+    label: 'IPTV',
+    icon: Icons.live_tv,
   );
 
   /// Create addon-specific option
@@ -578,6 +586,9 @@ class SearchSourceOptionsLoader {
     } catch (e) {
       debugPrint('SearchSourceOptionsLoader: Error loading addons: $e');
     }
+
+    // IPTV before Reddit
+    options.add(SearchSourceOption.iptv());
 
     // Reddit always goes last
     options.add(SearchSourceOption.reddit());

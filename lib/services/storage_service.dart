@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
+import '../models/iptv_playlist.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -86,6 +87,11 @@ class StorageService {
   static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
   static const String _playerDefaultAspectIndexTvKey = 'player_default_aspect_index_tv';
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
+
+  // IPTV settings
+  static const String _iptvPlaylistsKey = 'iptv_playlists';
+  static const String _iptvDefaultPlaylistKey = 'iptv_default_playlist';
+  static const String _iptvDefaultsInitializedKey = 'iptv_defaults_initialized';
 
   // PikPak API settings
   static const String _pikpakEnabledKey = 'pikpak_enabled';
@@ -3056,6 +3062,58 @@ class StorageService {
   static Future<void> setPlayerNightModeIndex(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_playerNightModeIndexKey, index);
+  }
+
+  // IPTV Playlist Settings
+
+  /// Get all saved IPTV playlists
+  static Future<List<IptvPlaylist>> getIptvPlaylists() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = prefs.getStringList(_iptvPlaylistsKey) ?? [];
+    return jsonList.map((json) {
+      try {
+        return IptvPlaylist.fromJson(
+          Map<String, dynamic>.from(jsonDecode(json) as Map),
+        );
+      } catch (e) {
+        return null;
+      }
+    }).whereType<IptvPlaylist>().toList();
+  }
+
+  /// Save IPTV playlists
+  static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = playlists.map((p) => jsonEncode(p.toJson())).toList();
+    await prefs.setStringList(_iptvPlaylistsKey, jsonList);
+  }
+
+  /// Get default IPTV playlist ID
+  static Future<String?> getIptvDefaultPlaylist() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_iptvDefaultPlaylistKey);
+  }
+
+  /// Set default IPTV playlist ID
+  static Future<void> setIptvDefaultPlaylist(String? playlistId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (playlistId == null || playlistId.isEmpty) {
+      await prefs.remove(_iptvDefaultPlaylistKey);
+    } else {
+      await prefs.setString(_iptvDefaultPlaylistKey, playlistId);
+    }
+  }
+
+  /// Check if IPTV defaults have been initialized (to avoid re-adding after user deletes)
+  static Future<bool> getIptvDefaultsInitialized() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_iptvDefaultsInitializedKey) ?? false;
+  }
+
+  /// Mark IPTV defaults as initialized
+  static Future<void> setIptvDefaultsInitialized(bool initialized) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_iptvDefaultsInitializedKey, initialized);
   }
 }
 

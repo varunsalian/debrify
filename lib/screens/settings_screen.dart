@@ -17,6 +17,7 @@ import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/reddit_settings_page.dart';
+import 'settings/iptv_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -213,6 +214,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.reddit,
           onTap: _openRedditSettings,
         ),
+        iptv: _ConnectionInfo(
+          title: 'IPTV',
+          connected: true,
+          status: 'Active',
+          caption: 'M3U playlist channels',
+          icon: Icons.live_tv,
+          onTap: _openIptvSettings,
+        ),
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
@@ -263,6 +272,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const RedditSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openIptvSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const IptvSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -727,6 +744,7 @@ class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
   final _ConnectionInfo reddit;
+  final _ConnectionInfo iptv;
   final FocusNode? firstCardFocusNode;
 
   const _ConnectionsSummary({
@@ -734,6 +752,7 @@ class _ConnectionsSummary extends StatefulWidget {
     required this.torbox,
     required this.pikpak,
     required this.reddit,
+    required this.iptv,
     this.firstCardFocusNode,
   });
 
@@ -745,9 +764,11 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   // Focus nodes for grid navigation
   // Layout: [realDebrid, torbox]
   //         [pikpak,     reddit]
+  //         [iptv]
   late final FocusNode _torboxFocusNode;
   late final FocusNode _pikpakFocusNode;
   late final FocusNode _redditFocusNode;
+  late final FocusNode _iptvFocusNode;
 
   @override
   void initState() {
@@ -755,6 +776,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
     _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
     _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
+    _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
   }
 
   @override
@@ -762,6 +784,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     _torboxFocusNode.dispose();
     _pikpakFocusNode.dispose();
     _redditFocusNode.dispose();
+    _iptvFocusNode.dispose();
     super.dispose();
   }
 
@@ -822,6 +845,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     isLeftColumn: true,
                     rightNeighbor: wide ? _redditFocusNode : null,
                     upNeighbor: widget.firstCardFocusNode,
+                    downNeighbor: _iptvFocusNode,
                   ),
                 ),
                 SizedBox(
@@ -832,6 +856,17 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? _pikpakFocusNode : null,
                     upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
+                    downNeighbor: wide ? null : _iptvFocusNode,
+                  ),
+                ),
+                // Row 3: IPTV (left only)
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.iptv,
+                    focusNode: _iptvFocusNode,
+                    isLeftColumn: true,
+                    upNeighbor: _pikpakFocusNode,
                   ),
                 ),
               ],
