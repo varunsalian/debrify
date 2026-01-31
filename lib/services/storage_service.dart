@@ -88,6 +88,9 @@ class StorageService {
   // Linux External Player settings
   static const String _linuxExternalPlayerPreferredKey = 'linux_external_player_preferred';
   static const String _linuxCustomCommandKey = 'linux_custom_command';
+  // Windows External Player settings
+  static const String _windowsExternalPlayerPreferredKey = 'windows_external_player_preferred';
+  static const String _windowsCustomCommandKey = 'windows_custom_command';
 
   // Debrify Player default settings
   static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
@@ -3185,6 +3188,39 @@ class StorageService {
       await prefs.remove(_linuxCustomCommandKey);
     } else {
       await prefs.setString(_linuxCustomCommandKey, command);
+    }
+  }
+
+  // ============================================================
+  // Windows External Player Settings
+  // ============================================================
+
+  /// Get preferred Windows external player key
+  static Future<String> getPreferredWindowsExternalPlayer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_windowsExternalPlayerPreferredKey) ?? 'system_default';
+  }
+
+  /// Set preferred Windows external player key
+  static Future<void> setPreferredWindowsExternalPlayer(String playerKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_windowsExternalPlayerPreferredKey, playerKey);
+  }
+
+  /// Get Windows custom command template
+  /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
+  static Future<String?> getWindowsCustomCommand() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_windowsCustomCommandKey);
+  }
+
+  /// Set Windows custom command template
+  static Future<void> setWindowsCustomCommand(String? command) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (command == null || command.isEmpty) {
+      await prefs.remove(_windowsCustomCommandKey);
+    } else {
+      await prefs.setString(_windowsCustomCommandKey, command);
     }
   }
 

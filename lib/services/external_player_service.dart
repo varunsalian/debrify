@@ -4,9 +4,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/external_player.dart';
 import '../models/ios_external_player.dart';
 import '../models/linux_external_player.dart';
+import '../models/windows_external_player.dart';
 export '../models/external_player.dart';
 export '../models/ios_external_player.dart';
 export '../models/linux_external_player.dart';
+export '../models/windows_external_player.dart';
 import 'storage_service.dart';
 
 /// Result of launching an external player
@@ -735,6 +737,243 @@ extension LinuxExternalPlayerServiceExtension on ExternalPlayerService {
     } catch (e) {
       debugPrint('Linux External Player: Launch failed: $e');
       return LinuxExternalPlayerLaunchResult.failed(
+        'Failed to open ${player.displayName}: $e',
+      );
+    }
+  }
+}
+
+// ============================================================
+// Windows External Player Support
+// ============================================================
+
+/// Result of launching a Windows external player
+class WindowsExternalPlayerLaunchResult {
+  final bool success;
+  final WindowsExternalPlayer? usedPlayer;
+  final String? errorMessage;
+
+  const WindowsExternalPlayerLaunchResult({
+    required this.success,
+    this.usedPlayer,
+    this.errorMessage,
+  });
+
+  factory WindowsExternalPlayerLaunchResult.succeeded(WindowsExternalPlayer player) {
+    return WindowsExternalPlayerLaunchResult(
+      success: true,
+      usedPlayer: player,
+    );
+  }
+
+  factory WindowsExternalPlayerLaunchResult.failed(String message) {
+    return WindowsExternalPlayerLaunchResult(
+      success: false,
+      errorMessage: message,
+    );
+  }
+}
+
+/// Extension methods for Windows external player support
+extension WindowsExternalPlayerServiceExtension on ExternalPlayerService {
+  /// Check if a Windows player is installed
+  /// Uses `where` command (Windows equivalent of `which`)
+  /// Also checks common installation paths for players not typically in PATH
+  static Future<bool> isWindowsPlayerInstalled(WindowsExternalPlayer player) async {
+    if (!Platform.isWindows) return false;
+    if (player == WindowsExternalPlayer.customCommand) return true;
+    if (player == WindowsExternalPlayer.systemDefault) return true;
+
+    // First, try `where` command (checks PATH)
+    try {
+      final result = await Process.run('where', [player.executable]);
+      if (result.exitCode == 0 &&
+          (result.stdout as String).trim().isNotEmpty) {
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Windows player PATH check failed: $e');
+    }
+
+    // If not in PATH, check common installation paths
+    final commonPaths = player.commonPaths;
+    for (final path in commonPaths) {
+      // Handle ${USER} placeholder in paths
+      String resolvedPath = path;
+      if (path.contains(r'${USER}')) {
+        final username = Platform.environment['USERNAME'] ?? '';
+        resolvedPath = path.replaceAll(r'${USER}', username);
+      }
+
+      try {
+        if (await File(resolvedPath).exists()) {
+          return true;
+        }
+      } catch (e) {
+        // Path check failed, continue to next
+      }
+    }
+
+    return false;
+  }
+
+  /// Find the resolved path for a Windows player
+  /// Returns the full path if found in common locations, or executable name if in PATH
+  static Future<String?> _resolveWindowsPlayerPath(WindowsExternalPlayer player) async {
+    if (!Platform.isWindows) return null;
+
+    // First, try `where` command (checks PATH)
+    try {
+      final result = await Process.run('where', [player.executable]);
+      if (result.exitCode == 0) {
+        final path = (result.stdout as String).trim().split('\n').first.trim();
+        if (path.isNotEmpty) {
+          return path;
+        }
+      }
+    } catch (e) {
+      // Not in PATH
+    }
+
+    // Check common installation paths
+    final commonPaths = player.commonPaths;
+    for (final path in commonPaths) {
+      String resolvedPath = path;
+      if (path.contains(r'${USER}')) {
+        final username = Platform.environment['USERNAME'] ?? '';
+        resolvedPath = path.replaceAll(r'${USER}', username);
+      }
+
+      try {
+        if (await File(resolvedPath).exists()) {
+          return resolvedPath;
+        }
+      } catch (e) {
+        // Continue to next path
+      }
+    }
+
+    return null;
+  }
+
+  /// Detect which Windows players are installed
+  static Future<Map<WindowsExternalPlayer, bool>> detectInstalledWindowsPlayers() async {
+    if (!Platform.isWindows) return {};
+
+    final results = <WindowsExternalPlayer, bool>{};
+
+    for (final player in WindowsExternalPlayer.values) {
+      if (player == WindowsExternalPlayer.customCommand ||
+          player == WindowsExternalPlayer.systemDefault) {
+        results[player] = true;
+        continue;
+      }
+      results[player] = await isWindowsPlayerInstalled(player);
+    }
+
+    return results;
+  }
+
+  /// Launch video with preferred Windows player
+  static Future<WindowsExternalPlayerLaunchResult> launchWithPreferredWindowsPlayer(
+    String url, {
+    String? title,
+  }) async {
+    if (!Platform.isWindows) {
+      return WindowsExternalPlayerLaunchResult.failed('Not running on Windows');
+    }
+
+    // Get user's preferred Windows player
+    final preferredPlayerKey = await StorageService.getPreferredWindowsExternalPlayer();
+    final preferredPlayer = WindowsExternalPlayerExtension.fromStorageKey(preferredPlayerKey);
+
+    // Check if preferred player is installed
+    if (preferredPlayer != WindowsExternalPlayer.systemDefault &&
+        preferredPlayer != WindowsExternalPlayer.customCommand) {
+      final installed = await isWindowsPlayerInstalled(preferredPlayer);
+      if (!installed) {
+        // Fall back to system default
+        return await launchWithWindowsPlayer(
+          url,
+          WindowsExternalPlayer.systemDefault,
+          title: title,
+        );
+      }
+    }
+
+    return await launchWithWindowsPlayer(url, preferredPlayer, title: title);
+  }
+
+  /// Launch video with a specific Windows player
+  static Future<WindowsExternalPlayerLaunchResult> launchWithWindowsPlayer(
+    String url,
+    WindowsExternalPlayer player, {
+    String? title,
+  }) async {
+    if (!Platform.isWindows) {
+      return WindowsExternalPlayerLaunchResult.failed('Not running on Windows');
+    }
+
+    try {
+      List<String> command;
+      String? resolvedPath;
+
+      if (player == WindowsExternalPlayer.customCommand) {
+        // Use custom command template
+        final customTemplate = await StorageService.getWindowsCustomCommand();
+        if (customTemplate == null || customTemplate.isEmpty) {
+          return WindowsExternalPlayerLaunchResult.failed(
+            'Custom command not configured',
+          );
+        }
+
+        final validation = validateWindowsCustomCommand(customTemplate);
+        if (!validation.isValid) {
+          return WindowsExternalPlayerLaunchResult.failed(
+            validation.errorMessage ?? 'Invalid custom command',
+          );
+        }
+
+        command = buildWindowsCustomCommand(customTemplate, url, title: title);
+        if (command.isEmpty) {
+          return WindowsExternalPlayerLaunchResult.failed('Invalid command format');
+        }
+      } else {
+        // For non-system-default players, try to resolve full path
+        if (player != WindowsExternalPlayer.systemDefault) {
+          resolvedPath = await _resolveWindowsPlayerPath(player);
+        }
+        command = player.buildCommand(url, title: title, resolvedPath: resolvedPath);
+      }
+
+      debugPrint('Windows External Player: Launching with command: ${command.join(' ')}');
+
+      final executable = command.first;
+      final args = command.skip(1).toList();
+
+      // For explorer.exe (system default), use Process.run as it spawns and exits quickly
+      // For media players, use Process.start detached so they run independently
+      if (executable == 'explorer.exe') {
+        final result = await Process.run(executable, args);
+        if (result.exitCode == 0 || result.exitCode == 1) {
+          // explorer.exe may return 1 even on success for URL launching
+          return WindowsExternalPlayerLaunchResult.succeeded(player);
+        }
+        return WindowsExternalPlayerLaunchResult.failed(
+          'Failed to open with system default: ${result.stderr}',
+        );
+      } else {
+        // Run player detached so it doesn't block
+        await Process.start(
+          executable,
+          args,
+          mode: ProcessStartMode.detached,
+        );
+        return WindowsExternalPlayerLaunchResult.succeeded(player);
+      }
+    } catch (e) {
+      debugPrint('Windows External Player: Launch failed: $e');
+      return WindowsExternalPlayerLaunchResult.failed(
         'Failed to open ${player.displayName}: $e',
       );
     }

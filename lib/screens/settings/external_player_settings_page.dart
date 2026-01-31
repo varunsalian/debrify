@@ -52,6 +52,15 @@ class _ExternalPlayerSettingsPageState
   bool _linuxCommandFocused = false;
   String? _linuxCommandError;
 
+  // Windows external player settings
+  WindowsExternalPlayer _selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
+  Map<WindowsExternalPlayer, bool> _installedWindowsPlayers = {};
+  String? _windowsCustomCommand;
+  final TextEditingController _windowsCommandController = TextEditingController();
+  final FocusNode _windowsCommandFocusNode = FocusNode();
+  bool _windowsCommandFocused = false;
+  String? _windowsCommandError;
+
   // DeoVR settings (Android)
   String _vrDefaultScreenType = 'dome';
   String _vrDefaultStereoMode = 'sbs';
@@ -109,6 +118,12 @@ class _ExternalPlayerSettingsPageState
       if (!mounted) return;
       setState(() {
         _linuxCommandFocused = _linuxCommandFocusNode.hasFocus;
+      });
+    });
+    _windowsCommandFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _windowsCommandFocused = _windowsCommandFocusNode.hasFocus;
       });
     });
     _screenTypeFocusNode.addListener(() {
@@ -176,6 +191,8 @@ class _ExternalPlayerSettingsPageState
     _iosSchemeFocusNode.dispose();
     _linuxCommandController.dispose();
     _linuxCommandFocusNode.dispose();
+    _windowsCommandController.dispose();
+    _windowsCommandFocusNode.dispose();
     _screenTypeFocusNode.dispose();
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
@@ -238,6 +255,18 @@ class _ExternalPlayerSettingsPageState
         _linuxCommandController.text = linuxCustomCommand ?? '';
       }
 
+      // Load Windows-specific settings
+      Map<WindowsExternalPlayer, bool> installedWindows = {};
+      String windowsPreferredKey = 'system_default';
+      String? windowsCustomCommand;
+
+      if (Platform.isWindows) {
+        installedWindows = await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
+        windowsPreferredKey = await StorageService.getPreferredWindowsExternalPlayer();
+        windowsCustomCommand = await StorageService.getWindowsCustomCommand();
+        _windowsCommandController.text = windowsCustomCommand ?? '';
+      }
+
       // Load DeoVR settings (Android)
       String vrScreenType = 'dome';
       String vrStereoMode = 'sbs';
@@ -285,6 +314,10 @@ class _ExternalPlayerSettingsPageState
         _installedLinuxPlayers = installedLinux;
         _selectedLinuxPlayer = LinuxExternalPlayerExtension.fromStorageKey(linuxPreferredKey);
         _linuxCustomCommand = linuxCustomCommand;
+        // Windows settings
+        _installedWindowsPlayers = installedWindows;
+        _selectedWindowsPlayer = WindowsExternalPlayerExtension.fromStorageKey(windowsPreferredKey);
+        _windowsCustomCommand = windowsCustomCommand;
         // Other settings
         _vrDefaultScreenType = vrScreenType;
         _vrDefaultStereoMode = vrStereoMode;
@@ -611,6 +644,82 @@ class _ExternalPlayerSettingsPageState
     }
   }
 
+  // Windows external player settings methods
+  Future<void> _selectWindowsPlayer(WindowsExternalPlayer player) async {
+    try {
+      await StorageService.setPreferredWindowsExternalPlayer(player.storageKey);
+      setState(() {
+        _selectedWindowsPlayer = player;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveWindowsCustomCommand() async {
+    final command = _windowsCommandController.text.trim();
+
+    final validation = validateWindowsCustomCommand(command);
+    if (!validation.isValid) {
+      setState(() {
+        _windowsCommandError = validation.errorMessage;
+      });
+      return;
+    }
+
+    try {
+      await StorageService.setWindowsCustomCommand(command);
+      await StorageService.setPreferredWindowsExternalPlayer('custom_command');
+
+      setState(() {
+        _windowsCustomCommand = command;
+        _windowsCommandError = null;
+        _selectedWindowsPlayer = WindowsExternalPlayer.customCommand;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Custom command saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save command: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearWindowsCustomCommand() async {
+    try {
+      await StorageService.setWindowsCustomCommand(null);
+
+      if (_selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
+        await StorageService.setPreferredWindowsExternalPlayer('system_default');
+        setState(() {
+          _selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
+        });
+      }
+
+      _windowsCommandController.clear();
+      setState(() {
+        _windowsCustomCommand = null;
+        _windowsCommandError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to clear command: $e')),
+        );
+      }
+    }
+  }
+
   // DeoVR settings setters
   Future<void> _setVrDefaultScreenType(String screenType) async {
     setState(() => _vrDefaultScreenType = screenType);
@@ -865,6 +974,70 @@ class _ExternalPlayerSettingsPageState
       onChanged: (value) {
         if (value != null) {
           _selectLinuxPlayer(value);
+        }
+      },
+      secondary: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          player.icon,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+      title: Text(
+        player.displayName,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildWindowsPlayerTile(WindowsExternalPlayer player) {
+    final theme = Theme.of(context);
+    final isInstalled = _installedWindowsPlayers[player] ?? false;
+    final isCustom = player == WindowsExternalPlayer.customCommand;
+
+    String subtitle;
+    Color? subtitleColor;
+
+    if (isCustom) {
+      if (_windowsCustomCommand != null && _windowsCustomCommand!.isNotEmpty) {
+        final displayCommand = _windowsCustomCommand!.length > 40
+            ? '${_windowsCustomCommand!.substring(0, 40)}...'
+            : _windowsCustomCommand!;
+        subtitle = displayCommand;
+      } else {
+        subtitle = 'No command configured';
+        subtitleColor = theme.colorScheme.onSurfaceVariant;
+      }
+    } else {
+      subtitle = player.description;
+      if (isInstalled) {
+        subtitleColor = Colors.green;
+        subtitle = 'Installed • ${player.description}';
+      }
+    }
+
+    return RadioListTile<WindowsExternalPlayer>(
+      value: player,
+      groupValue: _selectedWindowsPlayer,
+      onChanged: (value) {
+        if (value != null) {
+          _selectWindowsPlayer(value);
         }
       },
       secondary: Container(
@@ -1286,7 +1459,7 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS || Platform.isLinux;
+    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isWindows;
 
     if (!isSupportedPlatform) {
       return Scaffold(
@@ -2115,6 +2288,202 @@ class _ExternalPlayerSettingsPageState
                       Expanded(
                         child: Text(
                           'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Windows-specific player selection
+            if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        'Preferred Player',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.systemDefault),
+                    const Divider(height: 1),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.vlc),
+                    const Divider(height: 1),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.mpv),
+                    const Divider(height: 1),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.mpcHc),
+                    const Divider(height: 1),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.potPlayer),
+                    const Divider(height: 1),
+                    _buildWindowsPlayerTile(WindowsExternalPlayer.customCommand),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ],
+
+            // Windows Custom Command configuration
+            if (Platform.isWindows && _defaultPlayerMode == 'external' && _selectedWindowsPlayer == WindowsExternalPlayer.customCommand) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.terminal_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Custom Command',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Define a custom command to launch videos',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _windowsCommandController,
+                        focusNode: _windowsCommandFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Command Template',
+                          hintText: 'vlc --fullscreen {url}',
+                          helperText: 'Use {url} for video URL, {title} for title',
+                          helperMaxLines: 2,
+                          errorText: _windowsCommandError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.code_rounded),
+                        ),
+                        maxLines: 1,
+                        onChanged: (_) {
+                          if (_windowsCommandError != null) {
+                            setState(() {
+                              _windowsCommandError = null;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _saveWindowsCustomCommand,
+                              icon: const Icon(Icons.save_rounded),
+                              label: const Text('Save'),
+                            ),
+                          ),
+                          if (_windowsCustomCommand != null && _windowsCustomCommand!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _clearWindowsCustomCommand,
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Examples',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'vlc --fullscreen {url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'mpv --title="{title}" {url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Windows external player info
+            if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Videos will open in the selected player. For MPC-HC and PotPlayer, the app checks common installation paths. Use Custom Command if the player is installed elsewhere.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
                           ),
