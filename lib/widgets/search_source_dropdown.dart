@@ -464,10 +464,35 @@ class _DropdownMenuState extends State<_DropdownMenu> {
     return KeyEventResult.ignored;
   }
 
+  /// Build a section header widget
+  Widget _buildSectionHeader(ThemeData theme, ColorScheme colorScheme, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 6),
+      child: Text(
+        label.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    // Find the index of first addon to show Stremio section header
+    int? firstAddonIndex;
+    for (int i = 0; i < widget.options.length; i++) {
+      if (widget.options[i].type == SearchSourceType.addon) {
+        firstAddonIndex = i;
+        break;
+      }
+    }
 
     // Use FocusScope to trap focus within the dropdown
     return FocusScope(
@@ -484,79 +509,96 @@ class _DropdownMenuState extends State<_DropdownMenu> {
             final option = widget.options[index];
             final isSelected = option == widget.selectedOption;
 
-            return Focus(
-              key: _itemKeys[index],
-              focusNode: _itemFocusNodes[index],
-              onFocusChange: (focused) {
-                setState(() {
-                  _focusedIndex = focused ? index : -1;
-                });
-                if (focused) {
-                  _scrollToItem(index);
-                }
-              },
-              onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
-              child: InkWell(
-                onTap: () => widget.onSelected(option),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: _focusedIndex == index
-                        ? colorScheme.primary.withOpacity(0.2)
-                        : isSelected
-                            ? colorScheme.primaryContainer.withOpacity(0.5)
+            // Check if this is the first addon to show Stremio section header
+            final showStremioHeader = firstAddonIndex != null && index == firstAddonIndex;
+            // Check if this is IPTV (first "browse separately" item)
+            final showBrowseSeparatelyHeader = option.type == SearchSourceType.iptv;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Stremio Addons section header
+                if (showStremioHeader)
+                  _buildSectionHeader(theme, colorScheme, 'Stremio Addons'),
+                // Extras section header (IPTV, Reddit - not included in "All" search)
+                if (showBrowseSeparatelyHeader)
+                  _buildSectionHeader(theme, colorScheme, 'Extras'),
+                // The actual option item
+                Focus(
+                  key: _itemKeys[index],
+                  focusNode: _itemFocusNodes[index],
+                  onFocusChange: (focused) {
+                    setState(() {
+                      _focusedIndex = focused ? index : -1;
+                    });
+                    if (focused) {
+                      _scrollToItem(index);
+                    }
+                  },
+                  onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
+                  child: InkWell(
+                    onTap: () => widget.onSelected(option),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _focusedIndex == index
+                            ? colorScheme.primary.withValues(alpha: 0.2)
+                            : isSelected
+                                ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                                : null,
+                        border: _focusedIndex == index
+                            ? Border.all(color: colorScheme.primary, width: 2)
                             : null,
-                    border: _focusedIndex == index
-                        ? Border.all(color: colorScheme.primary, width: 2)
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        option.icon,
-                        size: 20,
-                        color: isSelected
-                            ? colorScheme.primary
-                            : colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              option.label,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurface,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            if (option.type == SearchSourceType.addon &&
-                                option.addon != null)
-                              Text(
-                                option.addon!.supportsCatalogs
-                                    ? '${option.addon!.catalogs.length} catalog${option.addon!.catalogs.length != 1 ? 's' : ''}'
-                                    : 'Search only',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
+                      child: Row(
+                        children: [
+                          Icon(
+                            option.icon,
+                            size: 20,
+                            color: isSelected
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  option.label,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
+                                if (option.type == SearchSourceType.addon &&
+                                    option.addon != null)
+                                  Text(
+                                    option.addon!.supportsCatalogs
+                                        ? '${option.addon!.catalogs.length} catalog${option.addon!.catalogs.length != 1 ? 's' : ''}'
+                                        : 'Search only',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            Icon(
+                              Icons.check,
+                              size: 20,
+                              color: colorScheme.primary,
+                            ),
+                        ],
                       ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check,
-                          size: 20,
-                          color: colorScheme.primary,
-                        ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             );
           },
         ),
