@@ -764,9 +764,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           'Delete All Torrents',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: Text(
-          'Are you sure you want to delete all ${_torrents.length} torrents from Real Debrid? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
+        content: const Text(
+          'Are you sure you want to delete all torrents from Real Debrid? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey),
         ),
         actions: [
           TextButton(
@@ -790,7 +790,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _showDeleteAllProgressDialog() async {
     bool isCancelled = false;
     int completed = 0;
-    int total = _torrents.length;
+    int total = 0;
+    String phase = 'Fetching all torrents...';
     List<String> failedDeletes = [];
     StateSetter? setDialogState;
 
@@ -817,12 +818,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Deleting torrents... ($completed/$total)',
+                  total == 0 ? phase : 'Deleting torrents... ($completed/$total)',
                   style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
                 LinearProgressIndicator(
-                  value: total > 0 ? completed / total : 0,
+                  value: total > 0 ? completed / total : null,
                   backgroundColor: Colors.grey.withValues(alpha: 0.3),
                   valueColor: const AlwaysStoppedAnimation<Color>(
                     Color(0xFFEF4444),
@@ -853,10 +854,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       ),
     );
 
-    // Perform batch delete
+    // Fetch ALL torrents first (1000 per page for speed)
+    List<RDTorrent> allTorrents = [];
     try {
-      for (int i = 0; i < _torrents.length && !isCancelled; i++) {
-        final torrent = _torrents[i];
+      int page = 1;
+      bool hasMore = true;
+
+      while (hasMore && !isCancelled) {
+        final result = await DebridService.getTorrents(_apiKey!, page: page, limit: 1000);
+        final torrents = result['torrents'] as List<RDTorrent>;
+        allTorrents.addAll(torrents);
+        hasMore = result['hasMore'] as bool;
+        page++;
+
+        // Update phase text
+        if (setDialogState != null && !isCancelled) {
+          phase = 'Fetching torrents... (${allTorrents.length} found)';
+          setDialogState!(() {});
+        }
+      }
+
+      if (isCancelled) {
+        if (mounted) await _fetchTorrents(_apiKey!, reset: true);
+        return;
+      }
+
+      total = allTorrents.length;
+      if (setDialogState != null) setDialogState!(() {});
+
+      // Now delete all torrents
+      for (int i = 0; i < allTorrents.length && !isCancelled; i++) {
+        final torrent = allTorrents[i];
 
         try {
           await DebridService.deleteTorrent(_apiKey!, torrent.id);
@@ -868,7 +896,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           }
 
           // Small delay to prevent overwhelming the API
-          await Future.delayed(const Duration(milliseconds: 200));
+          await Future.delayed(const Duration(milliseconds: 150));
         } catch (e) {
           failedDeletes.add(torrent.filename);
           completed++;
@@ -893,14 +921,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           });
         }
 
-        // Refresh the list to load more items from next pages
+        // Refresh the list
         if (mounted) {
           await _fetchTorrents(_apiKey!, reset: true);
         }
 
         // Show result message
         if (failedDeletes.isEmpty) {
-          _showSuccess('All torrents deleted successfully!');
+          _showSuccess('All $total torrents deleted successfully!');
         } else {
           _showError(
             'Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.',
@@ -934,9 +962,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           'Delete All Downloads',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: Text(
-          'Are you sure you want to delete all ${_downloads.length} downloads from Real Debrid? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
+        content: const Text(
+          'Are you sure you want to delete all downloads from Real Debrid? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey),
         ),
         actions: [
           TextButton(
@@ -960,7 +988,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _showDeleteAllDownloadsProgressDialog() async {
     bool isCancelled = false;
     int completed = 0;
-    int total = _downloads.length;
+    int total = 0;
+    String phase = 'Fetching all downloads...';
     List<String> failedDeletes = [];
     StateSetter? setDialogState;
 
@@ -987,12 +1016,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Deleting downloads... ($completed/$total)',
+                  total == 0 ? phase : 'Deleting downloads... ($completed/$total)',
                   style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
                 LinearProgressIndicator(
-                  value: total > 0 ? completed / total : 0,
+                  value: total > 0 ? completed / total : null,
                   backgroundColor: Colors.grey.withValues(alpha: 0.3),
                   valueColor: const AlwaysStoppedAnimation<Color>(
                     Color(0xFFEF4444),
@@ -1023,10 +1052,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       ),
     );
 
-    // Perform batch delete
+    // Fetch ALL downloads first (1000 per page for speed)
+    List<DebridDownload> allDownloads = [];
     try {
-      for (int i = 0; i < _downloads.length && !isCancelled; i++) {
-        final download = _downloads[i];
+      int page = 1;
+      bool hasMore = true;
+
+      while (hasMore && !isCancelled) {
+        final result = await DebridService.getDownloads(_apiKey!, page: page, limit: 1000);
+        final downloads = result['downloads'] as List<DebridDownload>;
+        allDownloads.addAll(downloads);
+        hasMore = result['hasMore'] as bool;
+        page++;
+
+        // Update phase text
+        if (setDialogState != null && !isCancelled) {
+          phase = 'Fetching downloads... (${allDownloads.length} found)';
+          setDialogState!(() {});
+        }
+      }
+
+      if (isCancelled) {
+        if (mounted) await _fetchDownloads(_apiKey!, reset: true);
+        return;
+      }
+
+      total = allDownloads.length;
+      if (setDialogState != null) setDialogState!(() {});
+
+      // Now delete all downloads
+      for (int i = 0; i < allDownloads.length && !isCancelled; i++) {
+        final download = allDownloads[i];
 
         try {
           await DebridService.deleteDownload(_apiKey!, download.id);
@@ -1038,7 +1094,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           }
 
           // Small delay to prevent overwhelming the API
-          await Future.delayed(const Duration(milliseconds: 200));
+          await Future.delayed(const Duration(milliseconds: 150));
         } catch (e) {
           failedDeletes.add(download.filename);
           completed++;
@@ -1063,14 +1119,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           });
         }
 
-        // Refresh the list to load more items from next pages
+        // Refresh the list
         if (mounted) {
           await _fetchDownloads(_apiKey!, reset: true);
         }
 
         // Show result message
         if (failedDeletes.isEmpty) {
-          _showSuccess('All downloads deleted successfully!');
+          _showSuccess('All $total downloads deleted successfully!');
         } else {
           _showError(
             'Deleted ${completed - failedDeletes.length} downloads. ${failedDeletes.length} failed to delete.',
@@ -2611,6 +2667,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
+          if (_torrents.isNotEmpty)
+            Tooltip(
+              message: 'Delete all torrents',
+              child: IconButton(
+                onPressed: _handleDeleteAllTorrents,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                color: theme.colorScheme.error,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
           Tooltip(
             message: 'Add magnet link',
             child: IconButton(
@@ -2639,6 +2705,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
+          if (_downloads.isNotEmpty)
+            Tooltip(
+              message: 'Delete all downloads',
+              child: IconButton(
+                onPressed: _handleDeleteAllDownloads,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                color: theme.colorScheme.error,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
           Tooltip(
             message: 'Add file link',
             child: IconButton(
