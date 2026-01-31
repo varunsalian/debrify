@@ -217,6 +217,22 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   @override
   void didUpdateWidget(CatalogBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Handle filterAddon changes (user switched addon in dropdown)
+    if (widget.filterAddon != oldWidget.filterAddon) {
+      // Reset state and reload with new addon
+      setState(() {
+        _selectedAddon = null;
+        _selectedCatalog = null;
+        _selectedGenre = null;
+        _content = [];
+        _isSearchMode = false;
+        _lastSearchQuery = '';
+      });
+      _loadAddons();
+      return; // Skip search query handling since we're reloading everything
+    }
+
     // Handle search query changes
     final newQuery = widget.searchQuery?.trim() ?? '';
     final oldQuery = oldWidget.searchQuery?.trim() ?? '';
