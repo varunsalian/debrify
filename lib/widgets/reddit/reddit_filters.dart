@@ -774,18 +774,19 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
     final items = <Widget>[];
     int focusIndex = 0;
 
-    // All Subreddits option
+    // All Subreddits option - capture index before incrementing
+    final allSubredditsIndex = focusIndex;
     items.add(
       FocusTraversalOrder(
-        order: NumericFocusOrder(1.0 + focusIndex),
+        order: NumericFocusOrder(1.0 + allSubredditsIndex),
         child: _FocusableSubredditTile(
-          focusNode: focusIndex < _tileFocusNodes.length ? _tileFocusNodes[focusIndex] : null,
+          focusNode: allSubredditsIndex < _tileFocusNodes.length ? _tileFocusNodes[allSubredditsIndex] : null,
           label: 'All Subreddits',
           icon: Icons.public,
           isSelected: widget.currentSubreddit == null,
           onTap: () => _selectSubreddit(null),
           onKeyEvent: (node, event) => _handleTileKeyEvent(
-            node, event, focusIndex, () => _selectSubreddit(null),
+            node, event, allSubredditsIndex, () => _selectSubreddit(null),
           ),
         ),
       ),
@@ -887,6 +888,7 @@ class _FocusableSubredditTile extends StatefulWidget {
 
 class _FocusableSubredditTileState extends State<_FocusableSubredditTile> {
   bool _isFocused = false;
+  final GlobalKey _tileKey = GlobalKey();
 
   @override
   void initState() {
@@ -911,7 +913,23 @@ class _FocusableSubredditTileState extends State<_FocusableSubredditTile> {
 
   void _onFocusChange() {
     if (mounted) {
-      setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
+      final hasFocus = widget.focusNode?.hasFocus ?? false;
+      setState(() => _isFocused = hasFocus);
+
+      // Scroll into view when focused
+      if (hasFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = _tileKey.currentContext;
+          if (context != null) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
     }
   }
 
@@ -926,6 +944,7 @@ class _FocusableSubredditTileState extends State<_FocusableSubredditTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
+          key: _tileKey,
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(vertical: 2),
           decoration: BoxDecoration(
@@ -1354,6 +1373,7 @@ class _FocusablePickerTile extends StatefulWidget {
 
 class _FocusablePickerTileState extends State<_FocusablePickerTile> {
   bool _isFocused = false;
+  final GlobalKey _tileKey = GlobalKey();
 
   @override
   void initState() {
@@ -1378,7 +1398,23 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
 
   void _onFocusChange() {
     if (mounted) {
-      setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
+      final hasFocus = widget.focusNode?.hasFocus ?? false;
+      setState(() => _isFocused = hasFocus);
+
+      // Scroll into view when focused
+      if (hasFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = _tileKey.currentContext;
+          if (context != null) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
     }
   }
 
@@ -1392,6 +1428,7 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
+          key: _tileKey,
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           decoration: BoxDecoration(
