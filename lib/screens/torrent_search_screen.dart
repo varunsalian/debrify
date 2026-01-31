@@ -9400,10 +9400,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Widget _buildStreamTypeFilters(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
 
     // Check if we have any providers
     final hasDirectProviders = _directProviderCounts.isNotEmpty;
     final hasTorrentProviders = _torrentProviderCounts.isNotEmpty;
+
+    // Use compact mode on narrow screens or when both dropdowns are shown
+    final bool useCompact = screenWidth < 500 || (hasDirectProviders && hasTorrentProviders);
 
     if (!hasDirectProviders && !hasTorrentProviders) {
       return Text(
@@ -9415,6 +9419,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         // Direct streams dropdown (only show if there are direct providers)
         if (hasDirectProviders) ...[
@@ -9425,6 +9430,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             selectedProviders: _selectedDirectProviders,
             focusNode: _directDropdownFocusNode,
             isTelevision: _isTelevision,
+            compact: useCompact,
             friendlyNameResolver: _friendlyEngineName,
             onToggleProvider: _toggleDirectProvider,
             onToggleAll: _toggleAllDirectProviders,
@@ -9447,7 +9453,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               }
             },
           ),
-          if (hasTorrentProviders) const SizedBox(width: 8),
+          if (hasTorrentProviders) const SizedBox(width: 6),
         ],
         // Torrent streams dropdown (only show if there are torrent providers)
         if (hasTorrentProviders)
@@ -9458,6 +9464,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             selectedProviders: _selectedTorrentProviders,
             focusNode: _torrentDropdownFocusNode,
             isTelevision: _isTelevision,
+            compact: useCompact,
             friendlyNameResolver: _friendlyEngineName,
             onToggleProvider: _toggleTorrentProvider,
             onToggleAll: _toggleAllTorrentProviders,
@@ -13564,6 +13571,7 @@ class _StreamTypeDropdown extends StatefulWidget {
   final Set<String> selectedProviders;
   final FocusNode focusNode;
   final bool isTelevision;
+  final bool compact;
   final String Function(String) friendlyNameResolver;
   final ValueChanged<String> onToggleProvider;
   final VoidCallback onToggleAll;
@@ -13579,6 +13587,7 @@ class _StreamTypeDropdown extends StatefulWidget {
     required this.selectedProviders,
     required this.focusNode,
     required this.isTelevision,
+    this.compact = false,
     required this.friendlyNameResolver,
     required this.onToggleProvider,
     required this.onToggleAll,
@@ -13649,9 +13658,17 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
   OverlayEntry _createOverlayEntry() {
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
+    final buttonPosition = renderBox.localToGlobal(Offset.zero);
+    final screenWidth = MediaQuery.of(context).size.width;
     const double minDropdownWidth = 200;
     final dropdownWidth = size.width < minDropdownWidth ? minDropdownWidth : size.width;
-    final horizontalOffset = size.width - dropdownWidth;
+
+    // Calculate horizontal offset - align left edge by default
+    double horizontalOffset = 0;
+    // If dropdown would extend beyond right edge, shift it left
+    if (buttonPosition.dx + dropdownWidth > screenWidth - 8) {
+      horizontalOffset = screenWidth - 8 - buttonPosition.dx - dropdownWidth;
+    }
 
     return OverlayEntry(
       builder: (context) => Stack(
@@ -13760,10 +13777,13 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
           onTap: _toggleDropdown,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.compact ? 6 : 8,
+              vertical: widget.compact ? 4 : 6,
+            ),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: _isFocused
                     ? colorScheme.primary
@@ -13785,24 +13805,27 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
               children: [
                 Icon(
                   widget.icon,
-                  size: 16,
+                  size: widget.compact ? 12 : 14,
                   color: colorScheme.onSurface,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 3),
                 Text(
-                  '${widget.label} - $totalStreamCount ($selectedCount/$totalCount)',
+                  widget.compact
+                      ? '$totalStreamCount'
+                      : '$totalStreamCount ($selectedCount/$totalCount)',
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
+                    fontSize: widget.compact ? 10 : 11,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 AnimatedRotation(
                   turns: _isExpanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.keyboard_arrow_down,
-                    size: 18,
+                    size: widget.compact ? 14 : 16,
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
