@@ -3269,6 +3269,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentPlayer.setMediaItem(newMediaItem, currentPosition)
         currentPlayer.prepare()
 
+        // Wait for player to be ready, then seek again to force subtitle sync
+        currentPlayer.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    currentPlayer.seekTo(currentPosition)
+                    currentPlayer.removeListener(this)
+                }
+            }
+        })
+
         if (wasPlaying) {
             currentPlayer.play()
         }

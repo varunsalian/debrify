@@ -143,7 +143,7 @@ class StremioSubtitleService(private val context: Context) {
         private const val TAG = "StremioSubtitleService"
         private const val PREFS_NAME = "FlutterSharedPreferences"
         private const val ADDONS_KEY = "flutter.stremio_addons_v1"
-        private const val REQUEST_TIMEOUT_MS = 10000
+        private const val REQUEST_TIMEOUT_MS = 30000
     }
 
     /**
