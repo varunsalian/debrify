@@ -47,9 +47,11 @@ import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
+import '../widgets/home_iptv_favorites_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/home_focus_controller.dart';
+import '../models/iptv_playlist.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -652,6 +654,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       }
     }
+  }
+
+  /// Play an IPTV channel from home favorites
+  Future<void> _playIptvChannelFromHome(IptvChannel channel) async {
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: channel.url,
+        title: channel.name,
+        subtitle: channel.group ?? 'IPTV',
+        viewMode: PlaylistViewMode.sorted,
+      ),
+    );
   }
 
   Future<void> _showServiceSelectionDialog(Torrent torrent, int index) async {
@@ -10132,6 +10147,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 },
                               ),
                               const SizedBox(height: 16),
+                              // IPTV favorites section (horizontal scroll)
+                              HomeIptvFavoritesSection(
+                                focusController: _homeFocusController,
+                                isTelevision: _isTelevision,
+                                onRequestFocusAbove: () {
+                                  final prev = _homeFocusController.getPreviousSection(HomeSection.iptvFavorites);
+                                  if (prev != null) {
+                                    _homeFocusController.focusSection(prev);
+                                  }
+                                },
+                                onRequestFocusBelow: () {
+                                  final next = _homeFocusController.getNextSection(HomeSection.iptvFavorites);
+                                  if (next != null) {
+                                    _homeFocusController.focusSection(next);
+                                  }
+                                },
+                                onPlayChannel: _playIptvChannelFromHome,
+                              ),
+                              const SizedBox(height: 16),
                               // Debrify TV favorites section (horizontal scroll)
                               HomeDebrifyTvFavoritesSection(
                                 focusController: _homeFocusController,
@@ -10772,6 +10806,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               _homeFocusController.focusSection(next);
             }
           },
+        ),
+        const SizedBox(height: 16),
+        // IPTV favorites section (horizontal scroll)
+        HomeIptvFavoritesSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          onRequestFocusAbove: () {
+            final prev = _homeFocusController.getPreviousSection(HomeSection.iptvFavorites);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            }
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.iptvFavorites);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+          onPlayChannel: _playIptvChannelFromHome,
         ),
         const SizedBox(height: 16),
         // Debrify TV favorites section (horizontal scroll)

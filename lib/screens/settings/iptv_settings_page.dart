@@ -154,6 +154,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> {
     // Clear cache for this playlist
     IptvService.instance.clearCache(playlist.url);
 
+    // Remove favorites that belonged to this playlist
+    await StorageService.removeIptvFavoritesByPlaylistId(playlist.id);
+
     setState(() => _playlists = newPlaylists);
     _ensureFocusNodes();
     _showSnackBar('Removed "${playlist.name}"', isError: false);

@@ -47,6 +47,9 @@ class IptvResultsViewState extends State<IptvResultsView> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Favorites
+  Set<String> _favoriteUrls = {};
+
   // Focus nodes for DPAD
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
@@ -58,6 +61,34 @@ class IptvResultsViewState extends State<IptvResultsView> {
   void initState() {
     super.initState();
     _loadSettings();
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    final urls = await StorageService.getIptvFavoriteChannelUrls();
+    if (mounted) {
+      setState(() => _favoriteUrls = urls);
+    }
+  }
+
+  Future<void> _toggleFavorite(IptvChannel channel, bool isFavorited) async {
+    await StorageService.setIptvChannelFavorited(
+      channel.url,
+      isFavorited,
+      channelName: channel.name,
+      logoUrl: channel.logoUrl,
+      group: channel.group,
+      playlistId: _selectedPlaylist?.id,
+    );
+    if (mounted) {
+      setState(() {
+        if (isFavorited) {
+          _favoriteUrls.add(channel.url);
+        } else {
+          _favoriteUrls.remove(channel.url);
+        }
+      });
+    }
   }
 
   Future<void> _loadSettings({bool forceReload = false}) async {
@@ -376,10 +407,13 @@ class IptvResultsViewState extends State<IptvResultsView> {
         padding: const EdgeInsets.only(top: 8, bottom: 16),
         itemCount: _filteredChannels.length,
         itemBuilder: (context, index) {
+          final channel = _filteredChannels[index];
           return IptvChannelCard(
-            channel: _filteredChannels[index],
-            onTap: () => _playChannel(_filteredChannels[index]),
+            channel: channel,
+            onTap: () => _playChannel(channel),
             focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+            isFavorited: _favoriteUrls.contains(channel.url),
+            onFavoriteToggle: (isFavorited) => _toggleFavorite(channel, isFavorited),
           );
         },
       ),

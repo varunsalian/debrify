@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 enum HomeSection {
   sources,
   favorites,
+  iptvFavorites,
   tvFavorites,
   providers,
 }
@@ -21,6 +22,7 @@ class HomeFocusController extends ChangeNotifier {
   /// Last focused card index per section
   final Map<HomeSection, int> _lastFocusedIndex = {
     HomeSection.favorites: 0,
+    HomeSection.iptvFavorites: 0,
     HomeSection.tvFavorites: 0,
     HomeSection.providers: 0,
   };
@@ -29,6 +31,7 @@ class HomeFocusController extends ChangeNotifier {
   final Map<HomeSection, bool> _sectionHasItems = {
     HomeSection.sources: true, // Sources accordion is always present
     HomeSection.favorites: false,
+    HomeSection.iptvFavorites: false,
     HomeSection.tvFavorites: false,
     HomeSection.providers: false,
   };

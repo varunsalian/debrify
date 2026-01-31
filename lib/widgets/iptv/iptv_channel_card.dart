@@ -7,12 +7,16 @@ class IptvChannelCard extends StatefulWidget {
   final IptvChannel channel;
   final VoidCallback onTap;
   final FocusNode? focusNode;
+  final bool isFavorited;
+  final ValueChanged<bool>? onFavoriteToggle;
 
   const IptvChannelCard({
     super.key,
     required this.channel,
     required this.onTap,
     this.focusNode,
+    this.isFavorited = false,
+    this.onFavoriteToggle,
   });
 
   @override
@@ -22,6 +26,9 @@ class IptvChannelCard extends StatefulWidget {
 class _IptvChannelCardState extends State<IptvChannelCard> {
   late FocusNode _focusNode;
   bool _isFocused = false;
+
+  // 0 = play button selected, 1 = favorite button selected
+  int _selectedAction = 0;
 
   @override
   void initState() {
@@ -40,7 +47,13 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
   }
 
   void _onFocusChange() {
-    setState(() => _isFocused = _focusNode.hasFocus);
+    setState(() {
+      _isFocused = _focusNode.hasFocus;
+      // Reset to play button when losing focus
+      if (!_isFocused) {
+        _selectedAction = 0;
+      }
+    });
   }
 
   @override
@@ -48,15 +61,40 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final channel = widget.channel;
+    final hasFavoriteButton = widget.onFavoriteToggle != null;
 
     return Focus(
       focusNode: _focusNode,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
-          widget.onTap();
-          return KeyEventResult.handled;
+        if (event is KeyDownEvent) {
+          // Select/Enter - activate currently selected action
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            if (_selectedAction == 0) {
+              widget.onTap();
+            } else if (_selectedAction == 1 && widget.onFavoriteToggle != null) {
+              widget.onFavoriteToggle!(!widget.isFavorited);
+            }
+            return KeyEventResult.handled;
+          }
+
+          // Right arrow - move to favorite button (if available)
+          if (event.logicalKey == LogicalKeyboardKey.arrowRight && hasFavoriteButton) {
+            if (_selectedAction == 0) {
+              setState(() => _selectedAction = 1);
+              return KeyEventResult.handled;
+            }
+            // If already on favorite, let it propagate (might move to next card or do nothing)
+          }
+
+          // Left arrow - move to play button
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (_selectedAction == 1) {
+              setState(() => _selectedAction = 0);
+              return KeyEventResult.handled;
+            }
+            // If already on play, let it propagate
+          }
         }
         return KeyEventResult.ignored;
       },
@@ -75,7 +113,7 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
             boxShadow: _isFocused
                 ? [
                     BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.3),
+                      color: colorScheme.primary.withValues(alpha: 0.3),
                       blurRadius: 8,
                       spreadRadius: 1,
                     ),
@@ -140,11 +178,11 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
                           ),
                         ),
                       ),
-                    // Play icon overlay on focus
-                    if (_isFocused)
+                    // Play icon overlay on focus when play is selected
+                    if (_isFocused && _selectedAction == 0)
                       Positioned.fill(
                         child: Container(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           child: const Center(
                             child: Icon(
                               Icons.play_arrow,
@@ -205,15 +243,54 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
                 ),
               ),
 
-              // Play indicator
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Icon(
-                  Icons.play_circle_outline,
-                  color: _isFocused ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                  size: 28,
+              // Play button (first action - index 0)
+              GestureDetector(
+                onTap: widget.onTap,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    color: (_isFocused && _selectedAction == 0)
+                        ? colorScheme.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.play_circle_outline,
+                    color: (_isFocused && _selectedAction == 0)
+                        ? Colors.white
+                        : colorScheme.onSurfaceVariant,
+                    size: 28,
+                  ),
                 ),
               ),
+
+              // Favorite button (second action - index 1)
+              if (hasFavoriteButton)
+                GestureDetector(
+                  onTap: () => widget.onFavoriteToggle?.call(!widget.isFavorited),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: (_isFocused && _selectedAction == 1)
+                          ? colorScheme.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      widget.isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: widget.isFavorited
+                          ? const Color(0xFFFFD700)
+                          : (_isFocused && _selectedAction == 1)
+                              ? Colors.white
+                              : colorScheme.onSurfaceVariant,
+                      size: 24,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

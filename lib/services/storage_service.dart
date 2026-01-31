@@ -162,6 +162,8 @@ class StorageService {
       'debrify_tv_min_torrents_per_keyword';
   static const String _debrifyTvFavoriteChannelsKey =
       'debrify_tv_favorite_channels_v1';
+  static const String _iptvFavoriteChannelsKey =
+      'iptv_favorite_channels_v1';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -1768,6 +1770,110 @@ class StorageService {
       debugPrint('Error reading Debrify TV channel favorites: $e');
       return {};
     }
+  }
+
+  // ==========================================================================
+  // IPTV Channel Favorites
+  // ==========================================================================
+
+  /// Check if an IPTV channel is favorited (by URL)
+  static Future<bool> isIptvChannelFavorited(String channelUrl) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return false;
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.containsKey(channelUrl);
+    } catch (e) {
+      debugPrint('Error reading IPTV channel favorites: $e');
+      return false;
+    }
+  }
+
+  /// Set favorite status for an IPTV channel
+  static Future<void> setIptvChannelFavorited(
+    String channelUrl,
+    bool isFavorited, {
+    String? channelName,
+    String? logoUrl,
+    String? group,
+    String? playlistId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
+
+    Map<String, dynamic> favorites = {};
+    if (favoritesJson != null) {
+      try {
+        favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    if (isFavorited) {
+      // Store channel metadata along with the favorite status
+      favorites[channelUrl] = {
+        'name': channelName ?? '',
+        'logoUrl': logoUrl ?? '',
+        'group': group ?? '',
+        'playlistId': playlistId ?? '',
+        'addedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+    } else {
+      favorites.remove(channelUrl);
+    }
+
+    await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
+  }
+
+  /// Remove all IPTV favorites that belong to a specific playlist
+  static Future<void> removeIptvFavoritesByPlaylistId(String playlistId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return;
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+
+      // Remove entries that belong to the deleted playlist
+      favorites.removeWhere((url, metadata) {
+        if (metadata is Map<String, dynamic>) {
+          return metadata['playlistId'] == playlistId;
+        }
+        return false;
+      });
+
+      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
+    } catch (e) {
+      debugPrint('Error removing IPTV favorites for playlist $playlistId: $e');
+    }
+  }
+
+  /// Get all favorite IPTV channel URLs with metadata
+  static Future<Map<String, Map<String, dynamic>>> getIptvFavoriteChannels() async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return {};
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.map((key, value) => MapEntry(
+        key,
+        value is Map<String, dynamic> ? value : {'name': '', 'logoUrl': '', 'group': ''},
+      ));
+    } catch (e) {
+      debugPrint('Error reading IPTV channel favorites: $e');
+      return {};
+    }
+  }
+
+  /// Get all favorite IPTV channel URLs
+  static Future<Set<String>> getIptvFavoriteChannelUrls() async {
+    final favorites = await getIptvFavoriteChannels();
+    return favorites.keys.toSet();
   }
 
   /// Build progress map for playlist items
