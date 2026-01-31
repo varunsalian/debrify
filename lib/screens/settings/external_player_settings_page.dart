@@ -34,6 +34,15 @@ class _ExternalPlayerSettingsPageState
   bool _commandFocused = false;
   String? _commandError;
 
+  // iOS external player settings
+  iOSExternalPlayer _selectedIOSPlayer = iOSExternalPlayer.vlc;
+  Map<iOSExternalPlayer, bool> _installedIOSPlayers = {};
+  String? _iosCustomScheme;
+  final TextEditingController _iosSchemeController = TextEditingController();
+  final FocusNode _iosSchemeFocusNode = FocusNode();
+  bool _iosSchemeFocused = false;
+  String? _iosSchemeError;
+
   // DeoVR settings (Android)
   String _vrDefaultScreenType = 'dome';
   String _vrDefaultStereoMode = 'sbs';
@@ -79,6 +88,12 @@ class _ExternalPlayerSettingsPageState
       if (!mounted) return;
       setState(() {
         _commandFocused = _commandFocusNode.hasFocus;
+      });
+    });
+    _iosSchemeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _iosSchemeFocused = _iosSchemeFocusNode.hasFocus;
       });
     });
     _screenTypeFocusNode.addListener(() {
@@ -142,6 +157,8 @@ class _ExternalPlayerSettingsPageState
   void dispose() {
     _commandController.dispose();
     _commandFocusNode.dispose();
+    _iosSchemeController.dispose();
+    _iosSchemeFocusNode.dispose();
     _screenTypeFocusNode.dispose();
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
@@ -178,6 +195,18 @@ class _ExternalPlayerSettingsPageState
         customAppName = await StorageService.getCustomExternalPlayerName();
         customCommand = await StorageService.getCustomExternalPlayerCommand();
         _commandController.text = customCommand ?? '';
+      }
+
+      // Load iOS-specific settings
+      Map<iOSExternalPlayer, bool> installedIOS = {};
+      String iosPreferredKey = 'vlc';
+      String? iosCustomScheme;
+
+      if (Platform.isIOS) {
+        installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
+        iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
+        iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
+        _iosSchemeController.text = iosCustomScheme ?? '';
       }
 
       // Load DeoVR settings (Android)
@@ -219,6 +248,11 @@ class _ExternalPlayerSettingsPageState
         _customAppPath = customAppPath;
         _customAppName = customAppName;
         _customCommand = customCommand;
+        // iOS settings
+        _installedIOSPlayers = installedIOS;
+        _selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(iosPreferredKey);
+        _iosCustomScheme = iosCustomScheme;
+        // Other settings
         _vrDefaultScreenType = vrScreenType;
         _vrDefaultStereoMode = vrStereoMode;
         _vrAutoDetectFormat = vrAutoDetect;
@@ -392,6 +426,82 @@ class _ExternalPlayerSettingsPageState
     }
   }
 
+  // iOS external player settings methods
+  Future<void> _selectIOSPlayer(iOSExternalPlayer player) async {
+    try {
+      await StorageService.setPreferredIOSExternalPlayer(player.storageKey);
+      setState(() {
+        _selectedIOSPlayer = player;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveIOSCustomScheme() async {
+    final scheme = _iosSchemeController.text.trim();
+
+    final validation = validateCustomScheme(scheme);
+    if (!validation.isValid) {
+      setState(() {
+        _iosSchemeError = validation.errorMessage;
+      });
+      return;
+    }
+
+    try {
+      await StorageService.setIOSCustomSchemeTemplate(scheme);
+      await StorageService.setPreferredIOSExternalPlayer('custom_scheme');
+
+      setState(() {
+        _iosCustomScheme = scheme;
+        _iosSchemeError = null;
+        _selectedIOSPlayer = iOSExternalPlayer.customScheme;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Custom URL scheme saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save URL scheme: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearIOSCustomScheme() async {
+    try {
+      await StorageService.setIOSCustomSchemeTemplate(null);
+
+      if (_selectedIOSPlayer == iOSExternalPlayer.customScheme) {
+        await StorageService.setPreferredIOSExternalPlayer('vlc');
+        setState(() {
+          _selectedIOSPlayer = iOSExternalPlayer.vlc;
+        });
+      }
+
+      _iosSchemeController.clear();
+      setState(() {
+        _iosCustomScheme = null;
+        _iosSchemeError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to clear URL scheme: $e')),
+        );
+      }
+    }
+  }
+
   // DeoVR settings setters
   Future<void> _setVrDefaultScreenType(String screenType) async {
     setState(() => _vrDefaultScreenType = screenType);
@@ -536,6 +646,70 @@ class _ExternalPlayerSettingsPageState
           color: canSelect
               ? theme.colorScheme.onSurface
               : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildIOSPlayerTile(iOSExternalPlayer player) {
+    final theme = Theme.of(context);
+    final isInstalled = _installedIOSPlayers[player] ?? false;
+    final isCustom = player == iOSExternalPlayer.customScheme;
+
+    String subtitle;
+    Color? subtitleColor;
+
+    if (isCustom) {
+      if (_iosCustomScheme != null && _iosCustomScheme!.isNotEmpty) {
+        final displayScheme = _iosCustomScheme!.length > 40
+            ? '${_iosCustomScheme!.substring(0, 40)}...'
+            : _iosCustomScheme!;
+        subtitle = displayScheme;
+      } else {
+        subtitle = 'No URL scheme configured';
+        subtitleColor = theme.colorScheme.onSurfaceVariant;
+      }
+    } else {
+      subtitle = player.description;
+      if (isInstalled) {
+        subtitleColor = Colors.green;
+        subtitle = 'Likely installed • ${player.description}';
+      }
+    }
+
+    return RadioListTile<iOSExternalPlayer>(
+      value: player,
+      groupValue: _selectedIOSPlayer,
+      onChanged: (value) {
+        if (value != null) {
+          _selectIOSPlayer(value);
+        }
+      },
+      secondary: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          player.icon,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+      title: Text(
+        player.displayName,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.onSurface,
         ),
       ),
       subtitle: Text(
@@ -939,7 +1113,7 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid;
+    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS;
 
     if (!isSupportedPlatform) {
       return Scaffold(
@@ -1374,6 +1548,204 @@ class _ExternalPlayerSettingsPageState
                       Expanded(
                         child: Text(
                           'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // iOS-specific player selection
+            if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        'Preferred Player',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Select the app to open videos with. Make sure the app is installed from the App Store.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildIOSPlayerTile(iOSExternalPlayer.vlc),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.infuse),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.outplayer),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.nplayer),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.playerXtreme),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.vimu),
+                    const Divider(height: 1),
+                    _buildIOSPlayerTile(iOSExternalPlayer.customScheme),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ],
+
+            // iOS Custom URL Scheme configuration
+            if (Platform.isIOS && _defaultPlayerMode == 'external' && _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.code_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Custom URL Scheme',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Define a custom URL scheme to launch videos',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _iosSchemeController,
+                        focusNode: _iosSchemeFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'URL Scheme Template',
+                          hintText: 'myplayer://play?url={url}',
+                          helperText: 'Use {url} for the video URL',
+                          helperMaxLines: 2,
+                          errorText: _iosSchemeError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.link_rounded),
+                        ),
+                        maxLines: 1,
+                        onChanged: (_) {
+                          if (_iosSchemeError != null) {
+                            setState(() {
+                              _iosSchemeError = null;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _saveIOSCustomScheme,
+                              icon: const Icon(Icons.save_rounded),
+                              label: const Text('Save'),
+                            ),
+                          ),
+                          if (_iosCustomScheme != null && _iosCustomScheme!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _clearIOSCustomScheme,
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Examples',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'vlc://{url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'infuse://x-callback-url/play?url={url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'customapp://stream?video={url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // iOS external player info
+            if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
                           ),

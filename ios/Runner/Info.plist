@@ -72,5 +72,14 @@
 			</array>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>vlc</string>
+		<string>infuse</string>
+		<string>outplayer</string>
+		<string>nplayer</string>
+		<string>playerxtreme</string>
+		<string>vimu</string>
+	</array>
 </dict>
 </plist>

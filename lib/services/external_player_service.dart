@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/external_player.dart';
+import '../models/ios_external_player.dart';
 export '../models/external_player.dart';
+export '../models/ios_external_player.dart';
 import 'storage_service.dart';
 
 /// Result of launching an external player
@@ -425,5 +428,146 @@ class ExternalPlayerService {
       return ExternalPlayerLaunchResult.failed(
           'Failed to launch URL: $e');
     }
+  }
+
+  // ============================================================
+  // iOS External Player Support
+  // ============================================================
+
+  /// Check if an iOS player is likely installed by checking if we can open its URL scheme
+  static Future<bool> isIOSPlayerInstalled(iOSExternalPlayer player) async {
+    if (!Platform.isIOS) return false;
+    if (player == iOSExternalPlayer.customScheme) return true;
+
+    try {
+      final schemeUrl = Uri.parse(player.urlScheme);
+      return await canLaunchUrl(schemeUrl);
+    } catch (e) {
+      debugPrint('Error checking iOS player installation: $e');
+      return false;
+    }
+  }
+
+  /// Detect which iOS players are installed
+  static Future<Map<iOSExternalPlayer, bool>> detectInstalledIOSPlayers() async {
+    if (!Platform.isIOS) return {};
+
+    final results = <iOSExternalPlayer, bool>{};
+
+    for (final player in iOSExternalPlayer.values) {
+      if (player == iOSExternalPlayer.customScheme) {
+        results[player] = true; // Custom is always "available"
+        continue;
+      }
+      results[player] = await isIOSPlayerInstalled(player);
+    }
+
+    return results;
+  }
+
+  /// Launch video with preferred iOS player
+  static Future<iOSExternalPlayerLaunchResult> launchWithPreferredIOSPlayer(
+    String url, {
+    String? title,
+  }) async {
+    if (!Platform.isIOS) {
+      return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
+    }
+
+    // Get user's preferred iOS player
+    final preferredPlayerKey = await StorageService.getPreferredIOSExternalPlayer();
+    final preferredPlayer = iOSExternalPlayerExtension.fromStorageKey(preferredPlayerKey);
+
+    return await launchWithIOSPlayer(url, preferredPlayer, title: title);
+  }
+
+  /// Launch video with a specific iOS player
+  static Future<iOSExternalPlayerLaunchResult> launchWithIOSPlayer(
+    String url,
+    iOSExternalPlayer player, {
+    String? title,
+  }) async {
+    if (!Platform.isIOS) {
+      return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
+    }
+
+    try {
+      String playerUrl;
+
+      if (player == iOSExternalPlayer.customScheme) {
+        // Use custom URL scheme template
+        final customTemplate = await StorageService.getIOSCustomSchemeTemplate();
+        if (customTemplate == null || customTemplate.isEmpty) {
+          return iOSExternalPlayerLaunchResult.failed(
+            'Custom URL scheme not configured',
+          );
+        }
+
+        final validation = validateCustomScheme(customTemplate);
+        if (!validation.isValid) {
+          return iOSExternalPlayerLaunchResult.failed(
+            validation.errorMessage ?? 'Invalid custom URL scheme',
+          );
+        }
+
+        playerUrl = buildCustomSchemeLaunchUrl(customTemplate, url);
+      } else {
+        playerUrl = player.buildLaunchUrl(url);
+      }
+
+      debugPrint('iOS External Player: Launching with URL: $playerUrl');
+
+      final uri = Uri.parse(playerUrl);
+
+      // For custom schemes, skip canLaunchUrl check (it would fail since
+      // custom schemes aren't in LSApplicationQueriesSchemes)
+      // Just try to launch and let iOS handle if app isn't installed
+      if (player == iOSExternalPlayer.customScheme) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return iOSExternalPlayerLaunchResult.succeeded(player);
+      }
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return iOSExternalPlayerLaunchResult.succeeded(player);
+      } else {
+        // Player not installed
+        return iOSExternalPlayerLaunchResult.failed(
+          '${player.displayName} is not installed. Please install it from the App Store.',
+        );
+      }
+    } catch (e) {
+      debugPrint('iOS External Player: Launch failed: $e');
+      return iOSExternalPlayerLaunchResult.failed(
+        'Failed to open ${player.displayName}: $e',
+      );
+    }
+  }
+}
+
+/// Result of launching an iOS external player
+class iOSExternalPlayerLaunchResult {
+  final bool success;
+  final iOSExternalPlayer? usedPlayer;
+  final String? errorMessage;
+
+  const iOSExternalPlayerLaunchResult({
+    required this.success,
+    this.usedPlayer,
+    this.errorMessage,
+  });
+
+  factory iOSExternalPlayerLaunchResult.succeeded(iOSExternalPlayer player) {
+    return iOSExternalPlayerLaunchResult(
+      success: true,
+      usedPlayer: player,
+    );
+  }
+
+  factory iOSExternalPlayerLaunchResult.failed(String message) {
+    return iOSExternalPlayerLaunchResult(
+      success: false,
+      errorMessage: message,
+    );
   }
 }

@@ -82,6 +82,9 @@ class StorageService {
   static const String _externalPlayerCustomPathKey = 'external_player_custom_path';
   static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
   static const String _externalPlayerCustomCommandKey = 'external_player_custom_command';
+  // iOS External Player settings
+  static const String _iosExternalPlayerPreferredKey = 'ios_external_player_preferred';
+  static const String _iosCustomSchemeTemplateKey = 'ios_custom_scheme_template';
 
   // Debrify Player default settings
   static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
@@ -3113,6 +3116,39 @@ class StorageService {
       await prefs.remove(_externalPlayerCustomCommandKey);
     } else {
       await prefs.setString(_externalPlayerCustomCommandKey, command);
+    }
+  }
+
+  // ============================================================
+  // iOS External Player Settings
+  // ============================================================
+
+  /// Get preferred iOS external player key
+  static Future<String> getPreferredIOSExternalPlayer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_iosExternalPlayerPreferredKey) ?? 'vlc';
+  }
+
+  /// Set preferred iOS external player key
+  static Future<void> setPreferredIOSExternalPlayer(String playerKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_iosExternalPlayerPreferredKey, playerKey);
+  }
+
+  /// Get iOS custom URL scheme template
+  /// Should contain {url} placeholder, e.g., "myplayer://play?url={url}"
+  static Future<String?> getIOSCustomSchemeTemplate() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_iosCustomSchemeTemplateKey);
+  }
+
+  /// Set iOS custom URL scheme template
+  static Future<void> setIOSCustomSchemeTemplate(String? template) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (template == null || template.isEmpty) {
+      await prefs.remove(_iosCustomSchemeTemplateKey);
+    } else {
+      await prefs.setString(_iosCustomSchemeTemplateKey, template);
     }
   }
 

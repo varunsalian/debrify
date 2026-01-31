@@ -416,6 +416,36 @@ class VideoPlayerLauncher {
         debugPrint('Failed to launch external player on Android: $e');
         return false;
       }
+    } else if (Platform.isIOS) {
+      // iOS: Use URL scheme to launch preferred external player
+      final result = await ExternalPlayerService.launchWithPreferredIOSPlayer(
+        url,
+        title: title,
+      );
+
+      if (result.success) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return true;
+      } else {
+        // Show error but fall back to in-app player
+        debugPrint('iOS External player failed: ${result.errorMessage}');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return false;
+      }
     }
 
     // Other platforms: not supported, use in-app player
