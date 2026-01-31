@@ -281,8 +281,81 @@ class VideoPlayerLauncher {
     BuildContext context,
     VideoPlayerLaunchArgs args,
   ) async {
-    final url = args.videoUrl;
-    final title = args.title;
+    // Determine the correct URL to play (considering resume state for series)
+    String url = args.videoUrl;
+    String title = args.title;
+
+    final playlist = args.playlist;
+    if (playlist != null && playlist.length > 1) {
+      try {
+        // Build SeriesPlaylist to check if it's a series
+        final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
+          playlist,
+          collectionTitle: args.title,
+          forceSeries: args.viewMode?.toForceSeries() ?? (args.contentType == 'series'),
+        );
+
+        int startIndex = 0;
+        if (seriesPlaylist.isSeries && seriesPlaylist.allEpisodes.isNotEmpty) {
+          // Get last played episode for resume
+          final lastEpisode = await StorageService.getLastPlayedEpisode(
+            seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+          );
+
+          if (lastEpisode != null) {
+            final lastSeason = lastEpisode['season'] as int;
+            final lastEpisodeNum = lastEpisode['episode'] as int;
+            final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
+              lastSeason,
+              lastEpisodeNum,
+            );
+            if (originalIndex != -1) {
+              startIndex = originalIndex;
+
+              // Check if this episode is finished - if so, advance to next
+              final isFinished = await StorageService.isEpisodeFinished(
+                seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+                season: lastSeason,
+                episode: lastEpisodeNum,
+              );
+
+              if (isFinished) {
+                // Find next episode in allEpisodes (already sorted by season/episode)
+                final currentEpisodeIdx = seriesPlaylist.allEpisodes.indexWhere(
+                  (ep) => ep.originalIndex == originalIndex,
+                );
+                if (currentEpisodeIdx != -1 && currentEpisodeIdx + 1 < seriesPlaylist.allEpisodes.length) {
+                  final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIdx + 1];
+                  startIndex = nextEpisode.originalIndex;
+                  debugPrint('ExternalPlayer: E${lastEpisodeNum} finished, advancing to next at index $startIndex');
+                }
+              } else {
+                debugPrint('ExternalPlayer: Resuming series at index $startIndex');
+              }
+            }
+          } else {
+            // First time - start at first episode
+            final firstIndex = seriesPlaylist.getFirstEpisodeOriginalIndex();
+            if (firstIndex != -1) {
+              startIndex = firstIndex;
+            }
+          }
+        }
+
+        // Resolve the URL for the target entry
+        if (startIndex >= 0 && startIndex < playlist.length) {
+          final targetEntry = playlist[startIndex];
+          final resolvedUrl = await _resolveEntryUrl(targetEntry, args);
+          if (resolvedUrl.isNotEmpty) {
+            url = resolvedUrl;
+            title = targetEntry.title;
+            debugPrint('ExternalPlayer: Using entry $startIndex - ${targetEntry.title}');
+          }
+        }
+      } catch (e) {
+        debugPrint('ExternalPlayer: Failed to determine start index, using default: $e');
+      }
+    }
 
     if (Platform.isMacOS) {
       // macOS: Use configured external player
