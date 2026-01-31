@@ -689,8 +689,12 @@ class VideoPlayerLauncher {
 
         debugPrint('TVMazeAsync: Episodes with info=$episodesWithInfo, without info=$episodesWithoutInfo');
 
-        if (metadataUpdates.isEmpty) {
-          debugPrint('TVMazeAsync: SKIPPED push - metadataUpdates is empty');
+        // Get discovered IMDB ID from TVMaze (may have been extracted from externals)
+        final discoveredImdbId = seriesPlaylist.imdbId;
+        debugPrint('TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId');
+
+        if (metadataUpdates.isEmpty && discoveredImdbId == null) {
+          debugPrint('TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID');
           return;
         }
 
@@ -703,12 +707,21 @@ class VideoPlayerLauncher {
 
         // Store pending updates for fallback (in case broadcast arrives before receiver is registered)
         // AND push directly to native player
-        debugPrint('TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback');
-        AndroidTvPlayerBridge.storePendingMetadataUpdates(metadataUpdates, sessionId: sessionId);
+        debugPrint('TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback (imdbId=$discoveredImdbId)');
+        AndroidTvPlayerBridge.storePendingMetadataUpdates(
+          metadataUpdates,
+          sessionId: sessionId,
+          imdbId: discoveredImdbId,
+        );
 
         // Push metadata updates directly to native player (don't wait for request)
-        debugPrint('TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player');
-        await AndroidTvPlayerBridge.updateEpisodeMetadata(metadataUpdates, sessionId: sessionId);
+        // Include discovered IMDB ID for Stremio subtitle fetching
+        debugPrint('TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player (imdbId=$discoveredImdbId)');
+        await AndroidTvPlayerBridge.updateEpisodeMetadata(
+          metadataUpdates,
+          sessionId: sessionId,
+          imdbId: discoveredImdbId,
+        );
         debugPrint('TVMazeAsync: Metadata push complete');
       } catch (e, stack) {
         debugPrint('TVMazeAsync: ERROR - $e');

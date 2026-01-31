@@ -341,13 +341,15 @@ class MainActivity : FlutterActivity() {
     ) {
         android.util.Log.d("TVMazeUpdate", "MainActivity: handleUpdateEpisodeMetadata CALLED")
         @Suppress("UNCHECKED_CAST")
-        val updates = args["updates"] as? List<Map<String, Any?>>
-        if (updates.isNullOrEmpty()) {
-            android.util.Log.e("TVMazeUpdate", "MainActivity: updates is null or empty")
-            result.error("bad_args", "updates is required", null)
+        val updates = args["updates"] as? List<Map<String, Any?>> ?: emptyList()
+        val imdbId = args["imdbId"] as? String
+
+        if (updates.isEmpty() && imdbId.isNullOrEmpty()) {
+            android.util.Log.e("TVMazeUpdate", "MainActivity: updates is empty and no imdbId")
+            result.error("bad_args", "updates or imdbId is required", null)
             return
         }
-        android.util.Log.d("TVMazeUpdate", "MainActivity: received ${updates.size} updates")
+        android.util.Log.d("TVMazeUpdate", "MainActivity: received ${updates.size} updates, imdbId=$imdbId")
 
         try {
             // Broadcast intent to the active player activity
@@ -356,9 +358,14 @@ class MainActivity : FlutterActivity() {
                 val updatesJson = listToJson(updates).toString()
                 android.util.Log.d("TVMazeUpdate", "MainActivity: updatesJson length=${updatesJson.length}")
                 putExtra("metadataUpdates", updatesJson)
+                // Include discovered IMDB ID for Stremio subtitle fetching
+                if (!imdbId.isNullOrEmpty()) {
+                    putExtra("imdbId", imdbId)
+                    android.util.Log.d("TVMazeUpdate", "MainActivity: Including imdbId=$imdbId")
+                }
             }
             sendBroadcast(intent)
-            android.util.Log.d("TVMazeUpdate", "MainActivity: Broadcast SENT with ${updates.size} updates")
+            android.util.Log.d("TVMazeUpdate", "MainActivity: Broadcast SENT with ${updates.size} updates, imdbId=$imdbId")
             result.success(true)
         } catch (e: Exception) {
             android.util.Log.e("TVMazeUpdate", "MainActivity: Failed to send metadata update: ${e.message}", e)

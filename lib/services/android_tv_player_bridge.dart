@@ -37,6 +37,8 @@ class AndroidTvPlayerBridge {
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
+  // Store pending IMDB ID discovered from TVMaze (for Stremio subtitles)
+  static String? _pendingImdbId;
 
   // Session ID to track which launch the metadata belongs to
   // Prevents stale metadata from previous sessions being sent to new sessions
@@ -175,12 +177,17 @@ class AndroidTvPlayerBridge {
         case 'requestEpisodeMetadata':
           debugPrint('TVMazeUpdate: requestEpisodeMetadata received from native');
           final pending = _pendingMetadataUpdates;
-          if (pending != null && pending.isNotEmpty) {
-            debugPrint('TVMazeUpdate: Sending ${pending.length} pending metadata updates');
-            // Send the pending updates via broadcast
-            await updateEpisodeMetadata(pending);
+          final pendingImdb = _pendingImdbId;
+          if ((pending != null && pending.isNotEmpty) || pendingImdb != null) {
+            debugPrint('TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb');
+            // Send the pending updates via broadcast (including IMDB ID for subtitles)
+            await updateEpisodeMetadata(
+              pending ?? [],
+              imdbId: pendingImdb,
+            );
             // Clear pending updates after sending
             _pendingMetadataUpdates = null;
+            _pendingImdbId = null;
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
@@ -389,6 +396,7 @@ class AndroidTvPlayerBridge {
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
+    _pendingImdbId = null;
 
     try {
       final bool? launched = await _channel.invokeMethod<bool>(
@@ -414,17 +422,20 @@ class AndroidTvPlayerBridge {
 
   /// Store pending metadata updates to be sent when the activity requests them
   /// The sessionId parameter ensures updates from stale sessions are discarded
+  /// The imdbId parameter stores discovered IMDB ID for Stremio subtitle fetching
   static void storePendingMetadataUpdates(
     List<Map<String, dynamic>> updates, {
     String? sessionId,
+    String? imdbId,
   }) {
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
       debugPrint('TVMazeUpdate: Discarding ${updates.length} updates - stale session (got: $sessionId, current: $_currentSessionId)');
       return;
     }
-    debugPrint('TVMazeUpdate: Storing ${updates.length} pending metadata updates');
+    debugPrint('TVMazeUpdate: Storing ${updates.length} pending metadata updates, imdbId=$imdbId');
     _pendingMetadataUpdates = updates;
+    _pendingImdbId = imdbId;
   }
 
   /// Set the current session ID for metadata tracking
@@ -445,14 +456,16 @@ class AndroidTvPlayerBridge {
   /// Push episode metadata updates to native player (for async TVMaze loading)
   /// Each update contains: originalIndex, title, description, artwork, rating
   /// If sessionId is provided, updates will be discarded if it doesn't match current session
+  /// If imdbId is provided, native player will use it to fetch Stremio subtitles
   static Future<bool> updateEpisodeMetadata(
     List<Map<String, dynamic>> metadataUpdates, {
     String? sessionId,
+    String? imdbId,
   }) async {
     if (!Platform.isAndroid) {
       return false;
     }
-    if (metadataUpdates.isEmpty) {
+    if (metadataUpdates.isEmpty && imdbId == null) {
       return false;
     }
 
@@ -463,11 +476,12 @@ class AndroidTvPlayerBridge {
     }
 
     try {
-      debugPrint('AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native');
+      debugPrint('AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native (imdbId=$imdbId)');
       final bool? success = await _channel.invokeMethod<bool>(
         'updateEpisodeMetadata',
         {
           'updates': metadataUpdates,
+          if (imdbId != null) 'imdbId': imdbId,
         },
       );
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');

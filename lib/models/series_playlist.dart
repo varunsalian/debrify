@@ -670,6 +670,8 @@ class SeriesPlaylist {
         showInfo = await _getShowById(overrideShowId);
         if (showInfo != null) {
           debugPrint('TVMaze: Loaded show info using saved mapping');
+          // Extract IMDB ID from externals for subtitle fetching
+          _extractImdbFromExternals(showInfo);
         }
       } else if (imdbId != null && imdbId.startsWith('tt')) {
         // Use IMDB ID for direct lookup (most accurate)
@@ -681,6 +683,8 @@ class SeriesPlaylist {
             overrideShowId = showInfo['id'] as int;
             debugPrint('TVMaze: Extracted show ID $overrideShowId from IMDB lookup');
           }
+          // Extract IMDB ID from externals (in case it differs or wasn't passed)
+          _extractImdbFromExternals(showInfo);
         } else {
           // Fallback to title search if IMDB lookup fails
           debugPrint('TVMaze: IMDB lookup failed, falling back to title search');
@@ -691,6 +695,8 @@ class SeriesPlaylist {
               overrideShowId = showInfo['id'] as int;
               debugPrint('TVMaze: Extracted show ID $overrideShowId from title fallback');
             }
+            // Extract IMDB ID from externals for subtitle fetching
+            _extractImdbFromExternals(showInfo);
           }
         }
       } else if (validSearchTitle.isNotEmpty) {
@@ -701,6 +707,8 @@ class SeriesPlaylist {
           overrideShowId = showInfo['id'] as int;
           debugPrint('TVMaze: Extracted show ID $overrideShowId from title search');
         }
+        // Extract IMDB ID from externals for subtitle fetching
+        _extractImdbFromExternals(showInfo);
       }
       // Found series info (no log needed, success assumed)
     } catch (e) {
@@ -988,6 +996,26 @@ class SeriesPlaylist {
     } catch (e) {
       debugPrint('Error getting show by ID: $e');
       return null;
+    }
+  }
+
+  /// Extract IMDB ID from TVMaze externals object and store it
+  /// This enables Stremio subtitle fetching for content discovered via title search
+  void _extractImdbFromExternals(Map<String, dynamic>? showInfo) {
+    if (showInfo == null) return;
+
+    // TVMaze returns externals object with imdb, thetvdb, tvrage IDs
+    // Use safe casting to avoid crashes on malformed API responses
+    final externals = showInfo['externals'];
+    if (externals is Map<String, dynamic>) {
+      final externalImdbId = externals['imdb'];
+      if (externalImdbId is String && externalImdbId.startsWith('tt')) {
+        // Only update if we don't already have an IMDB ID
+        if (imdbId == null || imdbId!.isEmpty) {
+          imdbId = externalImdbId;
+          debugPrint('TVMaze: Extracted IMDB ID "$externalImdbId" from externals');
+        }
+      }
     }
   }
 

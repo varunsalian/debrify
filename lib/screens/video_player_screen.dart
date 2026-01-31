@@ -3376,8 +3376,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final season = seriesInfo.season ?? widget.contentSeason;
     final episode = seriesInfo.episode ?? widget.contentEpisode;
 
-    debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=${widget.contentImdbId}, '
-        'contentType=${widget.contentType}, '
+    // Use discovered IMDB ID from series playlist (via TVMaze) if available,
+    // fall back to widget's contentImdbId (from Stremio catalog)
+    final effectiveImdbId = _seriesPlaylist?.imdbId ?? widget.contentImdbId;
+
+    // Use series playlist to determine content type if not provided
+    final effectiveContentType = widget.contentType ??
+        (_seriesPlaylist?.isSeries == true ? 'series' : null);
+
+    debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
+        'contentType=$effectiveContentType, '
         'season=$season, episode=$episode (parsed from: $currentTitle)');
     await TracksSheet.show(
       context,
@@ -3386,8 +3394,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _persistTrackChoice(audioId, subtitleId);
       },
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
-      contentImdbId: widget.contentImdbId,
-      contentType: widget.contentType,
+      contentImdbId: effectiveImdbId,
+      contentType: effectiveContentType,
       contentSeason: season,
       contentEpisode: episode,
     );

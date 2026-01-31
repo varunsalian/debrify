@@ -336,8 +336,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun setupMetadataReceiver() {
         metadataUpdateReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                val updatesJson = intent?.getStringExtra("metadataUpdates") ?: return
-                handleMetadataUpdate(updatesJson)
+                val updatesJson = intent?.getStringExtra("metadataUpdates")
+                val imdbId = intent?.getStringExtra("imdbId")
+                handleMetadataUpdate(updatesJson, imdbId)
             }
         }
 
@@ -353,18 +354,41 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         requestMetadataFromFlutter()
     }
 
-    private fun handleMetadataUpdate(updatesJson: String) {
+    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?) {
         android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
-        android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson.length}")
+        android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
+
+        val model = payload
+        if (model == null) {
+            android.util.Log.e("TVMazeUpdate", "payload is NULL - cannot update")
+            return
+        }
+
+        // Handle IMDB ID update for Stremio subtitles
+        if (!imdbId.isNullOrEmpty() && imdbId.startsWith("tt")) {
+            val previousImdbId = model.imdbId
+            if (previousImdbId.isNullOrEmpty()) {
+                android.util.Log.d("TVMazeUpdate", "Discovered IMDB ID from TVMaze: $imdbId (was: $previousImdbId)")
+                // Update payload with discovered IMDB ID
+                model.imdbId = imdbId
+                // Fetch Stremio subtitles now that we have IMDB ID
+                val currentItem = model.items.getOrNull(currentIndex)
+                if (currentItem != null) {
+                    android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")
+                    fetchStremioSubtitles(currentItem)
+                }
+            }
+        }
+
+        // Handle episode metadata updates
+        if (updatesJson.isNullOrEmpty()) {
+            android.util.Log.d("TVMazeUpdate", "No episode metadata updates to process")
+            return
+        }
+
         try {
             val updatesArray = JSONArray(updatesJson)
             android.util.Log.d("TVMazeUpdate", "Parsed ${updatesArray.length()} updates")
-
-            val model = payload
-            if (model == null) {
-                android.util.Log.e("TVMazeUpdate", "payload is NULL - cannot update")
-                return
-            }
             android.util.Log.d("TVMazeUpdate", "model.items.size=${model.items.size}")
 
             var anyUpdated = false
@@ -3563,7 +3587,7 @@ private data class PlaybackPayload(
     val nextEpisodeMap: Map<Int, Int> = emptyMap(),
     val prevEpisodeMap: Map<Int, Int> = emptyMap(),
     val collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
-    val imdbId: String? = null // IMDB ID for fetching external subtitles from Stremio addons
+    var imdbId: String? = null // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
 )
 
 private data class PlaybackItem(
