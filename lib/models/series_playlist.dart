@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
+import '../utils/movie_parser.dart';
 import '../screens/video_player_screen.dart';
 import '../services/episode_info_service.dart';
 import '../services/tvmaze_service.dart';
+import '../services/movie_metadata_service.dart';
 
 /// Represents a group of duplicate episodes
 class DuplicateGroup {
@@ -203,10 +205,17 @@ class SeriesPlaylist {
   final bool isSeries;
 
   /// IMDB ID passed from catalog (for SeriesBrowser to use if tvmazeShowId not ready)
+  /// For series: shared across all episodes
+  /// For movies: may be overridden by per-item lookup
   String? imdbId;
 
   /// TVMaze show ID discovered during fetchEpisodeInfo (for SeriesBrowser reuse)
   int? tvmazeShowId;
+
+  /// Per-item IMDB IDs for movie collections
+  /// Key: index in allEpisodes, Value: IMDB ID
+  /// Used when each item in a collection is a different movie
+  final Map<int, String> _movieImdbIds = {};
 
   SeriesPlaylist({
     this.seriesTitle,
@@ -216,6 +225,18 @@ class SeriesPlaylist {
     this.imdbId,
     this.tvmazeShowId,
   });
+
+  /// Get IMDB ID for a specific item index
+  /// For series: returns the shared imdbId (all episodes share same show ID)
+  /// For movies: returns per-item ID if available, otherwise shared imdbId
+  String? getImdbIdForIndex(int index) {
+    if (isSeries) {
+      // Series share the same IMDB ID across all episodes
+      return imdbId;
+    }
+    // For movies, prefer per-item ID, fall back to shared
+    return _movieImdbIds[index] ?? imdbId;
+  }
 
   int get totalEpisodes => allEpisodes.length;
   int get seasonCount => seasons.length;
@@ -995,6 +1016,86 @@ class SeriesPlaylist {
       return await EpisodeInfoService.getShowById(showId);
     } catch (e) {
       debugPrint('Error getting show by ID: $e');
+      return null;
+    }
+  }
+
+  /// Fetch movie metadata from Cinemeta to get IMDB ID for the first item
+  ///
+  /// This is a convenience method that calls [fetchMovieMetadataForIndex] with index 0.
+  /// For movie collections, prefer using [fetchMovieMetadataForIndex] with the current index.
+  Future<void> fetchMovieMetadata() async {
+    await fetchMovieMetadataForIndex(0);
+  }
+
+  /// Fetch movie metadata from Cinemeta to get IMDB ID for a specific item
+  ///
+  /// This is called for non-series content (isSeries == false) when:
+  /// - The filename has a year pattern (e.g., "Inception.2010.1080p.mkv")
+  /// - We don't already have an IMDB ID for this item
+  ///
+  /// The discovered IMDB ID is stored per-item in [_movieImdbIds] for subtitle fetching.
+  /// Use [getImdbIdForIndex] to retrieve the IMDB ID for a specific item.
+  Future<String?> fetchMovieMetadataForIndex(int index) async {
+    // Skip if this is a series
+    if (isSeries) {
+      debugPrint('MovieMetadata: Skipping - content is a series');
+      return imdbId;
+    }
+
+    // Check if we already have IMDB ID for this index
+    if (_movieImdbIds.containsKey(index)) {
+      final cachedId = _movieImdbIds[index];
+      debugPrint('MovieMetadata: Using cached IMDB ID for index $index: $cachedId');
+      return cachedId;
+    }
+
+    // Validate index
+    if (index < 0 || index >= allEpisodes.length) {
+      debugPrint('MovieMetadata: Invalid index $index (total: ${allEpisodes.length})');
+      return null;
+    }
+
+    final episode = allEpisodes[index];
+    final filename = episode.title;
+    debugPrint('MovieMetadata: Checking filename at index $index: "$filename"');
+
+    // Parse the filename for movie info
+    final movieInfo = MovieParser.parseFilename(filename);
+
+    // Only proceed if filename has year pattern
+    if (!movieInfo.hasYear) {
+      debugPrint('MovieMetadata: No year pattern found at index $index, skipping lookup');
+      return null;
+    }
+
+    if (movieInfo.title == null || movieInfo.title!.isEmpty) {
+      debugPrint('MovieMetadata: Could not extract title from filename at index $index');
+      return null;
+    }
+
+    debugPrint('MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year} (index $index)');
+
+    // Look up movie in Cinemeta
+    try {
+      final metadata = await MovieMetadataService.lookupMovie(
+        movieInfo.title!,
+        movieInfo.year,
+      );
+
+      if (metadata != null) {
+        // Store per-item IMDB ID
+        _movieImdbIds[index] = metadata.imdbId;
+        // Also set shared imdbId for backward compatibility (first successful lookup)
+        imdbId ??= metadata.imdbId;
+        debugPrint('MovieMetadata: Found IMDB ID "${metadata.imdbId}" for "${metadata.title}" (index $index)');
+        return metadata.imdbId;
+      } else {
+        debugPrint('MovieMetadata: No match found in Cinemeta for index $index');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('MovieMetadata: Error during lookup for index $index: $e');
       return null;
     }
   }

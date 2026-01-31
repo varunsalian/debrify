@@ -12,7 +12,9 @@ import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
+import '../utils/movie_parser.dart';
 import '../services/episode_info_service.dart';
+import '../services/movie_metadata_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -157,6 +159,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
+
+  // Cached IMDB ID for single-file movie playback (when no playlist exists)
+  String? _singleFileImdbId;
+  bool _singleFileImdbFetched = false;
 
   // PikPak cold storage retry logic
   bool _isPikPakRetrying = false;
@@ -1501,6 +1507,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final entry = widget.playlist![index];
     _currentIndex = index;
 
+    // For movie collections, prefetch movie metadata for the new index
+    // This runs in background so subtitles are ready when user opens TracksSheet
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
+      seriesPlaylist.fetchMovieMetadataForIndex(index).catchError((e) {
+        // Silently ignore errors - metadata is optional
+        return null;
+      });
+    }
+
     print('PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}');
 
     // Resolve the actual streaming URL if needed
@@ -2068,6 +2084,76 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           .catchError((error) {
             // Silently handle errors - this is just preloading
           });
+    } else if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
+      // For non-series content (movie collections), fetch movie metadata for current index
+      // This enables subtitles for movies from Debrid/Torbox/PikPak
+      seriesPlaylist
+          .fetchMovieMetadataForIndex(_currentIndex)
+          .then((imdbId) {
+            // Trigger UI update if IMDB ID was discovered
+            if (mounted && imdbId != null) {
+              setState(() {});
+            }
+          })
+          .catchError((error) {
+            // Silently handle errors - this is just preloading
+          });
+    } else if (seriesPlaylist == null && widget.contentImdbId == null) {
+      // Single-file playback (no playlist) - try to fetch movie metadata from title
+      _fetchSingleFileMovieMetadata();
+    }
+  }
+
+  /// Fetch movie metadata for single-file playback (when no playlist exists)
+  Future<void> _fetchSingleFileMovieMetadata() async {
+    // Skip if already fetched or we have an IMDB ID
+    if (_singleFileImdbFetched || widget.contentImdbId != null) {
+      return;
+    }
+
+    _singleFileImdbFetched = true;
+
+    // Use the video title for parsing
+    final title = widget.title;
+    if (title.isEmpty) {
+      debugPrint('MovieMetadata: No title for single-file lookup');
+      return;
+    }
+
+    debugPrint('MovieMetadata: Single-file lookup for "$title"');
+
+    // Parse the title for movie info
+    final movieInfo = MovieParser.parseFilename(title);
+
+    if (!movieInfo.hasYear) {
+      debugPrint('MovieMetadata: No year pattern in single-file title');
+      return;
+    }
+
+    if (movieInfo.title == null || movieInfo.title!.isEmpty) {
+      debugPrint('MovieMetadata: Could not extract title from single-file');
+      return;
+    }
+
+    debugPrint('MovieMetadata: Parsed single-file title="${movieInfo.title}", year=${movieInfo.year}');
+
+    try {
+      final metadata = await MovieMetadataService.lookupMovie(
+        movieInfo.title!,
+        movieInfo.year,
+      );
+
+      if (metadata != null) {
+        _singleFileImdbId = metadata.imdbId;
+        debugPrint('MovieMetadata: Found IMDB ID "${metadata.imdbId}" for single-file "${metadata.title}"');
+        if (mounted) {
+          setState(() {});
+        }
+      } else {
+        debugPrint('MovieMetadata: No match found for single-file');
+      }
+    } catch (e) {
+      debugPrint('MovieMetadata: Error during single-file lookup: $e');
     }
   }
 
@@ -3376,13 +3462,54 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final season = seriesInfo.season ?? widget.contentSeason;
     final episode = seriesInfo.episode ?? widget.contentEpisode;
 
-    // Use discovered IMDB ID from series playlist (via TVMaze) if available,
-    // fall back to widget's contentImdbId (from Stremio catalog)
-    final effectiveImdbId = _seriesPlaylist?.imdbId ?? widget.contentImdbId;
+    // Get IMDB ID for current item
+    // For series: uses shared IMDB ID (all episodes share same show ID)
+    // For movies: uses per-item IMDB ID (each movie in collection has unique ID)
+    String? effectiveImdbId;
+    final seriesPlaylist = _seriesPlaylist;
 
-    // Use series playlist to determine content type if not provided
-    final effectiveContentType = widget.contentType ??
-        (_seriesPlaylist?.isSeries == true ? 'series' : null);
+    if (seriesPlaylist != null) {
+      if (seriesPlaylist.isSeries) {
+        // Series: use shared IMDB ID
+        effectiveImdbId = seriesPlaylist.imdbId ?? widget.contentImdbId;
+      } else {
+        // Movie collection: try to get/fetch IMDB ID for current index
+        effectiveImdbId = seriesPlaylist.getImdbIdForIndex(_currentIndex);
+
+        // If not cached, try to fetch it now (async but we wait for it)
+        if (effectiveImdbId == null && widget.contentImdbId == null) {
+          debugPrint('VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks');
+          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(_currentIndex);
+        }
+
+        // Fall back to widget's contentImdbId if still null
+        effectiveImdbId ??= widget.contentImdbId;
+      }
+    } else {
+      // Single-file playback (no playlist)
+      // Try cached single-file IMDB ID, then widget's contentImdbId
+      effectiveImdbId = _singleFileImdbId ?? widget.contentImdbId;
+
+      // If not cached yet, try to fetch it now
+      if (effectiveImdbId == null && !_singleFileImdbFetched) {
+        debugPrint('VideoPlayer: Fetching single-file movie metadata before showing tracks');
+        await _fetchSingleFileMovieMetadata();
+        effectiveImdbId = _singleFileImdbId;
+      }
+    }
+
+    // Determine content type
+    // Priority: widget.contentType > series detection > movie detection
+    String? effectiveContentType = widget.contentType;
+    if (effectiveContentType == null) {
+      if (seriesPlaylist?.isSeries == true) {
+        effectiveContentType = 'series';
+      } else if (effectiveImdbId != null) {
+        // We have an IMDB ID (either from playlist or single-file lookup)
+        // If not a series, it's a movie
+        effectiveContentType = 'movie';
+      }
+    }
 
     debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
         'contentType=$effectiveContentType, '

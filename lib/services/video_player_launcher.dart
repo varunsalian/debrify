@@ -650,7 +650,36 @@ class VideoPlayerLauncher {
         debugPrint('TVMazeAsync: allEpisodes.length=${seriesPlaylist.allEpisodes.length}');
 
         if (!seriesPlaylist.isSeries) {
-          debugPrint('TVMazeAsync: SKIPPED - SeriesPlaylist says not a series');
+          // For non-series content, try to fetch movie metadata to get IMDB ID
+          debugPrint('MovieAsync: Not a series, attempting movie metadata fetch');
+          await seriesPlaylist.fetchMovieMetadata();
+
+          final discoveredImdbId = seriesPlaylist.imdbId;
+          if (discoveredImdbId != null) {
+            debugPrint('MovieAsync: Found IMDB ID $discoveredImdbId, pushing to native player');
+
+            // Check if this session is still current
+            if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
+              debugPrint('MovieAsync: DISCARDED - session $sessionId is no longer current');
+              return;
+            }
+
+            // Store and push IMDB ID to native player (no episode metadata for movies)
+            AndroidTvPlayerBridge.storePendingMetadataUpdates(
+              [],
+              sessionId: sessionId,
+              imdbId: discoveredImdbId,
+            );
+
+            await AndroidTvPlayerBridge.updateEpisodeMetadata(
+              [],
+              sessionId: sessionId,
+              imdbId: discoveredImdbId,
+            );
+            debugPrint('MovieAsync: IMDB ID pushed to native player');
+          } else {
+            debugPrint('MovieAsync: No IMDB ID discovered, cannot fetch subtitles');
+          }
           return;
         }
 
