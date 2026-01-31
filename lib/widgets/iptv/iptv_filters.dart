@@ -758,6 +758,7 @@ class _FocusablePickerTile extends StatefulWidget {
 
 class _FocusablePickerTileState extends State<_FocusablePickerTile> {
   bool _isFocused = false;
+  final GlobalKey _tileKey = GlobalKey();
 
   @override
   void initState() {
@@ -782,7 +783,23 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
 
   void _onFocusChange() {
     if (mounted) {
-      setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
+      final hasFocus = widget.focusNode?.hasFocus ?? false;
+      setState(() => _isFocused = hasFocus);
+
+      // Scroll into view when focused
+      if (hasFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = _tileKey.currentContext;
+          if (context != null) {
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        });
+      }
     }
   }
 
@@ -796,6 +813,7 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
+          key: _tileKey,
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           decoration: BoxDecoration(
