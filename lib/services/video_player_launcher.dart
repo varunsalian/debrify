@@ -350,6 +350,21 @@ class VideoPlayerLauncher {
             url = resolvedUrl;
             title = targetEntry.title;
             debugPrint('ExternalPlayer: Using entry $startIndex - ${targetEntry.title}');
+
+            // Mark episode as watched (external player doesn't provide progress feedback)
+            if (seriesPlaylist.isSeries) {
+              final episode = seriesPlaylist.allEpisodes.firstWhereOrNull(
+                (ep) => ep.originalIndex == startIndex,
+              );
+              if (episode != null && episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+                await StorageService.markEpisodeAsFinished(
+                  seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+                  season: episode.seriesInfo.season!,
+                  episode: episode.seriesInfo.episode!,
+                );
+                debugPrint('ExternalPlayer: Marked S${episode.seriesInfo.season}E${episode.seriesInfo.episode} as watched');
+              }
+            }
           }
         }
       } catch (e) {
