@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/external_player.dart';
 import '../models/ios_external_player.dart';
+import '../models/linux_external_player.dart';
 export '../models/external_player.dart';
 export '../models/ios_external_player.dart';
+export '../models/linux_external_player.dart';
 import 'storage_service.dart';
 
 /// Result of launching an external player
@@ -569,5 +571,172 @@ class iOSExternalPlayerLaunchResult {
       success: false,
       errorMessage: message,
     );
+  }
+}
+
+// ============================================================
+// Linux External Player Support
+// ============================================================
+
+/// Result of launching a Linux external player
+class LinuxExternalPlayerLaunchResult {
+  final bool success;
+  final LinuxExternalPlayer? usedPlayer;
+  final String? errorMessage;
+
+  const LinuxExternalPlayerLaunchResult({
+    required this.success,
+    this.usedPlayer,
+    this.errorMessage,
+  });
+
+  factory LinuxExternalPlayerLaunchResult.succeeded(LinuxExternalPlayer player) {
+    return LinuxExternalPlayerLaunchResult(
+      success: true,
+      usedPlayer: player,
+    );
+  }
+
+  factory LinuxExternalPlayerLaunchResult.failed(String message) {
+    return LinuxExternalPlayerLaunchResult(
+      success: false,
+      errorMessage: message,
+    );
+  }
+}
+
+/// Extension methods for Linux external player support
+extension LinuxExternalPlayerServiceExtension on ExternalPlayerService {
+  /// Check if a Linux player is installed using `which` command
+  static Future<bool> isLinuxPlayerInstalled(LinuxExternalPlayer player) async {
+    if (!Platform.isLinux) return false;
+    if (player == LinuxExternalPlayer.customCommand) return true;
+    if (player == LinuxExternalPlayer.systemDefault) return true;
+
+    try {
+      final result = await Process.run('which', [player.executable]);
+      return result.exitCode == 0 &&
+          (result.stdout as String).trim().isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking Linux player installation: $e');
+      return false;
+    }
+  }
+
+  /// Detect which Linux players are installed
+  static Future<Map<LinuxExternalPlayer, bool>> detectInstalledLinuxPlayers() async {
+    if (!Platform.isLinux) return {};
+
+    final results = <LinuxExternalPlayer, bool>{};
+
+    for (final player in LinuxExternalPlayer.values) {
+      if (player == LinuxExternalPlayer.customCommand ||
+          player == LinuxExternalPlayer.systemDefault) {
+        results[player] = true;
+        continue;
+      }
+      results[player] = await isLinuxPlayerInstalled(player);
+    }
+
+    return results;
+  }
+
+  /// Launch video with preferred Linux player
+  static Future<LinuxExternalPlayerLaunchResult> launchWithPreferredLinuxPlayer(
+    String url, {
+    String? title,
+  }) async {
+    if (!Platform.isLinux) {
+      return LinuxExternalPlayerLaunchResult.failed('Not running on Linux');
+    }
+
+    // Get user's preferred Linux player
+    final preferredPlayerKey = await StorageService.getPreferredLinuxExternalPlayer();
+    final preferredPlayer = LinuxExternalPlayerExtension.fromStorageKey(preferredPlayerKey);
+
+    // Check if preferred player is installed
+    if (preferredPlayer != LinuxExternalPlayer.systemDefault &&
+        preferredPlayer != LinuxExternalPlayer.customCommand) {
+      final installed = await isLinuxPlayerInstalled(preferredPlayer);
+      if (!installed) {
+        // Fall back to system default
+        return await launchWithLinuxPlayer(
+          url,
+          LinuxExternalPlayer.systemDefault,
+          title: title,
+        );
+      }
+    }
+
+    return await launchWithLinuxPlayer(url, preferredPlayer, title: title);
+  }
+
+  /// Launch video with a specific Linux player
+  static Future<LinuxExternalPlayerLaunchResult> launchWithLinuxPlayer(
+    String url,
+    LinuxExternalPlayer player, {
+    String? title,
+  }) async {
+    if (!Platform.isLinux) {
+      return LinuxExternalPlayerLaunchResult.failed('Not running on Linux');
+    }
+
+    try {
+      List<String> command;
+
+      if (player == LinuxExternalPlayer.customCommand) {
+        // Use custom command template
+        final customTemplate = await StorageService.getLinuxCustomCommand();
+        if (customTemplate == null || customTemplate.isEmpty) {
+          return LinuxExternalPlayerLaunchResult.failed(
+            'Custom command not configured',
+          );
+        }
+
+        final validation = validateLinuxCustomCommand(customTemplate);
+        if (!validation.isValid) {
+          return LinuxExternalPlayerLaunchResult.failed(
+            validation.errorMessage ?? 'Invalid custom command',
+          );
+        }
+
+        command = buildLinuxCustomCommand(customTemplate, url, title: title);
+        if (command.isEmpty) {
+          return LinuxExternalPlayerLaunchResult.failed('Invalid command format');
+        }
+      } else {
+        command = player.buildCommand(url, title: title);
+      }
+
+      debugPrint('Linux External Player: Launching with command: ${command.join(' ')}');
+
+      final executable = command.first;
+      final args = command.skip(1).toList();
+
+      // For xdg-open, use Process.run as it spawns and exits quickly
+      // For media players, use Process.start detached so they run independently
+      if (executable == 'xdg-open') {
+        final result = await Process.run(executable, args);
+        if (result.exitCode == 0) {
+          return LinuxExternalPlayerLaunchResult.succeeded(player);
+        }
+        return LinuxExternalPlayerLaunchResult.failed(
+          'Failed to open with system default: ${result.stderr}',
+        );
+      } else {
+        // Run player detached so it doesn't block
+        await Process.start(
+          executable,
+          args,
+          mode: ProcessStartMode.detached,
+        );
+        return LinuxExternalPlayerLaunchResult.succeeded(player);
+      }
+    } catch (e) {
+      debugPrint('Linux External Player: Launch failed: $e');
+      return LinuxExternalPlayerLaunchResult.failed(
+        'Failed to open ${player.displayName}: $e',
+      );
+    }
   }
 }

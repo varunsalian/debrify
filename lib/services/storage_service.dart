@@ -85,6 +85,9 @@ class StorageService {
   // iOS External Player settings
   static const String _iosExternalPlayerPreferredKey = 'ios_external_player_preferred';
   static const String _iosCustomSchemeTemplateKey = 'ios_custom_scheme_template';
+  // Linux External Player settings
+  static const String _linuxExternalPlayerPreferredKey = 'linux_external_player_preferred';
+  static const String _linuxCustomCommandKey = 'linux_custom_command';
 
   // Debrify Player default settings
   static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
@@ -3149,6 +3152,39 @@ class StorageService {
       await prefs.remove(_iosCustomSchemeTemplateKey);
     } else {
       await prefs.setString(_iosCustomSchemeTemplateKey, template);
+    }
+  }
+
+  // ============================================================
+  // Linux External Player Settings
+  // ============================================================
+
+  /// Get preferred Linux external player key
+  static Future<String> getPreferredLinuxExternalPlayer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_linuxExternalPlayerPreferredKey) ?? 'system_default';
+  }
+
+  /// Set preferred Linux external player key
+  static Future<void> setPreferredLinuxExternalPlayer(String playerKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_linuxExternalPlayerPreferredKey, playerKey);
+  }
+
+  /// Get Linux custom command template
+  /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
+  static Future<String?> getLinuxCustomCommand() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_linuxCustomCommandKey);
+  }
+
+  /// Set Linux custom command template
+  static Future<void> setLinuxCustomCommand(String? command) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (command == null || command.isEmpty) {
+      await prefs.remove(_linuxCustomCommandKey);
+    } else {
+      await prefs.setString(_linuxCustomCommandKey, command);
     }
   }
 

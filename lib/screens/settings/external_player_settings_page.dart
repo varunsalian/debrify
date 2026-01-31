@@ -43,6 +43,15 @@ class _ExternalPlayerSettingsPageState
   bool _iosSchemeFocused = false;
   String? _iosSchemeError;
 
+  // Linux external player settings
+  LinuxExternalPlayer _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
+  Map<LinuxExternalPlayer, bool> _installedLinuxPlayers = {};
+  String? _linuxCustomCommand;
+  final TextEditingController _linuxCommandController = TextEditingController();
+  final FocusNode _linuxCommandFocusNode = FocusNode();
+  bool _linuxCommandFocused = false;
+  String? _linuxCommandError;
+
   // DeoVR settings (Android)
   String _vrDefaultScreenType = 'dome';
   String _vrDefaultStereoMode = 'sbs';
@@ -94,6 +103,12 @@ class _ExternalPlayerSettingsPageState
       if (!mounted) return;
       setState(() {
         _iosSchemeFocused = _iosSchemeFocusNode.hasFocus;
+      });
+    });
+    _linuxCommandFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _linuxCommandFocused = _linuxCommandFocusNode.hasFocus;
       });
     });
     _screenTypeFocusNode.addListener(() {
@@ -159,6 +174,8 @@ class _ExternalPlayerSettingsPageState
     _commandFocusNode.dispose();
     _iosSchemeController.dispose();
     _iosSchemeFocusNode.dispose();
+    _linuxCommandController.dispose();
+    _linuxCommandFocusNode.dispose();
     _screenTypeFocusNode.dispose();
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
@@ -209,6 +226,18 @@ class _ExternalPlayerSettingsPageState
         _iosSchemeController.text = iosCustomScheme ?? '';
       }
 
+      // Load Linux-specific settings
+      Map<LinuxExternalPlayer, bool> installedLinux = {};
+      String linuxPreferredKey = 'system_default';
+      String? linuxCustomCommand;
+
+      if (Platform.isLinux) {
+        installedLinux = await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
+        linuxPreferredKey = await StorageService.getPreferredLinuxExternalPlayer();
+        linuxCustomCommand = await StorageService.getLinuxCustomCommand();
+        _linuxCommandController.text = linuxCustomCommand ?? '';
+      }
+
       // Load DeoVR settings (Android)
       String vrScreenType = 'dome';
       String vrStereoMode = 'sbs';
@@ -252,6 +281,10 @@ class _ExternalPlayerSettingsPageState
         _installedIOSPlayers = installedIOS;
         _selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(iosPreferredKey);
         _iosCustomScheme = iosCustomScheme;
+        // Linux settings
+        _installedLinuxPlayers = installedLinux;
+        _selectedLinuxPlayer = LinuxExternalPlayerExtension.fromStorageKey(linuxPreferredKey);
+        _linuxCustomCommand = linuxCustomCommand;
         // Other settings
         _vrDefaultScreenType = vrScreenType;
         _vrDefaultStereoMode = vrStereoMode;
@@ -502,6 +535,82 @@ class _ExternalPlayerSettingsPageState
     }
   }
 
+  // Linux external player settings methods
+  Future<void> _selectLinuxPlayer(LinuxExternalPlayer player) async {
+    try {
+      await StorageService.setPreferredLinuxExternalPlayer(player.storageKey);
+      setState(() {
+        _selectedLinuxPlayer = player;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveLinuxCustomCommand() async {
+    final command = _linuxCommandController.text.trim();
+
+    final validation = validateLinuxCustomCommand(command);
+    if (!validation.isValid) {
+      setState(() {
+        _linuxCommandError = validation.errorMessage;
+      });
+      return;
+    }
+
+    try {
+      await StorageService.setLinuxCustomCommand(command);
+      await StorageService.setPreferredLinuxExternalPlayer('custom_command');
+
+      setState(() {
+        _linuxCustomCommand = command;
+        _linuxCommandError = null;
+        _selectedLinuxPlayer = LinuxExternalPlayer.customCommand;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Custom command saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save command: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearLinuxCustomCommand() async {
+    try {
+      await StorageService.setLinuxCustomCommand(null);
+
+      if (_selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
+        await StorageService.setPreferredLinuxExternalPlayer('system_default');
+        setState(() {
+          _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
+        });
+      }
+
+      _linuxCommandController.clear();
+      setState(() {
+        _linuxCustomCommand = null;
+        _linuxCommandError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to clear command: $e')),
+        );
+      }
+    }
+  }
+
   // DeoVR settings setters
   Future<void> _setVrDefaultScreenType(String screenType) async {
     setState(() => _vrDefaultScreenType = screenType);
@@ -692,6 +801,70 @@ class _ExternalPlayerSettingsPageState
       onChanged: (value) {
         if (value != null) {
           _selectIOSPlayer(value);
+        }
+      },
+      secondary: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          player.icon,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+      title: Text(
+        player.displayName,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: subtitleColor ?? theme.colorScheme.onSurfaceVariant,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildLinuxPlayerTile(LinuxExternalPlayer player) {
+    final theme = Theme.of(context);
+    final isInstalled = _installedLinuxPlayers[player] ?? false;
+    final isCustom = player == LinuxExternalPlayer.customCommand;
+
+    String subtitle;
+    Color? subtitleColor;
+
+    if (isCustom) {
+      if (_linuxCustomCommand != null && _linuxCustomCommand!.isNotEmpty) {
+        final displayCommand = _linuxCustomCommand!.length > 40
+            ? '${_linuxCustomCommand!.substring(0, 40)}...'
+            : _linuxCustomCommand!;
+        subtitle = displayCommand;
+      } else {
+        subtitle = 'No command configured';
+        subtitleColor = theme.colorScheme.onSurfaceVariant;
+      }
+    } else {
+      subtitle = player.description;
+      if (isInstalled) {
+        subtitleColor = Colors.green;
+        subtitle = 'Installed • ${player.description}';
+      }
+    }
+
+    return RadioListTile<LinuxExternalPlayer>(
+      value: player,
+      groupValue: _selectedLinuxPlayer,
+      onChanged: (value) {
+        if (value != null) {
+          _selectLinuxPlayer(value);
         }
       },
       secondary: Container(
@@ -1113,7 +1286,7 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
-    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS;
+    final isSupportedPlatform = Platform.isMacOS || Platform.isAndroid || Platform.isIOS || Platform.isLinux;
 
     if (!isSupportedPlatform) {
       return Scaffold(
@@ -1746,6 +1919,202 @@ class _ExternalPlayerSettingsPageState
                       Expanded(
                         child: Text(
                           'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Linux-specific player selection
+            if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(
+                        'Preferred Player',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.systemDefault),
+                    const Divider(height: 1),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.vlc),
+                    const Divider(height: 1),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.mpv),
+                    const Divider(height: 1),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.celluloid),
+                    const Divider(height: 1),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.smplayer),
+                    const Divider(height: 1),
+                    _buildLinuxPlayerTile(LinuxExternalPlayer.customCommand),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ],
+
+            // Linux Custom Command configuration
+            if (Platform.isLinux && _defaultPlayerMode == 'external' && _selectedLinuxPlayer == LinuxExternalPlayer.customCommand) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.terminal_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Custom Command',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Define a custom command to launch videos',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _linuxCommandController,
+                        focusNode: _linuxCommandFocusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Command Template',
+                          hintText: 'vlc --fullscreen {url}',
+                          helperText: 'Use {url} for video URL, {title} for title',
+                          helperMaxLines: 2,
+                          errorText: _linuxCommandError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.code_rounded),
+                        ),
+                        maxLines: 1,
+                        onChanged: (_) {
+                          if (_linuxCommandError != null) {
+                            setState(() {
+                              _linuxCommandError = null;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _saveLinuxCustomCommand,
+                              icon: const Icon(Icons.save_rounded),
+                              label: const Text('Save'),
+                            ),
+                          ),
+                          if (_linuxCustomCommand != null && _linuxCustomCommand!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _clearLinuxCustomCommand,
+                              child: const Text('Clear'),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Examples',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'vlc --fullscreen {url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'mpv --title="{title}" {url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'celluloid {url}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: 'monospace',
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Linux external player info
+            if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+              const SizedBox(height: 16),
+              Card(
+                color: theme.colorScheme.primaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onPrimaryContainer,
                           ),
