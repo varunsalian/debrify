@@ -23,6 +23,8 @@ import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../utils/series_parser.dart';
+import '../utils/movie_parser.dart';
+import '../services/movie_metadata_service.dart';
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 final Map<String, String> _redirectCache = <String, String>{};
@@ -569,6 +571,22 @@ class VideoPlayerLauncher {
           resolver.dispose();
         },
         onRequestStream: resolver.handleRequest,
+        onRequestMovieMetadata: result.payload.contentType != _PlaybackContentType.series
+            ? (index, filename) async {
+                debugPrint('MovieMetadataCallback: index=$index, filename=$filename');
+                final movieInfo = MovieParser.parseFilename(filename);
+                if (!movieInfo.hasYear || movieInfo.title == null) {
+                  debugPrint('MovieMetadataCallback: No year pattern in filename');
+                  return null;
+                }
+                final metadata = await MovieMetadataService.lookupMovie(
+                  movieInfo.title!,
+                  movieInfo.year,
+                );
+                debugPrint('MovieMetadataCallback: Lookup result imdbId=${metadata?.imdbId}');
+                return metadata?.imdbId;
+              }
+            : null,
       );
 
       if (!launched) {
@@ -1449,6 +1467,12 @@ class _AndroidTvPlaybackPayloadBuilder {
       }
     }
 
+    // For non-series content without IMDB ID, try to fetch from Cinemeta
+    String? effectiveImdbId = args.contentImdbId;
+    if (effectiveImdbId == null && contentType != _PlaybackContentType.series) {
+      effectiveImdbId = await _fetchMovieImdbId(items, startIndex);
+    }
+
     final payload = _AndroidTvPlaybackPayload(
       contentType: contentType,
       title: args.title,
@@ -1460,13 +1484,65 @@ class _AndroidTvPlaybackPayloadBuilder {
       nextEpisodeMap: navigationMaps.nextMap,
       prevEpisodeMap: navigationMaps.prevMap,
       collectionGroups: collectionGroups,
-      imdbId: args.contentImdbId,
+      imdbId: effectiveImdbId,
     );
 
     return _AndroidTvPlaybackPayloadResult(
       payload: payload,
       entries: launcherEntries,
     );
+  }
+
+  /// Fetch movie IMDB ID from Cinemeta for Android TV playback
+  /// Returns IMDB ID if found, null otherwise
+  Future<String?> _fetchMovieImdbId(
+    List<_AndroidTvPlaybackItem> items,
+    int startIndex,
+  ) async {
+    // Get the title to parse - prefer the starting item, fall back to args.title
+    String titleToParse;
+    if (startIndex >= 0 && startIndex < items.length) {
+      titleToParse = items[startIndex].title;
+    } else if (items.isNotEmpty) {
+      titleToParse = items.first.title;
+    } else {
+      titleToParse = args.title;
+    }
+
+    debugPrint('AndroidTV MovieMetadata: Checking title "$titleToParse"');
+
+    // Parse the title for movie info
+    final movieInfo = MovieParser.parseFilename(titleToParse);
+
+    if (!movieInfo.hasYear) {
+      debugPrint('AndroidTV MovieMetadata: No year pattern, skipping lookup');
+      return null;
+    }
+
+    if (movieInfo.title == null || movieInfo.title!.isEmpty) {
+      debugPrint('AndroidTV MovieMetadata: Could not extract title');
+      return null;
+    }
+
+    debugPrint('AndroidTV MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year}');
+
+    try {
+      final metadata = await MovieMetadataService.lookupMovie(
+        movieInfo.title!,
+        movieInfo.year,
+      );
+
+      if (metadata != null) {
+        debugPrint('AndroidTV MovieMetadata: Found IMDB ID "${metadata.imdbId}"');
+        return metadata.imdbId;
+      } else {
+        debugPrint('AndroidTV MovieMetadata: No match found in Cinemeta');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('AndroidTV MovieMetadata: Error during lookup: $e');
+      return null;
+    }
   }
 
   /// Build navigation maps based on SeriesPlaylist.allEpisodes ordering

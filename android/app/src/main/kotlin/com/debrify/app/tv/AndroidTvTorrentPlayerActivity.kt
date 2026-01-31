@@ -1392,17 +1392,74 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     /**
      * Fetch external subtitles from Stremio addons for the current item.
+     * For series: uses payload.imdbId
+     * For movie collections: uses per-item IMDB ID from perItemImdbIds cache or requests from Flutter
      */
     private fun fetchStremioSubtitles(item: PlaybackItem) {
-        val imdbId = payload?.imdbId
-        if (imdbId.isNullOrEmpty()) {
-            stremioSubtitles.clear()
-            currentStremioSubtitleIndex = -1
+        val model = payload ?: return
+        val isSeries = model.contentType.lowercase(Locale.US) == "series"
+        val type = if (isSeries) "series" else "movie"
+
+        // For series, use the shared IMDB ID directly
+        if (isSeries) {
+            val imdbId = model.imdbId
+            if (imdbId.isNullOrEmpty()) {
+                stremioSubtitles.clear()
+                currentStremioSubtitleIndex = -1
+                return
+            }
+            fetchStremioSubtitlesWithImdb(imdbId, type, item)
             return
         }
 
-        val type = if (payload?.contentType == "series") "series" else "movie"
+        // For movie collections, use per-item IMDB ID
+        val itemIndex = item.index
 
+        // Check if we already have a cached IMDB ID for this item
+        if (model.perItemImdbIds.containsKey(itemIndex)) {
+            val cachedImdbId = model.perItemImdbIds[itemIndex]
+            if (cachedImdbId.isNullOrEmpty()) {
+                // Already looked up and found nothing
+                android.util.Log.d("StremioSubs", "No cached IMDB ID for item $itemIndex (previously not found)")
+                stremioSubtitles.clear()
+                currentStremioSubtitleIndex = -1
+                return
+            }
+            android.util.Log.d("StremioSubs", "Using cached IMDB ID $cachedImdbId for item $itemIndex")
+            fetchStremioSubtitlesWithImdb(cachedImdbId, type, item)
+            return
+        }
+
+        // Check if we have a fallback IMDB ID from payload (e.g., first item lookup)
+        val fallbackImdbId = model.imdbId
+        if (!fallbackImdbId.isNullOrEmpty() && model.items.size == 1) {
+            // Single item, use payload IMDB ID
+            android.util.Log.d("StremioSubs", "Single item, using payload IMDB ID: $fallbackImdbId")
+            fetchStremioSubtitlesWithImdb(fallbackImdbId, type, item)
+            return
+        }
+
+        // Request IMDB ID from Flutter for this item
+        android.util.Log.d("StremioSubs", "Requesting IMDB ID from Flutter for item $itemIndex")
+        requestMovieMetadataFromFlutter(item, itemIndex) { imdbId ->
+            // Cache the result (even if null to prevent repeated requests)
+            model.perItemImdbIds[itemIndex] = imdbId
+            android.util.Log.d("StremioSubs", "Received IMDB ID from Flutter: $imdbId for item $itemIndex")
+
+            if (imdbId.isNullOrEmpty()) {
+                stremioSubtitles.clear()
+                currentStremioSubtitleIndex = -1
+                return@requestMovieMetadataFromFlutter
+            }
+
+            fetchStremioSubtitlesWithImdb(imdbId, type, item)
+        }
+    }
+
+    /**
+     * Actually fetch subtitles with a known IMDB ID.
+     */
+    private fun fetchStremioSubtitlesWithImdb(imdbId: String, type: String, item: PlaybackItem) {
         subtitleScope.launch {
             try {
                 val subtitles = stremioSubtitleService?.fetchSubtitles(
@@ -1415,6 +1472,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 stremioSubtitles.clear()
                 stremioSubtitles.addAll(subtitles)
                 currentStremioSubtitleIndex = -1
+                android.util.Log.d("StremioSubs", "Fetched ${subtitles.size} subtitles for IMDB $imdbId")
             } catch (e: Exception) {
                 android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e)
                 stremioSubtitles.clear()
@@ -1523,6 +1581,47 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "requestStreamFromFlutter - exception: ${e.message}", e)
             callback(null, null)
+        }
+    }
+
+    /**
+     * Request movie metadata (IMDB ID) from Flutter for the given item.
+     * Used for movie collections to fetch per-item IMDB IDs from Cinemeta.
+     */
+    private fun requestMovieMetadataFromFlutter(item: PlaybackItem, index: Int, callback: (String?) -> Unit) {
+        try {
+            val args = hashMapOf<String, Any?>(
+                "index" to index,
+                "filename" to item.title
+            )
+            android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - index=$index, filename=${item.title}")
+
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "requestMovieMetadata",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - Flutter returned: $result")
+                        val map = result as? Map<*, *>
+                        val imdbId = map?.get("imdbId") as? String
+                        android.util.Log.d("MovieMetadata", "requestMovieMetadataFromFlutter - extracted imdbId: $imdbId")
+                        callback(imdbId)
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - error: $errorCode - $errorMessage")
+                        callback(null)
+                    }
+
+                    override fun notImplemented() {
+                        android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - not implemented")
+                        callback(null)
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - exception: ${e.message}", e)
+            callback(null)
         }
     }
 
@@ -3587,7 +3686,8 @@ private data class PlaybackPayload(
     val nextEpisodeMap: Map<Int, Int> = emptyMap(),
     val prevEpisodeMap: Map<Int, Int> = emptyMap(),
     val collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
-    var imdbId: String? = null // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
+    var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
+    val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf() // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
 )
 
 private data class PlaybackItem(

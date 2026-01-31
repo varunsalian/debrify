@@ -16,6 +16,7 @@ typedef AndroidTvProgressCallback = Future<void> Function(
     Map<String, dynamic> progress);
 typedef TorrentStreamProvider = Future<Map<String, dynamic>?> Function(
     Map<String, dynamic> request);
+typedef MovieMetadataProvider = Future<String?> Function(int index, String filename);
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
@@ -34,6 +35,7 @@ class AndroidTvPlayerBridge {
   static AndroidTvProgressCallback? _torrentProgressCallback;
   static PlaybackFinishedCallback? _torrentFinishedCallback;
   static TorrentStreamProvider? _torrentStreamProvider;
+  static MovieMetadataProvider? _movieMetadataProvider;
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
@@ -144,6 +146,7 @@ class AndroidTvPlayerBridge {
           _torrentProgressCallback = null;
           _torrentFinishedCallback = null;
           _torrentStreamProvider = null;
+          _movieMetadataProvider = null;
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
@@ -192,6 +195,33 @@ class AndroidTvPlayerBridge {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
           return null;
+        case 'requestMovieMetadata':
+          debugPrint('MovieMetadata: requestMovieMetadata received from native');
+          final provider = _movieMetadataProvider;
+          if (provider == null) {
+            debugPrint('MovieMetadata: No provider registered');
+            return null;
+          }
+          final args = call.arguments;
+          if (args is! Map) {
+            debugPrint('MovieMetadata: Invalid arguments');
+            return null;
+          }
+          final index = args['index'] as int?;
+          final filename = args['filename'] as String?;
+          if (index == null || filename == null) {
+            debugPrint('MovieMetadata: Missing index or filename');
+            return null;
+          }
+          try {
+            debugPrint('MovieMetadata: Fetching IMDB ID for index $index, filename: $filename');
+            final imdbId = await provider(index, filename);
+            debugPrint('MovieMetadata: Provider returned IMDB ID: $imdbId');
+            return imdbId != null ? {'imdbId': imdbId} : null;
+          } catch (e) {
+            debugPrint('MovieMetadata: Provider error: $e');
+            return null;
+          }
         default:
           throw PlatformException(
             code: 'unimplemented',
@@ -381,6 +411,7 @@ class AndroidTvPlayerBridge {
     AndroidTvProgressCallback? onProgress,
     PlaybackFinishedCallback? onFinished,
     TorrentStreamProvider? onRequestStream,
+    MovieMetadataProvider? onRequestMovieMetadata,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -393,6 +424,7 @@ class AndroidTvPlayerBridge {
     _torrentProgressCallback = onProgress;
     _torrentFinishedCallback = onFinished;
     _torrentStreamProvider = onRequestStream;
+    _movieMetadataProvider = onRequestMovieMetadata;
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
@@ -417,6 +449,7 @@ class AndroidTvPlayerBridge {
     _torrentProgressCallback = null;
     _torrentFinishedCallback = null;
     _torrentStreamProvider = null;
+    _movieMetadataProvider = null;
     return false;
   }
 
