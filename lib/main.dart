@@ -12,6 +12,7 @@ import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
 import 'screens/playlist_screen.dart';
+import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/debrify_tv_repository.dart';
@@ -390,6 +391,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const DebridDownloadsScreen(),
     const TorboxDownloadsScreen(),
     const PikPakFilesScreen(),
+    const AddonsScreen(),
     const SettingsScreen(),
   ];
 
@@ -401,6 +403,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Real Debrid',
     'Torbox',
     'PikPak',
+    'Addons',
     'Settings',
   ];
 
@@ -412,6 +415,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_download_rounded,
     Icons.flash_on_rounded,
     Icons.cloud_circle_rounded,
+    Icons.extension_rounded,
     Icons.settings_rounded,
   ];
 
@@ -1135,7 +1139,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (pikpak && !ppHidden) {
         indices.add(6); // PikPak
       }
-      indices.add(7); // Settings
+      indices.add(7); // Addons
+      indices.add(8); // Settings
       return indices;
     }
 
@@ -1146,14 +1151,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
     final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
     if (!rd && !tb && !pikpak) {
-      return [0, 7]; // Home, Settings
+      return [0, 7, 8]; // Home, Addons, Settings
     }
 
     final indices = <int>[0, 1, 2, 3];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
-    indices.add(7); // Settings
+    indices.add(7); // Addons
+    indices.add(8); // Settings
     return indices;
   }
 

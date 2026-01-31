@@ -38,8 +38,9 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
     [Color(0xFFF59E0B), Color(0xFFD97706)], // Debrify TV - Amber
     [Color(0xFFEF4444), Color(0xFFDC2626)], // Real Debrid - Red
     [Color(0xFF8B5CF6), Color(0xFF7C3AED)], // Torbox - Purple
-    [Color(0xFF6B7280), Color(0xFF4B5563)], // Settings - Gray
     [Color(0xFF06B6D4), Color(0xFF0891B2)], // PikPak - Cyan
+    [Color(0xFF14B8A6), Color(0xFF0D9488)], // Addons - Teal
+    [Color(0xFF6B7280), Color(0xFF4B5563)], // Settings - Gray
   ];
 
   @override

@@ -22,8 +22,6 @@ import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import 'settings/filter_settings_page.dart';
-import 'settings/engine_import_page.dart';
-import 'settings/stremio_addons_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
@@ -63,17 +61,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadSummaries();
 
-    // Register TV sidebar focus handler (tab index 7 = Settings)
+    // Register TV sidebar focus handler (tab index 8 = Settings)
     _tvContentFocusHandler = () {
       _firstCardFocusNode.requestFocus();
     };
-    MainPageBridge.registerTvContentFocusHandler(7, _tvContentFocusHandler!);
+    MainPageBridge.registerTvContentFocusHandler(8, _tvContentFocusHandler!);
   }
 
   @override
   void dispose() {
     if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(7, _tvContentFocusHandler!);
+      MainPageBridge.unregisterTvContentFocusHandler(8, _tvContentFocusHandler!);
     }
     _firstCardFocusNode.dispose();
     super.dispose();
@@ -232,8 +230,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
-      onOpenEngineImportSettings: _openEngineImportSettings,
-      onOpenStremioAddonsSettings: _openStremioAddonsSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -320,22 +316,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const QuickPlaySettingsPage()));
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openEngineImportSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const EngineImportPage()));
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openStremioAddonsSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const StremioAddonsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -507,8 +487,6 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
-  final Future<void> Function() onOpenEngineImportSettings;
-  final Future<void> Function() onOpenStremioAddonsSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -524,8 +502,6 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
     required this.onOpenExternalPlayerSettings,
-    required this.onOpenEngineImportSettings,
-    required this.onOpenStremioAddonsSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -572,18 +548,6 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Quick Play Settings',
                 subtitle: 'Configure quick play for torrent search',
                 onTap: onOpenQuickPlaySettings,
-              ),
-              _SettingsTile(
-                icon: Icons.extension_rounded,
-                title: 'Import Engines',
-                subtitle: 'Import and manage torrent search engines',
-                onTap: onOpenEngineImportSettings,
-              ),
-              _SettingsTile(
-                icon: Icons.stream_rounded,
-                title: 'Stremio Addons',
-                subtitle: 'Connect Stremio addons for more sources',
-                onTap: onOpenStremioAddonsSettings,
               ),
             ],
           ),

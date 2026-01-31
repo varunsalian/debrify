@@ -2,14 +2,413 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
+import '../addons_screen.dart';
 
-/// Page for managing Stremio addons
+/// Page for managing Stremio addons (with Scaffold wrapper)
 class StremioAddonsPage extends StatefulWidget {
   const StremioAddonsPage({super.key});
 
   @override
   State<StremioAddonsPage> createState() => _StremioAddonsPageState();
+}
+
+/// Content widget for embedding in tabs (without Scaffold)
+class StremioAddonsPageContent extends StatefulWidget {
+  const StremioAddonsPageContent({super.key});
+
+  @override
+  State<StremioAddonsPageContent> createState() => _StremioAddonsPageContentState();
+}
+
+class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
+  final StremioService _stremioService = StremioService.instance;
+  final TextEditingController _urlController = TextEditingController();
+  final FocusNode _urlFieldFocusNode = FocusNode(debugLabel: 'url-field-content');
+  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'add-button-content');
+
+  bool _isLoading = true;
+  bool _isAdding = false;
+  String? _error;
+  List<StremioAddon> _addons = [];
+  final Map<String, FocusNode> _addonFocusNodes = {};
+  bool _urlFieldFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFieldFocusNode.addListener(_onUrlFieldFocusChanged);
+    _stremioService.addAddonsChangedListener(_onAddonsChanged);
+    _loadAddons();
+  }
+
+  void _onAddonsChanged() {
+    if (mounted) _loadAddons();
+  }
+
+  void _onUrlFieldFocusChanged() {
+    setState(() {
+      _urlFieldFocused = _urlFieldFocusNode.hasFocus;
+    });
+  }
+
+  @override
+  void dispose() {
+    _stremioService.removeAddonsChangedListener(_onAddonsChanged);
+    _urlController.dispose();
+    _urlFieldFocusNode.removeListener(_onUrlFieldFocusChanged);
+    _urlFieldFocusNode.dispose();
+    _addButtonFocusNode.dispose();
+    for (final node in _addonFocusNodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadAddons() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      _addons = await _stremioService.getAddons();
+      for (final node in _addonFocusNodes.values) {
+        node.dispose();
+      }
+      _addonFocusNodes.clear();
+      for (final addon in _addons) {
+        _addonFocusNodes[addon.manifestUrl] =
+            FocusNode(debugLabel: 'addon-${addon.id}');
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _addAddon() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an addon URL')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isAdding = true;
+    });
+
+    try {
+      final addon = await _stremioService.addAddon(url);
+      _urlController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${addon.name} added successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAdding = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleAddon(StremioAddon addon) async {
+    await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
+  }
+
+  Future<void> _deleteAddon(StremioAddon addon) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Addon'),
+        content: Text('Remove "${addon.name}" from your addons?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _stremioService.removeAddon(addon.manifestUrl);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${addon.name} removed')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove addon: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Column(
+        children: [
+          _buildAddSection(),
+          const Divider(height: 1),
+          Expanded(child: _buildAddonsList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Add Stremio Addon',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Paste the addon manifest URL.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FocusTraversalOrder(
+                  order: const NumericFocusOrder(0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: _urlFieldFocused
+                          ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                          : null,
+                    ),
+                    child: Shortcuts(
+                      shortcuts: const <ShortcutActivator, Intent>{
+                        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowRight): _MoveToAddButtonIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowLeft): _MoveToSidebarIntent(),
+                      },
+                      child: Actions(
+                        actions: <Type, Action<Intent>>{
+                          NextFocusIntent: CallbackAction<NextFocusIntent>(
+                            onInvoke: (intent) {
+                              // Move to first addon in list or add button
+                              if (_addons.isNotEmpty && _addonFocusNodes.isNotEmpty) {
+                                _addonFocusNodes.values.first.requestFocus();
+                              } else {
+                                _addButtonFocusNode.requestFocus();
+                              }
+                              return null;
+                            },
+                          ),
+                          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
+                            onInvoke: (intent) {
+                              // Move to tab bar if available
+                              if (AddonsScreen.focusCurrentTab != null) {
+                                AddonsScreen.focusCurrentTab!();
+                              }
+                              return null;
+                            },
+                          ),
+                          _MoveToAddButtonIntent: CallbackAction<_MoveToAddButtonIntent>(
+                            onInvoke: (intent) {
+                              _addButtonFocusNode.requestFocus();
+                              return null;
+                            },
+                          ),
+                          _MoveToSidebarIntent: CallbackAction<_MoveToSidebarIntent>(
+                            onInvoke: (intent) {
+                              if (MainPageBridge.focusTvSidebar != null) {
+                                MainPageBridge.focusTvSidebar!();
+                              }
+                              return null;
+                            },
+                          ),
+                        },
+                        child: TextField(
+                          controller: _urlController,
+                          focusNode: _urlFieldFocusNode,
+                          decoration: const InputDecoration(
+                            hintText: 'https://addon.example.com/manifest.json',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          ),
+                          keyboardType: TextInputType.url,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _addAddon(),
+                          enabled: !_isAdding,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: FilledButton.icon(
+                  focusNode: _addButtonFocusNode,
+                  onPressed: _isAdding ? null : _addAddon,
+                  icon: _isAdding
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.add),
+                  label: const Text('Add'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddonsList() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading addons...'),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Failed to load addons', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _loadAddons,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_addons.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.extension_outlined, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(height: 16),
+              Text('No addons configured', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                'Add a Stremio addon URL above to get started',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _addons.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Icon(Icons.extension, size: 20, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Your Addons', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_addons.length}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final addon = _addons[index - 1];
+        return _AddonTile(
+          addon: addon,
+          index: index - 1,
+          focusNode: _addonFocusNodes[addon.manifestUrl]!,
+          onTap: () {},
+          onToggle: () => _toggleAddon(addon),
+          onDelete: () => _deleteAddon(addon),
+        );
+      },
+    );
+  }
 }
 
 class _StremioAddonsPageState extends State<StremioAddonsPage> {
@@ -998,4 +1397,14 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Custom intent for moving focus to Add button
+class _MoveToAddButtonIntent extends Intent {
+  const _MoveToAddButtonIntent();
+}
+
+/// Custom intent for moving focus to sidebar
+class _MoveToSidebarIntent extends Intent {
+  const _MoveToSidebarIntent();
 }

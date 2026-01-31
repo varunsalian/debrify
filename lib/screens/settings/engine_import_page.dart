@@ -7,12 +7,554 @@ import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
 
-/// Page for importing and managing torrent search engines
+/// Page for importing and managing torrent search engines (with Scaffold wrapper)
 class EngineImportPage extends StatefulWidget {
   const EngineImportPage({super.key});
 
   @override
   State<EngineImportPage> createState() => _EngineImportPageState();
+}
+
+/// Content widget for embedding in tabs (without Scaffold)
+class EngineImportPageContent extends StatefulWidget {
+  const EngineImportPageContent({super.key});
+
+  @override
+  State<EngineImportPageContent> createState() => _EngineImportPageContentState();
+}
+
+class _EngineImportPageContentState extends State<EngineImportPageContent> {
+  final RemoteEngineManager _remoteManager = RemoteEngineManager();
+  final LocalEngineStorage _localStorage = LocalEngineStorage.instance;
+
+  bool _isLoading = true;
+  String? _error;
+
+  List<ImportedEngineMetadata> _importedEngines = [];
+  List<RemoteEngineInfo> _availableEngines = [];
+
+  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'retry-button-content');
+  final FocusNode _importLocalButtonFocusNode = FocusNode(debugLabel: 'import-local-button-content');
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'refresh-button-content');
+  final Map<String, FocusNode> _importedEngineFocusNodes = {};
+  final Map<String, FocusNode> _availableEngineFocusNodes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEngines();
+  }
+
+  @override
+  void dispose() {
+    _remoteManager.dispose();
+    _retryButtonFocusNode.dispose();
+    _importLocalButtonFocusNode.dispose();
+    _refreshButtonFocusNode.dispose();
+    for (final node in _importedEngineFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _availableEngineFocusNodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadEngines() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      _importedEngines = await _localStorage.getImportedEngines();
+      final remoteEngines = await _remoteManager.fetchAvailableEngines();
+      final importedIds = _importedEngines.map((e) => e.id).toSet();
+      _availableEngines = remoteEngines.where((e) => !importedIds.contains(e.id)).toList();
+
+      for (final node in _importedEngineFocusNodes.values) {
+        node.dispose();
+      }
+      for (final node in _availableEngineFocusNodes.values) {
+        node.dispose();
+      }
+      _importedEngineFocusNodes.clear();
+      _availableEngineFocusNodes.clear();
+
+      for (final engine in _importedEngines) {
+        _importedEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'imported-${engine.id}');
+      }
+      for (final engine in _availableEngines) {
+        _availableEngineFocusNodes[engine.id] = FocusNode(debugLabel: 'available-${engine.id}');
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _importEngine(RemoteEngineInfo engine) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text('Importing ${engine.displayName}...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final yamlContent = await _remoteManager.downloadEngineYaml(engine.fileName);
+      if (yamlContent == null) {
+        throw Exception('Failed to download engine configuration');
+      }
+
+      await _localStorage.saveEngine(
+        engineId: engine.id,
+        fileName: engine.fileName,
+        yamlContent: yamlContent,
+        displayName: engine.displayName,
+        icon: engine.icon,
+      );
+
+      ConfigLoader().clearCache();
+      await EngineRegistry.instance.reload();
+
+      if (mounted) Navigator.of(context).pop();
+      await _loadEngines();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${engine.displayName} imported successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteEngine(ImportedEngineMetadata engine) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Engine'),
+        content: Text('Are you sure you want to delete ${engine.displayName}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _localStorage.deleteEngine(engine.id);
+      ConfigLoader().clearCache();
+      await EngineRegistry.instance.reload();
+      await _loadEngines();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${engine.displayName} deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _importFromLocalFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final file = result.files.first;
+
+      final fileName = file.name.toLowerCase();
+      if (!fileName.endsWith('.yaml') && !fileName.endsWith('.yml')) {
+        throw Exception('Please select a YAML file (.yaml or .yml)');
+      }
+
+      final String yamlContent;
+      if (file.bytes != null) {
+        yamlContent = String.fromCharCodes(file.bytes!);
+      } else if (file.path != null) {
+        final fileBytes = await file.xFile.readAsBytes();
+        yamlContent = String.fromCharCodes(fileBytes);
+      } else {
+        throw Exception('Could not read file content');
+      }
+
+      final yaml = loadYaml(yamlContent);
+      if (yaml == null) {
+        throw Exception('Invalid YAML file');
+      }
+
+      final engineId = yaml['id'] as String?;
+      final displayName = yaml['display_name'] as String?;
+      final icon = yaml['icon'] as String?;
+
+      if (engineId == null || engineId.isEmpty) {
+        throw Exception('YAML file must contain an "id" field');
+      }
+
+      if (displayName == null || displayName.isEmpty) {
+        throw Exception('YAML file must contain a "display_name" field');
+      }
+
+      final existingEngines = await _localStorage.getImportedEngines();
+      final alreadyExists = existingEngines.any((e) => e.id == engineId);
+
+      if (alreadyExists) {
+        if (!mounted) return;
+
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Engine Already Exists'),
+            content: Text('An engine with ID "$engineId" already exists. Do you want to replace it?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Replace'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true) return;
+      }
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            content: Row(
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(width: 16),
+                Text('Importing $displayName...'),
+              ],
+            ),
+          ),
+        );
+      }
+
+      await _localStorage.saveEngine(
+        engineId: engineId,
+        fileName: file.name,
+        yamlContent: yamlContent,
+        displayName: displayName,
+        icon: icon,
+      );
+
+      ConfigLoader().clearCache();
+      await EngineRegistry.instance.reload();
+
+      if (mounted) Navigator.of(context).pop();
+
+      await _loadEngines();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$displayName imported successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  IconData _getIconForEngine(String? iconName) {
+    switch (iconName) {
+      case 'sailing':
+        return Icons.sailing;
+      case 'storage':
+        return Icons.storage;
+      case 'movie':
+      case 'movie_creation':
+        return Icons.movie;
+      case 'tv':
+        return Icons.tv;
+      case 'cloud':
+        return Icons.cloud;
+      case 'search':
+        return Icons.search;
+      case 'database':
+        return Icons.storage;
+      case 'public':
+        return Icons.public;
+      default:
+        return Icons.extension;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading engines...'),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Failed to load engines', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                focusNode: _retryButtonFocusNode,
+                onPressed: _loadEngines,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Action buttons header
+        _buildActionButtonsHeader(),
+        const SizedBox(height: 16),
+        if (_importedEngines.isNotEmpty) ...[
+          _buildSectionHeader('Imported Engines', Icons.check_circle, Colors.green),
+          const SizedBox(height: 8),
+          for (int i = 0; i < _importedEngines.length; i++)
+            _buildImportedEngineTile(_importedEngines[i], i),
+          const SizedBox(height: 24),
+        ],
+        if (_availableEngines.isNotEmpty) ...[
+          _buildSectionHeader('Available to Import', Icons.download, Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 8),
+          for (int i = 0; i < _availableEngines.length; i++)
+            _buildAvailableEngineTile(_availableEngines[i], i),
+        ],
+        if (_importedEngines.isEmpty && _availableEngines.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(48),
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_outlined, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 16),
+                  Text('No engines available', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Check your internet connection and try again'),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtonsHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            focusNode: _importLocalButtonFocusNode,
+            onPressed: _importFromLocalFile,
+            icon: const Icon(Icons.folder_open, size: 18),
+            label: const Text('Import from File'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton.icon(
+          focusNode: _refreshButtonFocusNode,
+          onPressed: _loadEngines,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Refresh'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 8),
+        Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            title.contains('Imported') ? '${_importedEngines.length}' : '${_availableEngines.length}',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImportedEngineTile(ImportedEngineMetadata engine, int index) {
+    final focusNode = _importedEngineFocusNodes[engine.id];
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(index.toDouble()),
+      child: _TvFocusableCard(
+        focusNode: focusNode,
+        onPressed: () => _deleteEngine(engine),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.green.withValues(alpha: 0.1),
+                child: Icon(_getIconForEngine(engine.icon), color: Colors.green),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(engine.displayName, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Imported ${_formatDate(engine.importedAt)}',
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.delete_outline, color: Colors.red.withValues(alpha: 0.7)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailableEngineTile(RemoteEngineInfo engine, int index) {
+    final focusNode = _availableEngineFocusNodes[engine.id];
+    final orderIndex = _importedEngines.length + index;
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(orderIndex.toDouble()),
+      child: _TvFocusableCard(
+        focusNode: focusNode,
+        onPressed: () => _importEngine(engine),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                child: Icon(_getIconForEngine(engine.icon), color: Theme.of(context).colorScheme.onPrimaryContainer),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(engine.displayName, style: Theme.of(context).textTheme.titleMedium),
+                    if (engine.description != null) ...[
+                      const SizedBox(height: 2),
+                      Text(engine.description!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Import', style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inDays == 0) return 'today';
+    if (diff.inDays == 1) return 'yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return '${date.day}/${date.month}/${date.year}';
+  }
 }
 
 class _EngineImportPageState extends State<EngineImportPage> {
