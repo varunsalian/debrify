@@ -172,6 +172,86 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     }
   }
 
+  void _showAddonDetails(StremioAddon addon) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(addon.name),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (addon.description != null) ...[
+                Text(addon.description!),
+                const SizedBox(height: 16),
+              ],
+              _DetailRow(label: 'ID', value: addon.id),
+              if (addon.version != null)
+                _DetailRow(label: 'Version', value: addon.version!),
+              _DetailRow(
+                label: 'Types',
+                value: addon.types.isEmpty ? 'None' : addon.types.join(', '),
+              ),
+              _DetailRow(
+                label: 'Resources',
+                value: addon.resources.isEmpty
+                    ? 'None'
+                    : addon.resources.join(', '),
+              ),
+              if (addon.idPrefixes != null && addon.idPrefixes!.isNotEmpty)
+                _DetailRow(
+                  label: 'ID Prefixes',
+                  value: addon.idPrefixes!.join(', '),
+                ),
+              _DetailRow(
+                label: 'Added',
+                value: _formatDate(addon.addedAt),
+              ),
+              if (addon.lastChecked != null)
+                _DetailRow(
+                  label: 'Last Checked',
+                  value: _formatDate(addon.lastChecked!),
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'Manifest URL:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                addon.manifestUrl,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: addon.manifestUrl));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('URL copied to clipboard')),
+              );
+            },
+            child: const Text('Copy URL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return FocusTraversalGroup(
@@ -402,7 +482,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
           addon: addon,
           index: index - 1,
           focusNode: _addonFocusNodes[addon.manifestUrl]!,
-          onTap: () {},
+          onTap: () => _showAddonDetails(addon),
           onToggle: () => _toggleAddon(addon),
           onDelete: () => _deleteAddon(addon),
         );
