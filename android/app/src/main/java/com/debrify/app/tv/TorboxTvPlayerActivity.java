@@ -58,6 +58,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
+import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
@@ -270,12 +271,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View subtitleColumnStyle;
     private View subtitleColumnColor;
     private View subtitleColumnBg;
+    private View subtitleColumnFont;
     private View subtitleResetButton;
     private TextView subtitleValueTrack;
     private TextView subtitleValueSize;
     private TextView subtitleValueStyle;
     private TextView subtitleValueColor;
     private TextView subtitleValueBg;
+    private TextView subtitleValueFont;
     private View subtitleColorSwatch;
     private TextView subtitlePreviewText;
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
@@ -379,11 +382,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         subtitleColumnStyle = findViewById(R.id.subtitle_column_style);
         subtitleColumnColor = findViewById(R.id.subtitle_column_color);
         subtitleColumnBg = findViewById(R.id.subtitle_column_bg);
+        subtitleColumnFont = findViewById(R.id.subtitle_column_font);
         subtitleValueTrack = findViewById(R.id.subtitle_value_track);
         subtitleValueSize = findViewById(R.id.subtitle_value_size);
         subtitleValueStyle = findViewById(R.id.subtitle_value_style);
         subtitleValueColor = findViewById(R.id.subtitle_value_color);
         subtitleValueBg = findViewById(R.id.subtitle_value_bg);
+        subtitleValueFont = findViewById(R.id.subtitle_value_font);
         subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch);
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text);
         subtitleResetButton = findViewById(R.id.subtitle_reset_button);
@@ -2843,6 +2848,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleValueBg.setText(SubtitleSettings.getCurrentBg(this).getLabel());
         }
 
+        // Font
+        if (subtitleValueFont != null) {
+            subtitleValueFont.setText(SubtitleFontManager.getCurrentFontLabel(this));
+        }
+
         // Update preview
         updateSubtitlePreview();
     }
@@ -2854,9 +2864,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         SubtitleSettings.StyleOption styleOption = SubtitleSettings.getCurrentStyle(this);
         SubtitleSettings.SizeOption sizeOption = SubtitleSettings.getCurrentSize(this);
         SubtitleSettings.BgOption bgOption = SubtitleSettings.getCurrentBg(this);
+        android.graphics.Typeface typeface = SubtitleFontManager.getTypeface(this);
 
         subtitlePreviewText.setTextColor(colorOption.getColor());
         subtitlePreviewText.setTextSize(sizeOption.getSizeSp());
+        subtitlePreviewText.setTypeface(typeface);
 
         // Apply shadow based on edge style
         switch (styleOption.getEdgeType()) {
@@ -2897,6 +2909,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleColorUp(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgUp(this);
+        } else if (viewId == R.id.subtitle_column_font) {
+            SubtitleFontManager.cycleFontUp(this);
         } else if (viewId == R.id.subtitle_reset_button) {
             // Reset button doesn't cycle
             return;
@@ -2922,6 +2936,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleColorDown(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgDown(this);
+        } else if (viewId == R.id.subtitle_column_font) {
+            SubtitleFontManager.cycleFontDown(this);
         } else if (viewId == R.id.subtitle_reset_button) {
             // Reset button doesn't cycle
             return;
@@ -2974,6 +2990,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void resetSubtitleSettingsFromPanel() {
         SubtitleSettings.resetToDefaults(this);
+        SubtitleFontManager.resetToDefault(this);
         updateSubtitlePanelValues();
         applySubtitleSettings();
         showToast("Subtitle settings reset to defaults");

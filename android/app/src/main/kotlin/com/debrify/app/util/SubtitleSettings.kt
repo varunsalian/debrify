@@ -230,13 +230,16 @@ object SubtitleSettings {
             else -> Color.parseColor("#CC000000")  // Darker edge for colored text
         }
 
+        // Get typeface from font manager
+        val typeface = SubtitleFontManager.getTypeface(context)
+
         return CaptionStyleCompat(
             colorOption.color,       // foreground (text color)
             bgOption.color,          // background
             Color.TRANSPARENT,       // window color
             styleOption.edgeType,    // edge type
             edgeColor,               // edge color
-            Typeface.create("sans-serif", Typeface.NORMAL)
+            typeface                 // custom or default typeface
         )
     }
 

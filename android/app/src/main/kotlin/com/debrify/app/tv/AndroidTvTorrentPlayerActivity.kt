@@ -46,6 +46,7 @@ import com.debrify.app.MainActivity
 import com.debrify.app.R
 import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
+import com.debrify.app.util.SubtitleFontManager
 import com.debrify.app.util.SubtitleSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -152,12 +153,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleColumnStyle: View? = null
     private var subtitleColumnColor: View? = null
     private var subtitleColumnBg: View? = null
+    private var subtitleColumnFont: View? = null
     private var subtitleResetButton: View? = null
     private var subtitleValueTrack: TextView? = null
     private var subtitleValueSize: TextView? = null
     private var subtitleValueStyle: TextView? = null
     private var subtitleValueColor: TextView? = null
     private var subtitleValueBg: TextView? = null
+    private var subtitleValueFont: TextView? = null
     private var subtitleColorSwatch: View? = null
     private var subtitlePreviewText: TextView? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
@@ -514,11 +517,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleColumnStyle = findViewById(R.id.subtitle_column_style)
         subtitleColumnColor = findViewById(R.id.subtitle_column_color)
         subtitleColumnBg = findViewById(R.id.subtitle_column_bg)
+        subtitleColumnFont = findViewById(R.id.subtitle_column_font)
         subtitleValueTrack = findViewById(R.id.subtitle_value_track)
         subtitleValueSize = findViewById(R.id.subtitle_value_size)
         subtitleValueStyle = findViewById(R.id.subtitle_value_style)
         subtitleValueColor = findViewById(R.id.subtitle_value_color)
         subtitleValueBg = findViewById(R.id.subtitle_value_bg)
+        subtitleValueFont = findViewById(R.id.subtitle_value_font)
         subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch)
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
@@ -3050,6 +3055,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Background
         subtitleValueBg?.text = SubtitleSettings.getCurrentBg(this).label
 
+        // Font
+        subtitleValueFont?.text = SubtitleFontManager.getCurrentFontLabel(this)
+
         // Update preview
         updateSubtitlePreview()
     }
@@ -3059,10 +3067,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val styleOption = SubtitleSettings.getCurrentStyle(this)
         val sizeOption = SubtitleSettings.getCurrentSize(this)
         val bgOption = SubtitleSettings.getCurrentBg(this)
+        val typeface = SubtitleFontManager.getTypeface(this)
 
         subtitlePreviewText?.apply {
             setTextColor(colorOption.color)
             textSize = sizeOption.sizeSp
+            setTypeface(typeface)
 
             // Apply shadow based on edge style
             when (styleOption.edgeType) {
@@ -3108,6 +3118,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgUp(this)
             }
+            R.id.subtitle_column_font -> {
+                SubtitleFontManager.cycleFontUp(this)
+            }
             R.id.subtitle_reset_button -> {
                 // Reset button doesn't cycle
                 return
@@ -3137,6 +3150,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgDown(this)
+            }
+            R.id.subtitle_column_font -> {
+                SubtitleFontManager.cycleFontDown(this)
             }
             R.id.subtitle_reset_button -> {
                 // Reset button doesn't cycle
@@ -3182,6 +3198,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun resetSubtitleSettings() {
         SubtitleSettings.resetToDefaults(this)
+        SubtitleFontManager.resetToDefault(this)
         updateSubtitlePanelValues()
         applySubtitleSettings()
         Toast.makeText(this, "Subtitle settings reset to defaults", Toast.LENGTH_SHORT).show()

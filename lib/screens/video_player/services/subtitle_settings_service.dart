@@ -1,6 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../services/subtitle_font_service.dart';
 
 /// Subtitle size options
 class SubtitleSize {
@@ -194,11 +195,17 @@ class SubtitleSettingsService {
   /// Load all settings at once
   Future<SubtitleSettingsData> loadAll() async {
     await _ensurePrefs();
+    final fontService = SubtitleFontService.instance;
+    final fontIndex = await fontService.getFontIndex();
+    final fontFamily = await fontService.getFontFamily();
+
     return SubtitleSettingsData(
       sizeIndex: _prefs!.getInt(_keySizeIndex) ?? SubtitleSize.defaultIndex,
       styleIndex: _prefs!.getInt(_keyStyleIndex) ?? SubtitleStyle.defaultIndex,
       colorIndex: _prefs!.getInt(_keyColorIndex) ?? SubtitleColor.defaultIndex,
       bgIndex: _prefs!.getInt(_keyBgIndex) ?? SubtitleBackground.defaultIndex,
+      fontIndex: fontIndex,
+      fontFamily: fontFamily,
     );
   }
 
@@ -209,6 +216,7 @@ class SubtitleSettingsService {
     await _prefs!.setInt(_keyStyleIndex, SubtitleStyle.defaultIndex);
     await _prefs!.setInt(_keyColorIndex, SubtitleColor.defaultIndex);
     await _prefs!.setInt(_keyBgIndex, SubtitleBackground.defaultIndex);
+    await SubtitleFontService.instance.resetToDefault();
   }
 
   /// Check if settings are at defaults
@@ -217,7 +225,8 @@ class SubtitleSettingsService {
     return data.sizeIndex == SubtitleSize.defaultIndex &&
         data.styleIndex == SubtitleStyle.defaultIndex &&
         data.colorIndex == SubtitleColor.defaultIndex &&
-        data.bgIndex == SubtitleBackground.defaultIndex;
+        data.bgIndex == SubtitleBackground.defaultIndex &&
+        data.fontIndex == SubtitleFont.defaultIndex;
   }
 }
 
@@ -227,12 +236,16 @@ class SubtitleSettingsData {
   final int styleIndex;
   final int colorIndex;
   final int bgIndex;
+  final int fontIndex;
+  final String? fontFamily; // Resolved font family (null = system default)
 
   const SubtitleSettingsData({
     required this.sizeIndex,
     required this.styleIndex,
     required this.colorIndex,
     required this.bgIndex,
+    this.fontIndex = 0,
+    this.fontFamily,
   });
 
   SubtitleSize get size =>
@@ -247,6 +260,9 @@ class SubtitleSettingsData {
   SubtitleBackground get background => SubtitleBackground
       .options[bgIndex.clamp(0, SubtitleBackground.options.length - 1)];
 
+  SubtitleFont get font => SubtitleFont
+      .builtInOptions[fontIndex.clamp(0, SubtitleFont.builtInOptions.length - 1)];
+
   /// Build TextStyle for subtitles
   TextStyle buildTextStyle() {
     return TextStyle(
@@ -255,6 +271,7 @@ class SubtitleSettingsData {
       fontWeight: FontWeight.w600,
       shadows: style.shadows,
       backgroundColor: background.color,
+      fontFamily: fontFamily,
     );
   }
 
@@ -263,12 +280,16 @@ class SubtitleSettingsData {
     int? styleIndex,
     int? colorIndex,
     int? bgIndex,
+    int? fontIndex,
+    String? fontFamily,
   }) {
     return SubtitleSettingsData(
       sizeIndex: sizeIndex ?? this.sizeIndex,
       styleIndex: styleIndex ?? this.styleIndex,
       colorIndex: colorIndex ?? this.colorIndex,
       bgIndex: bgIndex ?? this.bgIndex,
+      fontIndex: fontIndex ?? this.fontIndex,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 }

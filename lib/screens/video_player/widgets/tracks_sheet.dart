@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import '../../../models/stremio_subtitle.dart';
 import '../../../services/stremio_subtitle_service.dart';
+import '../../../services/subtitle_font_service.dart';
 import '../constants/color_constants.dart';
 import '../widgets/netflix_radio_tile.dart';
 import '../utils/language_mapping.dart';
@@ -520,6 +521,28 @@ class TracksSheet {
                 .clamp(0, SubtitleBackground.options.length - 1);
             await SubtitleSettingsService.instance.setBgIndex(newIndex);
             onStyleChanged(subtitleStyle.copyWith(bgIndex: newIndex));
+          },
+        ),
+
+        // Font setting
+        _SubtitleStyleRow(
+          label: 'Font',
+          value: subtitleStyle.font.label,
+          onDecrease: () async {
+            final newIndex = await SubtitleFontService.instance.cycleFontDown();
+            final fontFamily = await SubtitleFontService.instance.getFontFamily();
+            onStyleChanged(subtitleStyle.copyWith(
+              fontIndex: newIndex,
+              fontFamily: fontFamily,
+            ));
+          },
+          onIncrease: () async {
+            final newIndex = await SubtitleFontService.instance.cycleFontUp();
+            final fontFamily = await SubtitleFontService.instance.getFontFamily();
+            onStyleChanged(subtitleStyle.copyWith(
+              fontIndex: newIndex,
+              fontFamily: fontFamily,
+            ));
           },
         ),
 

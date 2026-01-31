@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../services/external_player_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/android_native_downloader.dart';
+import '../../services/subtitle_font_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 
@@ -75,6 +76,7 @@ class _ExternalPlayerSettingsPageState
   int _subtitleStyleIndex = 1; // Outline
   int _subtitleColorIndex = 0; // White
   int _subtitleBgIndex = 0; // None
+  int _subtitleFontIndex = 0; // Default
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
@@ -82,11 +84,13 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _subtitleStyleFocusNode = FocusNode();
   final FocusNode _subtitleColorFocusNode = FocusNode();
   final FocusNode _subtitleBgFocusNode = FocusNode();
+  final FocusNode _subtitleFontFocusNode = FocusNode();
   bool _aspectFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
   bool _subtitleColorFocused = false;
   bool _subtitleBgFocused = false;
+  bool _subtitleFontFocused = false;
 
   // DeoVR FocusNodes for DPAD navigation
   final FocusNode _screenTypeFocusNode = FocusNode();
@@ -181,6 +185,12 @@ class _ExternalPlayerSettingsPageState
         _subtitleBgFocused = _subtitleBgFocusNode.hasFocus;
       });
     });
+    _subtitleFontFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleFontFocused = _subtitleFontFocusNode.hasFocus;
+      });
+    });
   }
 
   @override
@@ -203,6 +213,7 @@ class _ExternalPlayerSettingsPageState
     _subtitleStyleFocusNode.dispose();
     _subtitleColorFocusNode.dispose();
     _subtitleBgFocusNode.dispose();
+    _subtitleFontFocusNode.dispose();
     super.dispose();
   }
 
@@ -330,6 +341,7 @@ class _ExternalPlayerSettingsPageState
         _subtitleStyleIndex = subtitleSettings.styleIndex;
         _subtitleColorIndex = subtitleSettings.colorIndex;
         _subtitleBgIndex = subtitleSettings.bgIndex;
+        _subtitleFontIndex = subtitleSettings.fontIndex;
         _loading = false;
       });
     } catch (e) {
@@ -775,6 +787,11 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSubtitleBgIndex(int index) async {
     setState(() => _subtitleBgIndex = index);
     await SubtitleSettingsService.instance.setBgIndex(index);
+  }
+
+  Future<void> _setSubtitleFontIndex(int index) async {
+    setState(() => _subtitleFontIndex = index);
+    await SubtitleFontService.instance.setFontIndex(index);
   }
 
   // Aspect labels
@@ -1715,6 +1732,18 @@ class _ExternalPlayerSettingsPageState
                         focusNode: _subtitleBgFocusNode,
                         isFocused: _subtitleBgFocused,
                       ),
+                      const SizedBox(height: 12),
+
+                      // Font
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Font',
+                        value: _subtitleFontIndex,
+                        items: SubtitleFont.builtInOptions.map((o) => o.label).toList(),
+                        onChanged: (index) => _setSubtitleFontIndex(index),
+                        focusNode: _subtitleFontFocusNode,
+                        isFocused: _subtitleFontFocused,
+                      ),
 
                       const SizedBox(height: 16),
 
@@ -1735,6 +1764,7 @@ class _ExternalPlayerSettingsPageState
                               fontWeight: FontWeight.w600,
                               shadows: SubtitleStyle.options[_subtitleStyleIndex].shadows,
                               backgroundColor: SubtitleBackground.options[_subtitleBgIndex].color,
+                              fontFamily: SubtitleFont.builtInOptions[_subtitleFontIndex].fontFamily,
                             ),
                           ),
                         ),

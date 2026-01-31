@@ -290,7 +290,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/subtitle_column_color"
-                android:nextFocusRight="@+id/subtitle_reset_button"
+                android:nextFocusRight="@+id/subtitle_column_font"
                 android:layout_marginEnd="6dp">
 
                 <TextView
@@ -328,7 +328,64 @@
 
             </LinearLayout>
 
-            <!-- Column 6: Reset -->
+            <!-- Column 6: Font -->
+            <LinearLayout
+                android:id="@+id/subtitle_column_font"
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:background="@drawable/subtitle_column_bg"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/subtitle_column_bg"
+                android:nextFocusRight="@+id/subtitle_reset_button"
+                android:layout_marginEnd="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="FONT"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="9sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.05" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="▲"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+                <TextView
+                    android:id="@+id/subtitle_value_font"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Default"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:maxWidth="72dp"
+                    android:gravity="center" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+            </LinearLayout>
+
+            <!-- Column 7: Reset -->
             <LinearLayout
                 android:id="@+id/subtitle_reset_button"
                 android:layout_width="56dp"
@@ -342,7 +399,7 @@
                 android:background="@drawable/subtitle_column_bg"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_bg">
+                android:nextFocusLeft="@id/subtitle_column_font">
 
                 <ImageView
                     android:layout_width="20dp"
