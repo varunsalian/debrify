@@ -533,15 +533,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun setupPlayer() {
         trackSelector = DefaultTrackSelector(this)
 
-        // Get default subtitle language from settings
+        // Get default language settings
+        val defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this)
         val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
 
         // Build track selector parameters with robust language matching
         val paramsBuilder = trackSelector?.buildUponParameters()
-            ?.setPreferredAudioLanguage("en")
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
 
+        // Apply audio language preference
+        if (defaultAudioLang != null) {
+            val audioVariants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultAudioLang)
+            if (audioVariants.isNotEmpty()) {
+                paramsBuilder?.setPreferredAudioLanguages(*audioVariants.toTypedArray())
+            } else {
+                paramsBuilder?.setPreferredAudioLanguage(defaultAudioLang)
+            }
+        } else {
+            // Default to English if no preference set
+            val englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en")
+            paramsBuilder?.setPreferredAudioLanguages(*englishVariants.toTypedArray())
+        }
+
+        // Apply subtitle language preference
         when {
             defaultSubtitleLang == "off" -> {
                 // Disable subtitle auto-selection by setting empty preferred language

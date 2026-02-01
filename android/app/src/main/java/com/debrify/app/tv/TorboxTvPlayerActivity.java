@@ -477,14 +477,29 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
 
-        // Get default subtitle language from settings
+        // Get default language settings
+        String defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this);
         String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
 
         // Build track selector parameters with robust language matching
         DefaultTrackSelector.Parameters.Builder paramsBuilder = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage("en")
                 .setPreferredAudioMimeType("audio/opus");
 
+        // Apply audio language preference
+        if (defaultAudioLang != null) {
+            List<String> audioVariants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultAudioLang);
+            if (!audioVariants.isEmpty()) {
+                paramsBuilder.setPreferredAudioLanguages(audioVariants.toArray(new String[0]));
+            } else {
+                paramsBuilder.setPreferredAudioLanguage(defaultAudioLang);
+            }
+        } else {
+            // Default to English if no preference set
+            List<String> englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en");
+            paramsBuilder.setPreferredAudioLanguages(englishVariants.toArray(new String[0]));
+        }
+
+        // Apply subtitle language preference
         if ("off".equals(defaultSubtitleLang)) {
             // Disable subtitle auto-selection by setting empty preferred language
             paramsBuilder.setPreferredTextLanguage("");

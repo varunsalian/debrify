@@ -19,6 +19,7 @@ object SubtitleSettings {
     private const val KEY_COLOR_INDEX = "subtitle_color_index"
     private const val KEY_BG_INDEX = "subtitle_bg_index"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
+    private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
     // Default indices
     const val DEFAULT_SIZE_INDEX = 2      // Medium
@@ -86,6 +87,15 @@ object SubtitleSettings {
     @JvmStatic
     fun getDefaultSubtitleLanguage(context: Context): String? {
         return getFlutterPrefs(context).getString(KEY_DEFAULT_SUBTITLE_LANGUAGE, null)
+    }
+
+    /**
+     * Get the default audio language from Flutter settings.
+     * Returns language code (e.g., "en", "es") or null for no preference.
+     */
+    @JvmStatic
+    fun getDefaultAudioLanguage(context: Context): String? {
+        return getFlutterPrefs(context).getString(KEY_DEFAULT_AUDIO_LANGUAGE, null)
     }
 
     // Getters

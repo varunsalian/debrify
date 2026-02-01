@@ -97,6 +97,7 @@ class StorageService {
   static const String _playerDefaultAspectIndexTvKey = 'player_default_aspect_index_tv';
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
   static const String _playerDefaultSubtitleLanguageKey = 'player_default_subtitle_language';
+  static const String _playerDefaultAudioLanguageKey = 'player_default_audio_language';
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -3294,6 +3295,24 @@ class StorageService {
       await prefs.remove(_playerDefaultSubtitleLanguageKey);
     } else {
       await prefs.setString(_playerDefaultSubtitleLanguageKey, languageCode);
+    }
+  }
+
+  /// Get default audio language code
+  /// Returns language code (e.g., 'en', 'es') or null for no preference
+  static Future<String?> getDefaultAudioLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_playerDefaultAudioLanguageKey);
+  }
+
+  /// Set default audio language code
+  /// Pass language code (e.g., 'en', 'es') or null to clear preference
+  static Future<void> setDefaultAudioLanguage(String? languageCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (languageCode == null) {
+      await prefs.remove(_playerDefaultAudioLanguageKey);
+    } else {
+      await prefs.setString(_playerDefaultAudioLanguageKey, languageCode);
     }
   }
 

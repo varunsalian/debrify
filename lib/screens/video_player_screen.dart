@@ -3563,6 +3563,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             orElse: () => tracks.audio.first,
           );
           await _player.setAudioTrack(audioTrack);
+        } else {
+          // No stored audio preference - apply default audio language setting
+          await _applyDefaultAudioLanguage();
         }
 
         // Apply subtitle track preference
@@ -3578,10 +3581,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _applyDefaultSubtitleLanguage();
         }
       } else {
-        // No track preferences at all - apply default subtitle language setting
+        // No track preferences at all - apply default language settings
+        await _applyDefaultAudioLanguage();
         await _applyDefaultSubtitleLanguage();
       }
     } catch (e) {}
+  }
+
+  /// Apply default audio language from settings (when no stored preference exists)
+  Future<void> _applyDefaultAudioLanguage() async {
+    try {
+      final defaultLang = await StorageService.getDefaultAudioLanguage();
+      if (defaultLang == null) {
+        // No preference set - do nothing, let player use its default
+        return;
+      }
+
+      final tracks = _player.state.tracks;
+      if (tracks.audio.isEmpty) return;
+
+      // Find an audio track matching the preferred language using robust matching
+      mk.AudioTrack? matchingTrack;
+      for (final track in tracks.audio) {
+        if (LanguageMapper.matchesLanguage(defaultLang, track.language)) {
+          matchingTrack = track;
+          break;
+        }
+        // Also check title field as some tracks store language there
+        if (LanguageMapper.matchesLanguage(defaultLang, track.title)) {
+          matchingTrack = track;
+          break;
+        }
+      }
+
+      if (matchingTrack != null) {
+        await _player.setAudioTrack(matchingTrack);
+      }
+    } catch (e) {
+      // Silently fail - audio preference is non-critical
+    }
   }
 
   /// Apply default subtitle language from settings (when no stored preference exists)

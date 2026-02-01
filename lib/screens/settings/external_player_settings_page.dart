@@ -73,6 +73,7 @@ class _ExternalPlayerSettingsPageState
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 2; // Medium
   String? _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
+  String? _defaultAudioLanguage; // null = no preference, 'en'/'es'/etc = language
   int _subtitleSizeIndex = 2; // Medium
   int _subtitleStyleIndex = 1; // Outline
   int _subtitleColorIndex = 0; // White
@@ -81,6 +82,7 @@ class _ExternalPlayerSettingsPageState
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
+  final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
   final FocusNode _subtitleStyleFocusNode = FocusNode();
@@ -88,6 +90,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _subtitleBgFocusNode = FocusNode();
   final FocusNode _subtitleFontFocusNode = FocusNode();
   bool _aspectFocused = false;
+  bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
@@ -164,6 +167,12 @@ class _ExternalPlayerSettingsPageState
         _aspectFocused = _aspectFocusNode.hasFocus;
       });
     });
+    _defaultAudioLangFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _defaultAudioLangFocused = _defaultAudioLangFocusNode.hasFocus;
+      });
+    });
     _defaultSubtitleLangFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -218,6 +227,7 @@ class _ExternalPlayerSettingsPageState
     _showDialogFocusNode.dispose();
     // Debrify Player focus nodes
     _aspectFocusNode.dispose();
+    _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
     _subtitleStyleFocusNode.dispose();
@@ -317,6 +327,7 @@ class _ExternalPlayerSettingsPageState
           : await StorageService.getPlayerDefaultAspectIndex();
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
       final defaultSubtitleLanguage = await StorageService.getDefaultSubtitleLanguage();
+      final defaultAudioLanguage = await StorageService.getDefaultAudioLanguage();
 
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
@@ -349,6 +360,7 @@ class _ExternalPlayerSettingsPageState
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
         _defaultSubtitleLanguage = defaultSubtitleLanguage;
+        _defaultAudioLanguage = defaultAudioLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
         _subtitleStyleIndex = subtitleSettings.styleIndex;
         _subtitleColorIndex = subtitleSettings.colorIndex;
@@ -786,6 +798,11 @@ class _ExternalPlayerSettingsPageState
     await StorageService.setDefaultSubtitleLanguage(languageCode);
   }
 
+  Future<void> _setDefaultAudioLanguage(String? languageCode) async {
+    setState(() => _defaultAudioLanguage = languageCode);
+    await StorageService.setDefaultAudioLanguage(languageCode);
+  }
+
   Future<void> _setSubtitleSizeIndex(int index) async {
     setState(() => _subtitleSizeIndex = index);
     await SubtitleSettingsService.instance.setSizeIndex(index);
@@ -847,6 +864,35 @@ class _ExternalPlayerSettingsPageState
 
   int get _subtitleLanguageIndex {
     final idx = _subtitleLanguageOptions.indexWhere((opt) => opt.$1 == _defaultSubtitleLanguage);
+    return idx >= 0 ? idx : 0;
+  }
+
+  // Audio language options: (code, label) - no "Off" option for audio
+  static const List<(String?, String)> _audioLanguageOptions = [
+    (null, 'No Preference'),
+    ('en', 'English'),
+    ('es', 'Spanish'),
+    ('fr', 'French'),
+    ('de', 'German'),
+    ('it', 'Italian'),
+    ('pt', 'Portuguese'),
+    ('ru', 'Russian'),
+    ('ja', 'Japanese'),
+    ('ko', 'Korean'),
+    ('zh', 'Chinese'),
+    ('ar', 'Arabic'),
+    ('hi', 'Hindi'),
+    ('nl', 'Dutch'),
+    ('pl', 'Polish'),
+    ('tr', 'Turkish'),
+    ('sv', 'Swedish'),
+    ('da', 'Danish'),
+    ('no', 'Norwegian'),
+    ('fi', 'Finnish'),
+  ];
+
+  int get _audioLanguageIndex {
+    final idx = _audioLanguageOptions.indexWhere((opt) => opt.$1 == _defaultAudioLanguage);
     return idx >= 0 ? idx : 0;
   }
 
@@ -1703,6 +1749,18 @@ class _ExternalPlayerSettingsPageState
                         onChanged: (index) => _setDefaultAspectIndex(index),
                         focusNode: _aspectFocusNode,
                         isFocused: _aspectFocused,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Default Audio Language
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Default Audio',
+                        value: _audioLanguageIndex,
+                        items: _audioLanguageOptions.map((opt) => opt.$2).toList(),
+                        onChanged: (index) => _setDefaultAudioLanguage(_audioLanguageOptions[index].$1),
+                        focusNode: _defaultAudioLangFocusNode,
+                        isFocused: _defaultAudioLangFocused,
                       ),
                       const SizedBox(height: 12),
 
