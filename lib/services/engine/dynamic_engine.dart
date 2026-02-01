@@ -184,12 +184,15 @@ class DynamicEngine extends SearchEngine {
     int season,
     int? episode,
   ) async {
+    // Get default episode from series config, fallback to 1
+    final int defaultEpisode = config.request.seriesConfig?.defaultEpisode ?? 1;
+
     return await _executor.execute(
       config: config,
       params: {
         'imdbId': imdbId,
         'season': season,
-        if (episode != null) 'episode': episode,
+        'episode': episode ?? defaultEpisode,
       },
       betweenPageRequests: _defaultPageDelay,
     );
@@ -378,8 +381,13 @@ class DynamicEngine extends SearchEngine {
     if (season != null) {
       params['season'] = season;
     }
+    // For series searches with season, ensure episode is set (required by some APIs like torrentio)
     if (episode != null) {
       params['episode'] = episode;
+    } else if (isSeries == true && season != null) {
+      // Use default episode from series config, or fallback to 1
+      final int defaultEpisode = config.request.seriesConfig?.defaultEpisode ?? 1;
+      params['episode'] = defaultEpisode;
     }
 
     if (params.isEmpty) {
