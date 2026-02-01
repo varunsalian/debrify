@@ -199,37 +199,37 @@ class DynamicEngine extends SearchEngine {
   ///
   /// This is useful for engines like Torrentio where season must be specified.
   ///
-  /// If [availableSeasons] is provided (from IMDbbot API), iterates only over
-  /// those known seasons. Otherwise falls back to probing 1 to maxSeasonProbes.
+  /// If [availableSeasons] is provided (from IMDbbot API), uses those seasons
+  /// (capped at 10). Otherwise falls back to probing 1 to maxSeasonProbes.
   ///
-  /// Stops early if 3 consecutive seasons return 0 results.
+  /// Probes all seasons IN PARALLEL for faster results.
   Future<List<Torrent>> _probeSeasons(
     String imdbId,
     SeriesConfig seriesConfig,
     int? episode, {
     List<int>? availableSeasons,
   }) async {
-    final List<Torrent> allResults = [];
     final int defaultEpisode = seriesConfig.defaultEpisode;
+    const int maxSeasonsToProbeCap = 10; // Cap at 10 seasons like StremioService
 
     // Use available seasons if provided and non-empty, otherwise fallback to 1..maxProbes
     final bool hasSeasonData = availableSeasons != null && availableSeasons.isNotEmpty;
-    final List<int> seasonsToProbe = hasSeasonData
-        ? availableSeasons!
+    List<int> seasonsToProbe = hasSeasonData
+        ? availableSeasons
         : List.generate(seriesConfig.maxSeasonProbes, (i) => i + 1);
 
-    if (hasSeasonData) {
+    // Cap at 10 seasons to avoid excessive requests
+    if (seasonsToProbe.length > maxSeasonsToProbeCap) {
       debugPrint(
-          'DynamicEngine[$name]: Probing ${seasonsToProbe.length} known seasons: $seasonsToProbe');
-    } else {
-      debugPrint(
-          'DynamicEngine[$name]: No season data, probing up to ${seriesConfig.maxSeasonProbes} seasons');
+          'DynamicEngine[$name]: Capping seasons from ${seasonsToProbe.length} to $maxSeasonsToProbeCap');
+      seasonsToProbe = seasonsToProbe.take(maxSeasonsToProbeCap).toList();
     }
 
-    int consecutiveEmpty = 0;
-    const int maxConsecutiveEmpty = 3;
+    debugPrint(
+        'DynamicEngine[$name]: Probing ${seasonsToProbe.length} seasons IN PARALLEL: $seasonsToProbe');
 
-    for (final seasonNum in seasonsToProbe) {
+    // Probe all seasons in parallel for faster results
+    final List<Future<List<Torrent>>> futures = seasonsToProbe.map((seasonNum) async {
       try {
         final List<Torrent> seasonResults = await _executor.execute(
           config: config,
@@ -244,36 +244,27 @@ class DynamicEngine extends SearchEngine {
         );
 
         if (seasonResults.isEmpty) {
-          consecutiveEmpty++;
           debugPrint(
-              'DynamicEngine[$name]: Season $seasonNum returned 0 results (consecutive empty: $consecutiveEmpty)');
-
-          if (consecutiveEmpty >= maxConsecutiveEmpty) {
-            debugPrint(
-                'DynamicEngine[$name]: $maxConsecutiveEmpty consecutive empty seasons, stopping probe');
-            break;
-          }
+              'DynamicEngine[$name]: Season $seasonNum returned 0 results');
         } else {
-          consecutiveEmpty = 0; // Reset counter on success
           debugPrint(
               'DynamicEngine[$name]: Season $seasonNum returned ${seasonResults.length} results');
-          allResults.addAll(seasonResults);
         }
-
-        // Add a small delay between season probes
-        await Future.delayed(const Duration(milliseconds: 100));
+        return seasonResults;
       } catch (e) {
         debugPrint(
             'DynamicEngine[$name]: Error probing season $seasonNum: $e');
-        // Count errors as empty for consecutive check
-        consecutiveEmpty++;
-        if (consecutiveEmpty >= maxConsecutiveEmpty) {
-          debugPrint(
-              'DynamicEngine[$name]: $maxConsecutiveEmpty consecutive failures, stopping probe');
-          break;
-        }
+        return <Torrent>[];
       }
-    }
+    }).toList();
+
+    // Wait for all parallel requests to complete
+    final List<List<Torrent>> results = await Future.wait(futures);
+
+    // Flatten results
+    final List<Torrent> allResults = results.expand((list) => list).toList();
+    debugPrint(
+        'DynamicEngine[$name]: Parallel probe returned ${allResults.length} total results');
 
     return allResults;
   }

@@ -35,6 +35,7 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/search_loading_animation.dart';
 import '../widgets/channel_picker_dialog.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/debrify_tv_cache_service.dart';
@@ -207,6 +208,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _torrentDropdownFocusNode = FocusNode(debugLabel: 'torrent_dropdown');
 
   bool _isLoading = false;
+  SearchPhase _searchPhase = SearchPhase.idle;
   String _errorMessage = '';
   bool _hasSearched = false;
   int _activeSearchRequestId = 0;
@@ -1175,6 +1177,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final int requestId = ++_activeSearchRequestId;
     setState(() {
       _isLoading = true;
+      _searchPhase = SearchPhase.searching;
       _errorMessage = '';
       _hasSearched = true;
       _torboxCacheStatus = null;
@@ -1270,6 +1273,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torboxKeyValue != null &&
           torboxKeyValue.isNotEmpty &&
           combinedTorrents.isNotEmpty) {
+        // Update phase to cache checking
+        if (mounted && requestId == _activeSearchRequestId) {
+          setState(() => _searchPhase = SearchPhase.checkingCache);
+        }
         final uniqueHashes = combinedTorrents
             .map((torrent) => torrent.infohash.trim().toLowerCase())
             .where((hash) => hash.isNotEmpty)
@@ -1292,6 +1299,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             torboxCacheMap = null;
           }
         }
+      }
+
+      // Update phase to filtering
+      if (mounted && requestId == _activeSearchRequestId) {
+        setState(() => _searchPhase = SearchPhase.filtering);
       }
 
       final bool torboxActive =
@@ -1514,6 +1526,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _engineErrors = engineErrors;
         _torboxCacheStatus = torboxCacheMap;
         _isLoading = false;
+        _searchPhase = SearchPhase.idle;
         _showingTorboxCachedOnly = showOnlyCached;
         _errorMessage = nextErrorMessage;
       });
@@ -1537,6 +1550,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
         _errorMessage = errorMsg;
         _isLoading = false;
+        _searchPhase = SearchPhase.idle;
       });
     }
   }
@@ -1915,6 +1929,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // For series, fetch season metadata before searching
     if (selection.isSeries) {
+      // Show loading state while fetching metadata
+      setState(() {
+        _isLoading = true;
+        _searchPhase = SearchPhase.fetchingMetadata;
+        _hasSearched = true;
+      });
+
       try {
         debugPrint('TorrentSearchScreen: Fetching season metadata for series: ${selection.imdbId}');
         final details = await ImdbLookupService.getTitleDetails(selection.imdbId);
@@ -10004,43 +10025,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     Builder(
                       builder: (context) {
 
-                    // Loading state
+                    // Loading state with animated phase indicator
                     if (_isLoading) {
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(
-                          bottom: 16,
-                          left: 12,
-                          right: 12,
-                          top: 12,
-                        ),
-                        itemCount: 6,
-                        itemBuilder: (context, i) {
-                          return Container(
-                            key: ValueKey('shimmer-$i'),
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF1E293B,
-                              ).withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Shimmer(width: double.infinity, height: 18),
-                                SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Expanded(child: Shimmer(height: 22)),
-                                    SizedBox(width: 8),
-                                    Shimmer(width: 70, height: 22),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                      return SearchLoadingAnimation(
+                        phase: _searchPhase,
+                        isSeries: _isSeries,
                       );
                     }
 
