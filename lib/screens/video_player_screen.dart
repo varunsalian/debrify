@@ -3573,9 +3573,55 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             orElse: () => mk.SubtitleTrack.no(),
           );
           await _player.setSubtitleTrack(subtitleTrack);
+        } else {
+          // No stored subtitle preference - apply default subtitle language setting
+          await _applyDefaultSubtitleLanguage();
         }
+      } else {
+        // No track preferences at all - apply default subtitle language setting
+        await _applyDefaultSubtitleLanguage();
       }
     } catch (e) {}
+  }
+
+  /// Apply default subtitle language from settings (when no stored preference exists)
+  Future<void> _applyDefaultSubtitleLanguage() async {
+    try {
+      final defaultLang = await StorageService.getDefaultSubtitleLanguage();
+      if (defaultLang == null) {
+        // No preference set - do nothing, let player use its default
+        return;
+      }
+
+      final tracks = _player.state.tracks;
+
+      if (defaultLang == 'off') {
+        // Explicitly disable subtitles
+        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+        return;
+      }
+
+      // Find a subtitle track matching the preferred language using robust matching
+      // This handles ISO 639-1, ISO 639-2, regional variants, and language names
+      mk.SubtitleTrack? matchingTrack;
+      for (final track in tracks.subtitle) {
+        if (LanguageMapper.matchesLanguage(defaultLang, track.language)) {
+          matchingTrack = track;
+          break;
+        }
+        // Also check title field as some tracks store language there
+        if (LanguageMapper.matchesLanguage(defaultLang, track.title)) {
+          matchingTrack = track;
+          break;
+        }
+      }
+
+      if (matchingTrack != null) {
+        await _player.setSubtitleTrack(matchingTrack);
+      }
+    } catch (e) {
+      // Silently fail - subtitle preference is non-critical
+    }
   }
 
   Future<void> _persistTrackChoice(String audio, String subtitle) async {

@@ -58,10 +58,12 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
+import com.debrify.app.util.LanguageMapper;
 import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -474,11 +476,33 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         bandwidthMeter = new DefaultBandwidthMeter.Builder(this).build();
 
         trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
-        trackSelector.setParameters(trackSelector.buildUponParameters()
+
+        // Get default subtitle language from settings
+        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+
+        // Build track selector parameters with robust language matching
+        DefaultTrackSelector.Parameters.Builder paramsBuilder = trackSelector.buildUponParameters()
                 .setPreferredAudioLanguage("en")
-                .setPreferredTextLanguage("en")
-                .setPreferredAudioMimeType("audio/opus")
-                .build());
+                .setPreferredAudioMimeType("audio/opus");
+
+        if ("off".equals(defaultSubtitleLang)) {
+            // Disable subtitle auto-selection by setting empty preferred language
+            paramsBuilder.setPreferredTextLanguage("");
+        } else if (defaultSubtitleLang != null) {
+            // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
+            List<String> variants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultSubtitleLang);
+            if (!variants.isEmpty()) {
+                paramsBuilder.setPreferredTextLanguages(variants.toArray(new String[0]));
+            } else {
+                paramsBuilder.setPreferredTextLanguage(defaultSubtitleLang);
+            }
+        } else {
+            // Default to English if no preference set
+            List<String> englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en");
+            paramsBuilder.setPreferredTextLanguages(englishVariants.toArray(new String[0]));
+        }
+
+        trackSelector.setParameters(paramsBuilder.build());
 
         LoadControl loadControl = buildLoadControl(bandwidthMeter.getBitrateEstimate());
         createPlayer(loadControl);

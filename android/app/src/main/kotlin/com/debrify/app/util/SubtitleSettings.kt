@@ -13,10 +13,12 @@ import androidx.media3.ui.CaptionStyleCompat
 object SubtitleSettings {
 
     private const val PREFS_NAME = "debrify_subtitle_settings"
+    private const val FLUTTER_PREFS_NAME = "FlutterSharedPreferences"
     private const val KEY_SIZE_INDEX = "subtitle_size_index"
     private const val KEY_STYLE_INDEX = "subtitle_style_index"
     private const val KEY_COLOR_INDEX = "subtitle_color_index"
     private const val KEY_BG_INDEX = "subtitle_bg_index"
+    private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
 
     // Default indices
     const val DEFAULT_SIZE_INDEX = 2      // Medium
@@ -71,6 +73,19 @@ object SubtitleSettings {
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun getFlutterPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Get the default subtitle language from Flutter settings.
+     * Returns language code (e.g., "en", "es"), "off" for disabled, or null for no preference.
+     */
+    @JvmStatic
+    fun getDefaultSubtitleLanguage(context: Context): String? {
+        return getFlutterPrefs(context).getString(KEY_DEFAULT_SUBTITLE_LANGUAGE, null)
     }
 
     // Getters

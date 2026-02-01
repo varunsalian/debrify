@@ -46,6 +46,7 @@ import com.debrify.app.MainActivity
 import com.debrify.app.R
 import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
+import com.debrify.app.util.LanguageMapper
 import com.debrify.app.util.SubtitleFontManager
 import com.debrify.app.util.SubtitleSettings
 import kotlinx.coroutines.CoroutineScope
@@ -531,12 +532,38 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setupPlayer() {
         trackSelector = DefaultTrackSelector(this)
-        trackSelector?.parameters = trackSelector?.buildUponParameters()
+
+        // Get default subtitle language from settings
+        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+
+        // Build track selector parameters with robust language matching
+        val paramsBuilder = trackSelector?.buildUponParameters()
             ?.setPreferredAudioLanguage("en")
-            ?.setPreferredTextLanguage("en")
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-            ?.build()!!
+
+        when {
+            defaultSubtitleLang == "off" -> {
+                // Disable subtitle auto-selection by setting empty preferred language
+                paramsBuilder?.setPreferredTextLanguage("")
+            }
+            defaultSubtitleLang != null -> {
+                // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
+                val variants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultSubtitleLang)
+                if (variants.isNotEmpty()) {
+                    paramsBuilder?.setPreferredTextLanguages(*variants.toTypedArray())
+                } else {
+                    paramsBuilder?.setPreferredTextLanguage(defaultSubtitleLang)
+                }
+            }
+            else -> {
+                // Default to English if no preference set
+                val englishVariants = LanguageMapper.getLanguageVariantsForExoPlayer("en")
+                paramsBuilder?.setPreferredTextLanguages(*englishVariants.toTypedArray())
+            }
+        }
+
+        trackSelector?.parameters = paramsBuilder?.build()!!
 
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)

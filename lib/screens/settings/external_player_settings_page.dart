@@ -72,6 +72,7 @@ class _ExternalPlayerSettingsPageState
   bool _isAndroidTv = false;
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 2; // Medium
+  String? _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   int _subtitleSizeIndex = 2; // Medium
   int _subtitleStyleIndex = 1; // Outline
   int _subtitleColorIndex = 0; // White
@@ -80,12 +81,14 @@ class _ExternalPlayerSettingsPageState
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
+  final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
   final FocusNode _subtitleStyleFocusNode = FocusNode();
   final FocusNode _subtitleColorFocusNode = FocusNode();
   final FocusNode _subtitleBgFocusNode = FocusNode();
   final FocusNode _subtitleFontFocusNode = FocusNode();
   bool _aspectFocused = false;
+  bool _defaultSubtitleLangFocused = false;
   bool _subtitleSizeFocused = false;
   bool _subtitleStyleFocused = false;
   bool _subtitleColorFocused = false;
@@ -161,6 +164,12 @@ class _ExternalPlayerSettingsPageState
         _aspectFocused = _aspectFocusNode.hasFocus;
       });
     });
+    _defaultSubtitleLangFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _defaultSubtitleLangFocused = _defaultSubtitleLangFocusNode.hasFocus;
+      });
+    });
     _subtitleSizeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -209,6 +218,7 @@ class _ExternalPlayerSettingsPageState
     _showDialogFocusNode.dispose();
     // Debrify Player focus nodes
     _aspectFocusNode.dispose();
+    _defaultSubtitleLangFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
     _subtitleStyleFocusNode.dispose();
     _subtitleColorFocusNode.dispose();
@@ -306,6 +316,7 @@ class _ExternalPlayerSettingsPageState
           ? await StorageService.getPlayerDefaultAspectIndexTv()
           : await StorageService.getPlayerDefaultAspectIndex();
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
+      final defaultSubtitleLanguage = await StorageService.getDefaultSubtitleLanguage();
 
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
@@ -337,6 +348,7 @@ class _ExternalPlayerSettingsPageState
         _isAndroidTv = isAndroidTv;
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
+        _defaultSubtitleLanguage = defaultSubtitleLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
         _subtitleStyleIndex = subtitleSettings.styleIndex;
         _subtitleColorIndex = subtitleSettings.colorIndex;
@@ -769,6 +781,11 @@ class _ExternalPlayerSettingsPageState
     await StorageService.setPlayerNightModeIndex(index);
   }
 
+  Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
+    setState(() => _defaultSubtitleLanguage = languageCode);
+    await StorageService.setDefaultSubtitleLanguage(languageCode);
+  }
+
   Future<void> _setSubtitleSizeIndex(int index) async {
     setState(() => _subtitleSizeIndex = index);
     await SubtitleSettingsService.instance.setSizeIndex(index);
@@ -802,6 +819,36 @@ class _ExternalPlayerSettingsPageState
   static const List<String> _nightModeLabels = [
     'Off', 'Low', 'Medium', 'High', 'Higher', 'Extreme', 'Max', 'Sleeping Baby'
   ];
+
+  // Subtitle language options: (code, label)
+  static const List<(String?, String)> _subtitleLanguageOptions = [
+    (null, 'No Preference'),
+    ('off', 'Off'),
+    ('en', 'English'),
+    ('es', 'Spanish'),
+    ('fr', 'French'),
+    ('de', 'German'),
+    ('it', 'Italian'),
+    ('pt', 'Portuguese'),
+    ('ru', 'Russian'),
+    ('ja', 'Japanese'),
+    ('ko', 'Korean'),
+    ('zh', 'Chinese'),
+    ('ar', 'Arabic'),
+    ('hi', 'Hindi'),
+    ('nl', 'Dutch'),
+    ('pl', 'Polish'),
+    ('tr', 'Turkish'),
+    ('sv', 'Swedish'),
+    ('da', 'Danish'),
+    ('no', 'Norwegian'),
+    ('fi', 'Finnish'),
+  ];
+
+  int get _subtitleLanguageIndex {
+    final idx = _subtitleLanguageOptions.indexWhere((opt) => opt.$1 == _defaultSubtitleLanguage);
+    return idx >= 0 ? idx : 0;
+  }
 
   Widget _buildPlayerTile(ExternalPlayer player) {
     final theme = Theme.of(context);
@@ -1656,6 +1703,18 @@ class _ExternalPlayerSettingsPageState
                         onChanged: (index) => _setDefaultAspectIndex(index),
                         focusNode: _aspectFocusNode,
                         isFocused: _aspectFocused,
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Default Subtitle Language
+                      _buildSettingDropdown(
+                        context,
+                        label: 'Default Subtitle',
+                        value: _subtitleLanguageIndex,
+                        items: _subtitleLanguageOptions.map((opt) => opt.$2).toList(),
+                        onChanged: (index) => _setDefaultSubtitleLanguage(_subtitleLanguageOptions[index].$1),
+                        focusNode: _defaultSubtitleLangFocusNode,
+                        isFocused: _defaultSubtitleLangFocused,
                       ),
                     ],
                   ),
