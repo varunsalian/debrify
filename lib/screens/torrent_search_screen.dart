@@ -1710,11 +1710,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // "All" mode: Update UI to show aggregated results as user types
     if (_selectedSource.type == SearchSourceType.all) {
       // Reset search state so AggregatedSearchResults shows instead of torrent results
-      if (_hasSearched || _torrents.isNotEmpty) {
+      // Also reset series controls if user had previously selected a series
+      final needsSeriesReset = _isSeries || _seriesControlsExpanded || _activeAdvancedSelection != null;
+      if (_hasSearched || _torrents.isNotEmpty || needsSeriesReset) {
         setState(() {
           _hasSearched = false;
           _torrents = [];
           _allTorrents = [];
+          // Reset series controls when user edits search text
+          if (needsSeriesReset) {
+            _selectedImdbTitle = null;
+            _activeAdvancedSelection = null;
+            _isSeries = false;
+            _seriesControlsExpanded = false;
+            _availableSeasons = null;
+            _selectedSeason = null;
+            _searchPhase = SearchPhase.idle;
+          }
         });
       } else {
         // Just trigger rebuild to update AggregatedSearchResults query
@@ -1743,6 +1755,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         setState(() {
           _selectedImdbTitle = null;
           _activeAdvancedSelection = null;
+          // Also reset series controls when user edits search text
+          _isSeries = false;
+          _seriesControlsExpanded = false;
+          _availableSeasons = null;
+          _selectedSeason = null;
+          _searchPhase = SearchPhase.idle;
         });
       }
       return;

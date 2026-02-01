@@ -66,6 +66,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   String? _error;
   String _lastSearchedQuery = ''; // Track last searched query to avoid duplicate searches
 
+  // Race condition protection - ignore stale search responses
+  int _activeSearchRequestId = 0;
+
   // Debounce timer for search
   Timer? _debounceTimer;
   // Longer debounce for TV (remote typing is slower)
@@ -182,6 +185,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       return;
     }
 
+    // Increment request ID to track this specific search request
+    final int requestId = ++_activeSearchRequestId;
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -191,26 +197,32 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       final searchQuery = widget.query; // Capture query at start of search
       final results = await _stremioService.searchCatalogs(searchQuery);
 
-      if (mounted) {
-        // Sort results by relevance (title match priority)
-        final sortedResults = _sortByRelevance(results, searchQuery);
-
-        // Update focus nodes for new results
-        _updateFocusNodes(sortedResults.length);
-
-        setState(() {
-          _results = sortedResults;
-          _isLoading = false;
-          _lastSearchedQuery = searchQuery; // Remember what we searched for
-        });
+      // Race condition check: ignore stale responses from older requests
+      if (!mounted || requestId != _activeSearchRequestId) {
+        debugPrint('AggregatedSearchResults: Ignoring stale response for "$searchQuery" (request $requestId, current $_activeSearchRequestId)');
+        return;
       }
+
+      // Sort results by relevance (title match priority)
+      final sortedResults = _sortByRelevance(results, searchQuery);
+
+      // Update focus nodes for new results
+      _updateFocusNodes(sortedResults.length);
+
+      setState(() {
+        _results = sortedResults;
+        _isLoading = false;
+        _lastSearchedQuery = searchQuery; // Remember what we searched for
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Search failed: $e';
-          _isLoading = false;
-        });
+      // Race condition check for error case too
+      if (!mounted || requestId != _activeSearchRequestId) {
+        return;
       }
+      setState(() {
+        _error = 'Search failed: $e';
+        _isLoading = false;
+      });
     }
   }
 
