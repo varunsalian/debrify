@@ -1083,6 +1083,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (url.isNotEmpty) {
           debugPrint('Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).');
 
+          // Clear subtitle and IMDB state when switching content
+          _cachedStremioSubtitles = null;
+          _cachedSubtitleKey = null;
+          _selectedStremioSubtitleId = null;
+          _singleFileImdbId = null;
+          _singleFileImdbFetched = false;
+
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
             setState(() {
@@ -1103,6 +1110,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             await _player.open(mk.Media(url, httpHeaders: widget.httpHeaders), play: true);
           }
           _currentStreamUrl = url;
+          // Disable auto-enabled embedded subtitles to prevent duplicates
+          await _player.setSubtitleTrack(mk.SubtitleTrack.no());
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
             await _waitForVideoReady();
@@ -1295,12 +1304,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       });
     }
 
+    // Clear subtitle and IMDB state when switching channels
+    _cachedStremioSubtitles = null;
+    _cachedSubtitleKey = null;
+    _selectedStremioSubtitleId = null;
+    _singleFileImdbId = null;
+    _singleFileImdbFetched = false;
+
     try {
       _pikPakRetryId++;
       await _player.open(
           mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
           play: true);
       _currentStreamUrl = nextUrl;
+      // Disable auto-enabled embedded subtitles to prevent duplicates
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
     } catch (e) {
       debugPrint('Player: Failed to open channel stream: $e');
       setState(() {
@@ -1314,6 +1332,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (mounted) {
       setState(() {
         _isTransitioning = false;
+        if (nextTitle.isNotEmpty) {
+          _dynamicTitle = nextTitle;
+        }
       });
     }
   }
@@ -1409,11 +1430,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       });
     }
 
+    // Clear subtitle and IMDB state when switching channels
+    _cachedStremioSubtitles = null;
+    _cachedSubtitleKey = null;
+    _selectedStremioSubtitleId = null;
+    _singleFileImdbId = null;
+    _singleFileImdbFetched = false;
+
     try {
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
       await _player.open(mk.Media(nextUrl, httpHeaders: widget.httpHeaders), play: true);
       _currentStreamUrl = nextUrl;
+      // Disable auto-enabled embedded subtitles to prevent duplicates
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
     } catch (e) {
       debugPrint('Player: Failed to open next channel stream: $e');
       setState(() {
@@ -2125,8 +2155,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _singleFileImdbFetched = true;
 
-    // Use the video title for parsing
-    final title = widget.title;
+    // Use dynamic title (updated on stream switch) or fall back to widget title
+    final title = _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
     if (title.isEmpty) {
       debugPrint('MovieMetadata: No title for single-file lookup');
       return;

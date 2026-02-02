@@ -469,6 +469,8 @@ class TracksSheet {
                 language: sub.lang,
               );
 
+              // Disable current subtitle first to prevent duplicates
+              await player.setSubtitleTrack(mk.SubtitleTrack.no());
               await player.setSubtitleTrack(track);
               debugPrint('TracksSheet: Loaded "${sub.displayName}" (${response.body.length} bytes)');
 
