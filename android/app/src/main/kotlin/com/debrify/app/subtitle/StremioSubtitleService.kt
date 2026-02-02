@@ -241,6 +241,22 @@ class StremioSubtitleService(private val context: Context) {
     }
 
     /**
+     * Blocking version of fetchSubtitles for Java interop.
+     * This can be called from a background thread in Java code.
+     */
+    @JvmOverloads
+    fun fetchSubtitlesBlocking(
+        type: String,
+        imdbId: String,
+        season: Int? = null,
+        episode: Int? = null
+    ): List<StremioSubtitle> {
+        return kotlinx.coroutines.runBlocking {
+            fetchSubtitles(type, imdbId, season, episode)
+        }
+    }
+
+    /**
      * Build the subtitle ID for API request.
      * For series: tt1234567:season:episode
      * For movies: tt1234567 (no season/episode suffix)

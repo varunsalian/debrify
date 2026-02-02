@@ -56,13 +56,22 @@ import androidx.media3.ui.SubtitleView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.net.Uri;
+
+import androidx.media3.common.MimeTypes;
+
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
+import com.debrify.app.subtitle.StremioSubtitle;
+import com.debrify.app.subtitle.StremioSubtitleService;
 import com.debrify.app.util.LanguageMapper;
 import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
@@ -286,6 +295,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
 
+    // Stremio external subtitles
+    private StremioSubtitleService stremioSubtitleService;
+    private final ArrayList<StremioSubtitle> stremioSubtitles = new ArrayList<>();
+    private int currentStremioSubtitleIndex = -1;  // -1 means no Stremio subtitle selected
+    private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
+
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
     private final Runnable hideNextOverlayRunnable = this::performHideNextOverlay;
@@ -457,6 +472,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Initialize seek feedback manager
         seekFeedbackManager = new SeekFeedbackManager(findViewById(android.R.id.content));
+
+        // Initialize Stremio subtitle service
+        stremioSubtitleService = new StremioSubtitleService(this);
 
         initialisePlayer();
         applyUiPreferences(initialTitle);
@@ -1963,6 +1981,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setCues(java.util.Collections.emptyList());
         }
 
+        // Clear Stremio subtitle state when switching content
+        stremioSubtitles.clear();
+        currentStremioSubtitleIndex = -1;
+
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
                 .build();
@@ -1975,6 +1997,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         player.play();
         playedCount += 1;
         updateTitle(title);
+
+        // Fetch Stremio subtitles for this content
+        fetchStremioSubtitles(title);
 
         // Store listener reference for cleanup on channel switch
         trackChangeListener = new Player.Listener() {
@@ -1995,6 +2020,174 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Don't show the old centered title anymore, only use the new badge
         // showTitleTemporarily(title);
         updateTitleBadge(title);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STREMIO EXTERNAL SUBTITLES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetch external subtitles from Stremio addons for the current content.
+     * Uses the video title to look up IMDB ID via Flutter's MovieMetadata service.
+     */
+    private void fetchStremioSubtitles(@Nullable String title) {
+        if (stremioSubtitleService == null || title == null || title.isEmpty()) {
+            return;
+        }
+
+        // Request IMDB ID from Flutter for this title
+        MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+        if (channel == null) {
+            android.util.Log.d("StremioSubs", "Method channel not available");
+            return;
+        }
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("filename", title);
+
+        channel.invokeMethod("lookupMovieImdb", args, new MethodChannel.Result() {
+            @Override
+            public void success(@Nullable Object result) {
+                if (!(result instanceof Map)) {
+                    android.util.Log.d("StremioSubs", "No IMDB result for: " + title);
+                    return;
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) result;
+                String imdbId = safeString(data.get("imdbId"));
+
+                if (imdbId == null || imdbId.isEmpty()) {
+                    android.util.Log.d("StremioSubs", "No IMDB ID found for: " + title);
+                    return;
+                }
+
+                android.util.Log.d("StremioSubs", "Found IMDB ID: " + imdbId + " for: " + title);
+                fetchStremioSubtitlesWithImdb(imdbId);
+            }
+
+            @Override
+            public void error(String errorCode, @Nullable String errorMessage, @Nullable Object errorDetails) {
+                android.util.Log.e("StremioSubs", "IMDB lookup error: " + errorMessage);
+            }
+
+            @Override
+            public void notImplemented() {
+                android.util.Log.d("StremioSubs", "lookupMovieImdb not implemented");
+            }
+        });
+    }
+
+    /**
+     * Fetch subtitles from Stremio addons using a known IMDB ID.
+     */
+    private void fetchStremioSubtitlesWithImdb(String imdbId) {
+        if (stremioSubtitleService == null) {
+            return;
+        }
+
+        final StremioSubtitleService service = stremioSubtitleService;
+
+        subtitleExecutor.execute(() -> {
+            try {
+                // Use the blocking version for Java interop
+                List<StremioSubtitle> subtitles = service.fetchSubtitlesBlocking("movie", imdbId, null, null);
+
+                runOnUiThread(() -> {
+                    stremioSubtitles.clear();
+                    if (subtitles != null) {
+                        stremioSubtitles.addAll(subtitles);
+                    }
+                    currentStremioSubtitleIndex = -1;
+                    android.util.Log.d("StremioSubs", "Fetched " + stremioSubtitles.size() + " subtitles for IMDB " + imdbId);
+                });
+            } catch (Exception e) {
+                android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e);
+                runOnUiThread(() -> {
+                    stremioSubtitles.clear();
+                    currentStremioSubtitleIndex = -1;
+                });
+            }
+        });
+    }
+
+    /**
+     * Load an external Stremio subtitle into ExoPlayer.
+     * This rebuilds the media item with the subtitle configuration.
+     */
+    @OptIn(markerClass = UnstableApi.class)
+    private void loadStremioSubtitle(StremioSubtitle subtitle) {
+        if (player == null || subtitle == null) {
+            return;
+        }
+
+        MediaItem currentItem = player.getCurrentMediaItem();
+        if (currentItem == null) {
+            return;
+        }
+
+        long currentPosition = player.getCurrentPosition();
+        boolean wasPlaying = player.isPlaying();
+
+        // Extract path without query string for MIME type detection
+        String urlPath = subtitle.getUrl().split("\\?")[0].toLowerCase(Locale.US);
+
+        // Determine MIME type based on file extension
+        String mimeType;
+        if (urlPath.contains(".srt")) {
+            mimeType = MimeTypes.APPLICATION_SUBRIP;
+        } else if (urlPath.contains(".vtt")) {
+            mimeType = MimeTypes.TEXT_VTT;
+        } else if (urlPath.contains(".ass") || urlPath.contains(".ssa")) {
+            mimeType = MimeTypes.TEXT_SSA;
+        } else if (urlPath.contains(".ttml")) {
+            mimeType = MimeTypes.APPLICATION_TTML;
+        } else {
+            mimeType = MimeTypes.TEXT_VTT; // Default to VTT for Stremio addons
+        }
+
+        // Build subtitle configuration
+        MediaItem.SubtitleConfiguration subtitleConfig = new MediaItem.SubtitleConfiguration.Builder(
+                Uri.parse(subtitle.getUrl()))
+                .setMimeType(mimeType)
+                .setLanguage(subtitle.getLang())
+                .setLabel(subtitle.getDisplayName())
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build();
+
+        // Rebuild media item with subtitle configuration
+        MediaItem newMediaItem = currentItem.buildUpon()
+                .setSubtitleConfigurations(Collections.singletonList(subtitleConfig))
+                .build();
+
+        // Set the new media item, preserving position
+        player.setMediaItem(newMediaItem, currentPosition);
+        player.prepare();
+
+        // Wait for player to be ready, then seek again to force subtitle sync
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state == Player.STATE_READY) {
+                    player.seekTo(currentPosition);
+                    player.removeListener(this);
+                }
+            }
+        });
+
+        if (wasPlaying) {
+            player.play();
+        }
+
+        // Enable subtitle track after loading
+        if (trackSelector != null) {
+            DefaultTrackSelector.Parameters params = trackSelector.buildUponParameters()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build();
+            trackSelector.setParameters(params);
+        }
+
+        showToast("Loading: " + subtitle.getDisplayName());
     }
 
     /**
@@ -2805,7 +2998,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         List<TrackOption> tracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
         subtitleTrackOptions.addAll(tracks);
 
-        // Determine currently selected track index
+        // Determine currently selected embedded track index
         boolean hasSelectedSubtitle = false;
         if (!tracks.isEmpty()) {
             Tracks currentTracks = player != null ? player.getCurrentTracks() : null;
@@ -2820,8 +3013,25 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 }
             }
         }
+
+        // Add Stremio external subtitles to the track list
+        // These are marked with "⬇" prefix to indicate they're external/downloadable
+        int embeddedTrackCount = subtitleTrackOptions.size();
+        for (int i = 0; i < stremioSubtitles.size(); i++) {
+            StremioSubtitle sub = stremioSubtitles.get(i);
+            String label = "⬇ " + sub.getDisplayName() + " (" + sub.getSource() + ")";
+            // Use null group to indicate this is an external subtitle
+            subtitleTrackOptions.add(new TrackOption(null, -1, label));
+
+            // Check if this Stremio subtitle is currently selected
+            if (currentStremioSubtitleIndex == i) {
+                currentSubtitleTrackIndex = embeddedTrackCount + i;
+                hasSelectedSubtitle = true;
+            }
+        }
+
         // If no track selected, set to -1 (Off)
-        if (!hasSelectedSubtitle) {
+        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
             currentSubtitleTrackIndex = -1;
         }
 
@@ -3037,10 +3247,50 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void applySelectedSubtitleTrackFromPanel() {
         if (currentSubtitleTrackIndex < 0 || currentSubtitleTrackIndex >= subtitleTrackOptions.size()) {
-            applySubtitleTrack(null); // Off
-        } else {
-            applySubtitleTrack(subtitleTrackOptions.get(currentSubtitleTrackIndex));
+            // Off - disable all subtitles
+            currentStremioSubtitleIndex = -1;
+            applySubtitleTrack(null);
+            return;
         }
+
+        TrackOption option = subtitleTrackOptions.get(currentSubtitleTrackIndex);
+
+        // Check if this is a Stremio external subtitle (has null group)
+        if (option.group == null) {
+            // Calculate the Stremio subtitle index
+            // Count embedded tracks (those with non-null group)
+            int embeddedTrackCount = 0;
+            for (TrackOption opt : subtitleTrackOptions) {
+                if (opt.group != null) {
+                    embeddedTrackCount++;
+                } else {
+                    break; // Stremio subtitles come after embedded ones
+                }
+            }
+            int stremioIndex = currentSubtitleTrackIndex - embeddedTrackCount;
+
+            if (stremioIndex >= 0 && stremioIndex < stremioSubtitles.size()) {
+                // Disable embedded subtitles first
+                if (trackSelector != null) {
+                    DefaultTrackSelector.Parameters params = trackSelector.buildUponParameters()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build();
+                    trackSelector.setParameters(params);
+                }
+
+                // Load Stremio subtitle
+                loadStremioSubtitle(stremioSubtitles.get(stremioIndex));
+                currentStremioSubtitleIndex = stremioIndex;
+            }
+            return;
+        }
+
+        // Clear Stremio subtitle selection when selecting embedded track
+        currentStremioSubtitleIndex = -1;
+
+        // Handle embedded subtitle selection
+        applySubtitleTrack(option);
     }
 
     private void applySubtitleSettings() {
@@ -3756,6 +4006,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Cancel PikPak retry operations
         cancelPikPakRetry();
+
+        // Clean up Stremio subtitle resources
+        subtitleExecutor.shutdown();
+        stremioSubtitles.clear();
+        stremioSubtitleService = null;
 
         // Clean up TV static effect
         stopTvStaticEffect();

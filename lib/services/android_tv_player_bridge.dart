@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 // For debugPrint
 import 'package:flutter/material.dart' show debugPrint;
 
+import '../utils/movie_parser.dart';
+import 'movie_metadata_service.dart';
+
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
 typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
@@ -220,6 +223,44 @@ class AndroidTvPlayerBridge {
             return imdbId != null ? {'imdbId': imdbId} : null;
           } catch (e) {
             debugPrint('MovieMetadata: Provider error: $e');
+            return null;
+          }
+        case 'lookupMovieImdb':
+          // Simple IMDB lookup for TorboxTvPlayerActivity (DebrifyTV)
+          // Uses MovieMetadataService directly without needing a provider
+          debugPrint('MovieMetadata: lookupMovieImdb received from native');
+          final args = call.arguments;
+          if (args is! Map) {
+            debugPrint('MovieMetadata: Invalid arguments for lookupMovieImdb');
+            return null;
+          }
+          final filename = args['filename'] as String?;
+          if (filename == null || filename.isEmpty) {
+            debugPrint('MovieMetadata: Missing filename');
+            return null;
+          }
+          try {
+            // Parse the filename to extract title and year
+            final parsed = MovieParser.parseFilename(filename);
+            debugPrint('MovieMetadata: Parsed filename "$filename" -> title="${parsed.title}", year=${parsed.year}');
+
+            // Need a valid title to lookup
+            if (parsed.title == null || parsed.title!.isEmpty) {
+              debugPrint('MovieMetadata: Could not extract title from "$filename"');
+              return null;
+            }
+
+            // Lookup the movie using MovieMetadataService
+            final metadata = await MovieMetadataService.lookupMovie(parsed.title!, parsed.year);
+            if (metadata != null) {
+              debugPrint('MovieMetadata: Found IMDB ID ${metadata.imdbId} for "$filename"');
+              return {'imdbId': metadata.imdbId};
+            } else {
+              debugPrint('MovieMetadata: No IMDB ID found for "$filename"');
+              return null;
+            }
+          } catch (e) {
+            debugPrint('MovieMetadata: lookupMovieImdb error: $e');
             return null;
           }
         default:
