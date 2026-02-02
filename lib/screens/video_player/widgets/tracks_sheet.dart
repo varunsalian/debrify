@@ -28,6 +28,8 @@ class TracksSheet {
   /// - [contentEpisode]: Episode number for series
   /// - [cachedSubtitles]: Pre-fetched subtitles from parent (per-item cache)
   /// - [onSubtitlesFetched]: Callback to return fetched subtitles for caching
+  /// - [selectedStremioSubtitleId]: Currently selected addon subtitle ID (for UI state)
+  /// - [onStremioSubtitleSelected]: Callback when addon subtitle selection changes
   static Future<void> show(
     BuildContext context,
     mk.Player player, {
@@ -40,6 +42,8 @@ class TracksSheet {
     int? contentEpisode,
     List<StremioSubtitle>? cachedSubtitles,
     void Function(List<StremioSubtitle> subtitles)? onSubtitlesFetched,
+    String? selectedStremioSubtitleId,
+    void Function(String? id)? onStremioSubtitleSelected,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -51,7 +55,10 @@ class TracksSheet {
         )
         .toList(growable: false);
     String selectedAudio = player.state.track.audio.id;
-    String selectedSub = player.state.track.subtitle.id;
+    // For subtitle selection: use stremio ID if one is selected, otherwise use player's track ID
+    String selectedSub = selectedStremioSubtitleId != null
+        ? 'stremio:$selectedStremioSubtitleId'
+        : player.state.track.subtitle.id;
 
     // Load subtitle style settings
     SubtitleSettingsData subtitleStyle =
@@ -174,6 +181,7 @@ class TracksSheet {
                                 setModalState: setModalState,
                                 onSubChanged: (v) {
                                   setModalState(() => selectedSub = v);
+                                  onStremioSubtitleSelected?.call(null); // Clear addon selection
                                 },
                               ),
                               if (embeddedSubs.isNotEmpty)
@@ -186,6 +194,7 @@ class TracksSheet {
                                   setModalState: setModalState,
                                   onSubChanged: (v) {
                                     setModalState(() => selectedSub = v);
+                                    onStremioSubtitleSelected?.call(null); // Clear addon selection
                                   },
                                 ),
 
@@ -235,6 +244,7 @@ class TracksSheet {
                                     onSubChanged: (v) {
                                       setModalState(() => selectedSub = v);
                                     },
+                                    onStremioSubtitleSelected: onStremioSubtitleSelected,
                                   ),
                               ],
 
@@ -423,6 +433,7 @@ class TracksSheet {
     required Future<void> Function(String, String) onTrackChanged,
     required StateSetter setModalState,
     required void Function(String) onSubChanged,
+    void Function(String? id)? onStremioSubtitleSelected,
   }) {
     return ListView.builder(
       shrinkWrap: true,
@@ -460,6 +471,9 @@ class TracksSheet {
 
               await player.setSubtitleTrack(track);
               debugPrint('TracksSheet: Loaded "${sub.displayName}" (${response.body.length} bytes)');
+
+              // Notify parent of addon subtitle selection
+              onStremioSubtitleSelected?.call(sub.id);
 
               await onTrackChanged(selectedAudio, v);
             } catch (e) {

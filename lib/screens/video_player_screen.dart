@@ -284,6 +284,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Cached Stremio addon subtitles (per-item cache like Android TV)
   List<StremioSubtitle>? _cachedStremioSubtitles;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
+  String? _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
 
   // media_kit state
   bool _isReady = false;
@@ -1513,9 +1514,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final entry = widget.playlist![index];
     _currentIndex = index;
 
-    // Clear subtitle cache when changing content (will be re-fetched on demand)
+    // Clear subtitle cache and selection when changing content
     _cachedStremioSubtitles = null;
     _cachedSubtitleKey = null;
+    _selectedStremioSubtitleId = null;
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -3561,6 +3563,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _cachedStremioSubtitles = subtitles;
           _cachedSubtitleKey = cacheKey;
         }
+      },
+      selectedStremioSubtitleId: _selectedStremioSubtitleId,
+      onStremioSubtitleSelected: (id) {
+        _selectedStremioSubtitleId = id;
       },
     );
   }
