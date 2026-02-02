@@ -60,6 +60,7 @@ import android.net.Uri;
 
 import androidx.media3.common.MimeTypes;
 
+import com.debrify.app.ActivityTracker;
 import com.debrify.app.MainActivity;
 import com.debrify.app.R;
 import com.debrify.app.subtitle.StremioSubtitle;
@@ -3981,8 +3982,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        ActivityTracker.INSTANCE.setCurrentActivity(this);
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
+        if (ActivityTracker.INSTANCE.getCurrentActivity() == this) {
+            ActivityTracker.INSTANCE.setCurrentActivity(null);
+        }
         if (player != null && player.isPlaying()) {
             player.pause();
         }

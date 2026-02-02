@@ -42,6 +42,7 @@ import androidx.recyclerview.widget.RecyclerView
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
 import androidx.media3.common.MimeTypes
+import com.debrify.app.ActivityTracker
 import com.debrify.app.MainActivity
 import com.debrify.app.R
 import com.debrify.app.subtitle.StremioSubtitle
@@ -3623,8 +3624,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         })
     }
 
+    override fun onResume() {
+        super.onResume()
+        ActivityTracker.currentActivity = this
+    }
+
     override fun onPause() {
         super.onPause()
+        if (ActivityTracker.currentActivity == this) {
+            ActivityTracker.currentActivity = null
+        }
         // Cancel any ongoing PikPak retry operations
         cancelPikPakRetry()
     }

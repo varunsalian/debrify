@@ -3,10 +3,12 @@ package com.debrify.app
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.app.UiModeManager
 import android.content.res.Configuration
+import android.view.KeyEvent
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -20,6 +22,7 @@ class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
 	private val EVENTS = "com.debrify.app/downloader_events"
     private val ANDROID_TV_CHANNEL = "com.debrify.app/android_tv_player"
+    private val REMOTE_CONTROL_CHANNEL = "com.debrify.app/remote_control"
 
     companion object {
         @JvmStatic
@@ -38,6 +41,18 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // Enable edge-to-edge display to properly handle system navigation bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ActivityTracker.currentActivity = this
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (ActivityTracker.currentActivity == this) {
+            ActivityTracker.currentActivity = null
+        }
     }
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -159,6 +174,29 @@ class MainActivity : FlutterActivity() {
 						result.success(false)
 					}
 				}
+				"getDeviceName" -> {
+					try {
+						// Try to get the user-set device name first (Bluetooth name)
+						val bluetoothName = Settings.Global.getString(contentResolver, "device_name")
+						if (!bluetoothName.isNullOrBlank()) {
+							result.success(bluetoothName)
+							return@setMethodCallHandler
+						}
+						// Fall back to manufacturer + model
+						val manufacturer = Build.MANUFACTURER?.replaceFirstChar { it.uppercase() } ?: ""
+						val model = Build.MODEL ?: ""
+						val deviceName = if (manufacturer.isNotEmpty() && model.isNotEmpty() && !model.startsWith(manufacturer, ignoreCase = true)) {
+							"$manufacturer $model"
+						} else if (model.isNotEmpty()) {
+							model
+						} else {
+							"Android TV"
+						}
+						result.success(deviceName)
+					} catch (e: Exception) {
+						result.success("Android TV")
+					}
+				}
 			else -> result.notImplemented()
 			}
 		}
@@ -227,6 +265,40 @@ class MainActivity : FlutterActivity() {
                     android.util.Log.w("DebrifyTV", "MainActivity: Method not implemented: ${call.method}")
                     result.notImplemented()
                 }
+            }
+        }
+
+        // Remote control channel for injecting key events
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REMOTE_CONTROL_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "injectKeyEvent" -> {
+                    val keyCode = call.argument<Int>("keyCode")
+                    if (keyCode == null) {
+                        result.error("bad_args", "keyCode is required", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        // Get the currently active activity (could be MainActivity or a video player)
+                        val targetActivity = ActivityTracker.currentActivity
+                        if (targetActivity == null) {
+                            android.util.Log.w("RemoteControl", "No active activity to receive key event")
+                            result.error("no_activity", "No active activity", null)
+                            return@setMethodCallHandler
+                        }
+                        // Dispatch key down event
+                        val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+                        targetActivity.dispatchKeyEvent(downEvent)
+                        // Dispatch key up event
+                        val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+                        targetActivity.dispatchKeyEvent(upEvent)
+                        android.util.Log.d("RemoteControl", "Injected key event $keyCode to ${targetActivity.javaClass.simpleName}")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("RemoteControl", "Failed to inject key event: ${e.message}")
+                        result.error("inject_failed", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
 	}

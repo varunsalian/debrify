@@ -34,6 +34,11 @@ import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_sidebar_nav.dart';
+import 'widgets/remote/remote_floating_button.dart';
+import 'widgets/remote/remote_control_screen.dart';
+import 'services/remote_control/remote_control_state.dart';
+import 'services/remote_control/remote_command_router.dart';
+import 'utils/platform_util.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
 
@@ -383,6 +388,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // TV sidebar navigation
   final GlobalKey<TvSidebarNavState> _tvSidebarKey = GlobalKey<TvSidebarNavState>();
 
+  // Remote control state
+  bool _remoteControlEnabled = true;
+  bool _tvDetected = false;
+
   final List<Widget> _pages = [
     const TorrentSearchScreen(),
     const PlaylistScreen(),
@@ -546,6 +555,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           _tvSidebarKey.currentState?.requestFocus();
         };
       }
+
+      // Initialize remote control based on device type
+      _initializeRemoteControl(isTv);
     });
 
     // Initialize deep link service for magnet links
@@ -566,7 +578,58 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.focusTvSidebar = null;
     _animationController.dispose();
     DeepLinkService().dispose();
+    RemoteControlState().removeListener(_onRemoteStateChanged);
+    RemoteControlState().stop();
     super.dispose();
+  }
+
+  /// Initialize remote control based on device type
+  Future<void> _initializeRemoteControl(bool isTv) async {
+    // Check if remote control is enabled
+    _remoteControlEnabled = await StorageService.getRemoteControlEnabled();
+    if (!_remoteControlEnabled) return;
+
+    // Add listener for state changes
+    RemoteControlState().addListener(_onRemoteStateChanged);
+
+    if (isTv) {
+      // TV: Start listening for mobile devices
+      // Priority: 1. User-set custom name, 2. Actual device name, 3. Fallback
+      var deviceName = await StorageService.getRemoteTvDeviceName();
+      deviceName ??= await PlatformUtil.getDeviceName();
+      deviceName ??= 'Debrify TV';
+      await RemoteControlState().startTvListener(deviceName);
+
+      // Set up command routing
+      RemoteControlState().onCommandReceived = (action, command) {
+        RemoteCommandRouter().dispatchCommand(action, command);
+      };
+    } else {
+      // Mobile: Start scanning for TVs (only on Android/iOS)
+      if (Platform.isAndroid || Platform.isIOS) {
+        await RemoteControlState().startMobileDiscovery();
+      }
+    }
+  }
+
+  void _onRemoteStateChanged() {
+    if (!mounted) return;
+    final state = RemoteControlState();
+    setState(() {
+      _tvDetected = state.isConnected || state.isScanning;
+    });
+  }
+
+  void _showRemoteControl(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const FractionallySizedBox(
+        heightFactor: 0.85,
+        child: RemoteControlScreen(),
+      ),
+    );
   }
 
   /// Initialize deep linking for magnet links and shared URLs
@@ -1376,6 +1439,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      // Remote control floating button (before MobileFloatingNav)
+                      if (isMobile && _tvDetected && _remoteControlEnabled)
+                        RemoteFloatingButton(
+                          onTap: () => _showRemoteControl(context),
+                        ),
                       // Floating nav on mobile
                       if (isMobile)
                         MobileFloatingNav(

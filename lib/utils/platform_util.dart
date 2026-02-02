@@ -52,4 +52,21 @@ class PlatformUtil {
   static Future<bool> requiresFocusNavigation() async {
     return await isAndroidTV();
   }
+
+  /// Get the device name (e.g., "Sony BRAVIA VU31", "Chromecast with Google TV")
+  ///
+  /// On Android, tries to get the user-set device name first, then falls back
+  /// to manufacturer + model. On non-Android platforms, returns null.
+  static Future<String?> getDeviceName() async {
+    if (!Platform.isAndroid) {
+      return null;
+    }
+
+    try {
+      final result = await _channel.invokeMethod<String>('getDeviceName');
+      return result;
+    } catch (e) {
+      return null;
+    }
+  }
 }
