@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart' as mk;
 import '../../../models/stremio_subtitle.dart';
 import '../../../services/stremio_subtitle_service.dart';
@@ -25,6 +26,8 @@ class TracksSheet {
   /// - [contentType]: Content type ('movie' or 'series')
   /// - [contentSeason]: Season number for series
   /// - [contentEpisode]: Episode number for series
+  /// - [cachedSubtitles]: Pre-fetched subtitles from parent (per-item cache)
+  /// - [onSubtitlesFetched]: Callback to return fetched subtitles for caching
   static Future<void> show(
     BuildContext context,
     mk.Player player, {
@@ -35,6 +38,8 @@ class TracksSheet {
     String? contentType,
     int? contentSeason,
     int? contentEpisode,
+    List<StremioSubtitle>? cachedSubtitles,
+    void Function(List<StremioSubtitle> subtitles)? onSubtitlesFetched,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -52,8 +57,9 @@ class TracksSheet {
     SubtitleSettingsData subtitleStyle =
         await SubtitleSettingsService.instance.loadAll();
 
-    // Stremio addon subtitles state (managed internally)
-    List<StremioSubtitle>? stremioSubtitles;
+    // Stremio addon subtitles state
+    // Use cached subtitles if provided (per-item cache like Android TV)
+    List<StremioSubtitle>? stremioSubtitles = cachedSubtitles;
     bool isLoadingStremioSubtitles = false;
 
     await showModalBottomSheet(
@@ -79,7 +85,7 @@ class TracksSheet {
                   debugPrint('TracksSheet: stremioSubtitles=${stremioSubtitles?.length}, '
                       'isLoading=$isLoadingStremioSubtitles');
 
-                  // Fetch Stremio subtitles on first build
+                  // Fetch Stremio subtitles on first build (skip if cached)
                   if (stremioSubtitles == null &&
                       !isLoadingStremioSubtitles &&
                       contentImdbId != null &&
@@ -103,6 +109,8 @@ class TracksSheet {
                           stremioSubtitles = result.subtitles;
                           isLoadingStremioSubtitles = false;
                         });
+                        // Notify parent to cache these subtitles
+                        onSubtitlesFetched?.call(result.subtitles);
                       } catch (e) {
                         debugPrint('TracksSheet: Fetch error: $e');
                         setModalState(() {
@@ -110,6 +118,8 @@ class TracksSheet {
                         });
                       }
                     });
+                  } else if (stremioSubtitles != null) {
+                    debugPrint('TracksSheet: Using ${stremioSubtitles!.length} cached subtitles');
                   } else if (contentImdbId == null || contentType == null) {
                     debugPrint('TracksSheet: No content metadata provided, skipping subtitle fetch');
                   }
@@ -430,14 +440,31 @@ class TracksSheet {
           onChanged: (v) async {
             if (v == null) return;
             onSubChanged(v);
-            // Load external subtitle via URL
-            final track = mk.SubtitleTrack.uri(
-              sub.url,
-              title: sub.displayName,
-              language: sub.lang,
-            );
-            await player.setSubtitleTrack(track);
-            await onTrackChanged(selectedAudio, v);
+
+            // Fetch and load external subtitle using data() for reliability
+            try {
+              final response = await http.get(Uri.parse(sub.url)).timeout(
+                const Duration(seconds: 15),
+              );
+
+              if (response.statusCode != 200) {
+                debugPrint('TracksSheet: Subtitle fetch failed - HTTP ${response.statusCode}');
+                return;
+              }
+
+              final track = mk.SubtitleTrack.data(
+                response.body,
+                title: sub.displayName,
+                language: sub.lang,
+              );
+
+              await player.setSubtitleTrack(track);
+              debugPrint('TracksSheet: Loaded "${sub.displayName}" (${response.body.length} bytes)');
+
+              await onTrackChanged(selectedAudio, v);
+            } catch (e) {
+              debugPrint('TracksSheet: Subtitle error - $e');
+            }
           },
         );
       },

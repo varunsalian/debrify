@@ -51,6 +51,7 @@ import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
+import '../models/stremio_subtitle.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -279,6 +280,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
+
+  // Cached Stremio addon subtitles (per-item cache like Android TV)
+  List<StremioSubtitle>? _cachedStremioSubtitles;
+  String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
 
   // media_kit state
   bool _isReady = false;
@@ -514,6 +519,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _dynamicTitle = widget.title;
     _player = mk.Player(
       configuration: mk.PlayerConfiguration(
+        logLevel: mk.MPVLogLevel.error, // Suppress verbose subtitle logging
         ready: () {
           _isReady = true;
           if (mounted) {
@@ -1506,6 +1512,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _saveResume();
     final entry = widget.playlist![index];
     _currentIndex = index;
+
+    // Clear subtitle cache when changing content (will be re-fetched on demand)
+    _cachedStremioSubtitles = null;
+    _cachedSubtitleKey = null;
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -3514,6 +3524,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
         'contentType=$effectiveContentType, '
         'season=$season, episode=$episode (parsed from: $currentTitle)');
+
+    // Build cache key for subtitle caching (per-item like Android TV)
+    final String? cacheKey = effectiveImdbId != null
+        ? (season != null && episode != null
+            ? '$effectiveImdbId:$season:$episode'
+            : effectiveImdbId)
+        : null;
+
+    // Check if we have cached subtitles for this content
+    final List<StremioSubtitle>? cachedSubs =
+        (cacheKey != null && _cachedSubtitleKey == cacheKey)
+            ? _cachedStremioSubtitles
+            : null;
+
+    if (cachedSubs != null) {
+      debugPrint('VideoPlayer: Using ${cachedSubs.length} cached subtitles for key: $cacheKey');
+    }
+
     await TracksSheet.show(
       context,
       _player,
@@ -3525,6 +3553,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       contentType: effectiveContentType,
       contentSeason: season,
       contentEpisode: episode,
+      cachedSubtitles: cachedSubs,
+      onSubtitlesFetched: (subtitles) {
+        // Cache the fetched subtitles for this content
+        if (cacheKey != null) {
+          debugPrint('VideoPlayer: Caching ${subtitles.length} subtitles for key: $cacheKey');
+          _cachedStremioSubtitles = subtitles;
+          _cachedSubtitleKey = cacheKey;
+        }
+      },
     );
   }
 
