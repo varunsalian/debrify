@@ -8,12 +8,14 @@ class MobileFloatingNav extends StatefulWidget {
   final int currentIndex;
   final List<MobileNavItem> items;
   final ValueChanged<int> onTap;
+  final VoidCallback? onRemoteControlTap;
 
   const MobileFloatingNav({
     super.key,
     required this.currentIndex,
     required this.items,
     required this.onTap,
+    this.onRemoteControlTap,
   });
 
   @override
@@ -222,6 +224,12 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                       currentIndex: widget.currentIndex,
                       getGradientForIndex: _getGradientForIndex,
                       onSelectItem: _selectItem,
+                      onRemoteControlTap: widget.onRemoteControlTap != null
+                          ? () {
+                              _toggle();
+                              widget.onRemoteControlTap!();
+                            }
+                          : null,
                     ),
                   ),
                 ),
@@ -326,12 +334,14 @@ class _ScrollableMenuContent extends StatefulWidget {
   final int currentIndex;
   final List<Color> Function(int) getGradientForIndex;
   final void Function(int) onSelectItem;
+  final VoidCallback? onRemoteControlTap;
 
   const _ScrollableMenuContent({
     required this.items,
     required this.currentIndex,
     required this.getGradientForIndex,
     required this.onSelectItem,
+    this.onRemoteControlTap,
   });
 
   @override
@@ -401,6 +411,20 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                         color: Colors.white.withValues(alpha: 0.08),
                       ),
                     ),
+                ],
+                // Remote Control action item (accent line style)
+                if (widget.onRemoteControlTap != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  _RemoteControlMenuItem(
+                    onTap: widget.onRemoteControlTap!,
+                  ),
                 ],
               ],
             ),
@@ -667,6 +691,87 @@ class _Dot extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: opacity),
         borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+/// Remote Control menu item - accent line style
+class _RemoteControlMenuItem extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _RemoteControlMenuItem({required this.onTap});
+
+  @override
+  State<_RemoteControlMenuItem> createState() => _RemoteControlMenuItemState();
+}
+
+class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
+  bool _isPressed = false;
+
+  static const _accentColor = Color(0xFF06B6D4); // Cyan
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.98 : 1.0),
+        transformAlignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _isPressed ? _accentColor.withValues(alpha: 0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: _accentColor.withValues(alpha: _isPressed ? 1.0 : 0.6),
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.phonelink_rounded,
+              size: 18,
+              color: _accentColor.withValues(alpha: _isPressed ? 1.0 : 0.8),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Remote',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: _isPressed ? 1.0 : 0.7),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    'Control your TV',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 12,
+              color: _accentColor.withValues(alpha: 0.5),
+            ),
+          ],
+        ),
       ),
     );
   }

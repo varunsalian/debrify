@@ -38,6 +38,7 @@ import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
 import 'widgets/remote/addon_install_dialog.dart';
+import 'widgets/remote/remote_control_screen.dart';
 import 'utils/platform_util.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
@@ -1469,6 +1470,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           onTap: (relativeIndex) {
                             final actualIndex = visibleIndices[relativeIndex];
                             _onItemTapped(actualIndex);
+                          },
+                          onRemoteControlTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const RemoteControlScreen(),
+                              ),
+                            );
                           },
                         ),
                     ],

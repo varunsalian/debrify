@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -602,8 +605,10 @@ class _SettingsLayout extends StatelessWidget {
                 subtitle: 'Configure preferred video player',
                 onTap: onOpenExternalPlayerSettings,
               ),
-              // Hide Remote Control on TV (TV is the receiver, not controller)
-              if (!isAndroidTv)
+              // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
+              // Only show on desktop platforms
+              if (!kIsWeb &&
+                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
                 _SettingsTile(
                   icon: Icons.phonelink_rounded,
                   title: 'Remote Control',

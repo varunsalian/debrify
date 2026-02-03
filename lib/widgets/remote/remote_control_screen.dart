@@ -70,10 +70,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             // Main content
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 20),
 
                     // Connection status
                     if (!isConnected) ...[
@@ -420,7 +420,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           onTap: () => _openView('navigate'),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
 
         _buildMenuItem(
           icon: Icons.extension_rounded,
@@ -429,7 +429,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           onTap: () => _openView('addons'),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
 
         _buildMenuItem(
           icon: Icons.settings_remote_rounded,
@@ -438,7 +438,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           onTap: () => _openView('config'),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         // Switch TV option
         TextButton(
@@ -450,8 +450,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           child: Text(
             'Switch TV',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 13,
             ),
           ),
         ),
@@ -472,36 +472,43 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           HapticFeedback.mediumImpact();
           onTap();
         },
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.white.withValues(alpha: 0.08),
             ),
           ),
           child: Row(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Icon(
                   icon,
                   color: Colors.white,
-                  size: 28,
+                  size: 20,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,24 +517,25 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
               Icon(
-                Icons.chevron_right,
-                color: Colors.white.withValues(alpha: 0.5),
+                Icons.chevron_right_rounded,
+                color: Colors.white.withValues(alpha: 0.3),
+                size: 20,
               ),
             ],
           ),
