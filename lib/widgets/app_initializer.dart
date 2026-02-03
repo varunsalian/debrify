@@ -3,6 +3,9 @@ import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/app_migration_service.dart';
 import '../services/main_page_bridge.dart';
+import '../services/remote_control/remote_control_state.dart';
+import '../services/remote_control/remote_command_router.dart';
+import '../utils/platform_util.dart';
 import '../widgets/initial_setup_flow.dart';
 import '../main.dart';
 
@@ -92,6 +95,10 @@ class _AppInitializerState extends State<AppInitializer>
     if (_isAndroidTv) {
       FocusManager.instance.highlightStrategy =
           FocusHighlightStrategy.alwaysTraditional;
+
+      // Start TV listener early so phone can discover TV during onboarding
+      // This enables "Send Setup to TV" feature to work on fresh installs
+      await _startTvListenerEarly();
     }
 
     // Run app migrations (auto-add Cinemeta addon on fresh install or update)
@@ -159,6 +166,34 @@ class _AppInitializerState extends State<AppInitializer>
     setState(() {
       _onboardingComplete = true;
     });
+  }
+
+  /// Start TV listener early so phone can discover TV during onboarding
+  Future<void> _startTvListenerEarly() async {
+    try {
+      // Check if remote control is enabled
+      final remoteEnabled = await StorageService.getRemoteControlEnabled();
+      if (!remoteEnabled) return;
+
+      // Get device name for discovery
+      var deviceName = await StorageService.getRemoteTvDeviceName();
+      deviceName ??= await PlatformUtil.getDeviceName();
+      deviceName ??= 'Debrify TV';
+
+      debugPrint('AppInitializer: Starting TV listener early as "$deviceName"');
+
+      // Start the TV listener
+      await RemoteControlState().startTvListener(deviceName);
+
+      // Set up command routing (for receiving config commands during onboarding)
+      RemoteControlState().onCommandReceived = (action, command, data) {
+        RemoteCommandRouter().dispatchCommand(action, command, data);
+      };
+
+      debugPrint('AppInitializer: TV listener started - discoverable during onboarding');
+    } catch (e) {
+      debugPrint('AppInitializer: Failed to start TV listener early: $e');
+    }
   }
 
   @override

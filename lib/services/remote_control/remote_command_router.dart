@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,12 @@ import 'package:flutter/services.dart';
 
 import 'remote_constants.dart';
 import '../../services/stremio_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/account_service.dart';
+import '../../services/torbox_account_service.dart';
+import '../../services/pikpak_api_service.dart';
+import '../../services/engine/remote_engine_manager.dart';
+import '../../services/engine/local_engine_storage.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback = void Function(String action, String command, String? data);
@@ -44,6 +51,9 @@ class RemoteCommandRouter {
   // Scaffold messenger key for showing snackbars
   GlobalKey<ScaffoldMessengerState>? _scaffoldMessengerKey;
 
+  // Callback to restart app flow (set by main.dart)
+  VoidCallback? _onRestartApp;
+
   /// Set the navigator key for back navigation
   void setNavigatorKey(GlobalKey<NavigatorState> key) {
     _navigatorKey = key;
@@ -52,6 +62,11 @@ class RemoteCommandRouter {
   /// Set the scaffold messenger key for showing snackbars
   void setScaffoldMessengerKey(GlobalKey<ScaffoldMessengerState> key) {
     _scaffoldMessengerKey = key;
+  }
+
+  /// Set the callback to restart the app flow
+  void setRestartCallback(VoidCallback callback) {
+    _onRestartApp = callback;
   }
 
   /// Show a snackbar message (TV feedback)
@@ -116,6 +131,12 @@ class RemoteCommandRouter {
       return;
     }
 
+    // Handle config commands (TV side)
+    if (action == RemoteAction.config) {
+      _handleConfigCommand(command, data);
+      return;
+    }
+
     // Also try to use the focus system for navigation
     _tryFocusNavigation(action, command);
   }
@@ -163,6 +184,212 @@ class RemoteCommandRouter {
       }
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to handle text command: $e');
+    }
+  }
+
+  /// Handle config commands on TV (credentials/setup from phone)
+  Future<void> _handleConfigCommand(String command, String? data) async {
+    debugPrint('RemoteCommandRouter: Handling config command: $command');
+
+    // Handle complete signal (doesn't need data)
+    if (command == ConfigCommand.complete) {
+      await _handleConfigComplete();
+      return;
+    }
+
+    if (data == null) {
+      debugPrint('RemoteCommandRouter: Config command missing data');
+      return;
+    }
+
+    switch (command) {
+      case ConfigCommand.realDebrid:
+        await _handleRealDebridConfig(data);
+        break;
+      case ConfigCommand.torbox:
+        await _handleTorboxConfig(data);
+        break;
+      case ConfigCommand.pikpak:
+        await _handlePikPakConfig(data);
+        break;
+      case ConfigCommand.searchEngines:
+        await _handleSearchEnginesConfig(data);
+        break;
+      default:
+        debugPrint('RemoteCommandRouter: Unknown config command: $command');
+    }
+  }
+
+  /// Handle Real-Debrid API key config
+  Future<void> _handleRealDebridConfig(String apiKey) async {
+    try {
+      debugPrint('RemoteCommandRouter: Validating Real-Debrid API key...');
+
+      // Validate the API key
+      final isValid = await AccountService.validateAndGetUserInfo(apiKey);
+      if (!isValid) {
+        _showSnackBar('Real-Debrid: Invalid API key', isError: true);
+        return;
+      }
+
+      // Save the API key
+      await StorageService.saveApiKey(apiKey);
+      await StorageService.setRealDebridIntegrationEnabled(true);
+
+      debugPrint('RemoteCommandRouter: Real-Debrid configured successfully');
+      _showSnackBar('Real-Debrid configured successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure Real-Debrid: $e');
+      _showSnackBar('Real-Debrid: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle Torbox API key config
+  Future<void> _handleTorboxConfig(String apiKey) async {
+    try {
+      debugPrint('RemoteCommandRouter: Validating Torbox API key...');
+
+      // Validate the API key
+      final isValid = await TorboxAccountService.validateAndGetUserInfo(apiKey);
+      if (!isValid) {
+        _showSnackBar('Torbox: Invalid API key', isError: true);
+        return;
+      }
+
+      // Save the API key
+      await StorageService.saveTorboxApiKey(apiKey);
+      await StorageService.setTorboxIntegrationEnabled(true);
+
+      debugPrint('RemoteCommandRouter: Torbox configured successfully');
+      _showSnackBar('Torbox configured successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure Torbox: $e');
+      _showSnackBar('Torbox: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle PikPak credentials config
+  Future<void> _handlePikPakConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring PikPak...');
+
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final email = data['email'] as String?;
+      final password = data['password'] as String?;
+
+      if (email == null || password == null) {
+        _showSnackBar('PikPak: Invalid credentials data', isError: true);
+        return;
+      }
+
+      // Attempt login
+      final result = await PikPakApiService.instance.login(email, password);
+      if (!result) {
+        _showSnackBar('PikPak: Login failed', isError: true);
+        return;
+      }
+
+      // Enable PikPak integration
+      await StorageService.setPikPakEnabled(true);
+
+      debugPrint('RemoteCommandRouter: PikPak configured successfully');
+      _showSnackBar('PikPak configured successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure PikPak: $e');
+      _showSnackBar('PikPak: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle config complete signal - mark onboarding done and restart app flow
+  Future<void> _handleConfigComplete() async {
+    debugPrint('RemoteCommandRouter: Config complete, restarting app flow...');
+
+    // Mark onboarding as complete
+    await StorageService.setInitialSetupComplete(true);
+
+    // Show snackbar
+    _showSnackBar('Setup received! Restarting...');
+
+    // Give snackbar time to show, then restart app
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    // Use the restart callback if available
+    if (_onRestartApp != null) {
+      _onRestartApp!();
+      debugPrint('RemoteCommandRouter: Restart callback invoked');
+    } else {
+      debugPrint('RemoteCommandRouter: Restart callback not available');
+    }
+  }
+
+  /// Handle search engines config (downloads engine IDs)
+  Future<void> _handleSearchEnginesConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring search engines...');
+
+      final engineIds = (jsonDecode(jsonData) as List).cast<String>();
+      if (engineIds.isEmpty) {
+        debugPrint('RemoteCommandRouter: No engine IDs to import');
+        return;
+      }
+
+      final remoteManager = RemoteEngineManager();
+      final localStorage = LocalEngineStorage.instance;
+      await localStorage.initialize();
+
+      // Fetch available engines
+      final availableEngines = await remoteManager.fetchAvailableEngines();
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final engineId in engineIds) {
+        // Find the engine info
+        final engineInfo = availableEngines.where((e) => e.id == engineId).firstOrNull;
+        if (engineInfo == null) {
+          debugPrint('RemoteCommandRouter: Engine $engineId not found');
+          failCount++;
+          continue;
+        }
+
+        // Check if already imported
+        if (await localStorage.isEngineImported(engineId)) {
+          debugPrint('RemoteCommandRouter: Engine $engineId already imported');
+          successCount++;
+          continue;
+        }
+
+        // Download and save the engine
+        try {
+          final yamlContent = await remoteManager.downloadEngineYaml(engineInfo.fileName);
+          if (yamlContent == null) {
+            debugPrint('RemoteCommandRouter: Failed to download engine $engineId');
+            failCount++;
+            continue;
+          }
+          await localStorage.saveEngine(
+            engineId: engineId,
+            fileName: engineInfo.fileName,
+            yamlContent: yamlContent,
+            displayName: engineInfo.displayName,
+            icon: engineInfo.icon,
+          );
+          successCount++;
+        } catch (e) {
+          debugPrint('RemoteCommandRouter: Failed to import engine $engineId: $e');
+          failCount++;
+        }
+      }
+
+      if (failCount == 0) {
+        _showSnackBar('$successCount search engine${successCount != 1 ? 's' : ''} configured');
+      } else if (successCount == 0) {
+        _showSnackBar('Search engines: All failed to import', isError: true);
+      } else {
+        _showSnackBar('Search engines: $successCount imported, $failCount failed', isError: true);
+      }
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure search engines: $e');
+      _showSnackBar('Search engines: Configuration failed', isError: true);
     }
   }
 

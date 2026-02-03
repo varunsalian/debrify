@@ -216,6 +216,12 @@ class RemoteControlState extends ChangeNotifier {
     return await UdpCommandService.sendCommandToIp(cmd, targetIp);
   }
 
+  /// Send a config command to a specific device by IP (doesn't require connection)
+  Future<bool> sendConfigCommandToDevice(String configType, String targetIp, {String? configData}) async {
+    final cmd = RemoteCommand.config(configType, configData: configData);
+    return await UdpCommandService.sendCommandToIp(cmd, targetIp);
+  }
+
   /// Send a text input command (for mobile)
   void sendTextCommand(String command, {String? text}) {
     if (!isConnected || _isTv) return;

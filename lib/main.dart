@@ -144,6 +144,9 @@ class _WindowsFullscreenListener with WindowListener {
 final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
+// Global navigator key for app navigation (used for remote config restart)
+final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
 class DebrifyApp extends StatelessWidget {
   const DebrifyApp({super.key});
 
@@ -152,7 +155,16 @@ class DebrifyApp extends StatelessWidget {
     // Set up scaffold messenger key for remote command router (TV feedback)
     RemoteCommandRouter().setScaffoldMessengerKey(_scaffoldMessengerKey);
 
+    // Set up restart callback for remote config (when TV receives setup from phone)
+    RemoteCommandRouter().setRestartCallback(() {
+      _navigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AppInitializer()),
+        (_) => false,
+      );
+    });
+
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
       title: 'Debrify',
       debugShowCheckedModeBanner: false,

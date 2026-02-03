@@ -72,6 +72,15 @@ class RemoteCommand {
     );
   }
 
+  /// Create a config command (for sending setup/credentials to TV)
+  factory RemoteCommand.config(String configType, {String? configData}) {
+    return RemoteCommand(
+      action: RemoteAction.config,
+      command: configType,
+      data: configData,
+    );
+  }
+
   @override
   String toString() => 'RemoteCommand($action: $command${data != null ? ', data: $data' : ''})';
 }

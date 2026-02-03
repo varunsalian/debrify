@@ -11,21 +11,38 @@ class AddonInstallChoice {
   AddonInstallChoice({required this.target, this.device});
 }
 
-/// Dialog for choosing where to install a Stremio addon
+/// Dialog for choosing where to install a Stremio addon or send config
 class AddonInstallDialog extends StatefulWidget {
   final String manifestUrl;
+  final String? title;
+  final String? subtitle;
+  final bool showThisDevice;
 
   const AddonInstallDialog({
     super.key,
     required this.manifestUrl,
+    this.title,
+    this.subtitle,
+    this.showThisDevice = true,
   });
 
   /// Show the dialog and return the user's choice
-  static Future<AddonInstallChoice?> show(BuildContext context, String manifestUrl) async {
+  static Future<AddonInstallChoice?> show(
+    BuildContext context,
+    String manifestUrl, {
+    String? title,
+    String? subtitle,
+    bool showThisDevice = true,
+  }) async {
     return showDialog<AddonInstallChoice>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => AddonInstallDialog(manifestUrl: manifestUrl),
+      builder: (context) => AddonInstallDialog(
+        manifestUrl: manifestUrl,
+        title: title,
+        subtitle: subtitle,
+        showThisDevice: showThisDevice,
+      ),
     );
   }
 
@@ -101,7 +118,8 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final addonName = _extractAddonName();
+    final addonName = widget.subtitle ?? _extractAddonName();
+    final dialogTitle = widget.title ?? 'Install Addon';
 
     return Dialog(
       backgroundColor: const Color(0xFF1E293B),
@@ -131,8 +149,8 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                       ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.extension,
+                    child: Icon(
+                      widget.showThisDevice ? Icons.extension : Icons.settings_remote,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -142,9 +160,9 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Install Addon',
-                          style: TextStyle(
+                        Text(
+                          dialogTitle,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -167,17 +185,18 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
 
               const SizedBox(height: 20),
 
-              // This device - compact tile
-              _buildCompactTile(
-                icon: Icons.smartphone,
-                title: 'This device',
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                onTap: () => Navigator.of(context).pop(
-                  AddonInstallChoice(target: 'phone'),
+              // This device - compact tile (only show if enabled)
+              if (widget.showThisDevice) ...[
+                _buildCompactTile(
+                  icon: Icons.smartphone,
+                  title: 'This device',
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                  onTap: () => Navigator.of(context).pop(
+                    AddonInstallChoice(target: 'phone'),
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
               // TV section
               Row(

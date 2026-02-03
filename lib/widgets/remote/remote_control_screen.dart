@@ -6,6 +6,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
 import 'remote_dpad_widget.dart';
 import 'remote_addon_export.dart';
+import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
 
 /// Full remote control UI modal
@@ -83,6 +84,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ] else if (_activeView == 'addons') ...[
                       // Addons view - export addons to TV
                       RemoteAddonExport(onBack: _closeView),
+                    ] else if (_activeView == 'config') ...[
+                      // Config view - send setup to TV
+                      RemoteConfigExport(onBack: _closeView),
                     ] else ...[
                       // Main menu
                       _buildConnectedMenu(state),
@@ -423,6 +427,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           title: 'Stremio Addons',
           subtitle: 'Send addons to your TV',
           onTap: () => _openView('addons'),
+        ),
+
+        const SizedBox(height: 12),
+
+        _buildMenuItem(
+          icon: Icons.settings_remote_rounded,
+          title: 'Send Setup to TV',
+          subtitle: 'API keys, credentials, engines',
+          onTap: () => _openView('config'),
         ),
 
         const SizedBox(height: 24),

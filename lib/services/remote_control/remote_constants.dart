@@ -36,6 +36,7 @@ class RemoteAction {
   static const String media = 'media';
   static const String addon = 'addon';
   static const String text = 'text';
+  static const String config = 'config';
 }
 
 /// Navigation commands
@@ -65,4 +66,13 @@ class TextCommand {
   static const String type = 'type'; // data contains the text to type
   static const String backspace = 'backspace'; // delete one character
   static const String clear = 'clear'; // clear the field
+}
+
+/// Config commands (for sending setup/credentials to TV)
+class ConfigCommand {
+  static const String realDebrid = 'real_debrid';
+  static const String torbox = 'torbox';
+  static const String pikpak = 'pikpak';
+  static const String searchEngines = 'search_engines';
+  static const String complete = 'complete'; // Signals all configs sent, TV should restart
 }
