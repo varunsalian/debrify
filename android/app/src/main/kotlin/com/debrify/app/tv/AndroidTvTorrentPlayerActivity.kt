@@ -172,6 +172,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSubtitleService: StremioSubtitleService? = null
     private val stremioSubtitles = mutableListOf<StremioSubtitle>()
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
+    private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
+    private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Focus navigation state - prevents focus recovery from interfering with active navigation
@@ -1448,12 +1450,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val isSeries = model.contentType.lowercase(Locale.US) == "series"
         val type = if (isSeries) "series" else "movie"
 
+        // Set loading state and refresh panel if visible
+        isLoadingStremioSubtitles = true
+        if (subtitleSettingsVisible) {
+            refreshSubtitlePanelForLoading()
+        }
+
         // For series, use the shared IMDB ID directly
         if (isSeries) {
             val imdbId = model.imdbId
             if (imdbId.isNullOrEmpty()) {
                 stremioSubtitles.clear()
                 currentStremioSubtitleIndex = -1
+                clearStremioLoadingState()
                 return
             }
             fetchStremioSubtitlesWithImdb(imdbId, type, item)
@@ -1471,6 +1480,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 android.util.Log.d("StremioSubs", "No cached IMDB ID for item $itemIndex (previously not found)")
                 stremioSubtitles.clear()
                 currentStremioSubtitleIndex = -1
+                clearStremioLoadingState()
                 return
             }
             android.util.Log.d("StremioSubs", "Using cached IMDB ID $cachedImdbId for item $itemIndex")
@@ -1497,6 +1507,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (imdbId.isNullOrEmpty()) {
                 stremioSubtitles.clear()
                 currentStremioSubtitleIndex = -1
+                clearStremioLoadingState()
                 return@requestMovieMetadataFromFlutter
             }
 
@@ -1520,12 +1531,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 stremioSubtitles.clear()
                 stremioSubtitles.addAll(subtitles)
                 currentStremioSubtitleIndex = -1
+                isLoadingStremioSubtitles = false
                 android.util.Log.d("StremioSubs", "Fetched ${subtitles.size} subtitles for IMDB $imdbId")
+                // Refresh panel if visible to show loaded subtitles
+                if (subtitleSettingsVisible) {
+                    refreshSubtitlePanelForLoading()
+                }
             } catch (e: Exception) {
                 android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e)
                 stremioSubtitles.clear()
                 currentStremioSubtitleIndex = -1
+                isLoadingStremioSubtitles = false
+                // Refresh panel if visible to clear loading indicator
+                if (subtitleSettingsVisible) {
+                    refreshSubtitlePanelForLoading()
+                }
             }
+        }
+    }
+
+    /**
+     * Clear Stremio subtitle loading state and refresh panel if visible.
+     */
+    private fun clearStremioLoadingState() {
+        isLoadingStremioSubtitles = false
+        if (subtitleSettingsVisible) {
+            refreshSubtitlePanelForLoading()
         }
     }
 
@@ -3049,6 +3080,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
+        // Add loading indicator if still fetching Stremio subtitles
+        if (isLoadingStremioSubtitles) {
+            subtitleTracks.add(Pair("⏳ Loading external subtitles...", null))
+        }
+
         // Check if no subtitle is currently selected (means "Off")
         val hasSelectedSubtitle = tracks?.groups?.any { group ->
             group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
@@ -3073,6 +3109,69 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleSettingsVisible = false
         if (::playerView.isInitialized) {
             playerView.requestFocus()
+        }
+    }
+
+    /**
+     * Refresh subtitle panel to update loading state / loaded subtitles.
+     * Re-collects tracks and updates UI without changing visibility or focus.
+     */
+    private fun refreshSubtitlePanelForLoading() {
+        // Re-collect available subtitle tracks
+        subtitleTracks.clear()
+        subtitleTracks.add(Pair("Off", null))
+
+        val tracks = player?.currentTracks
+        if (tracks != null) {
+            for (group in tracks.groups) {
+                if (group.type == C.TRACK_TYPE_TEXT) {
+                    for (i in 0 until group.length) {
+                        val format = group.getTrackFormat(i)
+                        val label = buildSubtitleTrackLabel(format)
+                        val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
+                        subtitleTracks.add(Pair(label, override))
+
+                        if (group.isTrackSelected(i)) {
+                            currentSubtitleTrackIndex = subtitleTracks.size - 1
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add Stremio external subtitles
+        val embeddedTrackCount = subtitleTracks.size
+        for ((index, sub) in stremioSubtitles.withIndex()) {
+            val label = "⬇ ${sub.displayName} (${sub.source})"
+            subtitleTracks.add(Pair(label, null))
+
+            if (currentStremioSubtitleIndex == index) {
+                currentSubtitleTrackIndex = embeddedTrackCount + index
+            }
+        }
+
+        // Add loading indicator if still fetching
+        if (isLoadingStremioSubtitles) {
+            subtitleTracks.add(Pair("⏳ Loading external subtitles...", null))
+        }
+
+        // Check if no subtitle is currently selected (means "Off")
+        val hasSelectedSubtitle = tracks?.groups?.any { group ->
+            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
+        } ?: false
+        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
+            currentSubtitleTrackIndex = 0
+        }
+
+        // Update UI values only (don't change visibility or focus)
+        updateSubtitlePanelValues()
+
+        // If track selection dialog is open, refresh it to show updated list
+        subtitleTrackDialog?.let { dialog ->
+            if (dialog.isShowing) {
+                dialog.dismiss()
+                showSubtitleTrackSelectionDialog()
+            }
         }
     }
 
@@ -3227,15 +3326,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         val labels = subtitleTracks.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
+        subtitleTrackDialog = AlertDialog.Builder(this)
             .setTitle("Select Subtitle Track")
             .setSingleChoiceItems(labels, currentSubtitleTrackIndex) { dialog, which ->
+                // Ignore clicks on loading indicator
+                val selectedLabel = subtitleTracks.getOrNull(which)?.first ?: ""
+                if (selectedLabel.startsWith("⏳")) {
+                    // Loading indicator - ignore click
+                    return@setSingleChoiceItems
+                }
+
                 currentSubtitleTrackIndex = which
                 applySelectedSubtitleTrack()
                 updateSubtitlePanelValues()
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel", null)
+            .setOnDismissListener { subtitleTrackDialog = null }
             .show()
     }
 
