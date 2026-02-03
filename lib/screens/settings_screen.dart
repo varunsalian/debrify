@@ -922,13 +922,27 @@ class _ConnectionCard extends StatelessWidget {
         ? (active ? Colors.green : Colors.red)
         : theme.colorScheme.outline;
 
+    // Helper to focus and scroll into view
+    void focusAndScroll(FocusNode target) {
+      target.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (target.context != null) {
+          Scrollable.ensureVisible(
+            target.context!,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      });
+    }
+
     return Focus(
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
           if (leftNeighbor != null) {
-            leftNeighbor!.requestFocus();
+            focusAndScroll(leftNeighbor!);
             return KeyEventResult.handled;
           } else if (isLeftColumn && MainPageBridge.focusTvSidebar != null) {
             // Left column with no left neighbor: open sidebar
@@ -937,17 +951,17 @@ class _ConnectionCard extends StatelessWidget {
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
           if (rightNeighbor != null) {
-            rightNeighbor!.requestFocus();
+            focusAndScroll(rightNeighbor!);
             return KeyEventResult.handled;
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
           if (upNeighbor != null) {
-            upNeighbor!.requestFocus();
+            focusAndScroll(upNeighbor!);
             return KeyEventResult.handled;
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
           if (downNeighbor != null) {
-            downNeighbor!.requestFocus();
+            focusAndScroll(downNeighbor!);
             return KeyEventResult.handled;
           }
         }
