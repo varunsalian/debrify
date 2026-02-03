@@ -5,6 +5,7 @@ import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
 import 'remote_dpad_widget.dart';
+import 'remote_addon_export.dart';
 
 /// Full remote control UI modal
 class RemoteControlScreen extends StatefulWidget {
@@ -76,6 +77,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ] else if (_activeView == 'navigate') ...[
                       // Navigate view - D-pad and media controls
                       _buildNavigateView(state),
+                    ] else if (_activeView == 'addons') ...[
+                      // Addons view - export addons to TV
+                      RemoteAddonExport(onBack: _closeView),
                     ] else ...[
                       // Main menu
                       _buildConnectedMenu(state),
@@ -407,6 +411,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           title: 'Navigate',
           subtitle: 'D-pad and media controls',
           onTap: () => _openView('navigate'),
+        ),
+
+        const SizedBox(height: 12),
+
+        _buildMenuItem(
+          icon: Icons.extension_rounded,
+          title: 'Stremio Addons',
+          subtitle: 'Send addons to your TV',
+          onTap: () => _openView('addons'),
         ),
 
         const SizedBox(height: 24),

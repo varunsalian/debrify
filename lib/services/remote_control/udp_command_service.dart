@@ -10,22 +10,31 @@ import 'remote_constants.dart';
 class RemoteCommand {
   final String action;
   final String command;
+  final String? data;
 
   RemoteCommand({
     required this.action,
     required this.command,
+    this.data,
   });
 
-  Map<String, dynamic> toJson() => {
-        'type': RemoteMessageType.command,
-        'action': action,
-        'command': command,
-      };
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'type': RemoteMessageType.command,
+      'action': action,
+      'command': command,
+    };
+    if (data != null) {
+      json['data'] = data;
+    }
+    return json;
+  }
 
   factory RemoteCommand.fromJson(Map<String, dynamic> json) {
     return RemoteCommand(
       action: json['action'] as String? ?? '',
       command: json['command'] as String? ?? '',
+      data: json['data'] as String?,
     );
   }
 
@@ -45,8 +54,17 @@ class RemoteCommand {
     );
   }
 
+  /// Create an addon command
+  factory RemoteCommand.addon(String addonAction, {String? manifestUrl}) {
+    return RemoteCommand(
+      action: RemoteAction.addon,
+      command: addonAction,
+      data: manifestUrl,
+    );
+  }
+
   @override
-  String toString() => 'RemoteCommand($action: $command)';
+  String toString() => 'RemoteCommand($action: $command${data != null ? ', data: $data' : ''})';
 }
 
 /// Service for sending/receiving UDP commands

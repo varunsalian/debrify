@@ -138,12 +138,20 @@ class _WindowsFullscreenListener with WindowListener {
   }
 }
 
+// Global scaffold messenger key for showing snackbars from anywhere
+final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 class DebrifyApp extends StatelessWidget {
   const DebrifyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Set up scaffold messenger key for remote command router (TV feedback)
+    RemoteCommandRouter().setScaffoldMessengerKey(_scaffoldMessengerKey);
+
     return MaterialApp(
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
       // Performance optimizations for TV with TV-aware text scaling
@@ -594,8 +602,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       await RemoteControlState().startTvListener(deviceName);
 
       // Set up command routing
-      RemoteControlState().onCommandReceived = (action, command) {
-        RemoteCommandRouter().dispatchCommand(action, command);
+      RemoteControlState().onCommandReceived = (action, command, data) {
+        RemoteCommandRouter().dispatchCommand(action, command, data);
       };
     } else {
       // Non-TV: Start scanning for TVs

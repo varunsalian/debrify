@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'remote_constants.dart';
+import '../../services/stremio_service.dart';
 
 /// Callback type for remote command handlers
-typedef RemoteCommandCallback = void Function(String action, String command);
+typedef RemoteCommandCallback = void Function(String action, String command, String? data);
 
 /// Android KeyEvent key codes
 class AndroidKeyCode {
@@ -40,9 +41,41 @@ class RemoteCommandRouter {
   // Navigator key for back navigation
   GlobalKey<NavigatorState>? _navigatorKey;
 
+  // Scaffold messenger key for showing snackbars
+  GlobalKey<ScaffoldMessengerState>? _scaffoldMessengerKey;
+
   /// Set the navigator key for back navigation
   void setNavigatorKey(GlobalKey<NavigatorState> key) {
     _navigatorKey = key;
+  }
+
+  /// Set the scaffold messenger key for showing snackbars
+  void setScaffoldMessengerKey(GlobalKey<ScaffoldMessengerState> key) {
+    _scaffoldMessengerKey = key;
+  }
+
+  /// Show a snackbar message (TV feedback)
+  void _showSnackBar(String message, {bool isError = false}) {
+    final messenger = _scaffoldMessengerKey?.currentState;
+    if (messenger == null) return;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   /// Register a command handler
@@ -60,19 +93,40 @@ class RemoteCommandRouter {
   }
 
   /// Dispatch a remote command to all registered handlers
-  void dispatchCommand(String action, String command) {
-    debugPrint('RemoteCommandRouter: Dispatching $action:$command to ${_handlers.length} handlers');
+  void dispatchCommand(String action, String command, String? data) {
+    debugPrint('RemoteCommandRouter: Dispatching $action:$command${data != null ? ' with data' : ''} to ${_handlers.length} handlers');
 
     for (final handler in _handlers.toList()) {
       try {
-        handler(action, command);
+        handler(action, command, data);
       } catch (e) {
         debugPrint('RemoteCommandRouter: Handler error: $e');
       }
     }
 
+    // Handle addon commands (TV side)
+    if (action == RemoteAction.addon) {
+      _handleAddonCommand(command, data);
+      return;
+    }
+
     // Also try to use the focus system for navigation
     _tryFocusNavigation(action, command);
+  }
+
+  /// Handle addon commands on TV
+  Future<void> _handleAddonCommand(String command, String? data) async {
+    if (command == AddonCommand.install && data != null) {
+      debugPrint('RemoteCommandRouter: Installing addon from $data');
+      try {
+        final addon = await StremioService.instance.addAddon(data);
+        debugPrint('RemoteCommandRouter: Addon installed: ${addon.name}');
+        _showSnackBar('Addon installed: ${addon.name}');
+      } catch (e) {
+        debugPrint('RemoteCommandRouter: Failed to install addon: $e');
+        _showSnackBar('Failed to install addon', isError: true);
+      }
+    }
   }
 
   /// Try to handle navigation commands via platform key injection (Android) or focus system (other platforms)

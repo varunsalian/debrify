@@ -34,7 +34,7 @@ class RemoteControlState extends ChangeNotifier {
   String _deviceId = '';
 
   // Callbacks for TV mode
-  void Function(String action, String command)? onCommandReceived;
+  void Function(String action, String command, String? data)? onCommandReceived;
 
   // Getters
   RemoteConnectionState get connectionState => _connectionState;
@@ -204,6 +204,12 @@ class RemoteControlState extends ChangeNotifier {
     _commandService?.sendCommand(RemoteCommand.media(command));
   }
 
+  /// Send an addon command (for mobile)
+  void sendAddonCommand(String command, {String? manifestUrl}) {
+    if (!isConnected || _isTv) return;
+    _commandService?.sendCommand(RemoteCommand.addon(command, manifestUrl: manifestUrl));
+  }
+
   /// Restart scanning (for mobile)
   Future<void> rescan() async {
     await stop();
@@ -227,7 +233,7 @@ class RemoteControlState extends ChangeNotifier {
 
   void _handleCommand(RemoteCommand command) {
     debugPrint('RemoteControlState: Command received: $command');
-    onCommandReceived?.call(command.action, command.command);
+    onCommandReceived?.call(command.action, command.command, command.data);
   }
 
   String _generateDeviceId() {

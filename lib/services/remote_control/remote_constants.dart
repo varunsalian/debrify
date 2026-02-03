@@ -34,6 +34,7 @@ class RemoteSender {
 class RemoteAction {
   static const String navigate = 'navigate';
   static const String media = 'media';
+  static const String addon = 'addon';
 }
 
 /// Navigation commands
@@ -51,4 +52,9 @@ class MediaCommand {
   static const String playPause = 'play_pause';
   static const String seekForward = 'seek_forward';
   static const String seekBackward = 'seek_backward';
+}
+
+/// Addon commands
+class AddonCommand {
+  static const String install = 'install';
 }
