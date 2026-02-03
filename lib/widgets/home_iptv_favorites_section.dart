@@ -133,6 +133,32 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
     }
   }
 
+  Future<void> _confirmRemoveFavorite(IptvChannel channel) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove from Favorites?'),
+        content: Text('Remove "${channel.name}" from your favorites?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await StorageService.setIptvChannelFavorited(channel.url, false);
+      HapticFeedback.mediumImpact();
+      _loadFavorites();
+    }
+  }
+
   void _openChannel(IptvChannel channel) {
     widget.onPlayChannel?.call(channel);
   }
@@ -170,6 +196,15 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                 ),
               ),
               const Spacer(),
+              // Subtle hint for long-press
+              Text(
+                'Hold to remove',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: _loadFavorites,
                 borderRadius: BorderRadius.circular(4),
@@ -200,6 +235,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                 channel,
                 index: index,
                 focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+                onLongPress: () => _confirmRemoveFavorite(channel),
               );
             },
           ),
@@ -212,9 +248,11 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
     IptvChannel channel, {
     int index = 0,
     FocusNode? focusNode,
+    VoidCallback? onLongPress,
   }) {
     return _ChannelCardWithFocus(
       onTap: () => _openChannel(channel),
+      onLongPress: onLongPress,
       focusNode: focusNode,
       index: index,
       totalCount: _favoriteChannels.length,
@@ -369,6 +407,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
 /// Focus-aware wrapper for channel cards with DPAD/TV support
 class _ChannelCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -381,6 +420,7 @@ class _ChannelCardWithFocus extends StatefulWidget {
   const _ChannelCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -461,6 +501,7 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),

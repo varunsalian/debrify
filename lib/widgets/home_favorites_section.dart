@@ -136,6 +136,33 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     }
   }
 
+  Future<void> _confirmRemoveFavorite(Map<String, dynamic> item) async {
+    final title = (item['title'] as String?) ?? 'this item';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove from Favorites?'),
+        content: Text('Remove "$title" from your favorites?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await StorageService.setPlaylistItemFavorited(item, false);
+      HapticFeedback.mediumImpact();
+      _loadFavorites();
+    }
+  }
+
   Future<void> _playItem(Map<String, dynamic> item) async {
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
 
@@ -198,6 +225,15 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 ),
               ),
               const Spacer(),
+              // Subtle hint for long-press
+              Text(
+                'Hold to remove',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: _loadFavorites,
                 borderRadius: BorderRadius.circular(4),
@@ -233,6 +269,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 progress: progress,
                 isPlaying: isPlaying,
                 onTap: () => _playItem(item),
+                onLongPress: () => _confirmRemoveFavorite(item),
                 index: index,
                 focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
               );
@@ -248,6 +285,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     Map<String, dynamic>? progress,
     bool isPlaying = false,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
     bool autofocus = false,
     int index = 0,
     FocusNode? focusNode,
@@ -286,6 +324,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
     return _FavoriteCardWithFocus(
       onTap: isPlaying ? null : onTap,
+      onLongPress: onLongPress,
       autofocus: autofocus,
       focusNode: focusNode,
       index: index,
@@ -530,6 +569,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 /// Focus-aware wrapper for favorite cards with DPAD/TV support
 class _FavoriteCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool autofocus;
   final FocusNode? focusNode;
   final int index;
@@ -543,6 +583,7 @@ class _FavoriteCardWithFocus extends StatefulWidget {
   const _FavoriteCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.autofocus = false,
     this.focusNode,
     this.index = 0,
@@ -626,6 +667,7 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),
