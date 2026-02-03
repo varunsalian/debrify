@@ -8,6 +8,9 @@ import '../services/pikpak_api_service.dart';
 import '../services/storage_service.dart';
 import 'home_focus_controller.dart';
 
+// Callback type for notifier listeners
+typedef _VoidCallback = void Function();
+
 /// Data class to hold provider status info
 class ProviderStatus {
   final String name;
@@ -70,14 +73,34 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
 
+  // Listener callbacks for service notifiers
+  late final _VoidCallback _rdListener;
+  late final _VoidCallback _torboxListener;
+  late final _VoidCallback _pikpakListener;
+
   @override
   void initState() {
     super.initState();
+
+    // Set up listeners for reactive updates
+    _rdListener = () => _onRdStatusChanged();
+    _torboxListener = () => _onTorboxStatusChanged();
+    _pikpakListener = () => _onPikpakStatusChanged();
+
+    AccountService.userNotifier.addListener(_rdListener);
+    TorboxAccountService.userNotifier.addListener(_torboxListener);
+    PikPakApiService.instance.authStateNotifier.addListener(_pikpakListener);
+
     _loadProviderStatuses();
   }
 
   @override
   void dispose() {
+    // Remove notifier listeners
+    AccountService.userNotifier.removeListener(_rdListener);
+    TorboxAccountService.userNotifier.removeListener(_torboxListener);
+    PikPakApiService.instance.authStateNotifier.removeListener(_pikpakListener);
+
     // Unregister from controller
     widget.focusController?.unregisterSection(HomeSection.providers);
     // Dispose focus nodes
@@ -86,6 +109,30 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
     }
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // Called when Real-Debrid user state changes
+  void _onRdStatusChanged() {
+    if (!mounted) return;
+    _loadRealDebridStatus().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  // Called when Torbox user state changes
+  void _onTorboxStatusChanged() {
+    if (!mounted) return;
+    _loadTorboxStatus().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  // Called when PikPak auth state changes
+  void _onPikpakStatusChanged() {
+    if (!mounted) return;
+    _loadPikPakStatus().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   /// Ensure we have the right number of focus nodes for configured providers

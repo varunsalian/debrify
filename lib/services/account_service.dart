@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/rd_user.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
@@ -6,8 +7,17 @@ class AccountService {
   static RDUser? _currentUser;
   static bool _isValidating = false;
 
+  /// Notifier for reactive UI updates when user state changes
+  static final ValueNotifier<RDUser?> userNotifier = ValueNotifier(null);
+
   // Get current user info (cached)
   static RDUser? get currentUser => _currentUser;
+
+  // Internal setter that also notifies listeners
+  static void _setCurrentUser(RDUser? user) {
+    _currentUser = user;
+    userNotifier.value = user;
+  }
 
   // Check if currently validating
   static bool get isValidating => _isValidating;
@@ -22,7 +32,7 @@ class AccountService {
       final result = await DebridService.validateApiKeyWithFallback(apiKey);
 
       if (result['success'] == true) {
-        _currentUser = result['user'] as RDUser;
+        _setCurrentUser(result['user'] as RDUser);
 
         // Save API key to storage
         await StorageService.saveApiKey(apiKey);
@@ -30,11 +40,11 @@ class AccountService {
 
         return true;
       } else {
-        _currentUser = null;
+        _setCurrentUser(null);
         return false;
       }
     } catch (e) {
-      _currentUser = null;
+      _setCurrentUser(null);
       return false;
     } finally {
       _isValidating = false;
@@ -53,14 +63,14 @@ class AccountService {
 
   // Clear cached user info
   static void clearUserInfo() {
-    _currentUser = null;
+    _setCurrentUser(null);
   }
 
   // Refresh user info
   static Future<bool> refreshUserInfo() async {
     final apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
-      _currentUser = null;
+      _setCurrentUser(null);
       return false;
     }
     

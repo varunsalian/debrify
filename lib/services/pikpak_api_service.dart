@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'storage_service.dart';
 
@@ -8,6 +9,9 @@ class PikPakApiService {
   static final PikPakApiService instance = PikPakApiService._internal();
   factory PikPakApiService() => instance;
   PikPakApiService._internal();
+
+  /// Notifier for reactive UI updates when auth state changes
+  final ValueNotifier<bool> authStateNotifier = ValueNotifier(false);
 
   // Web Platform Constants (more reliable than Android/iOS)
   static const String _webClientId = 'YUMx5nI8ZU8Ap8pm';
@@ -284,16 +288,19 @@ class PikPakApiService {
         }
 
         print('PikPak: Login successful');
+        authStateNotifier.value = true;
         return true;
       } else {
         final errorData = jsonDecode(response.body);
         print(
           'PikPak: Login failed: ${errorData['error_description'] ?? errorData['error'] ?? response.body}',
         );
+        authStateNotifier.value = false;
         return false;
       }
     } catch (e) {
       print('PikPak: Login error: $e');
+      authStateNotifier.value = false;
       return false;
     }
   }
@@ -1159,7 +1166,9 @@ class PikPakApiService {
   Future<bool> isAuthenticated() async {
     final accessToken = await StorageService.getPikPakAccessToken();
     final refreshToken = await StorageService.getPikPakRefreshToken();
-    return accessToken != null && refreshToken != null;
+    final isAuth = accessToken != null && refreshToken != null;
+    authStateNotifier.value = isAuth;
+    return isAuth;
   }
 
   /// Logout - clear all tokens
@@ -1169,6 +1178,7 @@ class PikPakApiService {
     _email = null;
     _userId = null;
     await StorageService.clearPikPakAuth();
+    authStateNotifier.value = false;
     print('PikPak: Logged out');
   }
 
