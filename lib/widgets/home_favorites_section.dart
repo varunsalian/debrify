@@ -34,10 +34,28 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
 
+  // Scroll indicators
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_updateScrollIndicators);
     _loadFavorites();
+  }
+
+  void _updateScrollIndicators() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    final canLeft = pos.pixels > 0;
+    final canRight = pos.pixels < pos.maxScrollExtent;
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
   }
 
   @override
@@ -48,6 +66,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
+    _scrollController.removeListener(_updateScrollIndicators);
     _scrollController.dispose();
     super.dispose();
   }
@@ -112,6 +131,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         });
         // Update focus nodes and register with controller
         _ensureFocusNodes();
+        // Check scroll indicators after frame
+        WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollIndicators());
         widget.focusController?.registerSection(
           HomeSection.favorites,
           hasItems: _favoriteItems.isNotEmpty,
@@ -206,74 +227,156 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Premium section header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
             children: [
-              Icon(
-                Icons.star_rounded,
-                size: 18,
-                color: const Color(0xFFFFD700).withValues(alpha: 0.9),
+              // Glowing icon container
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.star_rounded,
+                  size: 18,
+                  color: Color(0xFFFFD700),
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Playlist - Favorites',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.7),
+              const SizedBox(width: 12),
+              // Gradient title
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                ).createShader(bounds),
+                child: const Text(
+                  'Favorites',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Item count badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Text(
+                  '${_favoriteItems.length}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
                 ),
               ),
               const Spacer(),
-              // Subtle hint for long-press
-              Text(
-                'Hold to remove',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-              ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: _loadFavorites,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.refresh_rounded,
-                    size: 16,
-                    color: Colors.white.withValues(alpha: 0.5),
+              // Refresh button with hover effect
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _loadFavorites,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      size: 16,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        // Horizontal scrolling favorites with DPAD support
+        const SizedBox(height: 8),
+        // Horizontal scrolling favorites with edge fade and scroll indicators
         SizedBox(
-          height: 220,
-          child: ListView.separated(
-            controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            itemCount: _favoriteItems.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final item = _favoriteItems[index];
-              final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-              final progress = _progressMap[dedupeKey];
-              final isPlaying = _playingItemKey == dedupeKey;
+          height: 230,
+          child: Stack(
+            children: [
+              ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: const [
+                      Colors.transparent,
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.02, 0.98, 1.0],
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.dstIn,
+                child: ListView.builder(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  clipBehavior: Clip.none,
+                  itemCount: _favoriteItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _favoriteItems[index];
+                    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+                    final progress = _progressMap[dedupeKey];
+                    final isPlaying = _playingItemKey == dedupeKey;
 
-              return _buildFavoriteCard(
-                item: item,
-                progress: progress,
-                isPlaying: isPlaying,
-                onTap: () => _playItem(item),
-                onLongPress: () => _confirmRemoveFavorite(item),
-                index: index,
-                focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
-              );
-            },
+                    return Padding(
+                      padding: EdgeInsets.only(right: index < _favoriteItems.length - 1 ? 14 : 0),
+                      child: _buildFavoriteCard(
+                        item: item,
+                        progress: progress,
+                        isPlaying: isPlaying,
+                        onTap: () => _playItem(item),
+                        onLongPress: () => _confirmRemoveFavorite(item),
+                        index: index,
+                        focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // Left scroll indicator
+              if (_canScrollLeft)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: _ScrollIndicator(direction: _ScrollDirection.left, accentColor: const Color(0xFFFFD700)),
+                ),
+              // Right scroll indicator
+              if (_canScrollRight)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: _ScrollIndicator(direction: _ScrollDirection.right, accentColor: const Color(0xFFFFD700)),
+                ),
+            ],
           ),
         ),
       ],
@@ -340,37 +443,47 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
-        return AnimatedScale(
-          scale: isActive ? 1.08 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOutCubic,
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.08 : 1.0),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            width: 147,
+            width: 150,
+            height: 210,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: isActive
-                  ? Border.all(color: const Color(0xFFE50914), width: 2)
-                  : null,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isActive ? const Color(0xFFE50914) : Colors.white.withValues(alpha: 0.1),
+                width: isActive ? 2.5 : 1,
+              ),
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                        blurRadius: 16,
+                        color: const Color(0xFFE50914).withValues(alpha: 0.5),
+                        blurRadius: 20,
                         spreadRadius: 2,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
                       ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(isActive ? 8 : 10),
+              borderRadius: BorderRadius.circular(isActive ? 10 : 11),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -380,9 +493,18 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       imageUrl: posterUrl,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
-                        color: const Color(0xFF1E293B),
-                        child: const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        color: const Color(0xFF1A1A2E),
+                        child: Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white.withValues(alpha: 0.3),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                       errorWidget: (context, url, error) => _buildPlaceholder(title),
@@ -400,68 +522,78 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                           colors: [
                             Colors.transparent,
                             Colors.transparent,
-                            Colors.black.withValues(alpha: 0.7),
-                            Colors.black.withValues(alpha: 0.9),
+                            Colors.black.withValues(alpha: 0.6),
+                            Colors.black.withValues(alpha: 0.95),
                           ],
-                          stops: const [0.0, 0.5, 0.75, 1.0],
+                          stops: const [0.0, 0.4, 0.7, 1.0],
                         ),
                       ),
                     ),
                   ),
 
-                  // Provider badge (top-left)
+                  // Provider badge (top-left) with glassmorphism
                   Positioned(
-                    top: 6,
-                    left: 6,
+                    top: 8,
+                    left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: providerColor.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(4),
+                        color: providerColor,
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: providerColor.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            spreadRadius: 0,
+                          ),
+                        ],
                       ),
                       child: Text(
                         providerBadge,
                         style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
                           color: Colors.white,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
                   ),
 
-                  // Favorite star (top-right)
+                  // Favorite star (top-right) with glow
                   Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Icon(
-                      Icons.star_rounded,
-                      size: 16,
-                      color: const Color(0xFFFFD700),
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          blurRadius: 4,
-                        ),
-                      ],
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.star_rounded,
+                        size: 14,
+                        color: Color(0xFFFFD700),
+                      ),
                     ),
                   ),
 
                   // Title (bottom)
                   Positioned(
-                    bottom: 10,
-                    left: 8,
-                    right: 8,
+                    bottom: progressPercent != null ? 14 : 10,
+                    left: 10,
+                    right: 10,
                     child: Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
+                        height: 1.2,
                         shadows: [
                           Shadow(
                             color: Colors.black,
-                            blurRadius: 4,
+                            blurRadius: 6,
                           ),
                         ],
                       ),
@@ -470,19 +602,28 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                     ),
                   ),
 
-                  // Progress bar (bottom)
+                  // Progress bar (bottom) with gradient
                   if (progressPercent != null)
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: LinearProgressIndicator(
-                        value: progressPercent,
-                        backgroundColor: Colors.black.withValues(alpha: 0.5),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFFE50914),
+                      child: Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
                         ),
-                        minHeight: 3,
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progressPercent,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
 
@@ -490,13 +631,15 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   if (isPlaying)
                     Positioned.fill(
                       child: Container(
-                        color: Colors.black.withValues(alpha: 0.6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                        ),
                         child: const Center(
                           child: SizedBox(
-                            width: 24,
-                            height: 24,
+                            width: 32,
+                            height: 32,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 3,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 Color(0xFFE50914),
                               ),
@@ -506,24 +649,42 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       ),
                     ),
 
-                  // Play icon overlay
-                  if (!isPlaying)
-                    Positioned.fill(
+                  // Play icon overlay - only show on hover/focus
+                  Positioned.fill(
+                    child: AnimatedOpacity(
+                      opacity: isActive && !isPlaying ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
                       child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 32,
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutBack,
+                          builder: (context, scale, child) {
+                            return Transform.scale(scale: scale, child: child);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE50914),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFE50914).withValues(alpha: 0.6),
+                                  blurRadius: 16,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -671,6 +832,59 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Direction for scroll indicator
+enum _ScrollDirection { left, right }
+
+/// Subtle scroll indicator widget
+class _ScrollIndicator extends StatelessWidget {
+  final _ScrollDirection direction;
+  final Color accentColor;
+
+  const _ScrollIndicator({
+    required this.direction,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLeft = direction == _ScrollDirection.left;
+
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: 28,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+              end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+              colors: [
+                const Color(0xFF0F0F1A).withValues(alpha: 0.9),
+                Colors.transparent,
+              ],
+            ),
+          ),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                size: 16,
+                color: accentColor.withValues(alpha: 0.7),
+              ),
+            ),
           ),
         ),
       ),

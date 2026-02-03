@@ -396,50 +396,137 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Premium section header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
             children: [
-              Icon(
-                Icons.cloud_done_rounded,
-                size: 18,
-                color: Colors.white.withValues(alpha: 0.7),
+              // Glowing icon container
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.cloud_done_rounded,
+                  size: 18,
+                  color: Color(0xFF6366F1),
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Debrid Services',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.7),
+              const SizedBox(width: 12),
+              // Gradient title
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                ).createShader(bounds),
+                child: const Text(
+                  'Services',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Connected count badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${configuredProviders.length} active',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF10B981),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
-              InkWell(
-                onTap: _loadProviderStatuses,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.refresh_rounded,
-                    size: 16,
-                    color: Colors.white.withValues(alpha: 0.5),
+              // Refresh button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _loadProviderStatuses,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      size: 16,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        // Horizontal scrolling provider cards with DPAD support
+        const SizedBox(height: 8),
+        // Horizontal scrolling provider cards with edge fade
         SizedBox(
-          height: 100,
-          child: ListView.separated(
-            controller: _scrollController,
-            scrollDirection: Axis.horizontal,
-            itemCount: configuredProviders.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => configuredProviders[index],
+          height: 110,
+          child: ShaderMask(
+            shaderCallback: (Rect bounds) {
+              return LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: const [
+                  Colors.transparent,
+                  Colors.white,
+                  Colors.white,
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.02, 0.98, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.dstIn,
+            child: ListView.builder(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              clipBehavior: Clip.none,
+              itemCount: configuredProviders.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.only(right: index < configuredProviders.length - 1 ? 12 : 0),
+                  child: configuredProviders[index],
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -601,151 +688,219 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
-        return Container(
-        width: 140, // Fixed width for horizontal scroll
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1E293B),
-              Color.lerp(const Color(0xFF1E293B), color, 0.1)!,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isActive
-                ? color
-                : hasError
-                    ? const Color(0xFFEF4444).withValues(alpha: 0.5)
-                    : hasWarning
-                        ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
-                        : color.withValues(alpha: 0.3),
-            width: isActive ? 2 : 1,
-          ),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
+        final statusColor = hasError
+            ? const Color(0xFFEF4444)
+            : hasWarning
+                ? const Color(0xFFF59E0B)
+                : const Color(0xFF10B981);
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            width: 155,
+            height: 90,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF1A1A2E),
+                  color.withValues(alpha: 0.08),
                 ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header row: Icon + Status indicator
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 14,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    status.name,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                // Status dot
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: hasError
-                        ? const Color(0xFFEF4444)
-                        : hasWarning
-                            ? const Color(0xFFF59E0B)
-                            : const Color(0xFF10B981),
-                    boxShadow: [
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isActive ? color : Colors.white.withValues(alpha: 0.08),
+                width: isActive ? 2 : 1,
+              ),
+              boxShadow: isActive
+                  ? [
                       BoxShadow(
-                        color: (hasError
-                                ? const Color(0xFFEF4444)
-                                : hasWarning
-                                    ? const Color(0xFFF59E0B)
-                                    : const Color(0xFF10B981))
-                            .withValues(alpha: 0.5),
-                        blurRadius: 4,
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ],
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 10),
-            // Status info
-            if (hasError)
-              Text(
-                status.error ?? 'Disconnected',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.6),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            else ...[
-              // Plan type
-              if (status.planType != null)
-                Text(
-                  status.planType!,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: color,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Stack(
+                children: [
+                  // Subtle radial gradient background
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0.05,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: Alignment.topRight,
+                            radius: 1.5,
+                            colors: [color, Colors.transparent],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              // Days remaining
-              if (status.daysRemaining != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  status.daysRemaining == 1
-                      ? '1 day left'
-                      : '${status.daysRemaining} days left',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: hasWarning
-                        ? const Color(0xFFF59E0B)
-                        : Colors.white.withValues(alpha: 0.5),
+                  // Main content
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header row: Icon + Name + Status
+                        Row(
+                          children: [
+                            // Icon with glow
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: color.withValues(alpha: 0.2),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                icon,
+                                size: 14,
+                                color: color,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Name
+                            Expanded(
+                              child: Text(
+                                status.name,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // Status indicator with pulse effect
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: statusColor,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: statusColor.withValues(alpha: 0.6),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        // Status info
+                        if (hasError)
+                          Text(
+                            status.error ?? 'Disconnected',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.9),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        else ...[
+                          Row(
+                            children: [
+                              // Plan badge
+                              if (status.planType != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    status.planType!,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 8),
+                              // Days remaining
+                              if (status.daysRemaining != null)
+                                Text(
+                                  '${status.daysRemaining}d left',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: hasWarning
+                                        ? const Color(0xFFF59E0B)
+                                        : Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                )
+                              else if (status.isPremium && status.planType != 'Connected')
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 12,
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.8),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Active',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white.withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              ] else if (status.isPremium && status.planType != 'Connected')
-                Text(
-                  'Active',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.5),
-                  ),
-                ),
-            ],
-          ],
-        ),
-      );
+                ],
+              ),
+            ),
+          ),
+        );
       },
     );
   }

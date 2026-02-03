@@ -252,7 +252,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                   scale: _scaleAnimation.value,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         // Subtle glow
                         BoxShadow(
@@ -266,13 +266,13 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(20),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
-                          height: 48,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          height: 40,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
@@ -287,7 +287,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                                       const Color(0xFF6366F1),
                                     ],
                             ),
-                            borderRadius: BorderRadius.circular(25),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: Colors.white.withValues(alpha: _isExpanded ? 0.2 : 0.25),
                               width: 1.5,
@@ -301,13 +301,13 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                                 isExpanded: _isExpanded,
                                 pulseValue: pulseValue,
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
                               // Text label
                               Text(
                                 _isExpanded ? 'Close' : 'Menu',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 15,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.3,
                                 ),
@@ -647,14 +647,14 @@ class _SimpleAnimatedIcon extends StatelessWidget {
       return const Icon(
         Icons.close_rounded,
         color: Colors.white,
-        size: 20,
+        size: 18,
       );
     }
 
     // 2x2 grid of dots with subtle animation
     return SizedBox(
-      width: 18,
-      height: 18,
+      width: 16,
+      height: 16,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -686,11 +686,11 @@ class _Dot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 6,
-      height: 6,
+      width: 5,
+      height: 5,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: opacity),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(1.5),
       ),
     );
   }
