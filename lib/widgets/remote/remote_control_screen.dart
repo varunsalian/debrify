@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -42,77 +40,64 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final deviceName = state.connectedDevice?.deviceName ?? 'TV';
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Blurred background
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.7),
-            ),
-          ),
+      backgroundColor: const Color(0xFF0F172A),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header
+            _buildHeader(context, isConnected, deviceName),
 
-          // Content
-          SafeArea(
-            child: Column(
-              children: [
-                // Header
-                _buildHeader(context, isConnected, deviceName),
+            // Main content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 32),
 
-                // Main content
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 32),
+                    // Connection status
+                    if (!isConnected) ...[
+                      _buildNotConnectedView(state),
+                    ] else ...[
+                      // DPAD
+                      const RemoteDpadWidget(size: 220),
 
-                        // Connection status
-                        if (!isConnected) ...[
-                          _buildNotConnectedView(state),
-                        ] else ...[
-                          // DPAD
-                          const RemoteDpadWidget(size: 220),
+                      const SizedBox(height: 32),
 
-                          const SizedBox(height: 32),
+                      // Media controls
+                      _buildMediaControls(),
 
-                          // Media controls
-                          _buildMediaControls(),
+                      const SizedBox(height: 24),
 
-                          const SizedBox(height: 24),
+                      // Back button
+                      _buildBackButton(),
 
-                          // Back button
-                          _buildBackButton(),
+                      const SizedBox(height: 16),
 
-                          const SizedBox(height: 16),
-
-                          // Switch TV / Disconnect
-                          TextButton(
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              state.disconnect();
-                              state.rescan();
-                            },
-                            child: Text(
-                              'Switch TV',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 14,
-                              ),
-                            ),
+                      // Switch TV / Disconnect
+                      TextButton(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          state.disconnect();
+                          state.rescan();
+                        },
+                        child: Text(
+                          'Switch TV',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 14,
                           ),
-                        ],
+                        ),
+                      ),
+                    ],
 
-                        const SizedBox(height: 32),
-                      ],
-                    ),
-                  ),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

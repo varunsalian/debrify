@@ -122,7 +122,7 @@ class UdpDiscoveryService {
   }
 
   /// Send a single discovery broadcast (for mobile)
-  void sendDiscoveryBroadcast() {
+  void sendDiscoveryBroadcast() async {
     if (_socket == null || _isTv) return;
 
     final message = jsonEncode({
@@ -131,15 +131,48 @@ class UdpDiscoveryService {
       'deviceId': _deviceId,
     });
 
+    final data = utf8.encode(message);
+
+    // Send to global broadcast (works on most mobile devices)
     try {
       _socket!.send(
-        utf8.encode(message),
+        data,
         InternetAddress(kBroadcastAddress),
         kDiscoveryPort,
       );
-      debugPrint('UdpDiscoveryService: Sent discovery broadcast');
+      debugPrint('UdpDiscoveryService: Sent discovery broadcast to $kBroadcastAddress');
     } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to send broadcast: $e');
+      debugPrint('UdpDiscoveryService: Failed to send global broadcast: $e');
+    }
+
+    // Also send to subnet broadcast addresses (needed for macOS/desktop)
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          // Calculate subnet broadcast (assume /24 subnet - most common)
+          final parts = addr.address.split('.');
+          if (parts.length == 4) {
+            final subnetBroadcast = '${parts[0]}.${parts[1]}.${parts[2]}.255';
+            try {
+              _socket!.send(
+                data,
+                InternetAddress(subnetBroadcast),
+                kDiscoveryPort,
+              );
+              debugPrint('UdpDiscoveryService: Sent discovery broadcast to $subnetBroadcast');
+            } catch (e) {
+              debugPrint('UdpDiscoveryService: Failed to send to $subnetBroadcast: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('UdpDiscoveryService: Failed to get network interfaces: $e');
     }
   }
 

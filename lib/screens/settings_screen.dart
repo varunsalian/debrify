@@ -12,6 +12,7 @@ import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
+import '../services/android_native_downloader.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -25,6 +26,7 @@ import 'settings/filter_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import '../widgets/remote/remote_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,6 +37,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
+  bool _isAndroidTv = false;
 
   // Focus node for the first connection card (Real-Debrid) for TV navigation
   final FocusNode _firstCardFocusNode = FocusNode(debugLabel: 'firstCardFocus');
@@ -155,6 +158,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final packageInfo = await PackageInfo.fromPlatform();
     final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
 
+    // Check if running on Android TV
+    final isAndroidTv = await AndroidNativeDownloader.isTelevision();
+
     if (!mounted) return;
 
     setState(() {
@@ -168,6 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _pikpakStatus = pikpakStatus;
       _pikpakCaption = pikpakCaption;
       _appVersion = appVersion;
+      _isAndroidTv = isAndroidTv;
       _loading = false;
     });
   }
@@ -230,6 +237,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenStartupSettings: _openStartupSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
+      onOpenRemoteControl: _openRemoteControl,
+      isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
@@ -292,6 +301,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const ExternalPlayerSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openRemoteControl() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RemoteControlScreen()));
     if (!mounted) return;
     setState(() {});
   }
@@ -487,6 +504,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
+  final VoidCallback onOpenRemoteControl;
+  final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
@@ -502,6 +521,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPikPakSettings,
     required this.onOpenStartupSettings,
     required this.onOpenExternalPlayerSettings,
+    required this.onOpenRemoteControl,
+    required this.isAndroidTv,
     required this.onClearDownloads,
     required this.onClearPlayback,
     required this.onDangerAction,
@@ -581,6 +602,14 @@ class _SettingsLayout extends StatelessWidget {
                 subtitle: 'Configure preferred video player',
                 onTap: onOpenExternalPlayerSettings,
               ),
+              // Hide Remote Control on TV (TV is the receiver, not controller)
+              if (!isAndroidTv)
+                _SettingsTile(
+                  icon: Icons.phonelink_rounded,
+                  title: 'Remote Control',
+                  subtitle: 'Control Debrify TV from your phone',
+                  onTap: () async => onOpenRemoteControl(),
+                ),
             ],
           ),
           const SizedBox(height: 24),
