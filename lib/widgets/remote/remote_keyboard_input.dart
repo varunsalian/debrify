@@ -69,8 +69,8 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
 
   void _sendEnter() {
     HapticFeedback.mediumImpact();
-    // Send select/enter command to submit
-    RemoteControlState().sendNavigateCommand(NavigateCommand.select);
+    // Send KEYCODE_ENTER - same as TV keyboard's Done/tick button
+    RemoteControlState().sendTextCommand(TextCommand.enter);
   }
 
   @override

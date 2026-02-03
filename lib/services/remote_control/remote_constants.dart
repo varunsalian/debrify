@@ -66,6 +66,7 @@ class TextCommand {
   static const String type = 'type'; // data contains the text to type
   static const String backspace = 'backspace'; // delete one character
   static const String clear = 'clear'; // clear the field
+  static const String enter = 'enter'; // submit/done key (KEYCODE_ENTER)
 }
 
 /// Config commands (for sending setup/credentials to TV)

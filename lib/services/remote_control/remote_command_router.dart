@@ -181,6 +181,11 @@ class RemoteCommandRouter {
           await _channel.invokeMethod('injectText', {'text': '', 'clear': true});
           debugPrint('RemoteCommandRouter: Cleared text field');
           break;
+        case TextCommand.enter:
+          // Send KEYCODE_ENTER (66) - same as keyboard's Done/Enter button
+          await _channel.invokeMethod('injectKeyEvent', {'keyCode': 66});
+          debugPrint('RemoteCommandRouter: Injected enter key');
+          break;
       }
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to handle text command: $e');
