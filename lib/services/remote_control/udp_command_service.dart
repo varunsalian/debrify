@@ -63,6 +63,15 @@ class RemoteCommand {
     );
   }
 
+  /// Create a text input command
+  factory RemoteCommand.text(String textAction, {String? text}) {
+    return RemoteCommand(
+      action: RemoteAction.text,
+      command: textAction,
+      data: text,
+    );
+  }
+
   @override
   String toString() => 'RemoteCommand($action: $command${data != null ? ', data: $data' : ''})';
 }

@@ -216,6 +216,12 @@ class RemoteControlState extends ChangeNotifier {
     return await UdpCommandService.sendCommandToIp(cmd, targetIp);
   }
 
+  /// Send a text input command (for mobile)
+  void sendTextCommand(String command, {String? text}) {
+    if (!isConnected || _isTv) return;
+    _commandService?.sendCommand(RemoteCommand.text(command, text: text));
+  }
+
   /// Restart scanning (for mobile)
   Future<void> rescan() async {
     await stop();

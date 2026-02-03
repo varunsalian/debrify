@@ -110,6 +110,12 @@ class RemoteCommandRouter {
       return;
     }
 
+    // Handle text input commands (TV side)
+    if (action == RemoteAction.text) {
+      _handleTextCommand(command, data);
+      return;
+    }
+
     // Also try to use the focus system for navigation
     _tryFocusNavigation(action, command);
   }
@@ -126,6 +132,37 @@ class RemoteCommandRouter {
         debugPrint('RemoteCommandRouter: Failed to install addon: $e');
         _showSnackBar('Failed to install addon', isError: true);
       }
+    }
+  }
+
+  /// Handle text input commands on TV
+  Future<void> _handleTextCommand(String command, String? data) async {
+    if (!Platform.isAndroid) {
+      debugPrint('RemoteCommandRouter: Text input only supported on Android');
+      return;
+    }
+
+    try {
+      switch (command) {
+        case TextCommand.type:
+          if (data != null && data.isNotEmpty) {
+            await _channel.invokeMethod('injectText', {'text': data});
+            debugPrint('RemoteCommandRouter: Injected text: $data');
+          }
+          break;
+        case TextCommand.backspace:
+          // Send backspace key event
+          await _channel.invokeMethod('injectKeyEvent', {'keyCode': 67}); // KEYCODE_DEL
+          debugPrint('RemoteCommandRouter: Injected backspace');
+          break;
+        case TextCommand.clear:
+          // Select all (Ctrl+A) then delete
+          await _channel.invokeMethod('injectText', {'text': '', 'clear': true});
+          debugPrint('RemoteCommandRouter: Cleared text field');
+          break;
+      }
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to handle text command: $e');
     }
   }
 

@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.app.UiModeManager
 import android.content.res.Configuration
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -268,7 +269,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // Remote control channel for injecting key events
+        // Remote control channel for injecting key events and text
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REMOTE_CONTROL_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "injectKeyEvent" -> {
@@ -295,6 +296,54 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         android.util.Log.e("RemoteControl", "Failed to inject key event: ${e.message}")
+                        result.error("inject_failed", e.message, null)
+                    }
+                }
+                "injectText" -> {
+                    val text = call.argument<String>("text") ?: ""
+                    val clear = call.argument<Boolean>("clear") ?: false
+                    try {
+                        val targetActivity = ActivityTracker.currentActivity
+                        if (targetActivity == null) {
+                            android.util.Log.w("RemoteControl", "No active activity to receive text")
+                            result.error("no_activity", "No active activity", null)
+                            return@setMethodCallHandler
+                        }
+
+                        if (clear) {
+                            // Select all and delete to clear the field
+                            // Send Ctrl+A to select all
+                            val metaState = KeyEvent.META_CTRL_ON
+                            val downA = KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A, 0, metaState)
+                            val upA = KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_A, 0, metaState)
+                            targetActivity.dispatchKeyEvent(downA)
+                            targetActivity.dispatchKeyEvent(upA)
+                            // Then send delete
+                            val downDel = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)
+                            val upDel = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL)
+                            targetActivity.dispatchKeyEvent(downDel)
+                            targetActivity.dispatchKeyEvent(upDel)
+                            android.util.Log.d("RemoteControl", "Cleared text field")
+                        } else if (text.isNotEmpty()) {
+                            // Use KeyCharacterMap to dispatch key events for each character
+                            // This is the most reliable way to inject text into Flutter TextFields
+                            // as it uses the same mechanism as physical keyboards
+                            val keyCharMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
+                            for (char in text) {
+                                val events = keyCharMap.getEvents(charArrayOf(char))
+                                if (events != null) {
+                                    for (event in events) {
+                                        targetActivity.dispatchKeyEvent(event)
+                                    }
+                                } else {
+                                    android.util.Log.w("RemoteControl", "No key events for char: $char")
+                                }
+                            }
+                            android.util.Log.d("RemoteControl", "Injected text via key events: $text")
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("RemoteControl", "Failed to inject text: ${e.message}")
                         result.error("inject_failed", e.message, null)
                     }
                 }

@@ -35,6 +35,7 @@ class RemoteAction {
   static const String navigate = 'navigate';
   static const String media = 'media';
   static const String addon = 'addon';
+  static const String text = 'text';
 }
 
 /// Navigation commands
@@ -57,4 +58,11 @@ class MediaCommand {
 /// Addon commands
 class AddonCommand {
   static const String install = 'install';
+}
+
+/// Text input commands
+class TextCommand {
+  static const String type = 'type'; // data contains the text to type
+  static const String backspace = 'backspace'; // delete one character
+  static const String clear = 'clear'; // clear the field
 }

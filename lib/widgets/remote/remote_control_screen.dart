@@ -6,6 +6,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
 import 'remote_dpad_widget.dart';
 import 'remote_addon_export.dart';
+import 'remote_keyboard_input.dart';
 
 /// Full remote control UI modal
 class RemoteControlScreen extends StatefulWidget {
@@ -18,6 +19,8 @@ class RemoteControlScreen extends StatefulWidget {
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
   // Track which view is showing: null = menu, 'navigate' = D-pad controls
   String? _activeView;
+  // Track if keyboard input is showing
+  bool _showKeyboard = false;
 
   @override
   void initState() {
@@ -527,9 +530,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
-            onPressed: _closeView,
+            onPressed: () {
+              if (_showKeyboard) {
+                setState(() => _showKeyboard = false);
+              } else {
+                _closeView();
+              }
+            },
             icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('Back to menu'),
+            label: Text(_showKeyboard ? 'Hide keyboard' : 'Back to menu'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.white.withValues(alpha: 0.7),
             ),
@@ -537,6 +546,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         ),
 
         const SizedBox(height: 16),
+
+        // Keyboard input (when shown)
+        if (_showKeyboard) ...[
+          RemoteKeyboardInput(
+            onClose: () => setState(() => _showKeyboard = false),
+          ),
+          const SizedBox(height: 24),
+        ],
 
         // DPAD
         const RemoteDpadWidget(size: 220),
@@ -548,8 +565,61 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
         const SizedBox(height: 24),
 
-        // Back button (sends back command to TV)
-        _buildBackButton(),
+        // Keyboard toggle and Back button row
+        Row(
+          children: [
+            // Keyboard button
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  setState(() => _showKeyboard = !_showKeyboard);
+                },
+                icon: Icon(
+                  _showKeyboard ? Icons.keyboard_hide : Icons.keyboard,
+                  size: 20,
+                ),
+                label: Text(_showKeyboard ? 'Hide' : 'Keyboard'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _showKeyboard
+                      ? const Color(0xFF6366F1)
+                      : Colors.white,
+                  side: BorderSide(
+                    color: _showKeyboard
+                        ? const Color(0xFF6366F1)
+                        : Colors.white.withValues(alpha: 0.3),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Back button (sends back command to TV)
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  RemoteControlState().sendNavigateCommand(NavigateCommand.back);
+                },
+                icon: const Icon(Icons.arrow_back, size: 20),
+                label: const Text('Back'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -591,30 +661,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildBackButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () {
-          HapticFeedback.mediumImpact();
-          RemoteControlState().sendNavigateCommand(NavigateCommand.back);
-        },
-        icon: const Icon(Icons.arrow_back),
-        label: const Text('Back'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white,
-          side: BorderSide(
-            color: Colors.white.withValues(alpha: 0.3),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
     );
   }
 }
