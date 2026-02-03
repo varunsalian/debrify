@@ -67,17 +67,43 @@ class AdaptivePlaylistSectionState extends State<AdaptivePlaylistSection> {
 
   /// Request focus on the first item in this section
   /// Returns true if focus was requested successfully
+  /// Also scrolls the item into view in the parent scroll view
   bool requestFocusOnFirstItem() {
     if (_cardFocusNodes.isEmpty) return false;
-    _cardFocusNodes[0].requestFocus();
+    final node = _cardFocusNodes[0];
+    node.requestFocus();
+    // Scroll into view after focus is applied
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (node.context != null) {
+        Scrollable.ensureVisible(
+          node.context!,
+          alignment: 0.15, // Closer to top to show search button above
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
     return true;
   }
 
   /// Request focus on the last item in this section
   /// Returns true if focus was requested successfully
+  /// Also scrolls the item into view in the parent scroll view
   bool requestFocusOnLastItem() {
     if (_cardFocusNodes.isEmpty) return false;
-    _cardFocusNodes.last.requestFocus();
+    final node = _cardFocusNodes.last;
+    node.requestFocus();
+    // Scroll into view after focus is applied
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (node.context != null) {
+        Scrollable.ensureVisible(
+          node.context!,
+          alignment: 0.7,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
     return true;
   }
 
@@ -197,35 +223,69 @@ String _getDedupeKey(Map<String, dynamic> item) {
       child: Row(
         children: [
           if (widget.sectionIcon != null) ...[
-            Icon(
-              widget.sectionIcon,
-              color: widget.sectionIconColor ?? const Color(0xFFFFD700),
-              size: 22,
+            // Animated icon container with glow
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (widget.sectionIconColor ?? const Color(0xFFFFD700)).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: (widget.sectionIconColor ?? const Color(0xFFFFD700)).withValues(alpha: 0.2),
+                    blurRadius: 12,
+                    spreadRadius: 0,
+                  ),
+                ],
+              ),
+              child: Icon(
+                widget.sectionIcon,
+                color: widget.sectionIconColor ?? const Color(0xFFFFD700),
+                size: 20,
+              ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
           ],
-          Text(
-            widget.sectionTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.3,
+          // Section title with gradient text effect
+          ShaderMask(
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [
+                Colors.white,
+                Colors.white.withValues(alpha: 0.85),
+              ],
+            ).createShader(bounds),
+            child: Text(
+              widget.sectionTitle,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
+          // Count badge with modern design
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0.12),
+                  Colors.white.withValues(alpha: 0.06),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+                width: 1,
+              ),
             ),
             child: Text(
               '${widget.items.length}',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -236,31 +296,48 @@ String _getDedupeKey(Map<String, dynamic> item) {
 
   /// TV layout: Horizontal scrolling row with Netflix-style cards
   Widget _buildHorizontalRow(double screenWidth) {
-    // Card dimensions for TV - portrait poster style
-    const double cardWidth = 180;
-    const double cardHeight = 270; // ~2:3 aspect ratio
+    // Card dimensions - balanced size for TV viewing
+    const double cardWidth = 165;
+    const double cardHeight = 230; // ~2:3 aspect ratio (Netflix poster style)
 
     return SizedBox(
-      height: cardHeight + 20, // Extra space for scale animation overflow
-      child: ListView.builder(
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        clipBehavior: Clip.hardEdge, // Clip to prevent overflow beyond container
-        cacheExtent: 500, // Pre-cache items for smoother scrolling
-        itemCount: widget.items.length,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: EdgeInsets.only(
-              right: index < widget.items.length - 1 ? 16 : 0,
-            ),
-            child: SizedBox(
-              width: cardWidth,
-              height: cardHeight,
-              child: _buildCardItem(context, index),
-            ),
-          );
+      height: cardHeight + 35, // Extra space for scale animation overflow + shadows
+      child: ShaderMask(
+        // Subtle fade effect at edges to hint at more content
+        shaderCallback: (Rect bounds) {
+          return LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: const [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.02, 0.98, 1.0],
+          ).createShader(bounds);
         },
+        blendMode: BlendMode.dstIn,
+        child: ListView.builder(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          clipBehavior: Clip.none, // Allow shadow overflow
+          cacheExtent: 600, // Pre-cache more items for smoother scrolling
+          itemCount: widget.items.length,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: EdgeInsets.only(
+                right: index < widget.items.length - 1 ? 18 : 0,
+              ),
+              child: SizedBox(
+                width: cardWidth,
+                height: cardHeight,
+                child: _buildCardItem(context, index),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -319,34 +396,51 @@ String _getDedupeKey(Map<String, dynamic> item) {
             _hasNotifiedRestore = true;
             widget.onFocusRestored?.call();
           }
-          // Auto-scroll to focused item on TV
+          // Auto-scroll to focused item within horizontal row
           if (focused && _scrollController.hasClients) {
             _scrollToIndex(index);
+          }
+          // Also scroll item into view in parent scroll view (for cross-section visibility)
+          if (focused && focusNode?.context != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (focusNode?.context != null && focusNode!.context!.mounted) {
+                Scrollable.ensureVisible(
+                  focusNode.context!,
+                  alignment: 0.2, // Show more content above focused item
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            });
           }
         },
       ),
     );
   }
 
-  /// Scroll to make the focused item visible with some padding
+  /// Scroll to make the focused item visible with smooth centering
   void _scrollToIndex(int index) {
     // Guard against scroll controller not being attached
     if (!_scrollController.hasClients) return;
 
-    const double cardWidth = 180;
-    const double spacing = 16;
+    const double cardWidth = 165; // Match card dimensions
+    const double spacing = 18;
     const double padding = 20;
 
-    // Calculate target to center the focused item
+    // Calculate target to center the focused item with slight left offset for context
     final viewportWidth = _scrollController.position.viewportDimension;
     final targetOffset = (index * (cardWidth + spacing)) + padding - (viewportWidth / 2) + (cardWidth / 2);
     final maxScroll = _scrollController.position.maxScrollExtent;
     final clampedOffset = targetOffset.clamp(0.0, maxScroll);
 
+    // Only animate if the change is significant (avoids jitter on small moves)
+    final currentOffset = _scrollController.offset;
+    if ((currentOffset - clampedOffset).abs() < 10) return;
+
     _scrollController.animateTo(
       clampedOffset,
-      duration: const Duration(milliseconds: 150), // Snappier animation
-      curve: Curves.easeOutCubic, // Smoother deceleration
+      duration: const Duration(milliseconds: 250), // Smooth but responsive
+      curve: Curves.easeOutCubic, // Natural deceleration
     );
   }
 }

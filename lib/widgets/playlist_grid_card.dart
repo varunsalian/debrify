@@ -239,26 +239,45 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
         },
         child: GestureDetector(
           onTap: () => _showActionMenu(context),
-          // Use AnimatedScale for GPU-accelerated smooth scaling
-          child: AnimatedScale(
-            scale: isActive ? 1.08 : 1.0,
-            duration: const Duration(milliseconds: 150), // Snappier
-            curve: Curves.easeOutCubic, // Smoother deceleration
+          // Use TweenAnimationBuilder for smoother GPU-accelerated animations
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1.0, end: isActive ? 1.08 : 1.0),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutBack, // Subtle bounce for premium feel
+            builder: (context, scale, child) {
+              return Transform.scale(
+                scale: scale,
+                child: child,
+              );
+            },
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: isActive
                     ? [
-                        // Subtle glow effect
+                        // Premium glow effect - Netflix red
                         BoxShadow(
-                          color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                          blurRadius: 16,
+                          color: const Color(0xFFE50914).withValues(alpha: 0.5),
+                          blurRadius: 24,
                           spreadRadius: 2,
                         ),
+                        // Subtle dark shadow for depth
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
                       ]
-                    : null,
+                    : [
+                        // Subtle resting shadow
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -285,7 +304,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       ),
                     ),
 
-                    // Provider badge (top left)
+                    // Provider badge (top left) with modern design
                     if (provider != null)
                       Positioned(
                         top: 8,
@@ -293,8 +312,19 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE50914),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFE50914), Color(0xFFB20710)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                             borderRadius: BorderRadius.circular(6),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFE50914).withValues(alpha: 0.4),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: Text(
                             _prettifyProvider(provider),
@@ -302,31 +332,46 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                               color: Colors.white,
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
                       ),
 
-                    // Favorite star badge (top right)
+                    // Favorite star badge (top right) with glow effect
                     if (widget.isFavorited)
                       Positioned(
                         top: 8,
                         right: 8,
                         child: Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(6),
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.black.withValues(alpha: 0.7),
+                                Colors.black.withValues(alpha: 0.5),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                spreadRadius: 0,
+                              ),
+                            ],
                           ),
                           child: const Icon(
-                            Icons.star,
+                            Icons.star_rounded,
                             color: Color(0xFFFFD700),
-                            size: 18,
+                            size: 16,
                           ),
                         ),
                       ),
 
-                    // Progress indicator (bottom)
+                    // Progress indicator (bottom) with modern style
                     if (progress != null && progress > 0 && progress < 1.0)
                       Positioned(
                         left: 0,
@@ -337,11 +382,24 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                             bottomLeft: Radius.circular(12),
                             bottomRight: Radius.circular(12),
                           ),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: Colors.white.withValues(alpha: 0.2),
-                            valueColor: const AlwaysStoppedAnimation(Color(0xFFE50914)),
-                            minHeight: 4,
+                          child: Container(
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progress,
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [Color(0xFFE50914), Color(0xFFFF4444)],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -371,19 +429,68 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       ),
                     ),
 
-                    // Focus/hover border with animated opacity
-                    if (isActive)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFE50914),
-                              width: 3,
+                    // Play button overlay (appears on focus/hover)
+                    Positioned.fill(
+                      child: AnimatedOpacity(
+                        opacity: isActive ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        child: Center(
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOutBack,
+                            builder: (context, scale, child) {
+                              return Transform.scale(
+                                scale: scale,
+                                child: child,
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE50914),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFE50914).withValues(alpha: 0.6),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
                             ),
                           ),
                         ),
                       ),
+                    ),
+
+                    // Focus/hover border with animated glow effect
+                    Positioned.fill(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isActive
+                                ? const Color(0xFFE50914)
+                                : Colors.transparent,
+                            width: isActive ? 3 : 0,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
