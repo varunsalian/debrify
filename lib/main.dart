@@ -36,6 +36,8 @@ import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
+import 'services/remote_control/remote_constants.dart';
+import 'widgets/remote/addon_install_dialog.dart';
 import 'utils/platform_util.dart';
 
 final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
@@ -717,7 +719,32 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     deepLinkService.onStremioAddonReceived = (manifestUrl) async {
       if (!mounted) return;
 
-      // Show loading indicator
+      // Show dialog to choose where to install (phone or TV)
+      final choice = await AddonInstallDialog.show(context, manifestUrl);
+
+      if (choice == null || !mounted) return; // User cancelled
+
+      if (choice.target == 'tv' && choice.device != null) {
+        // Send to TV
+        final success = await RemoteControlState().sendAddonCommandToDevice(
+          AddonCommand.install,
+          choice.device!.ip,
+          manifestUrl: manifestUrl,
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+              ? 'Addon sent to ${choice.device!.deviceName}'
+              : 'Failed to send addon to TV'),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      // Install on this device
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -728,7 +755,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               ),
               SizedBox(width: 12),
-              Text('Installing Stremio addon...'),
+              Text('Installing addon...'),
             ],
           ),
           duration: Duration(seconds: 10),
@@ -745,7 +772,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added Stremio addon: ${addon.name}'),
+            content: Text('Addon installed: ${addon.name}'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
           ),
@@ -757,7 +784,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add addon: $e'),
+            content: Text('Failed to install addon: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),

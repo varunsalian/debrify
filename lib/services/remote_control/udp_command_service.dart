@@ -157,6 +157,29 @@ class UdpCommandService {
     }
   }
 
+  /// Send a command to a specific IP address (without requiring connection)
+  static Future<bool> sendCommandToIp(RemoteCommand command, String targetIp) async {
+    RawDatagramSocket? tempSocket;
+    try {
+      // Create a temporary socket if we don't have one
+      tempSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      final message = jsonEncode(command.toJson());
+
+      tempSocket.send(
+        utf8.encode(message),
+        InternetAddress(targetIp),
+        kCommandPort,
+      );
+      debugPrint('UdpCommandService: Sent command to $targetIp: $command');
+      return true;
+    } catch (e) {
+      debugPrint('UdpCommandService: Failed to send command to $targetIp: $e');
+      return false;
+    } finally {
+      tempSocket?.close();
+    }
+  }
+
   /// Send a heartbeat message
   void sendHeartbeat() {
     if (_socket == null) return;

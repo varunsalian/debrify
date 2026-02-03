@@ -210,6 +210,12 @@ class RemoteControlState extends ChangeNotifier {
     _commandService?.sendCommand(RemoteCommand.addon(command, manifestUrl: manifestUrl));
   }
 
+  /// Send an addon command to a specific device by IP (doesn't require connection)
+  Future<bool> sendAddonCommandToDevice(String command, String targetIp, {String? manifestUrl}) async {
+    final cmd = RemoteCommand.addon(command, manifestUrl: manifestUrl);
+    return await UdpCommandService.sendCommandToIp(cmd, targetIp);
+  }
+
   /// Restart scanning (for mobile)
   Future<void> rescan() async {
     await stop();
