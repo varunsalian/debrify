@@ -380,7 +380,7 @@ class Controls extends StatelessWidget {
                             // Audio & subtitles button
                             NetflixControlButton(
                               icon: Icons.subtitles_rounded,
-                              label: 'Audio',
+                              label: 'Audio & Subs',
                               onPressed: onShowTracks,
                               isCompact: true,
                             ),
