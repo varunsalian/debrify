@@ -15,6 +15,9 @@ class RemoteControlScreen extends StatefulWidget {
 }
 
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
+  // Track which view is showing: null = menu, 'navigate' = D-pad controls
+  String? _activeView;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +34,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _openView(String view) {
+    setState(() {
+      _activeView = view;
+    });
+  }
+
+  void _closeView() {
+    setState(() {
+      _activeView = null;
+    });
   }
 
   @override
@@ -58,37 +73,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     // Connection status
                     if (!isConnected) ...[
                       _buildNotConnectedView(state),
+                    ] else if (_activeView == 'navigate') ...[
+                      // Navigate view - D-pad and media controls
+                      _buildNavigateView(state),
                     ] else ...[
-                      // DPAD
-                      const RemoteDpadWidget(size: 220),
-
-                      const SizedBox(height: 32),
-
-                      // Media controls
-                      _buildMediaControls(),
-
-                      const SizedBox(height: 24),
-
-                      // Back button
-                      _buildBackButton(),
-
-                      const SizedBox(height: 16),
-
-                      // Switch TV / Disconnect
-                      TextButton(
-                        onPressed: () {
-                          HapticFeedback.lightImpact();
-                          state.disconnect();
-                          state.rescan();
-                        },
-                        child: Text(
-                          'Switch TV',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
+                      // Main menu
+                      _buildConnectedMenu(state),
                     ],
 
                     const SizedBox(height: 32),
@@ -405,6 +395,149 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildConnectedMenu(RemoteControlState state) {
+    return Column(
+      children: [
+        // Menu items
+        _buildMenuItem(
+          icon: Icons.gamepad_rounded,
+          title: 'Navigate',
+          subtitle: 'D-pad and media controls',
+          onTap: () => _openView('navigate'),
+        ),
+
+        const SizedBox(height: 24),
+
+        // Switch TV option
+        TextButton(
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            state.disconnect();
+            state.rescan();
+          },
+          child: Text(
+            'Switch TV',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigateView(RemoteControlState state) {
+    return Column(
+      children: [
+        // Back to menu button
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _closeView,
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Back to menu'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // DPAD
+        const RemoteDpadWidget(size: 220),
+
+        const SizedBox(height: 32),
+
+        // Media controls
+        _buildMediaControls(),
+
+        const SizedBox(height: 24),
+
+        // Back button (sends back command to TV)
+        _buildBackButton(),
+      ],
     );
   }
 
