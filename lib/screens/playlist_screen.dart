@@ -1786,7 +1786,21 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           }
 
           if (_allItems.isEmpty) {
-            return _buildEmptyState();
+            return Column(
+              children: [
+                // Search button row - for TV DPAD focus
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildSearchButton(''),
+                    ],
+                  ),
+                ),
+                Expanded(child: _buildEmptyState()),
+              ],
+            );
           }
 
           return ValueListenableBuilder<String>(
