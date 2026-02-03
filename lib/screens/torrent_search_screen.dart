@@ -10951,8 +10951,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ? _cardFocusNodes[index]
         : FocusNode();
 
+    // Key for scroll-to-visible (stable across rebuilds)
+    final cardKey = GlobalObjectKey('direct_stream_${torrent.infohash}_$index');
+
     return Focus(
       focusNode: focusNode,
+      onFocusChange: (focused) {
+        // Auto-scroll into view when focused (like TorrentResultRow)
+        if (focused && cardKey.currentContext != null) {
+          Scrollable.ensureVisible(
+            cardKey.currentContext!,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           // Handle select/enter to activate
@@ -10991,6 +11005,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return KeyEventResult.ignored;
       },
       child: Builder(
+        key: cardKey,
         builder: (context) {
           final isFocused = Focus.of(context).hasFocus;
           return GestureDetector(
