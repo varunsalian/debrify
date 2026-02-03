@@ -54,6 +54,10 @@ class PikPakApiService {
   String? _email;
   String? _userId;
 
+  // Circuit breaker for re-authentication to prevent hammering PikPak when rate-limited
+  DateTime? _lastReAuthAttempt;
+  static const Duration _reAuthCooldown = Duration(seconds: 60);
+
   /// Generate device ID from email and password (MD5 hash)
   String _generateDeviceId(String email, String password) {
     final bytes = utf8.encode(email + password);
@@ -227,7 +231,8 @@ class PikPakApiService {
   }
 
   /// Login with email and password
-  Future<bool> login(String email, String password) async {
+  /// [notifyListeners] - If false, won't update authStateNotifier (used for internal re-auth)
+  Future<bool> login(String email, String password, {bool notifyListeners = true}) async {
     try {
       print('PikPak: Logging in as $email...');
 
@@ -288,19 +293,19 @@ class PikPakApiService {
         }
 
         print('PikPak: Login successful');
-        authStateNotifier.value = true;
+        if (notifyListeners) authStateNotifier.value = true;
         return true;
       } else {
         final errorData = jsonDecode(response.body);
         print(
           'PikPak: Login failed: ${errorData['error_description'] ?? errorData['error'] ?? response.body}',
         );
-        authStateNotifier.value = false;
+        if (notifyListeners) authStateNotifier.value = false;
         return false;
       }
     } catch (e) {
       print('PikPak: Login error: $e');
-      authStateNotifier.value = false;
+      if (notifyListeners) authStateNotifier.value = false;
       return false;
     }
   }
@@ -539,6 +544,16 @@ class PikPakApiService {
   /// This is a fallback when token refresh fails
   Future<bool> _tryReAuthenticate() async {
     try {
+      // Circuit breaker: Don't attempt re-auth if we tried recently
+      // This prevents hammering PikPak when rate-limited
+      if (_lastReAuthAttempt != null) {
+        final elapsed = DateTime.now().difference(_lastReAuthAttempt!);
+        if (elapsed < _reAuthCooldown) {
+          print('PikPak: Re-auth cooldown active (${_reAuthCooldown.inSeconds - elapsed.inSeconds}s remaining), skipping');
+          return false;
+        }
+      }
+
       final email = await StorageService.getPikPakEmail();
       final password = await StorageService.getPikPakPassword();
 
@@ -549,11 +564,17 @@ class PikPakApiService {
         return false;
       }
 
+      // Mark this attempt
+      _lastReAuthAttempt = DateTime.now();
+
       print('PikPak: Re-authenticating with stored credentials...');
-      final success = await login(email, password);
+      // Don't notify listeners during internal re-auth to prevent infinite loops
+      final success = await login(email, password, notifyListeners: false);
 
       if (success) {
         print('PikPak: Re-authentication successful');
+        // Reset cooldown on success
+        _lastReAuthAttempt = null;
         return true;
       } else {
         print('PikPak: Re-authentication failed');
