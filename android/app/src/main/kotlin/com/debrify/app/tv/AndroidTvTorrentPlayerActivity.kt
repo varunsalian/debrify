@@ -1934,30 +1934,49 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 override fun onTracksChanged(tracks: Tracks) {
                     currentPlayer.removeListener(this)
 
-                    // Find and select default subtitle track
                     val trackSelector = trackSelector ?: return
-                    val params = trackSelector.parameters
 
+                    // Get user's default subtitle language preference
+                    val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
+
+                    // If subtitles are explicitly disabled, don't auto-select
+                    if (defaultSubtitleLang == "off") {
+                        android.util.Log.d("AndroidTvPlayer", "PikPak: Subtitles disabled by user preference")
+                        return
+                    }
+
+                    // If no preference set, default to English
+                    val targetLang = defaultSubtitleLang ?: "en"
+
+                    // Search for subtitle track matching the preferred language
                     for (trackGroup in tracks.groups) {
                         if (trackGroup.type == C.TRACK_TYPE_TEXT) {
                             for (i in 0 until trackGroup.length) {
                                 val format = trackGroup.getTrackFormat(i)
-                                if (format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0) {
-                                    // Found default subtitle track
+                                val language = format.language
+                                val label = format.label
+                                val id = format.id
+
+                                // Check if track matches the preferred language using robust matching
+                                if (LanguageMapper.matchesLanguage(targetLang, language) ||
+                                    LanguageMapper.matchesLanguage(targetLang, label) ||
+                                    LanguageMapper.matchesLanguage(targetLang, id)) {
+
                                     val override = TrackSelectionOverride(
                                         trackGroup.mediaTrackGroup,
                                         listOf(i)
                                     )
-                                    trackSelector.parameters = params.buildUpon()
+                                    trackSelector.parameters = trackSelector.parameters.buildUpon()
                                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                                         .addOverride(override)
                                         .build()
-                                    android.util.Log.d("AndroidTvPlayer", "PikPak: Default subtitle track selected")
+                                    android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-enabled $targetLang subtitles: label=$label lang=$language")
                                     return
                                 }
                             }
                         }
                     }
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang subtitle found, subtitles remain disabled")
                 }
             })
         }

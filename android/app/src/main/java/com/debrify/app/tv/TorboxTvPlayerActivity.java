@@ -2497,53 +2497,58 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (trackSelector == null) {
             return;
         }
+
+        // Get user's default subtitle language preference
+        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+
+        // If subtitles are explicitly disabled, don't auto-select
+        if ("off".equals(defaultSubtitleLang)) {
+            android.util.Log.d("TorboxTvPlayer", "Subtitles disabled by user preference");
+            return;
+        }
+
+        // If no preference set, default to English
+        String targetLang = defaultSubtitleLang != null ? defaultSubtitleLang : "en";
+
         List<TrackOption> subtitleTracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
         if (subtitleTracks.isEmpty()) {
             return;
         }
-        
-        // Search for English subtitle track using regex
-        TrackOption englishTrack = null;
+
+        // Search for subtitle track matching the preferred language
+        TrackOption matchingTrack = null;
         for (TrackOption option : subtitleTracks) {
-            String label = option.label != null ? option.label.toLowerCase() : "";
-            
+            String label = option.label;
+
             // Get track format to extract language and id
             Format format = option.group.getMediaTrackGroup().getFormat(option.trackIndex);
-            String language = format.language != null ? format.language.toLowerCase() : "";
-            String id = format.id != null ? format.id.toLowerCase() : "";
-            
-            // Check if track is English using regex pattern
-            if (isEnglishSubtitle(label) || isEnglishSubtitle(id) || isEnglishSubtitle(language)) {
-                englishTrack = option;
-                android.util.Log.d("TorboxTvPlayer", "Found English subtitle: label=" + option.label + " id=" + format.id + " lang=" + format.language);
+            String language = format.language;
+            String id = format.id;
+
+            // Check if track matches the preferred language using robust matching
+            if (LanguageMapper.matchesLanguage(targetLang, language) ||
+                LanguageMapper.matchesLanguage(targetLang, label) ||
+                LanguageMapper.matchesLanguage(targetLang, id)) {
+                matchingTrack = option;
+                android.util.Log.d("TorboxTvPlayer", "Found matching subtitle for '" + targetLang + "': label=" + option.label + " id=" + format.id + " lang=" + format.language);
                 break;
             }
         }
-        
-        // Only enable subtitles if English track is found
-        if (englishTrack != null) {
+
+        // Only enable subtitles if matching track is found
+        if (matchingTrack != null) {
             DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                     .addOverride(new TrackSelectionOverride(
-                            englishTrack.group.getMediaTrackGroup(),
-                            Collections.singletonList(englishTrack.trackIndex)));
+                            matchingTrack.group.getMediaTrackGroup(),
+                            Collections.singletonList(matchingTrack.trackIndex)));
             trackSelector.setParameters(builder.build());
-            // Don't show toast for auto-selection, only for manual changes
-            android.util.Log.d("TorboxTvPlayer", "Auto-enabled English subtitles: " + englishTrack.label);
+            android.util.Log.d("TorboxTvPlayer", "Auto-enabled " + targetLang + " subtitles: " + matchingTrack.label);
         } else {
-            // No English subtitle found, leave subtitles disabled
-            android.util.Log.d("TorboxTvPlayer", "No English subtitle found, subtitles remain disabled");
+            // No matching subtitle found, leave subtitles disabled
+            android.util.Log.d("TorboxTvPlayer", "No " + targetLang + " subtitle found, subtitles remain disabled");
         }
-    }
-    
-    private boolean isEnglishSubtitle(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-        // Regex patterns to match English subtitles
-        // Matches: "en", "eng", "english", "en-us", "en-gb", etc.
-        return text.matches(".*\\b(en|eng|english)\\b.*");
     }
 
     private void requestNextStream() {
