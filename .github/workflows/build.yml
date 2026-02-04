@@ -367,7 +367,7 @@ jobs:
       run: |
         # subosito/flutter-action doesn't support linux-arm64, install manually
         # Using stable tag - see https://github.com/subosito/flutter-action/issues/345
-        git clone --depth 1 --branch 3.27.3 https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
+        git clone --depth 1 --branch 3.38.9 https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
         echo "$RUNNER_TEMP/flutter/bin" >> $GITHUB_PATH
 
     - name: Precache Flutter
