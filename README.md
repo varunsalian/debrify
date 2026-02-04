@@ -38,6 +38,7 @@
 </p>
 <p align="center">
   <img src="assets/screenshots/episodes.png" alt="Episodes" width="49%">
+  <img src="assets/screenshots/stremio-addons.png" alt="Stremio Addons" width="49%">
 </p>
 
 <p align="center">
@@ -52,8 +53,6 @@
 ## What is Debrify?
 
 Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, and **Stremio Addons support** for discovering content.
-
-> **No torrenting on your device.** Debrify connects to debrid services that handle everything server-side. You just stream or download the finished files.
 
 ---
 
@@ -100,6 +99,25 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 
 </td>
 </tr>
+<tr>
+<td width="50%">
+
+### Stremio Addons
+- **Easy install** — Paste addon links or install directly from browser
+- **Content discovery** — Search movies and shows across multiple sources
+- **Quick play** — Stream directly or browse available torrents
+- **Seamless integration** — Works with your debrid provider
+
+</td>
+<td width="50%">
+
+### External Players
+- **Player choice** — Use your preferred video player app
+- **VR support** — Stream to DeoVR for immersive playback
+- **One-tap handoff** — Send any stream to external apps
+
+</td>
+</tr>
 </table>
 
 ---
@@ -109,20 +127,13 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 A dedicated lean-back experience for your living room.
 
 <p align="center">
-  <img src="assets/screenshots/tv-player.png" alt="TV Player" width="70%">
+  <img src="assets/screenshots/tv-home.png" alt="TV Home" width="49%">
+  <img src="assets/screenshots/tv-search.png" alt="TV Search" width="49%">
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/tv-player-channel.png" alt="TV Player Channel Mode" width="70%">
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/tv-subtitles.png" alt="TV Subtitle Settings" width="70%">
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/tv-channels.png" alt="TV Channels" width="49%">
-  <img src="assets/screenshots/tv-guide.png" alt="TV Guide" width="49%">
+  <img src="assets/screenshots/tv-player.png" alt="TV Player" width="49%">
+  <img src="assets/screenshots/tv-player-channel.png" alt="TV Player Channel Mode" width="49%">
 </p>
 
 - **Remote-friendly player** — Full playback controls with D-pad navigation
