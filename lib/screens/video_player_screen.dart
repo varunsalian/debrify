@@ -802,7 +802,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               currentEpisode.seriesInfo.episode != null) {
             return 'Episode ${currentEpisode.seriesInfo.episode}';
           }
-        } catch (e) {}
+        } catch (e) {
+          // Silently fail
+        }
       }
     }
 

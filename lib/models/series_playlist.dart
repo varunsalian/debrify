@@ -14,6 +14,7 @@ class DuplicateGroup {
   final List<int> indices;
   final List<int> fileSizes;
   final List<bool> isAuxiliary; // Track if each file is in auxiliary folder
+  final List<bool> isDeletedScenes; // Track if each file is a deleted scenes file
 
   DuplicateGroup({
     required this.season,
@@ -21,27 +22,40 @@ class DuplicateGroup {
     required this.indices,
     required this.fileSizes,
     required this.isAuxiliary,
+    required this.isDeletedScenes,
   });
 
-  /// Get index of the best file (prioritize normal over auxiliary, then largest)
+  /// Get index of the best file
+  /// Priority: real episode > deleted scenes > auxiliary
+  /// Within same priority: largest file wins
   int get bestFileIndex {
     if (indices.isEmpty) return -1;
     if (indices.length == 1) return indices.first;
 
-    // Separate normal and auxiliary files
-    final normalIndices = <int>[];
-    final auxiliaryIndices = <int>[];
+    // Categorize files by priority
+    final realEpisodeIndices = <int>[]; // Not auxiliary, not deleted scenes
+    final deletedScenesIndices = <int>[]; // Deleted scenes (but not auxiliary)
+    final auxiliaryIndices = <int>[]; // Auxiliary folder content
 
     for (int i = 0; i < indices.length; i++) {
       if (isAuxiliary[i]) {
         auxiliaryIndices.add(i);
+      } else if (isDeletedScenes[i]) {
+        deletedScenesIndices.add(i);
       } else {
-        normalIndices.add(i);
+        realEpisodeIndices.add(i);
       }
     }
 
-    // Prefer normal content over auxiliary
-    final indicesToConsider = normalIndices.isNotEmpty ? normalIndices : auxiliaryIndices;
+    // Choose the best category (in priority order)
+    List<int> indicesToConsider;
+    if (realEpisodeIndices.isNotEmpty) {
+      indicesToConsider = realEpisodeIndices;
+    } else if (deletedScenesIndices.isNotEmpty) {
+      indicesToConsider = deletedScenesIndices;
+    } else {
+      indicesToConsider = auxiliaryIndices;
+    }
 
     // Safety check
     if (indicesToConsider.isEmpty) return indices.first;
@@ -287,7 +301,11 @@ class SeriesPlaylist {
         validIndices.add(i);
         validEntries.add(entries[i]);
         validFilenames.add(filenames[i]);
-        if (fileSizes != null && i < fileSizes.length) {
+        // Extract sizeBytes from PlaylistEntry, fallback to fileSizes param, then 0
+        final entrySize = entries[i].sizeBytes;
+        if (entrySize != null && entrySize > 0) {
+          validFileSizes.add(entrySize);
+        } else if (fileSizes != null && i < fileSizes.length) {
           validFileSizes.add(fileSizes[i]);
         } else {
           validFileSizes.add(0); // Default size if not provided
@@ -366,16 +384,25 @@ class SeriesPlaylist {
         final keepIndex = group.bestFileIndex;
         indicesToKeep.add(keepIndex);
 
-        // Check if we prioritized based on folder type
-        final keptIsAuxiliary = group.isAuxiliary[group.indices.indexOf(keepIndex)];
-        final hasNormalContent = group.isAuxiliary.contains(false);
-        final hasAuxiliaryContent = group.isAuxiliary.contains(true);
+        // Check what type of file we kept
+        final keptLocalIdx = group.indices.indexOf(keepIndex);
+        final keptIsAuxiliary = group.isAuxiliary[keptLocalIdx];
+        final keptIsDeletedScenes = group.isDeletedScenes[keptLocalIdx];
+
+        // Count categories
+        final hasRealEpisode = !group.isAuxiliary.every((v) => v) && !group.isDeletedScenes.every((v) => v);
+        final hasDeletedScenes = group.isDeletedScenes.contains(true);
+        final hasAuxiliary = group.isAuxiliary.contains(true);
 
         String reason = 'largest file';
-        if (hasNormalContent && hasAuxiliaryContent && !keptIsAuxiliary) {
-          reason = 'main content over extras';
-        } else if (!hasNormalContent && hasAuxiliaryContent) {
-          reason = 'largest auxiliary file';
+        if (hasRealEpisode && !keptIsAuxiliary && !keptIsDeletedScenes) {
+          if (hasDeletedScenes || hasAuxiliary) {
+            reason = 'real episode over bonus content';
+          }
+        } else if (hasDeletedScenes && keptIsDeletedScenes && !keptIsAuxiliary) {
+          reason = 'deleted scenes (no real episode found)';
+        } else if (keptIsAuxiliary) {
+          reason = 'auxiliary content (no better option)';
         }
 
         debugPrint('SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping $reason (index $keepIndex, ${validFileSizes[keepIndex]} bytes)');
@@ -750,6 +777,7 @@ class SeriesPlaylist {
     }
 
     // Process each episode
+    // Process each episode
     for (final season in seasons) {
       for (final episode in season.episodes) {
         // Skip Season 0 (special content)
@@ -781,7 +809,6 @@ class SeriesPlaylist {
 
             if (episodeData != null) {
               episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
-              // Episode matched (no log per episode)
             }
           } catch (e) {
             // Silently fail - episode info is optional
@@ -844,9 +871,8 @@ class SeriesPlaylist {
   /// Find the original index in the PlaylistEntry array by season and episode
   /// Returns -1 if not found
   int findOriginalIndexBySeasonEpisode(int season, int episode) {
-    for (int i = 0; i < allEpisodes.length; i++) {
-      final episodeInfo = allEpisodes[i];
-      if (episodeInfo.seriesInfo.season == season && 
+    for (final episodeInfo in allEpisodes) {
+      if (episodeInfo.seriesInfo.season == season &&
           episodeInfo.seriesInfo.episode == episode) {
         return episodeInfo.originalIndex;
       }
@@ -921,6 +947,43 @@ class SeriesPlaylist {
     return false;
   }
 
+  /// Check if a filename indicates it's a "deleted scenes" or similar bonus content file
+  /// These should be deprioritized vs actual episodes when resolving duplicates
+  static bool _isDeletedScenesFile(String filename) {
+    final lower = filename.toLowerCase();
+
+    // Patterns that indicate deleted scenes / bonus content with episode numbers
+    const deletedScenesPatterns = [
+      'deleted scene',
+      'deleted_scene',
+      'deleted.scene',
+      'deletedscene',
+      'extended scene',
+      'extended_scene',
+      'extended.scene',
+      'bonus scene',
+      'bonus_scene',
+      'bonus.scene',
+      'alternate scene',
+      'alternate_scene',
+      'alternate.scene',
+      'outtake',
+      'out take',
+      'blooper',
+      'gag reel',
+      'behind the scene',
+      'making of',
+    ];
+
+    for (final pattern in deletedScenesPatterns) {
+      if (lower.contains(pattern)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   /// Detect duplicate episodes based on S##E## numbers
   static Map<String, DuplicateGroup> _detectDuplicates(
     List<SeriesInfo> seriesInfos,
@@ -941,6 +1004,7 @@ class SeriesPlaylist {
             indices: [],
             fileSizes: [],
             isAuxiliary: [],
+            isDeletedScenes: [],
           );
         }
 
@@ -954,6 +1018,10 @@ class SeriesPlaylist {
         // Check if this file is in an auxiliary folder
         final isAux = _isAuxiliaryFolder(entries[i].relativePath);
         duplicateMap[key]!.isAuxiliary.add(isAux);
+
+        // Check if this file is a deleted scenes / bonus content file
+        final isDeleted = _isDeletedScenesFile(entries[i].title);
+        duplicateMap[key]!.isDeletedScenes.add(isDeleted);
       }
     }
 
