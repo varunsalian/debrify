@@ -3784,13 +3784,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         imdbId = seriesPlaylist.imdbId;
         contentType = 'series';
-        final currentEpisode = seriesPlaylist.currentEpisode;
-        if (currentEpisode != null) {
-          season = currentEpisode.season;
-          episode = currentEpisode.episode;
+        // Get current episode info from playlist using current index
+        if (_currentIndex >= 0 && _currentIndex < seriesPlaylist.allEpisodes.length) {
+          final currentEp = seriesPlaylist.allEpisodes[_currentIndex];
+          season = currentEp.seriesInfo.season;
+          episode = currentEp.seriesInfo.episode;
         }
       } else {
-        imdbId = widget.imdbId;
+        // Use widget's content IMDB ID or single file IMDB ID
+        imdbId = widget.contentImdbId ?? _singleFileImdbId;
         contentType = 'movie';
       }
 
@@ -3806,9 +3808,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           : imdbId;
 
       // Check if we have cached subtitles
-      List<StremioSubtitle>? subtitles;
+      List<StremioSubtitle> subtitles;
       if (_cachedSubtitleKey == cacheKey && _cachedStremioSubtitles != null) {
-        subtitles = _cachedStremioSubtitles;
+        subtitles = _cachedStremioSubtitles!;
         debugPrint('VideoPlayer: Using ${subtitles.length} cached addon subtitles');
       } else {
         // Fetch Stremio subtitles proactively
