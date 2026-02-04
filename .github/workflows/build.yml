@@ -429,7 +429,8 @@ jobs:
         # Build AppImage
         VERSION="${{ github.event.release.tag_name }}"
         if [ -z "$VERSION" ]; then VERSION="dev"; fi
-        ARCH=aarch64 ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-arm64.AppImage
+        export ARCH=aarch64
+        ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-arm64.AppImage
 
     - name: Upload AppImage to Release
       if: github.event_name == 'release'
