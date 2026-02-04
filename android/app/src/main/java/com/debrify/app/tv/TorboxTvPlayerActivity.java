@@ -301,6 +301,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final ArrayList<StremioSubtitle> stremioSubtitles = new ArrayList<>();
     private int currentStremioSubtitleIndex = -1;  // -1 means no Stremio subtitle selected
     private boolean isLoadingStremioSubtitles = false;  // Loading state for UI indicator
+    private boolean embeddedSubtitleSelected = false;  // Track if embedded subtitle was auto-selected
+    private int addonSubtitleFetchToken = 0;  // Guard against stale async fetches on content switch
     private AlertDialog subtitleTrackDialog;  // Reference for auto-refresh when subtitles load
     private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
 
@@ -1987,6 +1989,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Clear Stremio subtitle state when switching content
         stremioSubtitles.clear();
         currentStremioSubtitleIndex = -1;
+        embeddedSubtitleSelected = false;
+        addonSubtitleFetchToken++;
 
         MediaMetadata metadata = new MediaMetadata.Builder()
                 .setTitle(title != null ? title : "")
@@ -2111,6 +2115,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         final StremioSubtitleService service = stremioSubtitleService;
+        // Capture token to detect if content changes during async fetch
+        final int fetchToken = addonSubtitleFetchToken;
 
         subtitleExecutor.execute(() -> {
             try {
@@ -2118,6 +2124,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 List<StremioSubtitle> subtitles = service.fetchSubtitlesBlocking("movie", imdbId, null, null);
 
                 runOnUiThread(() -> {
+                    // Check if content changed during fetch
+                    if (fetchToken != addonSubtitleFetchToken) {
+                        android.util.Log.d("StremioSubs", "Content changed during fetch, discarding results for IMDB " + imdbId);
+                        return;
+                    }
+
                     stremioSubtitles.clear();
                     if (subtitles != null) {
                         stremioSubtitles.addAll(subtitles);
@@ -2125,6 +2137,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     currentStremioSubtitleIndex = -1;
                     isLoadingStremioSubtitles = false;
                     android.util.Log.d("StremioSubs", "Fetched " + stremioSubtitles.size() + " subtitles for IMDB " + imdbId);
+
+                    // Try to auto-select addon subtitle if no embedded subtitle was selected
+                    tryAutoSelectAddonSubtitle();
+
                     // Refresh panel if visible to show loaded subtitles
                     if (subtitleSettingsVisible) {
                         refreshSubtitlePanelForLoading();
@@ -2133,6 +2149,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             } catch (Exception e) {
                 android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e);
                 runOnUiThread(() -> {
+                    // Check if content changed during fetch
+                    if (fetchToken != addonSubtitleFetchToken) {
+                        return;
+                    }
+
                     stremioSubtitles.clear();
                     currentStremioSubtitleIndex = -1;
                     isLoadingStremioSubtitles = false;
@@ -2504,6 +2525,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // If subtitles are explicitly disabled, don't auto-select
         if ("off".equals(defaultSubtitleLang)) {
             android.util.Log.d("TorboxTvPlayer", "Subtitles disabled by user preference");
+            embeddedSubtitleSelected = false;
             return;
         }
 
@@ -2512,6 +2534,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         List<TrackOption> subtitleTracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
         if (subtitleTracks.isEmpty()) {
+            // No embedded subtitles - mark for addon selection
+            embeddedSubtitleSelected = false;
+            // Try addon subtitles if already loaded
+            if (!stremioSubtitles.isEmpty()) {
+                tryAutoSelectAddonSubtitle();
+            }
             return;
         }
 
@@ -2545,10 +2573,57 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                             Collections.singletonList(matchingTrack.trackIndex)));
             trackSelector.setParameters(builder.build());
             android.util.Log.d("TorboxTvPlayer", "Auto-enabled " + targetLang + " subtitles: " + matchingTrack.label);
+            embeddedSubtitleSelected = true;
         } else {
-            // No matching subtitle found, leave subtitles disabled
-            android.util.Log.d("TorboxTvPlayer", "No " + targetLang + " subtitle found, subtitles remain disabled");
+            // No embedded subtitle found - mark for addon subtitle selection
+            android.util.Log.d("TorboxTvPlayer", "No " + targetLang + " embedded subtitle found");
+            embeddedSubtitleSelected = false;
+
+            // Try addon subtitles if already loaded
+            if (!stremioSubtitles.isEmpty()) {
+                tryAutoSelectAddonSubtitle();
+            }
         }
+    }
+
+    /**
+     * Try to auto-select a Stremio addon subtitle matching user's preferred language.
+     * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
+     */
+    private void tryAutoSelectAddonSubtitle() {
+        // Skip if embedded subtitle was already selected
+        if (embeddedSubtitleSelected) {
+            return;
+        }
+
+        // Skip if addon subtitle is already selected
+        if (currentStremioSubtitleIndex >= 0) {
+            return;
+        }
+
+        // Get user's default subtitle language preference
+        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+
+        // If subtitles are explicitly disabled, don't auto-select
+        if ("off".equals(defaultSubtitleLang)) {
+            return;
+        }
+
+        // If no preference set, default to English
+        String targetLang = defaultSubtitleLang != null ? defaultSubtitleLang : "en";
+
+        // Search for addon subtitle matching the preferred language
+        for (int i = 0; i < stremioSubtitles.size(); i++) {
+            StremioSubtitle sub = stremioSubtitles.get(i);
+            if (LanguageMapper.matchesLanguage(targetLang, sub.getLang())) {
+                android.util.Log.d("TorboxTvPlayer", "Auto-selecting addon subtitle: " + sub.getDisplayName() + " (" + sub.getLang() + ")");
+                loadStremioSubtitle(sub);
+                currentStremioSubtitleIndex = i;
+                return;
+            }
+        }
+
+        android.util.Log.d("TorboxTvPlayer", "No " + targetLang + " addon subtitle found");
     }
 
     private void requestNextStream() {

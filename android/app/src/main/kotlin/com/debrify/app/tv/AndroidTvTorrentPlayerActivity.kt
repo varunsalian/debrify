@@ -173,6 +173,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val stremioSubtitles = mutableListOf<StremioSubtitle>()
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
+    private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
+    private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
     private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -1414,6 +1416,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun playMediaDirect(item: PlaybackItem) {
+        // Clear subtitle state when switching content
+        stremioSubtitles.clear()
+        currentStremioSubtitleIndex = -1
+        embeddedSubtitleSelected = false
+        addonSubtitleFetchToken++
+
         val metadata = MediaMetadata.Builder()
             .setTitle(item.title)
             .setArtist(item.seasonEpisodeLabel())
@@ -1519,6 +1527,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * Actually fetch subtitles with a known IMDB ID.
      */
     private fun fetchStremioSubtitlesWithImdb(imdbId: String, type: String, item: PlaybackItem) {
+        // Capture token to detect if content changes during async fetch
+        val fetchToken = addonSubtitleFetchToken
+
         subtitleScope.launch {
             try {
                 val subtitles = stremioSubtitleService?.fetchSubtitles(
@@ -1528,17 +1539,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     episode = item.episode
                 ) ?: emptyList()
 
+                // Check if content changed during fetch
+                if (fetchToken != addonSubtitleFetchToken) {
+                    android.util.Log.d("StremioSubs", "Content changed during fetch, discarding results for IMDB $imdbId")
+                    return@launch
+                }
+
                 stremioSubtitles.clear()
                 stremioSubtitles.addAll(subtitles)
                 currentStremioSubtitleIndex = -1
                 isLoadingStremioSubtitles = false
                 android.util.Log.d("StremioSubs", "Fetched ${subtitles.size} subtitles for IMDB $imdbId")
+
+                // Try to auto-select addon subtitle if no embedded subtitle was selected
+                tryAutoSelectAddonSubtitle()
+
                 // Refresh panel if visible to show loaded subtitles
                 if (subtitleSettingsVisible) {
                     refreshSubtitlePanelForLoading()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("StremioSubs", "Failed to fetch subtitles", e)
+
+                // Check if content changed during fetch
+                if (fetchToken != addonSubtitleFetchToken) {
+                    return@launch
+                }
+
                 stremioSubtitles.clear()
                 currentStremioSubtitleIndex = -1
                 isLoadingStremioSubtitles = false
@@ -1710,6 +1737,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun playPikPakVideoWithRetry(item: PlaybackItem) {
         android.util.Log.d("AndroidTvPlayer", "PikPak: Starting retry logic for cold storage handling")
+
+        // Clear subtitle state when switching content
+        stremioSubtitles.clear()
+        currentStremioSubtitleIndex = -1
+        embeddedSubtitleSelected = false
+        addonSubtitleFetchToken++
 
         // Cancel any previous retry loops
         pikPakRetryId++
@@ -1942,6 +1975,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     // If subtitles are explicitly disabled, don't auto-select
                     if (defaultSubtitleLang == "off") {
                         android.util.Log.d("AndroidTvPlayer", "PikPak: Subtitles disabled by user preference")
+                        embeddedSubtitleSelected = false
                         return
                     }
 
@@ -1971,15 +2005,63 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                         .addOverride(override)
                                         .build()
                                     android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-enabled $targetLang subtitles: label=$label lang=$language")
+                                    embeddedSubtitleSelected = true
                                     return
                                 }
                             }
                         }
                     }
-                    android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang subtitle found, subtitles remain disabled")
+
+                    // No embedded subtitle found - mark for addon subtitle selection
+                    android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang embedded subtitle found")
+                    embeddedSubtitleSelected = false
+
+                    // Try addon subtitles if already loaded
+                    if (stremioSubtitles.isNotEmpty()) {
+                        tryAutoSelectAddonSubtitle()
+                    }
                 }
             })
         }
+    }
+
+    /**
+     * Try to auto-select a Stremio addon subtitle matching user's preferred language.
+     * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
+     */
+    private fun tryAutoSelectAddonSubtitle() {
+        // Skip if embedded subtitle was already selected
+        if (embeddedSubtitleSelected) {
+            return
+        }
+
+        // Skip if addon subtitle is already selected
+        if (currentStremioSubtitleIndex >= 0) {
+            return
+        }
+
+        // Get user's default subtitle language preference
+        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+
+        // If subtitles are explicitly disabled, don't auto-select
+        if (defaultSubtitleLang == "off") {
+            return
+        }
+
+        // If no preference set, default to English
+        val targetLang = defaultSubtitleLang ?: "en"
+
+        // Search for addon subtitle matching the preferred language
+        for ((index, sub) in stremioSubtitles.withIndex()) {
+            if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
+                android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-selecting addon subtitle: ${sub.displayName} (${sub.lang})")
+                loadStremioSubtitle(sub)
+                currentStremioSubtitleIndex = index
+                return
+            }
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang addon subtitle found")
     }
 
     // D-pad navigation

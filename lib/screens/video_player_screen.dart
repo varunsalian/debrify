@@ -52,6 +52,8 @@ import 'video_player/widgets/channel_guide.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
+import '../services/stremio_subtitle_service.dart';
+import 'package:http/http.dart' as http;
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -285,6 +287,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   List<StremioSubtitle>? _cachedStremioSubtitles;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
   String? _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
+  bool _embeddedSubtitleApplied = false; // Track if embedded subtitle was auto-selected
+  int _addonSubtitleFetchToken = 0; // Guard against stale async fetches on content switch
 
   // media_kit state
   bool _isReady = false;
@@ -1087,6 +1091,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _cachedStremioSubtitles = null;
           _cachedSubtitleKey = null;
           _selectedStremioSubtitleId = null;
+          _embeddedSubtitleApplied = false;
+          _addonSubtitleFetchToken++;
           _singleFileImdbId = null;
           _singleFileImdbFetched = false;
 
@@ -1308,6 +1314,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cachedStremioSubtitles = null;
     _cachedSubtitleKey = null;
     _selectedStremioSubtitleId = null;
+    _embeddedSubtitleApplied = false;
+    _addonSubtitleFetchToken++;
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
 
@@ -1434,6 +1442,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cachedStremioSubtitles = null;
     _cachedSubtitleKey = null;
     _selectedStremioSubtitleId = null;
+    _embeddedSubtitleApplied = false;
+    _addonSubtitleFetchToken++;
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
 
@@ -1548,6 +1558,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cachedStremioSubtitles = null;
     _cachedSubtitleKey = null;
     _selectedStremioSubtitleId = null;
+    _embeddedSubtitleApplied = false;
+    _addonSubtitleFetchToken++;
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -3622,6 +3634,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
       }
 
+      bool subtitleApplied = false;
+
       if (trackPreferences != null) {
         final audioTrackId = trackPreferences['audioTrackId'] as String?;
         final subtitleTrackId = trackPreferences['subtitleTrackId'] as String?;
@@ -3644,20 +3658,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Apply subtitle track preference
         if (subtitleTrackId != null && subtitleTrackId.isNotEmpty) {
           final tracks = _player.state.tracks;
-          final subtitleTrack = tracks.subtitle.firstWhere(
-            (track) => track.id == subtitleTrackId,
-            orElse: () => mk.SubtitleTrack.no(),
-          );
-          await _player.setSubtitleTrack(subtitleTrack);
+          // Check if the stored track actually exists in this video
+          final trackExists = tracks.subtitle.any((t) => t.id == subtitleTrackId);
+          if (trackExists) {
+            final subtitleTrack = tracks.subtitle.firstWhere(
+              (track) => track.id == subtitleTrackId,
+            );
+            await _player.setSubtitleTrack(subtitleTrack);
+            subtitleApplied = true;
+          } else {
+            // Stored track doesn't exist in this video - fall through to default
+            subtitleApplied = await _applyDefaultSubtitleLanguage();
+          }
         } else {
           // No stored subtitle preference - apply default subtitle language setting
-          await _applyDefaultSubtitleLanguage();
+          subtitleApplied = await _applyDefaultSubtitleLanguage();
         }
       } else {
         // No track preferences at all - apply default language settings
         await _applyDefaultAudioLanguage();
-        await _applyDefaultSubtitleLanguage();
+        subtitleApplied = await _applyDefaultSubtitleLanguage();
       }
+
+      // Track if embedded subtitle was applied for addon fallback
+      _embeddedSubtitleApplied = subtitleApplied;
+
+      // Always fetch Stremio addon subtitles proactively (like Android TV)
+      // Auto-selection will only happen if no embedded subtitle was applied
+      _fetchAndMaybeAutoSelectAddonSubtitle();
     } catch (e) {}
   }
 
@@ -3696,12 +3724,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Apply default subtitle language from settings (when no stored preference exists)
-  Future<void> _applyDefaultSubtitleLanguage() async {
+  /// Returns true if an embedded subtitle was found and applied, false otherwise.
+  Future<bool> _applyDefaultSubtitleLanguage() async {
     try {
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
       if (defaultLang == null) {
         // No preference set - do nothing, let player use its default
-        return;
+        return false;
       }
 
       final tracks = _player.state.tracks;
@@ -3709,7 +3738,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (defaultLang == 'off') {
         // Explicitly disable subtitles
         await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-        return;
+        return true; // User explicitly disabled, don't try addon
       }
 
       // Find a subtitle track matching the preferred language using robust matching
@@ -3729,9 +3758,147 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (matchingTrack != null) {
         await _player.setSubtitleTrack(matchingTrack);
+        return true;
       }
+      return false;
     } catch (e) {
       // Silently fail - subtitle preference is non-critical
+      return false;
+    }
+  }
+
+  /// Fetch Stremio addon subtitles proactively and auto-select if no embedded subtitle was applied.
+  /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
+  Future<void> _fetchAndMaybeAutoSelectAddonSubtitle() async {
+    // Capture token at start to detect if content changes during async operations
+    final fetchToken = _addonSubtitleFetchToken;
+
+    try {
+      // Get content info for Stremio subtitle fetch
+      final seriesPlaylist = _seriesPlaylist;
+      String? imdbId;
+      String contentType;
+      int? season;
+      int? episode;
+
+      if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+        imdbId = seriesPlaylist.imdbId;
+        contentType = 'series';
+        final currentEpisode = seriesPlaylist.currentEpisode;
+        if (currentEpisode != null) {
+          season = currentEpisode.season;
+          episode = currentEpisode.episode;
+        }
+      } else {
+        imdbId = widget.imdbId;
+        contentType = 'movie';
+      }
+
+      // Need IMDB ID to fetch Stremio subtitles
+      if (imdbId == null || imdbId.isEmpty) {
+        debugPrint('VideoPlayer: No IMDB ID for addon subtitle fetch');
+        return;
+      }
+
+      // Build cache key
+      final cacheKey = season != null && episode != null
+          ? '$imdbId:$season:$episode'
+          : imdbId;
+
+      // Check if we have cached subtitles
+      List<StremioSubtitle>? subtitles;
+      if (_cachedSubtitleKey == cacheKey && _cachedStremioSubtitles != null) {
+        subtitles = _cachedStremioSubtitles;
+        debugPrint('VideoPlayer: Using ${subtitles.length} cached addon subtitles');
+      } else {
+        // Fetch Stremio subtitles proactively
+        debugPrint('VideoPlayer: Fetching addon subtitles (IMDB: $imdbId)');
+        final result = await StremioSubtitleService.instance.fetchSubtitles(
+          type: contentType,
+          imdbId: imdbId,
+          season: season,
+          episode: episode,
+        );
+        subtitles = result.subtitles;
+
+        // Check if content changed during fetch
+        if (fetchToken != _addonSubtitleFetchToken) {
+          debugPrint('VideoPlayer: Content changed during addon subtitle fetch, discarding results');
+          return;
+        }
+
+        // Cache the results
+        _cachedStremioSubtitles = subtitles;
+        _cachedSubtitleKey = cacheKey;
+        debugPrint('VideoPlayer: Fetched and cached ${subtitles.length} addon subtitles');
+      }
+
+      // Only auto-select if no embedded subtitle was applied
+      if (_embeddedSubtitleApplied) {
+        debugPrint('VideoPlayer: Embedded subtitle already applied, skipping addon auto-select');
+        return;
+      }
+
+      if (subtitles.isEmpty) {
+        debugPrint('VideoPlayer: No addon subtitles available for auto-select');
+        return;
+      }
+
+      // Get user's default subtitle language preference
+      final defaultLang = await StorageService.getDefaultSubtitleLanguage();
+
+      // If subtitles are explicitly disabled, don't auto-select
+      if (defaultLang == 'off') {
+        return;
+      }
+
+      // If no preference set, default to English
+      final targetLang = defaultLang ?? 'en';
+
+      // Find matching subtitle by language
+      StremioSubtitle? matchingSub;
+      for (final sub in subtitles) {
+        if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
+          matchingSub = sub;
+          break;
+        }
+      }
+
+      if (matchingSub == null) {
+        debugPrint('VideoPlayer: No $targetLang addon subtitle found');
+        return;
+      }
+
+      debugPrint('VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})');
+
+      // Download and apply the subtitle
+      final response = await http.get(Uri.parse(matchingSub.url)).timeout(
+        const Duration(seconds: 15),
+      );
+
+      // Check if content changed during download
+      if (fetchToken != _addonSubtitleFetchToken) {
+        debugPrint('VideoPlayer: Content changed during addon subtitle download, discarding');
+        return;
+      }
+
+      if (response.statusCode != 200) {
+        debugPrint('VideoPlayer: Failed to download addon subtitle');
+        return;
+      }
+
+      final track = mk.SubtitleTrack.data(
+        response.body,
+        title: matchingSub.displayName,
+        language: matchingSub.lang,
+      );
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _player.setSubtitleTrack(track);
+      _selectedStremioSubtitleId = matchingSub.id;
+
+      debugPrint('VideoPlayer: Auto-enabled ${matchingSub.lang} addon subtitle');
+    } catch (e) {
+      debugPrint('VideoPlayer: Addon subtitle fetch/auto-selection failed: $e');
     }
   }
 
