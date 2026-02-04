@@ -86,10 +86,17 @@ class TracksSheet {
             }
 
             final screenWidth = MediaQuery.of(context).size.width;
+            final screenHeight = MediaQuery.of(context).size.height;
             final isWide = screenWidth > 600;
+            final isLandscape = screenWidth > screenHeight;
+
+            // Use more height on mobile landscape to show more options
+            final sheetHeight = isLandscape
+                ? screenHeight * 0.85  // 85% in landscape
+                : screenHeight * 0.7;  // 70% in portrait
 
             return Container(
-              height: MediaQuery.of(context).size.height * 0.7,
+              height: sheetHeight,
               decoration: const BoxDecoration(
                 color: Color(0xFF141414),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
