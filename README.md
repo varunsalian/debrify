@@ -138,7 +138,7 @@ Debrify runs everywhere. One codebase, full feature support across all platforms
 | **Android TV** | [APK](https://github.com/varunsalian/debrify/releases) | Full D-pad navigation and remote support |
 | **Windows** | [Installer](https://github.com/varunsalian/debrify/releases) | Windows 10/11 |
 | **macOS** | [DMG](https://github.com/varunsalian/debrify/releases) | Intel and Apple Silicon |
-| **Linux** | [AppImage](https://github.com/varunsalian/debrify/releases) | Requires libmpv ([see install notes](#linux)) |
+| **Linux** | [AppImage](https://github.com/varunsalian/debrify/releases) | x86_64 and ARM64. Requires dependencies ([see install notes](#linux)) |
 | **iOS** | [IPA](https://github.com/varunsalian/debrify/releases) | Unsigned — requires sideloading ([guide](docs/iOS-Installation.md)) |
 
 ---
@@ -156,11 +156,18 @@ Download the DMG, drag Debrify to Applications. First launch: right-click → Op
 
 ### Linux
 ```bash
-# Install libmpv (required)
-sudo apt install libmpv2        # Ubuntu 24.04+
-sudo apt install libmpv1        # Ubuntu 22.04 / Debian
-sudo dnf install mpv-libs       # Fedora
-sudo pacman -S mpv              # Arch
+# Install dependencies (required)
+# Ubuntu 24.04+
+sudo apt install libmpv2 libsqlite3-dev libfuse2
+
+# Ubuntu 22.04 / Debian
+sudo apt install libmpv1 libsqlite3-dev libfuse2
+
+# Fedora
+sudo dnf install mpv-libs sqlite-devel fuse-libs
+
+# Arch
+sudo pacman -S mpv sqlite fuse2
 
 # Run the AppImage
 chmod +x debrify-*.AppImage
