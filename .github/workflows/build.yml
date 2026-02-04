@@ -429,7 +429,10 @@ jobs:
         # Build AppImage
         VERSION="${{ github.event.release.tag_name }}"
         if [ -z "$VERSION" ]; then VERSION="dev"; fi
-        export ARCH=aarch64
+
+        # Note: appimagetool expects "arm_aarch64" not "aarch64"
+        # See: https://github.com/AppImage/AppImageKit/issues/1163
+        export ARCH=arm_aarch64
         ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-arm64.AppImage
 
     - name: Upload AppImage to Release
