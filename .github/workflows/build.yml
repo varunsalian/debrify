@@ -17,6 +17,7 @@ on:
           - windows
           - ios
           - linux
+          - linux-arm64
 
 permissions:
   contents: write
@@ -349,3 +350,92 @@ jobs:
       with:
         name: debrify-linux
         path: debrify-dev-x86_64.AppImage
+
+  linux-arm64:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux-arm64'
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libmpv-dev
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.8'
+        channel: 'stable'
+
+    - name: Enable Linux desktop
+      run: flutter config --enable-linux-desktop
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build Linux app
+      run: flutter build linux --release
+
+    - name: Create AppImage
+      run: |
+        # Download appimagetool for aarch64
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
+        chmod +x appimagetool-aarch64.AppImage
+
+        # Create AppDir structure
+        mkdir -p AppDir/usr/bin
+        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+        mkdir -p AppDir/usr/share/applications
+
+        # Copy built app (arm64 path)
+        cp -r build/linux/arm64/release/bundle/* AppDir/usr/bin/
+
+        # Copy icon
+        cp assets/app_icon.png AppDir/usr/share/icons/hicolor/256x256/apps/debrify.png
+        cp assets/app_icon.png AppDir/debrify.png
+
+        # Create desktop file
+        cat > AppDir/debrify.desktop << 'EOF'
+        [Desktop Entry]
+        Name=Debrify
+        Comment=Modern debrid companion with torrent search and playlist management
+        Exec=debrify
+        Icon=debrify
+        Type=Application
+        Categories=Utility;Network;
+        EOF
+
+        cp AppDir/debrify.desktop AppDir/usr/share/applications/
+
+        # Create AppRun
+        cat > AppDir/AppRun << 'EOF'
+        #!/bin/bash
+        SELF=$(readlink -f "$0")
+        HERE=${SELF%/*}
+        export PATH="${HERE}/usr/bin:${PATH}"
+        export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${LD_LIBRARY_PATH}"
+        exec "${HERE}/usr/bin/debrify" "$@"
+        EOF
+        chmod +x AppDir/AppRun
+
+        # Build AppImage
+        VERSION="${{ github.event.release.tag_name }}"
+        if [ -z "$VERSION" ]; then VERSION="dev"; fi
+        ARCH=aarch64 ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-arm64.AppImage
+
+    - name: Upload AppImage to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: debrify-${{ github.event.release.tag_name }}-arm64.AppImage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload AppImage as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-linux-arm64
+        path: debrify-dev-arm64.AppImage
