@@ -363,11 +363,17 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libmpv-dev
 
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        channel: 'stable'
-        # Note: Don't pin flutter-version for arm64 - not all versions have arm64 Linux builds
+    - name: Setup Flutter (manual for arm64)
+      run: |
+        # subosito/flutter-action doesn't support linux-arm64, install manually
+        # Using stable tag - see https://github.com/subosito/flutter-action/issues/345
+        git clone --depth 1 --branch 3.27.3 https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
+        echo "$RUNNER_TEMP/flutter/bin" >> $GITHUB_PATH
+
+    - name: Precache Flutter
+      run: |
+        flutter precache --linux
+        flutter doctor -v
 
     - name: Enable Linux desktop
       run: flutter config --enable-linux-desktop
