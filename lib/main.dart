@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/torbox/torbox_downloads_screen.dart';
@@ -49,6 +50,12 @@ Future<void> main() async {
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
     windowManager.addListener(_desktopFullscreenListener);
+  }
+
+  // Initialize sqflite FFI for Windows/Linux desktop (sqflite needs FFI on these platforms)
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
   }
 
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
