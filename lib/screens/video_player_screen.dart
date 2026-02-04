@@ -400,7 +400,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       DeviceOrientation.landscapeRight,
     ]);
     _landscapeLocked = true;
-    WakelockPlus.enable();
+    try {
+      WakelockPlus.enable();
+    } catch (_) {
+      // Wakelock not supported on this platform (e.g., Linux)
+    }
     // System volume UI not modified
 
     // Initialize the player asynchronously
@@ -2342,8 +2346,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Restore system brightness when exiting the player
     try {
       ScreenBrightness().resetScreenBrightness();
-    } catch (_) {}
-    WakelockPlus.disable();
+    } catch (_) {
+      // Screen brightness not supported on this platform (e.g., Linux)
+    }
+    try {
+      WakelockPlus.disable();
+    } catch (_) {
+      // Wakelock not supported on this platform (e.g., Linux)
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     AndroidNativeDownloader.isTelevision().then((isTv) {
       if (!isTv) {
@@ -2883,7 +2893,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         0.0,
         1.0,
       );
-      ScreenBrightness().setScreenBrightness(newBright);
+      try {
+        ScreenBrightness().setScreenBrightness(newBright);
+      } catch (_) {
+        // Screen brightness not supported on this platform (e.g., Linux)
+      }
       _verticalHud.value = VerticalHudState(
         kind: VerticalKind.brightness,
         value: newBright,
