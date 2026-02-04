@@ -678,6 +678,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  // Wait for subtitle tracks to be parsed from the media file
+  // media_kit initially only has 'auto' and 'no' tracks, real tracks come later
+  Future<void> _waitForSubtitleTracks() async {
+    // Wait up to 3 seconds for subtitle tracks to be available
+    for (int i = 0; i < 30; i++) {
+      final tracks = _player.state.tracks.subtitle;
+      // Check if we have any real tracks (not just 'auto' and 'no')
+      final hasRealTracks = tracks.any((t) =>
+        t.id != 'auto' && t.id != 'no' && t.id.isNotEmpty
+      );
+      if (hasRealTracks) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    // Timeout reached - video may not have embedded subtitles
+  }
+
   // Wait for duration to be available before attempting position restoration
   Future<void> _waitForDuration() async {
     // Wait up to 20 seconds for duration to be available
@@ -3616,6 +3634,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Restore audio and subtitle track preferences
   Future<void> _restoreTrackPreferences() async {
     try {
+      // Wait for subtitle tracks to be parsed from the media file
+      // media_kit initially only has 'auto' and 'no' placeholder tracks
+      await _waitForSubtitleTracks();
+
       final seriesPlaylist = _seriesPlaylist;
       Map<String, dynamic>? trackPreferences;
 
