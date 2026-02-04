@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -114,63 +115,60 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
     });
   }
 
+  String _prettifyProvider(String? raw) {
+    if (raw == null || raw.isEmpty) return 'RD';
+    switch (raw.toLowerCase()) {
+      case 'realdebrid':
+      case 'real-debrid':
+      case 'real_debrid':
+        return 'RD';
+      case 'torbox':
+        return 'TB';
+      case 'pikpak':
+      case 'pik-pak':
+      case 'pik_pak':
+        return 'PP';
+      case 'alldebrid':
+      case 'all-debrid':
+      case 'all_debrid':
+        return 'AD';
+      default:
+        return raw.substring(0, 2).toUpperCase();
+    }
+  }
+
   void _showActionMenu(BuildContext context) {
+    final title = widget.item['title'] as String? ?? 'Untitled';
+    final posterUrl = widget.item['posterUrl'] as String?;
+    final provider = widget.item['provider'] as String?;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(Icons.play_arrow, color: Color(0xFFE50914)),
-              title: const Text('Play', style: TextStyle(color: Colors.white, fontSize: 18)),
-              onTap: () {
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _LandscapeActionSheet(
+        title: title,
+        posterUrl: posterUrl,
+        provider: provider != null ? _prettifyProvider(provider) : null,
+        hasProgress: widget.onClearProgress != null,
+        onPlay: () {
+          Navigator.pop(context);
+          widget.onPlay();
+        },
+        onView: () {
+          Navigator.pop(context);
+          widget.onView();
+        },
+        onClearProgress: widget.onClearProgress != null
+            ? () {
                 Navigator.pop(context);
-                widget.onPlay();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_open, color: Color(0xFF6366F1)),
-              title: const Text('View Files', style: TextStyle(color: Colors.white, fontSize: 18)),
-              onTap: () {
-                Navigator.pop(context);
-                widget.onView();
-              },
-            ),
-            if (widget.onClearProgress != null)
-              ListTile(
-                leading: const Icon(Icons.restart_alt, color: Color(0xFFFF9800)),
-                title: const Text('Clear Progress', style: TextStyle(color: Colors.white, fontSize: 18)),
-                onTap: () {
-                  Navigator.pop(context);
-                  widget.onClearProgress?.call();
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.redAccent),
-              title: const Text('Delete', style: TextStyle(color: Colors.white, fontSize: 18)),
-              onTap: () {
-                Navigator.pop(context);
-                widget.onDelete();
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
+                widget.onClearProgress?.call();
+              }
+            : null,
+        onDelete: () {
+          Navigator.pop(context);
+          widget.onDelete();
+        },
       ),
     );
   }
@@ -458,6 +456,388 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Premium action sheet with poster header and glassmorphism design (Landscape variant)
+class _LandscapeActionSheet extends StatefulWidget {
+  final String title;
+  final String? posterUrl;
+  final String? provider;
+  final bool hasProgress;
+  final VoidCallback onPlay;
+  final VoidCallback onView;
+  final VoidCallback? onClearProgress;
+  final VoidCallback onDelete;
+
+  const _LandscapeActionSheet({
+    required this.title,
+    this.posterUrl,
+    this.provider,
+    required this.hasProgress,
+    required this.onPlay,
+    required this.onView,
+    this.onClearProgress,
+    required this.onDelete,
+  });
+
+  @override
+  State<_LandscapeActionSheet> createState() => _LandscapeActionSheetState();
+}
+
+class _LandscapeActionSheetState extends State<_LandscapeActionSheet>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+
+  // Focus nodes for DPAD navigation
+  final List<FocusNode> _focusNodes = [];
+  final FocusScopeNode _focusScopeNode = FocusScopeNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _slideAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+    _controller.forward();
+
+    // Create focus nodes for each action
+    _initFocusNodes();
+
+    // Auto-focus first item after animation starts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_focusNodes.isNotEmpty) {
+        _focusNodes[0].requestFocus();
+      }
+    });
+  }
+
+  void _initFocusNodes() {
+    // Count how many actions we have
+    int count = 2; // Play + View Files (always present)
+    if (widget.hasProgress) count++;
+    count++; // Delete (always present)
+
+    for (int i = 0; i < count; i++) {
+      _focusNodes.add(FocusNode());
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    _focusScopeNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            color: Colors.black.withValues(alpha: 0.5 * _fadeAnimation.value),
+            child: GestureDetector(
+              onTap: () {}, // Prevent tap through
+              child: SafeArea(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Sheet content
+                    Transform.translate(
+                      offset: Offset(0, 50 * (1 - _slideAnimation.value)),
+                      child: Opacity(
+                        opacity: _fadeAnimation.value,
+                        child: Container(
+                          margin: const EdgeInsets.all(12),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: FocusScope(
+                                  node: _focusScopeNode,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildHeader(),
+                                      _buildDivider(),
+                                      _buildActions(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 0.5,
+      color: Colors.white.withValues(alpha: 0.1),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Row(
+        children: [
+          // Poster
+          Container(
+            width: 56,
+            height: 84,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: widget.posterUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => _buildPosterPlaceholder(),
+                      errorWidget: (context, url, error) => _buildPosterPlaceholder(),
+                    )
+                  : _buildPosterPlaceholder(),
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Title
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.provider != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      widget.provider!,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPosterPlaceholder() {
+    return Container(
+      color: Colors.white.withValues(alpha: 0.1),
+      child: Icon(
+        Icons.movie_outlined,
+        color: Colors.white.withValues(alpha: 0.3),
+        size: 24,
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    int index = 0;
+
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          // Play button
+          _LandscapeGlassButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
+            focusNode: _focusNodes[index++],
+            autofocus: true,
+            onTap: widget.onPlay,
+          ),
+          // View Files
+          _LandscapeGlassButton(
+            icon: Icons.folder_outlined,
+            label: 'View Files',
+            focusNode: _focusNodes[index++],
+            onTap: widget.onView,
+          ),
+          // Clear progress
+          if (widget.hasProgress)
+            _LandscapeGlassButton(
+              icon: Icons.refresh_rounded,
+              label: 'Clear Progress',
+              focusNode: _focusNodes[index++],
+              onTap: widget.onClearProgress!,
+            ),
+          // Delete
+          _LandscapeGlassButton(
+            icon: Icons.delete_outline_rounded,
+            label: 'Delete',
+            isDanger: true,
+            focusNode: _focusNodes[index],
+            onTap: widget.onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Minimal glass-style button with DPAD support
+class _LandscapeGlassButton extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool isDanger;
+  final bool autofocus;
+  final FocusNode? focusNode;
+  final VoidCallback onTap;
+
+  const _LandscapeGlassButton({
+    required this.icon,
+    required this.label,
+    this.isDanger = false,
+    this.autofocus = false,
+    this.focusNode,
+    required this.onTap,
+  });
+
+  @override
+  State<_LandscapeGlassButton> createState() => _LandscapeGlassButtonState();
+}
+
+class _LandscapeGlassButtonState extends State<_LandscapeGlassButton> {
+  bool _isPressed = false;
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHighlighted = _isPressed || _isFocused;
+    final textColor = widget.isDanger
+        ? const Color(0xFFFF6B6B)
+        : Colors.white.withValues(alpha: _isFocused ? 1.0 : 0.9);
+    final iconColor = widget.isDanger
+        ? const Color(0xFFFF6B6B)
+        : Colors.white.withValues(alpha: _isFocused ? 1.0 : 0.7);
+
+    return Focus(
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isHighlighted
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isFocused
+                  ? Colors.white.withValues(alpha: 0.3)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, color: iconColor, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 16,
+                    fontWeight: _isFocused ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white.withValues(alpha: _isFocused ? 0.5 : 0.3),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
