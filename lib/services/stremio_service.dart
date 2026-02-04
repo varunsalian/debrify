@@ -703,8 +703,11 @@ class StremioService {
         continue;
       }
 
-      // Parse seeders from title (only relevant for torrents, but parse anyway)
-      final seeders = stream.seedersFromTitle ?? 0;
+      // Parse seeders from title - only for actual torrents
+      // Direct/external links should have 0 seeders so they sort to bottom
+      final seeders = streamType == StreamType.torrent
+          ? (stream.seedersFromTitle ?? 0)
+          : 0;
 
       // Parse size - try behaviorHints.videoSize first, then title
       int sizeBytes = 0;
