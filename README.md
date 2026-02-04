@@ -29,11 +29,14 @@
 ---
 
 <p align="center">
-  <img src="assets/screenshots/search.png" alt="Search" width="49%">
-  <img src="assets/screenshots/downloads.png" alt="Downloads" width="49%">
+  <img src="assets/screenshots/torrent-search.png" alt="Torrent Search" width="49%">
+  <img src="assets/screenshots/stremio-catalog.png" alt="Stremio Catalog" width="49%">
 </p>
 <p align="center">
+  <img src="assets/screenshots/downloads.png" alt="Downloads" width="49%">
   <img src="assets/screenshots/player.png" alt="Player" width="49%">
+</p>
+<p align="center">
   <img src="assets/screenshots/episodes.png" alt="Episodes" width="49%">
 </p>
 
@@ -41,13 +44,14 @@
   <img src="https://img.shields.io/badge/Real--Debrid-Supported-4ade80?style=for-the-badge" alt="Real-Debrid">
   <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
   <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
+  <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
 </p>
 
 ---
 
 ## What is Debrify?
 
-Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, and an **optional plugin system** for torrent search engines.
+Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, and **Stremio Addons support** for discovering content.
 
 > **No torrenting on your device.** Debrify connects to debrid services that handle everything server-side. You just stream or download the finished files.
 
