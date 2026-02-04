@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -6912,69 +6913,194 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showGeneralDialog<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetContext) {
-        bool isLoadingZip = false;
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.checklist_outlined),
-                      title: const Text('Select files to download'),
-                      subtitle: const Text(
-                        'Choose specific files from this torrent',
-                      ),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        _showTorboxFileSelection(
-                          torrent: torrent,
-                          apiKey: apiKey,
-                        );
-                      },
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  width: 340,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B).withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.1),
+                      width: 1,
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.archive_outlined),
-                      title: const Text('Download whole torrent as ZIP'),
-                      subtitle: const Text(
-                        'Create a single archive for offline use',
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 5,
                       ),
-                      trailing: isLoadingZip
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : null,
-                      enabled: !isLoadingZip,
-                      onTap: isLoadingZip
-                          ? null
-                          : () {
-                              Navigator.of(sheetContext).pop();
-                              _showTorboxSnack(
-                                'Torbox ZIP downloads coming soon',
-                              );
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7C3AED).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.download_rounded,
+                              color: Color(0xFF7C3AED),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Download Options',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white54,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      // Option 1: Select files
+                      _buildGlassOptionCard(
+                        icon: Icons.checklist_rounded,
+                        iconColor: const Color(0xFF3B82F6),
+                        title: 'Select Files',
+                        subtitle: 'Choose specific files to download',
+                        autofocus: true,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _showTorboxFileSelection(
+                            torrent: torrent,
+                            apiKey: apiKey,
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      // Option 2: Download as ZIP
+                      _buildGlassOptionCard(
+                        icon: Icons.folder_zip_rounded,
+                        iconColor: const Color(0xFF10B981),
+                        title: 'Download as ZIP',
+                        subtitle: 'Get everything in one archive',
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await _enqueueTorboxZipDownload(
+                            torrent: torrent,
+                            apiKey: apiKey,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          ),
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
         );
       },
     );
+  }
+
+  Widget _buildGlassOptionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool autofocus = false,
+  }) {
+    return _GlassOptionCard(
+      icon: icon,
+      iconColor: iconColor,
+      title: title,
+      subtitle: subtitle,
+      onTap: onTap,
+      autofocus: autofocus,
+    );
+  }
+
+  /// Enqueue a ZIP download for a Torbox torrent
+  Future<void> _enqueueTorboxZipDownload({
+    required TorboxTorrent torrent,
+    required String apiKey,
+  }) async {
+    _showTorboxSnack('Preparing ZIP download...');
+
+    try {
+      // Generate ZIP permalink
+      final zipUrl = TorboxService.createZipPermalink(apiKey, torrent.id);
+
+      if (zipUrl.isEmpty) {
+        _showTorboxSnack('Failed to generate ZIP download link', isError: true);
+        return;
+      }
+
+      // Create meta JSON with Torbox-specific fields for ZIP
+      final meta = jsonEncode({
+        'torboxTorrentId': torrent.id,
+        'apiKey': apiKey,
+        'torboxDownload': true,
+        'torboxZip': true,
+      });
+
+      // Enqueue ZIP download
+      final zipFileName = '${torrent.name}.zip';
+      await DownloadService.instance.enqueueDownload(
+        url: zipUrl,
+        fileName: zipFileName,
+        meta: meta,
+        torrentName: torrent.name,
+        context: mounted ? context : null,
+      );
+
+      _showTorboxSnack('ZIP download queued successfully');
+    } catch (e) {
+      _showTorboxSnack('Failed to queue ZIP download: $e', isError: true);
+    }
   }
 
   /// Show file selection dialog for Torbox torrents
@@ -12650,6 +12776,118 @@ class _PikPakPlaylistItem {
     required this.seriesInfo,
     required this.displayName,
   });
+}
+
+/// Glass-style option card for Torbox download dialog with D-pad support.
+class _GlassOptionCard extends StatefulWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool autofocus;
+
+  const _GlassOptionCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_GlassOptionCard> createState() => _GlassOptionCardState();
+}
+
+class _GlassOptionCardState extends State<_GlassOptionCard> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (focused) {
+        if (mounted) {
+          setState(() {
+            _focused = focused;
+          });
+        }
+      },
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          DialogTapGuard.markKeyAction();
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(_focused ? 0.1 : 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _focused
+                    ? widget.iconColor.withOpacity(0.6)
+                    : Colors.white.withOpacity(0.08),
+                width: _focused ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: widget.iconColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(widget.icon, color: widget.iconColor, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white.withOpacity(0.3),
+                  size: 22,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DebridActionTile extends StatefulWidget {
