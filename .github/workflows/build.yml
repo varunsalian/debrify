@@ -366,8 +366,8 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
         channel: 'stable'
+        # Note: Don't pin flutter-version for arm64 - not all versions have arm64 Linux builds
 
     - name: Enable Linux desktop
       run: flutter config --enable-linux-desktop
