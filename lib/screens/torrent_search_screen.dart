@@ -556,13 +556,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Handle different stream types
-    if (torrent.isDirectStream) {
-      // Direct URL - play directly without debrid
-      _playDirectStream(torrent);
-      return;
-    } else if (torrent.isExternalStream) {
-      // External URL - open in browser
-      _openExternalStream(torrent);
+    if (torrent.isDirectStream || torrent.isExternalStream) {
+      // Show action dialog for direct/external streams
+      _showDirectStreamActionDialog(torrent, index);
       return;
     }
 
@@ -656,6 +652,274 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       }
     }
+  }
+
+  /// Resolve redirect chain for a URL to get the final download URL.
+  /// This is needed for direct stream downloads where the initial URL
+  /// redirects to the actual file (e.g., MediaFusion playback URLs).
+  Future<String> _resolveDownloadUrl(String url) async {
+    debugPrint('[DirectStreamDownload] Resolving URL: $url');
+
+    String currentUrl = url;
+    int maxRedirects = 10;
+    int redirectCount = 0;
+
+    while (redirectCount < maxRedirects) {
+      try {
+        final uri = Uri.parse(currentUrl);
+        final client = http.Client();
+        try {
+          final request = http.Request('HEAD', uri);
+          request.followRedirects = false;
+          request.headers['User-Agent'] =
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+          final response = await client.send(request).timeout(
+            const Duration(seconds: 10),
+          );
+
+          debugPrint('[DirectStreamDownload] Response ${response.statusCode} for $currentUrl');
+
+          // Check for redirect
+          if (response.statusCode == 301 ||
+              response.statusCode == 302 ||
+              response.statusCode == 303 ||
+              response.statusCode == 307 ||
+              response.statusCode == 308) {
+            final location = response.headers['location'];
+            if (location != null && location.isNotEmpty) {
+              // Handle relative URLs
+              final resolvedUri = uri.resolve(location);
+              currentUrl = resolvedUri.toString();
+              debugPrint('[DirectStreamDownload] Redirect to: $currentUrl');
+              redirectCount++;
+              continue;
+            }
+          }
+
+          // No redirect or success - return current URL
+          debugPrint('[DirectStreamDownload] Final URL: $currentUrl');
+          return currentUrl;
+        } finally {
+          client.close();
+        }
+      } catch (e) {
+        debugPrint('[DirectStreamDownload] Error resolving URL: $e');
+        break;
+      }
+    }
+
+    // Return best URL we have (might be partially resolved)
+    return currentUrl;
+  }
+
+  /// Show action dialog for direct/external streams (Play, Copy, Download)
+  Future<void> _showDirectStreamActionDialog(Torrent torrent, int index) async {
+    if (torrent.directUrl == null || torrent.directUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No stream URL available')),
+      );
+      return;
+    }
+
+    final isExternal = torrent.isExternalStream;
+    final accentColor = isExternal
+        ? const Color(0xFF6366F1) // Purple for external
+        : const Color(0xFF10B981); // Green for direct
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                accentColor,
+                                accentColor.withValues(alpha: 0.7),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            isExternal
+                                ? Icons.open_in_new_rounded
+                                : Icons.play_circle_filled_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                torrent.displayTitle,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                isExternal
+                                    ? 'External link - opens in browser'
+                                    : 'Direct stream - no debrid required',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF1E293B)),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Play / Open option
+                          _DebridActionTile(
+                            icon: isExternal
+                                ? Icons.open_in_new_rounded
+                                : Icons.play_circle_rounded,
+                            color: const Color(0xFF60A5FA),
+                            title: isExternal ? 'Open in browser' : 'Play now',
+                            subtitle: isExternal
+                                ? 'Open this link in your browser'
+                                : 'Stream directly in the built-in player',
+                            enabled: true,
+                            autofocus: true,
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(index);
+                              if (isExternal) {
+                                _openExternalStream(torrent);
+                              } else {
+                                _playDirectStream(torrent);
+                              }
+                            },
+                          ),
+                          // Copy URL option
+                          _DebridActionTile(
+                            icon: Icons.copy_rounded,
+                            color: const Color(0xFFF59E0B),
+                            title: 'Copy URL',
+                            subtitle: 'Copy the stream URL to clipboard',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(index);
+                              Clipboard.setData(
+                                ClipboardData(text: torrent.directUrl!),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('URL copied to clipboard'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                          // Download option
+                          _DebridActionTile(
+                            icon: Icons.download_rounded,
+                            color: const Color(0xFF4ADE80),
+                            title: 'Download to device',
+                            subtitle: 'Download this file to your device',
+                            enabled: true,
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(index);
+
+                              // Show resolving snackbar
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Text('Resolving download URL...'),
+                                    ],
+                                  ),
+                                  duration: Duration(seconds: 10),
+                                ),
+                              );
+
+                              // Resolve redirects to get final download URL
+                              final resolvedUrl = await _resolveDownloadUrl(torrent.directUrl!);
+
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                              await _downloadFile(
+                                resolvedUrl,
+                                torrent.displayTitle,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Play an IPTV channel from home favorites
@@ -11128,27 +11392,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ),
                 ),
-                // Copy button
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: IconButton(
-                    onPressed: () {
-                      final url = torrent.directUrl;
-                      if (url != null && url.isNotEmpty) {
-                        Clipboard.setData(ClipboardData(text: url));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('URL copied to clipboard'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.copy_rounded,
-                      size: 18,
-                      color: textSecondary,
-                    ),
+                // Chevron indicator
+                const Padding(
+                  padding: EdgeInsets.only(right: 12),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 24,
+                    color: textSecondary,
                   ),
                 ),
               ],
