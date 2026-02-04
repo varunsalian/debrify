@@ -41,14 +41,14 @@ import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_control_screen.dart';
 import 'utils/platform_util.dart';
 
-final WindowListener _windowsFullscreenListener = _WindowsFullscreenListener();
+final WindowListener _desktopFullscreenListener = _DesktopFullscreenListener();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && Platform.isWindows) {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
-    windowManager.addListener(_windowsFullscreenListener);
+    windowManager.addListener(_desktopFullscreenListener);
   }
 
   // Set a sensible default orientation: phones stay portrait, Android TV uses landscape.
@@ -57,7 +57,7 @@ Future<void> main() async {
   await _cleanupPlaybackState();
   runApp(const DebrifyApp());
 
-  if (!kIsWeb && Platform.isWindows) {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     windowManager.waitUntilReadyToShow().then((_) async {
       await windowManager.show();
       await windowManager.focus();
@@ -123,10 +123,10 @@ Future<void> _cleanupPlaybackState() async {
   } catch (e) {}
 }
 
-class _WindowsFullscreenListener with WindowListener {
+class _DesktopFullscreenListener with WindowListener {
   @override
   Future<void> onWindowEvent(String eventName) async {
-    if (!Platform.isWindows) return;
+    if (!Platform.isWindows && !Platform.isLinux) return;
     if (eventName == 'maximize') {
       final isFull = await windowManager.isFullScreen();
       if (!isFull) {
@@ -183,6 +183,30 @@ class DebrifyApp extends StatelessWidget {
               debugPrint('Debrify: TV mode detected: $isTv, text scale: ${isTv ? 1.0 : 1.3}');
             }
 
+            // Wrap with global Escape key handler for desktop fullscreen exit
+            Widget content = child!;
+            if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+              content = Focus(
+                autofocus: false,
+                canRequestFocus: false,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
+                    // Check if in fullscreen and exit
+                    windowManager.isFullScreen().then((isFullScreen) {
+                      if (isFullScreen) {
+                        windowManager.setFullScreen(false);
+                      }
+                    });
+                    // Don't consume the event - let it propagate to video player etc.
+                    return KeyEventResult.ignored;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: content,
+              );
+            }
+
             return MediaQuery(
               data: MediaQuery.of(context).copyWith(
                 // TV: No text scaling (1.0) to prevent zoom issues
@@ -191,7 +215,7 @@ class DebrifyApp extends StatelessWidget {
                   isTv ? 1.0 : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
                 ),
               ),
-              child: child!,
+              child: content,
             );
           },
         );

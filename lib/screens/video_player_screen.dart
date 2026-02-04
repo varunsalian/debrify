@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
@@ -3253,8 +3255,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               }
             }
 
-            // Escape key to quit the player
+            // Escape key: exit fullscreen first, then quit the player
             if (key == LogicalKeyboardKey.escape) {
+              // On Windows/Linux desktop, exit fullscreen first if in fullscreen
+              if (Platform.isWindows || Platform.isLinux) {
+                windowManager.isFullScreen().then((isFullScreen) {
+                  if (!mounted) return; // Safety check for async callback
+                  if (isFullScreen) {
+                    // Exit fullscreen but don't quit the player
+                    windowManager.setFullScreen(false);
+                  } else {
+                    // Not in fullscreen, quit the player
+                    Navigator.of(context).pop();
+                  }
+                });
+                return KeyEventResult.handled;
+              }
+              // On other platforms (mobile, macOS), just quit
               Navigator.of(context).pop();
               return KeyEventResult.handled;
             }
