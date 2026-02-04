@@ -10,6 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   permission_handler_windows
   screen_brightness_windows
   screen_retriever
+  sqlite3_flutter_libs
   url_launcher_windows
   volume_controller
   window_manager
