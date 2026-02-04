@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/main_page_bridge.dart';
@@ -30,6 +32,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   final FocusNode _folderRestrictionSelectButtonFocusNode = FocusNode(
     debugLabel: 'folder-restriction-select',
   );
+  final FocusNode _resetDeviceIdButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-reset-device-id',
+  );
 
   bool _pikpakEnabled = false;
   bool _showVideosOnly = true;
@@ -58,6 +63,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     _logoutButtonFocusNode.dispose();
     _folderRestrictionSkipButtonFocusNode.dispose();
     _folderRestrictionSelectButtonFocusNode.dispose();
+    _resetDeviceIdButtonFocusNode.dispose();
     super.dispose();
   }
 
@@ -893,6 +899,25 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               )
                             : const Icon(Icons.login),
                         label: Text(_isConnecting ? 'Logging in...' : 'Login'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        focusNode: _resetDeviceIdButtonFocusNode,
+                        onPressed: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          final currentDeviceId = prefs.getString('pikpak_device_id');
+                          debugPrint('PikPak: Current device ID: $currentDeviceId');
+                          await prefs.remove('pikpak_device_id');
+                          await prefs.remove('pikpak_captcha_token');
+                          debugPrint('PikPak: Device ID cleared');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Device ID cleared. Try logging in again.')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Reset Device ID'),
                       ),
                     ] else ...[
                       const SizedBox(height: 16),

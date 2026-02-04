@@ -58,9 +58,12 @@ class PikPakApiService {
   DateTime? _lastReAuthAttempt;
   static const Duration _reAuthCooldown = Duration(seconds: 60);
 
-  /// Generate device ID from email and password (MD5 hash)
-  String _generateDeviceId(String email, String password) {
-    final bytes = utf8.encode(email + password);
+  /// Generate a random device ID (32 character hex string like rclone does)
+  String _generateDeviceId() {
+    final random = DateTime.now().millisecondsSinceEpoch.toString() +
+        DateTime.now().microsecondsSinceEpoch.toString() +
+        (DateTime.now().hashCode * 31).toString();
+    final bytes = utf8.encode(random);
     final digest = md5.convert(bytes);
     return digest.toString();
   }
@@ -239,7 +242,7 @@ class PikPakApiService {
       // 1. Generate or load device ID
       String? deviceId = await StorageService.getPikPakDeviceId();
       if (deviceId == null) {
-        deviceId = _generateDeviceId(email, password);
+        deviceId = _generateDeviceId();
         await StorageService.setPikPakDeviceId(deviceId);
         print('PikPak: Generated new device ID: $deviceId');
       } else {
