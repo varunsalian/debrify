@@ -3737,6 +3737,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               file['filename']?.toString() ??
               file['path']?.toString();
 
+          // Save full path for relativePath before stripping to filename
+          String? relativePath = filename;
+          if (relativePath != null && relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1); // Remove leading slash
+          }
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
@@ -3764,6 +3770,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   PlaylistEntry(
                     url: url,
                     title: finalFilename,
+                    relativePath: relativePath,
                     sizeBytes: sizeBytes,
                   ),
                 );
@@ -3773,6 +3780,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   PlaylistEntry(
                     url: '', // Empty URL - will be filled when unrestricted
                     title: finalFilename,
+                    relativePath: relativePath,
                     restrictedLink: torrent.links[i],
                     sizeBytes: sizeBytes,
                   ),
@@ -3784,6 +3792,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
+                  relativePath: relativePath,
                   restrictedLink: torrent.links[i],
                   sizeBytes: sizeBytes,
                 ),
@@ -3795,6 +3804,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
+                relativePath: relativePath,
                 restrictedLink: torrent.links[i],
                 sizeBytes: sizeBytes,
               ),
@@ -3809,6 +3819,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               file['name']?.toString() ??
               file['filename']?.toString() ??
               file['path']?.toString();
+
+          // Save full path for relativePath before stripping to filename
+          String? relativePath = filename;
+          if (relativePath != null && relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1); // Remove leading slash
+          }
 
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
@@ -3837,6 +3853,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   PlaylistEntry(
                     url: url,
                     title: finalFilename,
+                    relativePath: relativePath,
                     sizeBytes: sizeBytes,
                   ),
                 );
@@ -3846,6 +3863,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   PlaylistEntry(
                     url: '', // Empty URL - will be filled when unrestricted
                     title: finalFilename,
+                    relativePath: relativePath,
                     restrictedLink: torrent.links[i],
                     sizeBytes: sizeBytes,
                   ),
@@ -3857,6 +3875,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
+                  relativePath: relativePath,
                   restrictedLink: torrent.links[i],
                   sizeBytes: sizeBytes,
                 ),
@@ -3868,6 +3887,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
+                relativePath: relativePath,
                 restrictedLink: torrent.links[i],
                 sizeBytes: sizeBytes,
               ),

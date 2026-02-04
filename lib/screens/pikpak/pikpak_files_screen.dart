@@ -2320,9 +2320,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
 
     try {
-      // Recursively scan folder for all files
+      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
       final allFiles = await PikPakApiService.instance.listFilesRecursive(
         folderId: folderId,
+        includePaths: true,
       );
 
       // Close loading dialog
@@ -2401,6 +2402,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 PlaylistEntry(
                   url: url,
                   title: title,
+                  relativePath: file['_fullPath'] as String?,
                   provider: 'pikpak',
                   pikpakFileId: file['id'],
                   sizeBytes: sizeBytes,
@@ -2505,6 +2507,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
+          relativePath: entry.file['_fullPath'] as String?,
           provider: 'pikpak',
           pikpakFileId: entry.file['id'],
           sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
@@ -2607,9 +2610,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
 
     try {
-      // Recursively scan folder for all files
+      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
       final allFiles = await PikPakApiService.instance.listFilesRecursive(
         folderId: folderId,
+        includePaths: true,
       );
 
       // Close loading dialog

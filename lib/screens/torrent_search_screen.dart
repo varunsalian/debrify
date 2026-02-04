@@ -4772,7 +4772,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     List<Map<String, dynamic>> videoFiles = [];
     try {
       final pikpak = PikPakApiService.instance;
-      final allFiles = await pikpak.listFilesRecursive(folderId: fileId);
+      final allFiles = await pikpak.listFilesRecursive(folderId: fileId, includePaths: true);
       videoFiles = allFiles.where((file) {
         final name = (file['name'] as String?) ?? '';
         final kind = (file['kind'] as String?) ?? '';
@@ -4991,6 +4991,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 PlaylistEntry(
                   url: url,
                   title: title,
+                  relativePath: file['_fullPath'] as String?,
                   provider: 'pikpak',
                   pikpakFileId: file['id'],
                   sizeBytes: sizeBytes,
@@ -5089,6 +5090,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       playlistEntries.add(PlaylistEntry(
         url: i == startIndex ? initialUrl : '',
         title: combinedTitle,
+        relativePath: entry.file['_fullPath'] as String?,
         provider: 'pikpak',
         pikpakFileId: entry.file['id'],
         sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
@@ -7391,10 +7393,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         isSeriesCollection: isSeriesCollection,
         fallback: displayName,
       );
+
+      // Strip first folder level (torrent name) from path for relativePath
+      String relativePath = entry.file.name;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
       playlistEntries.add(
         PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
+          relativePath: relativePath,
           provider: 'torbox',
           torboxTorrentId: torrent.id,
           torboxFileId: entry.file.id,
@@ -8834,6 +8845,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               file['filename']?.toString() ??
               file['path']?.toString();
 
+          // Save full path for relativePath before stripping to filename
+          String? relativePath = filename;
+          if (relativePath != null && relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1); // Remove leading slash
+          }
+
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
@@ -8861,6 +8878,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   PlaylistEntry(
                     url: url,
                     title: finalFilename,
+                    relativePath: relativePath,
                     sizeBytes: sizeBytes,
                   ),
                 );
@@ -8870,6 +8888,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   PlaylistEntry(
                     url: '', // Empty URL - will be filled when unrestricted
                     title: finalFilename,
+                    relativePath: relativePath,
                     restrictedLink: links[i],
                     sizeBytes: sizeBytes,
                   ),
@@ -8881,6 +8900,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
+                  relativePath: relativePath,
                   restrictedLink: links[i],
                   sizeBytes: sizeBytes,
                 ),
@@ -8892,6 +8912,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
+                relativePath: relativePath,
                 restrictedLink: links[i],
                 sizeBytes: sizeBytes,
               ),
@@ -8906,6 +8927,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               file['name']?.toString() ??
               file['filename']?.toString() ??
               file['path']?.toString();
+
+          // Save full path for relativePath before stripping to filename
+          String? relativePath = filename;
+          if (relativePath != null && relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1); // Remove leading slash
+          }
 
           // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
@@ -8934,6 +8961,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   PlaylistEntry(
                     url: url,
                     title: finalFilename,
+                    relativePath: relativePath,
                     sizeBytes: sizeBytes,
                   ),
                 );
@@ -8943,6 +8971,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   PlaylistEntry(
                     url: '', // Empty URL - will be filled when unrestricted
                     title: finalFilename,
+                    relativePath: relativePath,
                     restrictedLink: links[i],
                     sizeBytes: sizeBytes,
                   ),
@@ -8954,6 +8983,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 PlaylistEntry(
                   url: '', // Empty URL - will be filled when unrestricted
                   title: finalFilename,
+                  relativePath: relativePath,
                   restrictedLink: links[i],
                   sizeBytes: sizeBytes,
                 ),
@@ -8965,6 +8995,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               PlaylistEntry(
                 url: '', // Empty URL - will be filled when unrestricted
                 title: finalFilename,
+                relativePath: relativePath,
                 restrictedLink: links[i],
                 sizeBytes: sizeBytes,
               ),
