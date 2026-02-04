@@ -118,6 +118,23 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 
 </td>
 </tr>
+<tr>
+<td width="50%">
+
+### IPTV Support
+- **M3U playlists** — Load your IPTV playlists
+- **Live TV** — Watch live channels seamlessly
+- **Channel favorites** — Organize and quick-access your channels
+
+</td>
+<td width="50%">
+
+### Reddit Videos
+- **Audio merged** — Plays videos with audio properly combined
+- **Download support** — Save Reddit videos locally
+
+</td>
+</tr>
 </table>
 
 ---
