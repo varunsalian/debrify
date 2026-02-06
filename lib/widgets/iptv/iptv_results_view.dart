@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import '../../models/iptv_playlist.dart';
 import '../../models/playlist_view_mode.dart';
@@ -56,7 +54,6 @@ class IptvResultsViewState extends State<IptvResultsView> {
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
   final List<FocusNode> _cardFocusNodes = [];
-  int _gridColumns = 4; // Track grid columns for navigation
 
   String _lastSearchQuery = '';
 
@@ -409,79 +406,20 @@ class IptvResultsViewState extends State<IptvResultsView> {
       );
     }
 
-    // Results grid
+    // Results list
     return TvFocusScrollWrapper(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Calculate columns - IPTV cards are wider so fewer columns
-          final width = constraints.maxWidth;
-          final columns = width > 1000 ? 6 : width > 800 ? 5 : width > 600 ? 4 : width > 400 ? 3 : 2;
-          // Update column count for navigation
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_gridColumns != columns) {
-              _gridColumns = columns;
-            }
-          });
-
-          return CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.9, // Square-ish for channel logos
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final channel = _filteredChannels[index];
-                      return IptvChannelGridCard(
-                        channel: channel,
-                        onTap: () => _playChannel(channel),
-                        focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
-                        isFavorited: _favoriteUrls.contains(channel.url),
-                        onFavoriteToggle: (isFavorited) => _toggleFavorite(channel, isFavorited),
-                        gridColumns: _gridColumns,
-                        index: index,
-                        totalItems: _filteredChannels.length,
-                        onNavigateUp: () {
-                          final row = index ~/ columns;
-                          if (row == 0) {
-                            _playlistFilterFocusNode.requestFocus();
-                          } else {
-                            final newIndex = (row - 1) * columns + (index % columns);
-                            if (newIndex >= 0 && newIndex < _cardFocusNodes.length) {
-                              _cardFocusNodes[newIndex].requestFocus();
-                            }
-                          }
-                        },
-                        onNavigateDown: () {
-                          final row = index ~/ columns;
-                          final newIndex = (row + 1) * columns + (index % columns);
-                          if (newIndex < _filteredChannels.length && newIndex < _cardFocusNodes.length) {
-                            _cardFocusNodes[newIndex].requestFocus();
-                          }
-                        },
-                        onNavigateLeft: () {
-                          if (index > 0 && index - 1 < _cardFocusNodes.length) {
-                            _cardFocusNodes[index - 1].requestFocus();
-                          }
-                        },
-                        onNavigateRight: () {
-                          if (index + 1 < _filteredChannels.length && index + 1 < _cardFocusNodes.length) {
-                            _cardFocusNodes[index + 1].requestFocus();
-                          }
-                        },
-                      );
-                    },
-                    childCount: _filteredChannels.length,
-                  ),
-                ),
-              ),
-            ],
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(top: 8, bottom: 16),
+        itemCount: _filteredChannels.length,
+        itemBuilder: (context, index) {
+          final channel = _filteredChannels[index];
+          return IptvChannelCard(
+            channel: channel,
+            onTap: () => _playChannel(channel),
+            focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+            isFavorited: _favoriteUrls.contains(channel.url),
+            onFavoriteToggle: (isFavorited) => _toggleFavorite(channel, isFavorited),
           );
         },
       ),
