@@ -219,7 +219,9 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.playlist_play,
+                widget.selectedPlaylist?.isLocalFile == true
+                    ? Icons.folder
+                    : Icons.playlist_play,
                 size: 16,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -532,8 +534,10 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                 return _FocusablePickerTile(
                   focusNode: index < _focusNodes.length ? _focusNodes[index] : null,
                   label: playlist.name,
-                  subtitle: playlist.url,
-                  icon: isSelected ? Icons.check_circle : Icons.playlist_play,
+                  subtitle: playlist.isLocalFile ? 'Local file' : playlist.url,
+                  icon: isSelected
+                      ? Icons.check_circle
+                      : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
                   isSelected: isSelected,
                   onTap: () => Navigator.of(context).pop(playlist),
                   onKeyEvent: (node, event) => _handleKeyEvent(

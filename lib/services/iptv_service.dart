@@ -117,6 +117,14 @@ class IptvService {
       return false;
     }
   }
+
+  /// Parse M3U content directly (for file-based playlists)
+  IptvParseResult parseContent(String content) {
+    debugPrint('IptvService: Parsing content directly (${content.length} chars)');
+    final result = M3uParser.parse(content);
+    debugPrint('IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories');
+    return result;
+  }
 }
 
 class _CachedPlaylist {

@@ -5,19 +5,25 @@ class IptvPlaylist {
   final String id;
   final String name;
   final String url;
+  final String? content; // Raw M3U content for file-based playlists
   final DateTime addedAt;
 
   const IptvPlaylist({
     required this.id,
     required this.name,
     required this.url,
+    this.content,
     required this.addedAt,
   });
+
+  /// Returns true if this playlist was imported from a local file
+  bool get isLocalFile => content != null && content!.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'url': url,
+    if (content != null) 'content': content,
     'addedAt': addedAt.toIso8601String(),
   };
 
@@ -25,6 +31,7 @@ class IptvPlaylist {
     id: json['id'] as String,
     name: json['name'] as String,
     url: json['url'] as String,
+    content: json['content'] as String?,
     addedAt: DateTime.parse(json['addedAt'] as String),
   );
 

@@ -179,7 +179,13 @@ class IptvResultsViewState extends State<IptvResultsView> {
     }
     _cardFocusNodes.clear();
 
-    final result = await _iptvService.fetchPlaylist(playlist.url);
+    // Use parseContent for file-based playlists, fetchPlaylist for URL-based
+    final IptvParseResult result;
+    if (playlist.isLocalFile) {
+      result = _iptvService.parseContent(playlist.content!);
+    } else {
+      result = await _iptvService.fetchPlaylist(playlist.url);
+    }
 
     if (!mounted) return;
 
