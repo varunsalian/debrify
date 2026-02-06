@@ -79,6 +79,7 @@ class _ExternalPlayerSettingsPageState
   int _subtitleColorIndex = 0; // White
   int _subtitleBgIndex = 0; // None
   int _subtitleFontIndex = 0; // Default
+  List<SubtitleFont> _allFonts = SubtitleFont.builtInOptions; // Built-in + custom fonts
 
   // Debrify Player FocusNodes for DPAD navigation
   final FocusNode _aspectFocusNode = FocusNode();
@@ -368,6 +369,8 @@ class _ExternalPlayerSettingsPageState
         _subtitleFontIndex = subtitleSettings.fontIndex;
         _loading = false;
       });
+      // Load fonts (built-in + custom) separately (async)
+      _loadFonts();
     } catch (e) {
       setState(() {
         _loading = false;
@@ -826,6 +829,75 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSubtitleFontIndex(int index) async {
     setState(() => _subtitleFontIndex = index);
     await SubtitleFontService.instance.setFontIndex(index);
+  }
+
+  Future<void> _loadFonts() async {
+    final allFonts = await SubtitleFontService.instance.getAllFonts();
+    final selectedIndex = await SubtitleFontService.instance.getSelectedFontIndex();
+    if (mounted) {
+      setState(() {
+        _allFonts = allFonts;
+        _subtitleFontIndex = selectedIndex;
+      });
+    }
+  }
+
+  Future<void> _importCustomFont() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['ttf', 'otf'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      if (file.path == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not access selected file')),
+          );
+        }
+        return;
+      }
+
+      final newFont = await SubtitleFontService.instance.importCustomFont(
+        file.path!,
+        file.name,
+      );
+
+      if (newFont != null) {
+        await _loadFonts();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Font "${newFont.label}" imported successfully')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to import font')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error importing font: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeCustomFont(SubtitleFont font) async {
+    await SubtitleFontService.instance.removeCustomFont(font.id);
+    await _loadFonts();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Font "${font.label}" removed')),
+      );
+    }
   }
 
   // Aspect labels
@@ -1856,11 +1928,69 @@ class _ExternalPlayerSettingsPageState
                         context,
                         label: 'Font',
                         value: _subtitleFontIndex,
-                        items: SubtitleFont.builtInOptions.map((o) => o.label).toList(),
+                        items: _allFonts.map((f) => f.isCustom ? '${f.label} (Custom)' : f.label).toList(),
                         onChanged: (index) => _setSubtitleFontIndex(index),
                         focusNode: _subtitleFontFocusNode,
                         isFocused: _subtitleFontFocused,
                       ),
+
+                      // Import custom font button (always visible)
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _importCustomFont,
+                          icon: const Icon(Icons.file_upload_outlined),
+                          label: const Text('Import Custom Font (TTF/OTF)'),
+                        ),
+                      ),
+
+                      // List of custom fonts with delete buttons
+                      if (_allFonts.any((f) => f.isCustom)) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Custom Fonts',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        ..._allFonts.where((f) => f.isCustom).map((font) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.text_fields,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  font.label,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: _allFonts[_subtitleFontIndex].id == font.id
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: _allFonts[_subtitleFontIndex].id == font.id
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => _removeCustomFont(font),
+                                icon: const Icon(Icons.delete_outline, size: 18),
+                                color: theme.colorScheme.error,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                tooltip: 'Remove font',
+                              ),
+                            ],
+                          ),
+                        )),
+                      ],
 
                       const SizedBox(height: 16),
 
@@ -1881,7 +2011,9 @@ class _ExternalPlayerSettingsPageState
                               fontWeight: FontWeight.w600,
                               shadows: SubtitleStyle.options[_subtitleStyleIndex].shadows,
                               backgroundColor: SubtitleBackground.options[_subtitleBgIndex].color,
-                              fontFamily: SubtitleFont.builtInOptions[_subtitleFontIndex].fontFamily,
+                              fontFamily: _subtitleFontIndex < _allFonts.length
+                                  ? _allFonts[_subtitleFontIndex].fontFamily
+                                  : null,
                             ),
                           ),
                         ),

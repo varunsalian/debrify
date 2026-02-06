@@ -198,6 +198,7 @@ class SubtitleSettingsService {
     final fontService = SubtitleFontService.instance;
     final fontIndex = await fontService.getFontIndex();
     final fontFamily = await fontService.getFontFamily();
+    final selectedFont = await fontService.getSelectedFont();
 
     return SubtitleSettingsData(
       sizeIndex: _prefs!.getInt(_keySizeIndex) ?? SubtitleSize.defaultIndex,
@@ -206,6 +207,7 @@ class SubtitleSettingsService {
       bgIndex: _prefs!.getInt(_keyBgIndex) ?? SubtitleBackground.defaultIndex,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
+      fontLabel: selectedFont.label,
     );
   }
 
@@ -238,6 +240,7 @@ class SubtitleSettingsData {
   final int bgIndex;
   final int fontIndex;
   final String? fontFamily; // Resolved font family (null = system default)
+  final String fontLabel; // Display label for the font
 
   const SubtitleSettingsData({
     required this.sizeIndex,
@@ -246,6 +249,7 @@ class SubtitleSettingsData {
     required this.bgIndex,
     this.fontIndex = 0,
     this.fontFamily,
+    this.fontLabel = 'Default',
   });
 
   SubtitleSize get size =>
@@ -260,8 +264,11 @@ class SubtitleSettingsData {
   SubtitleBackground get background => SubtitleBackground
       .options[bgIndex.clamp(0, SubtitleBackground.options.length - 1)];
 
-  SubtitleFont get font => SubtitleFont
-      .builtInOptions[fontIndex.clamp(0, SubtitleFont.builtInOptions.length - 1)];
+  SubtitleFont get font => SubtitleFont(
+      id: fontIndex.toString(),
+      label: fontLabel,
+      fontFamily: fontFamily,
+    );
 
   /// Build TextStyle for subtitles
   TextStyle buildTextStyle() {
@@ -282,6 +289,7 @@ class SubtitleSettingsData {
     int? bgIndex,
     int? fontIndex,
     String? fontFamily,
+    String? fontLabel,
   }) {
     return SubtitleSettingsData(
       sizeIndex: sizeIndex ?? this.sizeIndex,
@@ -290,6 +298,7 @@ class SubtitleSettingsData {
       bgIndex: bgIndex ?? this.bgIndex,
       fontIndex: fontIndex ?? this.fontIndex,
       fontFamily: fontFamily ?? this.fontFamily,
+      fontLabel: fontLabel ?? this.fontLabel,
     );
   }
 }

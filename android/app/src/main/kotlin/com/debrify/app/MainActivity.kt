@@ -442,6 +442,15 @@ class MainActivity : FlutterActivity() {
             putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
             putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)
             putExtra("showChannelName", config?.get("showChannelName") as? Boolean ?: false)
+
+            // Custom font from Flutter settings
+            (args["customFontPath"] as? String)?.trim()?.let { fontPath ->
+                putExtra("customFontPath", fontPath)
+                (args["customFontName"] as? String)?.trim()?.let { fontName ->
+                    putExtra("customFontName", fontName)
+                }
+                android.util.Log.d("DebrifyTV", "MainActivity: Passing custom font: $fontPath")
+            }
         }
 
         try {

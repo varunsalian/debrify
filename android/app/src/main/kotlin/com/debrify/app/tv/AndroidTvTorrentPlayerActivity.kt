@@ -324,6 +324,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         currentIndex = payload!!.startIndex.coerceIn(0, payload!!.items.lastIndex)
 
+        // Apply custom font from Flutter settings if provided in payload
+        try {
+            val payloadJson = JSONObject(rawPayload)
+            val customFontPath = payloadJson.optString("customFontPath").takeIf { it.isNotEmpty() }
+            val customFontName = payloadJson.optString("customFontName").takeIf { it.isNotEmpty() }
+            if (customFontPath != null) {
+                android.util.Log.d("AndroidTvPlayer", "Applying custom font from Flutter: $customFontPath")
+                SubtitleFontManager.applyCustomFontIfValid(this, customFontPath, customFontName)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Failed to parse custom font from payload", e)
+        }
+
         bindViews()
         setupPlayer()
         setupSeekbar()

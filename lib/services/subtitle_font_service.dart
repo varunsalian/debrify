@@ -1,24 +1,43 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Built-in font options for subtitles
+/// Represents a subtitle font option (built-in or custom)
 class SubtitleFont {
   final String id;
   final String label;
   final String? fontFamily; // null means system default
+  final bool isCustom;
+  final String? path; // Only for custom fonts
 
   const SubtitleFont({
     required this.id,
     required this.label,
     this.fontFamily,
+    this.isCustom = false,
+    this.path,
   });
 
-  bool get isCustom => id == 'custom';
   bool get isDefault => id == 'default';
 
-  /// 10 bundled fonts + custom option
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'label': label,
+    'fontFamily': fontFamily,
+    'path': path,
+  };
+
+  factory SubtitleFont.fromJson(Map<String, dynamic> json) => SubtitleFont(
+    id: json['id'] as String,
+    label: json['label'] as String,
+    fontFamily: json['fontFamily'] as String?,
+    isCustom: true,
+    path: json['path'] as String?,
+  );
+
+  /// Built-in font options
   static const List<SubtitleFont> builtInOptions = [
     SubtitleFont(id: 'default', label: 'Default', fontFamily: null),
     SubtitleFont(id: 'roboto', label: 'Roboto', fontFamily: 'Roboto'),
@@ -31,18 +50,15 @@ class SubtitleFont {
     SubtitleFont(id: 'sourceserif', label: 'Source Serif', fontFamily: 'SourceSerifPro'),
     SubtitleFont(id: 'firamono', label: 'Fira Mono', fontFamily: 'FiraMono'),
     SubtitleFont(id: 'notosans', label: 'Noto Sans', fontFamily: 'NotoSans'),
-    SubtitleFont(id: 'custom', label: 'Custom Font', fontFamily: null),
   ];
 
   static const int defaultIndex = 0;
 }
 
-/// Service for managing custom subtitle fonts
+/// Service for managing subtitle fonts (built-in + unlimited custom fonts)
 class SubtitleFontService {
-  static const String _keyFontIndex = 'subtitle_font_index';
-  static const String _keyCustomFontPath = 'subtitle_custom_font_path';
-  static const String _keyCustomFontName = 'subtitle_custom_font_name';
-  static const String _customFontFamily = 'CustomSubtitleFont';
+  static const String _keySelectedFontId = 'subtitle_selected_font_id';
+  static const String _keyCustomFonts = 'subtitle_custom_fonts';
   static const String _customFontDir = 'subtitle_fonts';
 
   static SubtitleFontService? _instance;
@@ -54,65 +70,105 @@ class SubtitleFontService {
   SubtitleFontService._();
 
   SharedPreferences? _prefs;
-  bool _customFontLoaded = false;
-  String? _loadedCustomFontPath;
+  final Set<String> _loadedFontFamilies = {};
+  List<SubtitleFont>? _cachedCustomFonts;
 
   Future<void> _ensurePrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
   }
 
-  /// Get current font index
-  Future<int> getFontIndex() async {
+  /// Get all available fonts (built-in + custom)
+  Future<List<SubtitleFont>> getAllFonts() async {
+    final customFonts = await getCustomFonts();
+    return [...SubtitleFont.builtInOptions, ...customFonts];
+  }
+
+  /// Get custom fonts list
+  Future<List<SubtitleFont>> getCustomFonts() async {
+    if (_cachedCustomFonts != null) return _cachedCustomFonts!;
+
     await _ensurePrefs();
-    return _prefs!.getInt(_keyFontIndex) ?? SubtitleFont.defaultIndex;
+    final jsonStr = _prefs!.getString(_keyCustomFonts);
+    if (jsonStr == null || jsonStr.isEmpty) {
+      _cachedCustomFonts = [];
+      return [];
+    }
+
+    try {
+      final List<dynamic> jsonList = jsonDecode(jsonStr);
+      _cachedCustomFonts = jsonList
+          .map((json) => SubtitleFont.fromJson(json as Map<String, dynamic>))
+          .toList();
+      return _cachedCustomFonts!;
+    } catch (e) {
+      _cachedCustomFonts = [];
+      return [];
+    }
   }
 
-  /// Set font index
-  Future<void> setFontIndex(int index) async {
+  /// Save custom fonts list
+  Future<void> _saveCustomFonts(List<SubtitleFont> fonts) async {
     await _ensurePrefs();
-    await _prefs!.setInt(
-        _keyFontIndex, index.clamp(0, SubtitleFont.builtInOptions.length - 1));
+    final jsonList = fonts.map((f) => f.toJson()).toList();
+    await _prefs!.setString(_keyCustomFonts, jsonEncode(jsonList));
+    _cachedCustomFonts = fonts;
   }
 
-  /// Get custom font path (if set)
-  Future<String?> getCustomFontPath() async {
+  /// Get selected font ID
+  Future<String> getSelectedFontId() async {
     await _ensurePrefs();
-    return _prefs!.getString(_keyCustomFontPath);
+    return _prefs!.getString(_keySelectedFontId) ?? 'default';
   }
 
-  /// Get custom font display name
-  Future<String?> getCustomFontName() async {
+  /// Set selected font ID
+  Future<void> setSelectedFontId(String fontId) async {
     await _ensurePrefs();
-    return _prefs!.getString(_keyCustomFontName);
+    await _prefs!.setString(_keySelectedFontId, fontId);
   }
 
-  /// Get current font option
-  Future<SubtitleFont> getCurrentFont() async {
-    final idx = await getFontIndex();
-    return SubtitleFont
-        .builtInOptions[idx.clamp(0, SubtitleFont.builtInOptions.length - 1)];
+  /// Get selected font index in the combined list
+  Future<int> getSelectedFontIndex() async {
+    final allFonts = await getAllFonts();
+    final selectedId = await getSelectedFontId();
+    final index = allFonts.indexWhere((f) => f.id == selectedId);
+    return index >= 0 ? index : 0;
   }
 
-  /// Get the font family to use for subtitles
-  /// Returns null for system default, or the appropriate font family string
+  /// Set selected font by index in the combined list
+  Future<void> setSelectedFontByIndex(int index) async {
+    final allFonts = await getAllFonts();
+    if (index >= 0 && index < allFonts.length) {
+      await setSelectedFontId(allFonts[index].id);
+    }
+  }
+
+  /// Get current selected font
+  Future<SubtitleFont> getSelectedFont() async {
+    final allFonts = await getAllFonts();
+    final selectedId = await getSelectedFontId();
+    return allFonts.firstWhere(
+      (f) => f.id == selectedId,
+      orElse: () => SubtitleFont.builtInOptions.first,
+    );
+  }
+
+  /// Get the font family string for the selected font
+  /// Returns null for system default
   Future<String?> getFontFamily() async {
-    final font = await getCurrentFont();
+    final font = await getSelectedFont();
 
-    if (font.isCustom) {
-      // Check if custom font is loaded
-      if (await _ensureCustomFontLoaded()) {
-        return _customFontFamily;
-      }
-      // Fallback to default if custom font not available
-      return null;
+    if (font.isCustom && font.path != null) {
+      // Ensure custom font is loaded
+      await _ensureCustomFontLoaded(font);
+      return font.fontFamily;
     }
 
     return font.fontFamily;
   }
 
   /// Import a custom font file
-  /// Returns true if successful, false otherwise
-  Future<bool> importCustomFont(String sourcePath, String fileName) async {
+  /// Returns the new font if successful, null otherwise
+  Future<SubtitleFont?> importCustomFont(String sourcePath, String fileName) async {
     try {
       await _ensurePrefs();
 
@@ -128,90 +184,115 @@ class SubtitleFontService {
       // Copy font file to app directory
       final sourceFile = File(sourcePath);
       if (!await sourceFile.exists()) {
-        return false;
+        return null;
       }
 
-      final destPath = '${fontDir.path}/$fileName';
+      // Generate unique ID and font family name
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fontId = 'custom_$timestamp';
+      final fontFamily = 'CustomFont_$timestamp';
+
+      final destPath = '${fontDir.path}/${fontId}_$fileName';
       await sourceFile.copy(destPath);
 
-      // Save font path and name
-      await _prefs!.setString(_keyCustomFontPath, destPath);
-      await _prefs!.setString(_keyCustomFontName, _extractFontName(fileName));
+      // Create font entry
+      final fontName = _extractFontName(fileName);
+      final newFont = SubtitleFont(
+        id: fontId,
+        label: fontName,
+        fontFamily: fontFamily,
+        isCustom: true,
+        path: destPath,
+      );
 
-      // Load the font
-      await _loadCustomFont(destPath);
-
-      // Set font index to custom
-      final customIndex = SubtitleFont.builtInOptions
-          .indexWhere((f) => f.id == 'custom');
-      if (customIndex >= 0) {
-        await setFontIndex(customIndex);
+      // Load the font into Flutter
+      final loaded = await _loadCustomFont(newFont);
+      if (!loaded) {
+        // Clean up if loading failed
+        try {
+          await File(destPath).delete();
+        } catch (_) {}
+        return null;
       }
 
-      return true;
+      // Add to custom fonts list
+      final customFonts = await getCustomFonts();
+      customFonts.add(newFont);
+      await _saveCustomFonts(customFonts);
+
+      // Select the new font
+      await setSelectedFontId(fontId);
+
+      return newFont;
     } catch (e) {
-      return false;
+      return null;
     }
   }
 
-  /// Remove custom font
-  Future<void> removeCustomFont() async {
-    await _ensurePrefs();
+  /// Remove a custom font by ID
+  Future<void> removeCustomFont(String fontId) async {
+    final customFonts = await getCustomFonts();
+    final fontIndex = customFonts.indexWhere((f) => f.id == fontId);
 
-    final fontPath = await getCustomFontPath();
-    if (fontPath != null) {
+    if (fontIndex < 0) return;
+
+    final font = customFonts[fontIndex];
+
+    // Delete the font file
+    if (font.path != null) {
       try {
-        final file = File(fontPath);
+        final file = File(font.path!);
         if (await file.exists()) {
           await file.delete();
         }
       } catch (_) {}
     }
 
-    await _prefs!.remove(_keyCustomFontPath);
-    await _prefs!.remove(_keyCustomFontName);
-    _customFontLoaded = false;
-    _loadedCustomFontPath = null;
+    // Remove from list
+    customFonts.removeAt(fontIndex);
+    await _saveCustomFonts(customFonts);
 
-    // Reset to default font
-    await setFontIndex(SubtitleFont.defaultIndex);
+    // If this was the selected font, reset to default
+    final selectedId = await getSelectedFontId();
+    if (selectedId == fontId) {
+      await setSelectedFontId('default');
+    }
   }
 
-  /// Check if custom font is available
-  Future<bool> hasCustomFont() async {
-    final path = await getCustomFontPath();
-    if (path == null) return false;
-
-    final file = File(path);
-    return await file.exists();
+  /// Check if any custom fonts are available
+  Future<bool> hasCustomFonts() async {
+    final fonts = await getCustomFonts();
+    return fonts.isNotEmpty;
   }
 
-  /// Ensure custom font is loaded into Flutter's font registry
-  Future<bool> _ensureCustomFontLoaded() async {
-    final fontPath = await getCustomFontPath();
-    if (fontPath == null) return false;
+  /// Ensure a custom font is loaded into Flutter's font registry
+  Future<bool> _ensureCustomFontLoaded(SubtitleFont font) async {
+    if (!font.isCustom || font.path == null || font.fontFamily == null) {
+      return false;
+    }
 
-    // Already loaded this font
-    if (_customFontLoaded && _loadedCustomFontPath == fontPath) {
+    // Already loaded
+    if (_loadedFontFamilies.contains(font.fontFamily)) {
       return true;
     }
 
-    return await _loadCustomFont(fontPath);
+    return await _loadCustomFont(font);
   }
 
   /// Load a custom font file into Flutter
-  Future<bool> _loadCustomFont(String fontPath) async {
+  Future<bool> _loadCustomFont(SubtitleFont font) async {
+    if (font.path == null || font.fontFamily == null) return false;
+
     try {
-      final file = File(fontPath);
+      final file = File(font.path!);
       if (!await file.exists()) return false;
 
       final fontData = await file.readAsBytes();
-      final fontLoader = FontLoader(_customFontFamily);
+      final fontLoader = FontLoader(font.fontFamily!);
       fontLoader.addFont(Future.value(ByteData.view(fontData.buffer)));
       await fontLoader.load();
 
-      _customFontLoaded = true;
-      _loadedCustomFontPath = fontPath;
+      _loadedFontFamilies.add(font.fontFamily!);
       return true;
     } catch (e) {
       return false;
@@ -237,65 +318,40 @@ class SubtitleFontService {
     }).join(' ');
   }
 
-  /// Cycle to next font option
-  Future<int> cycleFontUp() async {
-    final current = await getFontIndex();
-    final options = await _getAvailableOptions();
-    final currentInOptions = options.indexWhere(
-        (i) => i == current);
-    final nextIndex = (currentInOptions + 1) % options.length;
-    await setFontIndex(options[nextIndex]);
-    return options[nextIndex];
-  }
-
-  /// Cycle to previous font option
-  Future<int> cycleFontDown() async {
-    final current = await getFontIndex();
-    final options = await _getAvailableOptions();
-    final currentInOptions = options.indexWhere(
-        (i) => i == current);
-    final prevIndex = currentInOptions == 0
-        ? options.length - 1
-        : currentInOptions - 1;
-    await setFontIndex(options[prevIndex]);
-    return options[prevIndex];
-  }
-
-  /// Get available font option indices (excludes custom if not set)
-  Future<List<int>> _getAvailableOptions() async {
-    final hasCustom = await hasCustomFont();
-    final options = <int>[];
-
-    for (var i = 0; i < SubtitleFont.builtInOptions.length; i++) {
-      final font = SubtitleFont.builtInOptions[i];
-      if (font.isCustom && !hasCustom) continue;
-      options.add(i);
-    }
-
-    return options;
-  }
-
-  /// Get display label for current font
-  Future<String> getCurrentFontLabel() async {
-    final font = await getCurrentFont();
-    if (font.isCustom) {
-      final customName = await getCustomFontName();
-      return customName ?? 'Custom Font';
-    }
-    return font.label;
-  }
-
-  /// Reset font to default
-  Future<void> resetToDefault() async {
-    await setFontIndex(SubtitleFont.defaultIndex);
-  }
-
-  /// Initialize - call on app startup to preload custom font if set
+  /// Initialize - call on app startup to preload selected custom font
   Future<void> initialize() async {
     await _ensurePrefs();
-    final font = await getCurrentFont();
+    final font = await getSelectedFont();
     if (font.isCustom) {
-      await _ensureCustomFontLoaded();
+      await _ensureCustomFontLoaded(font);
     }
+  }
+
+  /// Reset to default font
+  Future<void> resetToDefault() async {
+    await setSelectedFontId('default');
+  }
+
+  // Legacy compatibility methods for settings service
+  Future<int> getFontIndex() => getSelectedFontIndex();
+
+  Future<void> setFontIndex(int index) => setSelectedFontByIndex(index);
+
+  /// Cycle to previous font (wraps around)
+  Future<int> cycleFontDown() async {
+    final allFonts = await getAllFonts();
+    final currentIndex = await getSelectedFontIndex();
+    final newIndex = currentIndex <= 0 ? allFonts.length - 1 : currentIndex - 1;
+    await setSelectedFontByIndex(newIndex);
+    return newIndex;
+  }
+
+  /// Cycle to next font (wraps around)
+  Future<int> cycleFontUp() async {
+    final allFonts = await getAllFonts();
+    final currentIndex = await getSelectedFontIndex();
+    final newIndex = currentIndex >= allFonts.length - 1 ? 0 : currentIndex + 1;
+    await setSelectedFontByIndex(newIndex);
+    return newIndex;
   }
 }

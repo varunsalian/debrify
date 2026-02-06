@@ -253,4 +253,76 @@ object SubtitleFontManager {
         cachedCustomFontPath = null
         cachedBundledTypefaces.clear()
     }
+
+    /**
+     * Set custom font from external path (e.g., from Flutter).
+     * This stores the path in SharedPreferences so it persists for future use.
+     */
+    @JvmStatic
+    fun setCustomFontFromPath(context: Context, fontPath: String?, fontName: String? = null) {
+        if (fontPath == null) {
+            return
+        }
+
+        val file = File(fontPath)
+        if (!file.exists()) {
+            android.util.Log.w("SubtitleFontManager", "Custom font path does not exist: $fontPath")
+            return
+        }
+
+        // Store the custom font path and name
+        val displayName = fontName ?: extractFontName(fontPath)
+        getPrefs(context).edit()
+            .putString(KEY_CUSTOM_FONT_PATH, fontPath)
+            .putString(KEY_CUSTOM_FONT_NAME, displayName)
+            .apply()
+
+        // Clear cache to force reload
+        cachedCustomTypeface = null
+        cachedCustomFontPath = null
+
+        android.util.Log.d("SubtitleFontManager", "Set custom font: $displayName from $fontPath")
+    }
+
+    /**
+     * Extract a display name from font file path.
+     */
+    private fun extractFontName(fontPath: String): String {
+        val fileName = File(fontPath).nameWithoutExtension
+        // Remove common prefixes like "custom_123456789_"
+        val cleanName = fileName.replace(Regex("^custom_\\d+_"), "")
+        // Replace separators with spaces and capitalize words
+        return cleanName
+            .replace(Regex("[-_]"), " ")
+            .split(" ")
+            .joinToString(" ") { word ->
+                word.replaceFirstChar { it.uppercase() }
+            }
+    }
+
+    /**
+     * Check if a custom font path is valid and set it if so.
+     * Returns true if the font was set successfully.
+     */
+    @JvmStatic
+    fun applyCustomFontIfValid(context: Context, fontPath: String?, fontName: String? = null): Boolean {
+        if (fontPath.isNullOrEmpty()) {
+            return false
+        }
+
+        val file = File(fontPath)
+        if (!file.exists()) {
+            return false
+        }
+
+        setCustomFontFromPath(context, fontPath, fontName)
+
+        // Also set the font index to "custom" (last option)
+        val customIndex = FONT_OPTIONS.indexOfFirst { it.isCustom }
+        if (customIndex >= 0) {
+            setFontIndex(context, customIndex)
+        }
+
+        return true
+    }
 }

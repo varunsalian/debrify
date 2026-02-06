@@ -700,18 +700,20 @@ class _StyleTab extends StatelessWidget {
             value: subtitleStyle.font.label,
             onDecrease: () async {
               final newIndex = await SubtitleFontService.instance.cycleFontDown();
-              final fontFamily = await SubtitleFontService.instance.getFontFamily();
+              final font = await SubtitleFontService.instance.getSelectedFont();
               onStyleChanged(subtitleStyle.copyWith(
                 fontIndex: newIndex,
-                fontFamily: fontFamily,
+                fontFamily: font.fontFamily,
+                fontLabel: font.label,
               ));
             },
             onIncrease: () async {
               final newIndex = await SubtitleFontService.instance.cycleFontUp();
-              final fontFamily = await SubtitleFontService.instance.getFontFamily();
+              final font = await SubtitleFontService.instance.getSelectedFont();
               onStyleChanged(subtitleStyle.copyWith(
                 fontIndex: newIndex,
-                fontFamily: fontFamily,
+                fontFamily: font.fontFamily,
+                fontLabel: font.label,
               ));
             },
           ),

@@ -481,6 +481,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Initialize Stremio subtitle service
         stremioSubtitleService = new StremioSubtitleService(this);
 
+        // Apply custom font from Flutter settings if provided
+        String customFontPath = intent.getStringExtra("customFontPath");
+        String customFontName = intent.getStringExtra("customFontName");
+        if (customFontPath != null && !customFontPath.isEmpty()) {
+            android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Applying custom font from Flutter: " + customFontPath);
+            SubtitleFontManager.applyCustomFontIfValid(this, customFontPath, customFontName);
+        }
+
         initialisePlayer();
         applyUiPreferences(initialTitle);
         setupControllerUi();

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
 import 'movie_metadata_service.dart';
+import 'subtitle_font_service.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
@@ -56,6 +57,22 @@ class AndroidTvPlayerBridge {
   // Deprecated: use _playbackFinishedCallback
   static PlaybackFinishedCallback? get _torboxFinishedCallback => _playbackFinishedCallback;
   static set _torboxFinishedCallback(PlaybackFinishedCallback? callback) => _playbackFinishedCallback = callback;
+
+  /// Get custom font info for Android TV player
+  static Future<Map<String, String?>> _getCustomFontInfo() async {
+    try {
+      final font = await SubtitleFontService.instance.getSelectedFont();
+      if (font.isCustom && font.path != null) {
+        return {
+          'customFontPath': font.path,
+          'customFontName': font.label,
+        };
+      }
+    } catch (e) {
+      debugPrint('AndroidTvPlayerBridge: Error getting custom font info: $e');
+    }
+    return {};
+  }
 
   static void _ensureInitialized() {
     if (_handlerInitialized) {
@@ -310,6 +327,9 @@ class AndroidTvPlayerBridge {
           ?.map((entry) => Map<String, dynamic>.from(entry))
           .toList(growable: false);
 
+      // Get custom font info for Android TV player
+      final fontInfo = await _getCustomFontInfo();
+
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorboxPlayback',
         {
@@ -328,6 +348,7 @@ class AndroidTvPlayerBridge {
             'showVideoTitle': showVideoTitle,
             'showChannelName': showChannelName,
           },
+          ...fontInfo,
         },
       );
       if (launched == true) {
@@ -386,7 +407,10 @@ class AndroidTvPlayerBridge {
       debugPrint('AndroidTvPlayerBridge: URL=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...');
       debugPrint('AndroidTvPlayerBridge: title="$title"');
       debugPrint('AndroidTvPlayerBridge: provider=real_debrid');
-      
+
+      // Get custom font info for Android TV player
+      final fontInfo = await _getCustomFontInfo();
+
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchRealDebridPlayback',
         {
@@ -407,6 +431,7 @@ class AndroidTvPlayerBridge {
             'showVideoTitle': showVideoTitle,
             'showChannelName': showChannelName,
           },
+          ...fontInfo,
         },
       );
       
@@ -472,10 +497,20 @@ class AndroidTvPlayerBridge {
     _pendingImdbId = null;
 
     try {
+      // Get custom font info for Android TV player
+      final fontInfo = await _getCustomFontInfo();
+
+      // Add font info to payload
+      final payloadWithFont = Map<String, dynamic>.from(payload);
+      if (fontInfo['customFontPath'] != null) {
+        payloadWithFont['customFontPath'] = fontInfo['customFontPath'];
+        payloadWithFont['customFontName'] = fontInfo['customFontName'];
+      }
+
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorrentPlayback',
         {
-          'payload': payload,
+          'payload': payloadWithFont,
         },
       );
       if (launched == true) {
