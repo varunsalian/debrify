@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
@@ -304,6 +306,350 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
         Icons.live_tv,
         size: 32,
         color: colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// Grid card widget for IPTV channels with glass morphism effect
+class IptvChannelGridCard extends StatefulWidget {
+  final IptvChannel channel;
+  final VoidCallback onTap;
+  final FocusNode? focusNode;
+  final bool isFavorited;
+  final ValueChanged<bool>? onFavoriteToggle;
+  final int gridColumns;
+  final int index;
+  final int totalItems;
+  final VoidCallback? onNavigateUp;
+  final VoidCallback? onNavigateDown;
+  final VoidCallback? onNavigateLeft;
+  final VoidCallback? onNavigateRight;
+
+  const IptvChannelGridCard({
+    super.key,
+    required this.channel,
+    required this.onTap,
+    this.focusNode,
+    this.isFavorited = false,
+    this.onFavoriteToggle,
+    this.gridColumns = 4,
+    this.index = 0,
+    this.totalItems = 0,
+    this.onNavigateUp,
+    this.onNavigateDown,
+    this.onNavigateLeft,
+    this.onNavigateRight,
+  });
+
+  @override
+  State<IptvChannelGridCard> createState() => _IptvChannelGridCardState();
+}
+
+class _IptvChannelGridCardState extends State<IptvChannelGridCard> {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    if (widget.focusNode == null) {
+      _focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    setState(() => _isFocused = _focusNode.hasFocus);
+    if (_isFocused) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Grid navigation
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onNavigateUp?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      widget.onNavigateDown?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      final col = widget.index % widget.gridColumns;
+      if (col > 0) {
+        widget.onNavigateLeft?.call();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      final col = widget.index % widget.gridColumns;
+      if (col < widget.gridColumns - 1 && widget.index + 1 < widget.totalItems) {
+        widget.onNavigateRight?.call();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // Select/Enter - play channel
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final channel = widget.channel;
+    final isHighlighted = _isFocused || _isHovered;
+
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            transform: isHighlighted
+                ? (Matrix4.identity()..scale(1.05))
+                : Matrix4.identity(),
+            transformAlignment: Alignment.center,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: isHighlighted ? 0.15 : 0.08),
+                        Colors.white.withValues(alpha: isHighlighted ? 0.08 : 0.03),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isHighlighted
+                          ? const Color(0xFFEC4899).withValues(alpha: 0.6)
+                          : Colors.white.withValues(alpha: 0.1),
+                      width: isHighlighted ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      if (isHighlighted)
+                        BoxShadow(
+                          color: const Color(0xFFEC4899).withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Logo area
+                      Expanded(
+                        flex: 3,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Channel logo
+                            ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(13),
+                              ),
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                padding: const EdgeInsets.all(12),
+                                child: channel.logoUrl != null && channel.logoUrl!.isNotEmpty
+                                    ? Image.network(
+                                        channel.logoUrl!,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, __, ___) => _buildDefaultIcon(),
+                                      )
+                                    : _buildDefaultIcon(),
+                              ),
+                            ),
+                            // Live badge
+                            if (channel.isLive)
+                              Positioned(
+                                top: 6,
+                                left: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(6),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.red.withValues(alpha: 0.5),
+                                        blurRadius: 8,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.circle,
+                                        size: 6,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'LIVE',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Favorite badge
+                            if (widget.isFavorited)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(
+                                    Icons.star_rounded,
+                                    size: 14,
+                                    color: Color(0xFFFFD700),
+                                  ),
+                                ),
+                              ),
+                            // Play overlay on focus
+                            if (isHighlighted)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(13),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEC4899),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFFEC4899)
+                                                .withValues(alpha: 0.5),
+                                            blurRadius: 12,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Channel info
+                      Expanded(
+                        flex: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Channel name
+                              Text(
+                                channel.name,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (channel.group != null && channel.group!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  channel.group!,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    fontSize: 9,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefaultIcon() {
+    return Center(
+      child: Icon(
+        Icons.live_tv_rounded,
+        size: 36,
+        color: Colors.white.withValues(alpha: 0.4),
       ),
     );
   }

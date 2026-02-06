@@ -10160,32 +10160,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               policy: OrderedTraversalPolicy(),
               child: Column(
                 children: [
-                  // Search Box
-              Container(
-                margin: const EdgeInsets.all(8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(
-                        0xFF1E40AF,
-                      ).withValues(alpha: 0.9), // Blue 800
-                      const Color(
-                        0xFF1E3A8A,
-                      ).withValues(alpha: 0.8), // Blue 900
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
-                      blurRadius: 25,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
-                ),
+                  // Search Box - Glass morphism style
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        // Glass gradient: translucent with hint of blue
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                            const Color(0xFF1E40AF).withValues(alpha: 0.15),
+                            const Color(0xFF1E3A8A).withValues(alpha: 0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        // Subtle glass border
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          // Soft outer glow
+                          BoxShadow(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                            blurRadius: 30,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 8),
+                          ),
+                          // Subtle bottom shadow
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -10342,6 +10358,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ],
                     ], // end else (non-browse mode)
                   ],
+                ),
+                    ),
+                  ),
                 ),
               ),
 
@@ -13185,27 +13204,44 @@ class _SearchTextFieldState extends State<_SearchTextField> {
 
   @override
   Widget build(BuildContext context) {
-    // Use regular Container instead of AnimatedContainer to avoid animation overhead on every rebuild
-    // Focus animation is handled by the border property changing
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: _isFocused
-            ? Border.all(
-                color: const Color(0xFF6366F1),
-                width: 1.6,
-              )
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(
-              alpha: _isFocused ? 0.45 : 0.3,
+    // Glass morphism search field
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            // Glass gradient background
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: _isFocused ? 0.15 : 0.1),
+                Colors.white.withValues(alpha: _isFocused ? 0.08 : 0.05),
+              ],
             ),
-            blurRadius: _isFocused ? 16 : 10,
-            offset: const Offset(0, 4),
+            borderRadius: BorderRadius.circular(14),
+            // Glass border
+            border: Border.all(
+              color: _isFocused
+                  ? const Color(0xFF6366F1).withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.15),
+              width: _isFocused ? 1.5 : 1,
+            ),
+            boxShadow: [
+              if (_isFocused)
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
       // Key events are handled by focusNode.onKeyEvent set in initState
       child: Tooltip(
         message: widget.enabled ? '' : (widget.disabledTooltip ?? 'Search not available'),
@@ -13312,6 +13348,8 @@ class _SearchTextFieldState extends State<_SearchTextField> {
             ),
           ),
           onChanged: widget.enabled ? widget.onChanged : null,
+        ),
+      ),
         ),
       ),
     );

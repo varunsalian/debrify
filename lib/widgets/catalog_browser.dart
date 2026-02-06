@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -89,6 +90,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   final FocusNode _genreDropdownFocusNode = FocusNode(debugLabel: 'genre_dropdown');
   List<FocusNode> _contentFocusNodes = [];
   int _focusedContentIndex = -1; // Track last focused content item for sidebar navigation
+  int _gridColumns = 3; // Track grid columns for navigation
 
   // Focus state trackers for visual indicators
   final ValueNotifier<bool> _providerDropdownFocused = ValueNotifier(false);
@@ -516,28 +518,55 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   KeyEventResult _handleContentItemKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // List navigation (up/down only)
+    // Grid navigation: up/down moves by row, left/right moves within row
+    final columns = _gridColumns;
+    final row = index ~/ columns;
+    final col = index % columns;
+
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index == 0) {
-        // Move to provider dropdown (first dropdown in the row)
+      if (row == 0) {
+        // First row: move to provider dropdown
         _providerDropdownFocusNode.requestFocus();
-        return KeyEventResult.handled;
+      } else {
+        // Move up one row
+        final newIndex = (row - 1) * columns + col;
+        if (newIndex >= 0 && newIndex < _contentFocusNodes.length) {
+          _contentFocusNodes[newIndex].requestFocus();
+        }
       }
-      if (index > 0 && index - 1 < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[index - 1]);
-        return KeyEventResult.handled;
-      }
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index + 1 < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[index + 1]);
-        return KeyEventResult.handled;
+      final newIndex = (row + 1) * columns + col;
+      if (newIndex < _content.length) {
+        _contentFocusNodes[newIndex].requestFocus();
       }
+      return KeyEventResult.handled;
     }
 
-    // Select/Enter is now handled within the card widget for button selection
-    // This handler only handles navigation
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (col > 0) {
+        _contentFocusNodes[index - 1].requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (col < columns - 1 && index + 1 < _content.length) {
+        _contentFocusNodes[index + 1].requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // Select/Enter triggers the card action
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      _onItemTap(_content[index]);
+      return KeyEventResult.handled;
+    }
 
     return KeyEventResult.ignored;
   }
@@ -959,34 +988,70 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _content.length + (_hasMoreContent ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= _content.length) {
-          // Loading indicator at end
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate columns based on width
+        final width = constraints.maxWidth;
+        final columns = width > 900 ? 5 : width > 700 ? 4 : width > 500 ? 3 : 2;
+        // Update column count for navigation
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_gridColumns != columns) {
+            _gridColumns = columns;
+          }
+        });
 
-        final item = _content[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: _CatalogItemCard(
-            item: item,
-            focusNode: index < _contentFocusNodes.length
-                ? _contentFocusNodes[index]
-                : null,
-            onQuickPlay: () => _onQuickPlay(item),
-            onSources: () => _onItemTap(item),
-            onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
-                _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
-            showQuickPlay: widget.showQuickPlay,
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            // Trigger pagination when near the bottom
+            if (notification is ScrollUpdateNotification) {
+              final metrics = notification.metrics;
+              if (metrics.pixels >= metrics.maxScrollExtent - 300) {
+                _loadMoreContent();
+              }
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.55,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = _content[index];
+                      return _CatalogPosterCard(
+                        item: item,
+                        focusNode: index < _contentFocusNodes.length
+                            ? _contentFocusNodes[index]
+                            : null,
+                        onTap: () => _onItemTap(item),
+                        onQuickPlay: () => _onQuickPlay(item),
+                        onKeyEvent: (event) => _handleContentItemKey(index, event),
+                        showQuickPlay: widget.showQuickPlay,
+                      );
+                    },
+                    childCount: _content.length,
+                  ),
+                ),
+              ),
+              // Loading indicator
+              if (_hasMoreContent)
+                const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -1446,5 +1511,330 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       default:
         return Icons.folder_rounded;
     }
+  }
+}
+
+/// Poster-focused grid card with glass morphism effect
+class _CatalogPosterCard extends StatefulWidget {
+  final StremioMeta item;
+  final FocusNode? focusNode;
+  final VoidCallback onTap;
+  final VoidCallback onQuickPlay;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+  final bool showQuickPlay;
+
+  const _CatalogPosterCard({
+    required this.item,
+    this.focusNode,
+    required this.onTap,
+    required this.onQuickPlay,
+    required this.onKeyEvent,
+    this.showQuickPlay = true,
+  });
+
+  @override
+  State<_CatalogPosterCard> createState() => _CatalogPosterCardState();
+}
+
+class _CatalogPosterCardState extends State<_CatalogPosterCard> {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    if (widget.focusNode == null) {
+      _focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    setState(() => _isFocused = _focusNode.hasFocus);
+    if (_isFocused) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 200),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isHighlighted = _isFocused || _isHovered;
+
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: (node, event) => widget.onKeyEvent(event),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            transform: isHighlighted
+                ? (Matrix4.identity()..scale(1.03))
+                : Matrix4.identity(),
+            transformAlignment: Alignment.center,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: isHighlighted ? 0.12 : 0.08),
+                        Colors.white.withValues(alpha: isHighlighted ? 0.06 : 0.03),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isHighlighted
+                          ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                          : Colors.white.withValues(alpha: 0.1),
+                      width: isHighlighted ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      if (isHighlighted)
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Poster with overlays
+                      Expanded(
+                        flex: 4,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(15),
+                              ),
+                              child: _buildPoster(),
+                            ),
+                            // Rating badge
+                            if (widget.item.imdbRating != null)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.amber.withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 14,
+                                        color: Colors.amber,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        widget.item.imdbRating!.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Type badge
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: _buildTypeBadge(),
+                            ),
+                            // Quick play overlay on focus
+                            if (isHighlighted && widget.showQuickPlay)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.7),
+                                      ],
+                                    ),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(15),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: GestureDetector(
+                                      onTap: widget.onQuickPlay,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF10B981)
+                                                  .withValues(alpha: 0.5),
+                                              blurRadius: 16,
+                                              spreadRadius: 2,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Title and year
+                      Expanded(
+                        flex: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                widget.item.name,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (widget.item.year != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.item.year!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoster() {
+    if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: widget.item.poster!,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[900],
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white54,
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildPlaceholder(),
+      );
+    }
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey[900],
+      child: Center(
+        child: Icon(
+          widget.item.type == 'movie' ? Icons.movie_rounded : Icons.tv_rounded,
+          size: 40,
+          color: Colors.white24,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeBadge() {
+    final isMovie = widget.item.type == 'movie';
+    final color = isMovie ? const Color(0xFF3B82F6) : const Color(0xFFA855F7);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.4),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Text(
+        isMovie ? 'Movie' : 'Series',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
   }
 }

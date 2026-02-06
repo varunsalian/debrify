@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,6 +81,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   late List<FocusNode> _resultFocusNodes;
   late List<GlobalKey> _resultCardKeys; // Keys for scroll-into-view
   int _focusedIndex = -1; // -1 = keyword card focused, 0+ = result index
+  int _gridColumns = 3; // Track grid columns for navigation
 
   @override
   void initState() {
@@ -358,25 +360,55 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   KeyEventResult _handleResultKeyEvent(FocusNode node, KeyEvent event, int index, {bool? isQuickPlayFocused}) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Select/Enter is now handled within the card widget for button selection
+    // Grid navigation: up/down moves by row, left/right moves within row
+    final columns = _gridColumns;
+    final row = index ~/ columns;
+    final col = index % columns;
 
-    // Arrow navigation in list (up/down only)
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index == 0) {
-        // First item: go to keyword card
+      if (row == 0) {
+        // First row: go to keyword card
         _keywordSearchFocusNode.requestFocus();
       } else {
-        // Move up one item
-        _resultFocusNodes[index - 1].requestFocus();
+        // Move up one row
+        final newIndex = (row - 1) * columns + col;
+        if (newIndex >= 0 && newIndex < _resultFocusNodes.length) {
+          _resultFocusNodes[newIndex].requestFocus();
+        }
       }
       return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _results.length - 1) {
+      final newIndex = (row + 1) * columns + col;
+      if (newIndex < _results.length) {
+        _resultFocusNodes[newIndex].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (col > 0) {
+        _resultFocusNodes[index - 1].requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (col < columns - 1 && index + 1 < _results.length) {
         _resultFocusNodes[index + 1].requestFocus();
         return KeyEventResult.handled;
       }
+      return KeyEventResult.ignored;
+    }
+
+    // Select/Enter triggers the card action
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      // Default action is browse/sources
+      _onItemSelected(_results[index]);
+      return KeyEventResult.handled;
     }
 
     return KeyEventResult.ignored;
@@ -448,18 +480,27 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             ),
           ),
 
-        // Loading state
+        // Loading state - shimmer grid
         if (_isLoading)
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _ShimmerCard(),
-                ),
-                childCount: 6,
-              ),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.crossAxisExtent;
+                final columns = width > 900 ? 5 : width > 700 ? 4 : width > 500 ? 3 : 2;
+                return SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.55,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _ShimmerPosterCard(),
+                    childCount: 12,
+                  ),
+                );
+              },
             ),
           ),
 
@@ -487,44 +528,60 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             ),
           ),
 
-        // Results list
+        // Results grid
         if (!_isLoading && _error == null && _results.isNotEmpty)
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = _results[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: KeyedSubtree(
-                      key: _resultCardKeys[index],
-                      child: _CatalogResultCard(
-                        item: item,
-                        focusNode: _resultFocusNodes[index],
-                        isFocused: _focusedIndex == index,
-                        onQuickPlay: () => _onQuickPlay(item),
-                        onSources: () => _onItemSelected(item),
-                        onFocusChange: (focused) {
-                          setState(() {
-                            _focusedIndex = focused ? index : _focusedIndex;
-                          });
-                          // Scroll into view when focused
-                          if (focused) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _scrollResultIntoView(index);
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                // Calculate columns based on width
+                final width = constraints.crossAxisExtent;
+                final columns = width > 900 ? 5 : width > 700 ? 4 : width > 500 ? 3 : 2;
+                // Update column count for navigation
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_gridColumns != columns) {
+                    _gridColumns = columns;
+                  }
+                });
+
+                return SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.55, // Taller cards for posters
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = _results[index];
+                      return KeyedSubtree(
+                        key: _resultCardKeys[index],
+                        child: _PosterGridCard(
+                          item: item,
+                          focusNode: _resultFocusNodes[index],
+                          isFocused: _focusedIndex == index,
+                          onTap: () => _onItemSelected(item),
+                          onQuickPlay: () => _onQuickPlay(item),
+                          onFocusChange: (focused) {
+                            setState(() {
+                              _focusedIndex = focused ? index : _focusedIndex;
                             });
-                          }
-                        },
-                        onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
-                            _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
-                        showQuickPlay: widget.showQuickPlay,
-                      ),
-                    ),
-                  );
-                },
-                childCount: _results.length,
-              ),
+                            if (focused) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _scrollResultIntoView(index);
+                              });
+                            }
+                          },
+                          onKeyEvent: (node, event) =>
+                              _handleResultKeyEvent(node, event, index),
+                          showQuickPlay: widget.showQuickPlay,
+                        ),
+                      );
+                    },
+                    childCount: _results.length,
+                  ),
+                );
+              },
             ),
           ),
 
@@ -1077,7 +1134,384 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
   }
 }
 
-/// Horizontal shimmer loading card
+/// Poster-focused grid card with glass morphism effect
+class _PosterGridCard extends StatefulWidget {
+  final StremioMeta item;
+  final FocusNode focusNode;
+  final bool isFocused;
+  final VoidCallback onTap;
+  final VoidCallback onQuickPlay;
+  final ValueChanged<bool> onFocusChange;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
+  final bool showQuickPlay;
+
+  const _PosterGridCard({
+    required this.item,
+    required this.focusNode,
+    required this.isFocused,
+    required this.onTap,
+    required this.onQuickPlay,
+    required this.onFocusChange,
+    required this.onKeyEvent,
+    this.showQuickPlay = true,
+  });
+
+  @override
+  State<_PosterGridCard> createState() => _PosterGridCardState();
+}
+
+class _PosterGridCardState extends State<_PosterGridCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isHighlighted = widget.isFocused || _isHovered;
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: widget.onFocusChange,
+      onKeyEvent: widget.onKeyEvent,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            transform: isHighlighted
+                ? (Matrix4.identity()..scale(1.03))
+                : Matrix4.identity(),
+            transformAlignment: Alignment.center,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    // Glass gradient background
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: isHighlighted ? 0.12 : 0.08),
+                        Colors.white.withValues(alpha: isHighlighted ? 0.06 : 0.03),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isHighlighted
+                          ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                          : Colors.white.withValues(alpha: 0.1),
+                      width: isHighlighted ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      if (isHighlighted)
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Poster image with overlays
+                      Expanded(
+                        flex: 4,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Poster
+                            ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(15),
+                              ),
+                              child: _buildPoster(),
+                            ),
+                            // Rating badge (top right)
+                            if (widget.item.imdbRating != null)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.7),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.amber.withValues(alpha: 0.5),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 14,
+                                        color: Colors.amber,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${widget.item.imdbRating}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Type badge (top left)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: _buildTypeBadge(),
+                            ),
+                            // Quick play button overlay (shows on hover/focus)
+                            if (isHighlighted && widget.showQuickPlay)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.7),
+                                      ],
+                                    ),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(15),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: GestureDetector(
+                                      onTap: widget.onQuickPlay,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF10B981)
+                                                  .withValues(alpha: 0.5),
+                                              blurRadius: 16,
+                                              spreadRadius: 2,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.play_arrow_rounded,
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Title and year section
+                      Expanded(
+                        flex: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Title
+                              Text(
+                                widget.item.name,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (widget.item.year != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.item.year!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoster() {
+    if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: widget.item.poster!,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: Colors.grey[900],
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white54,
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildPlaceholder(),
+      );
+    }
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey[900],
+      child: Center(
+        child: Icon(
+          widget.item.type == 'movie' ? Icons.movie_rounded : Icons.tv_rounded,
+          size: 40,
+          color: Colors.white24,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeBadge() {
+    final isMovie = widget.item.type == 'movie';
+    final color = isMovie ? const Color(0xFF3B82F6) : const Color(0xFFA855F7);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.4),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Text(
+        isMovie ? 'Movie' : 'Series',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+/// Shimmer poster card for loading state
+class _ShimmerPosterCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.08),
+              Colors.white.withValues(alpha: 0.03),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Poster placeholder
+            Expanded(
+              flex: 4,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(15),
+                  ),
+                ),
+              ),
+            ),
+            // Text placeholder
+            Expanded(
+              flex: 1,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 10,
+                      width: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal shimmer loading card (legacy)
 class _ShimmerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

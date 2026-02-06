@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -183,9 +184,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
     return '${(diff.inDays / 365).floor()}y ago';
   }
 
-  // Dark theme colors
-  static const _cardBg = Color(0xFF1E293B); // Slate 800
-  static const _cardBgHover = Color(0xFF334155); // Slate 700
+  // Glass morphism colors
   static const _textPrimary = Colors.white;
   static const _textSecondary = Color(0xFF94A3B8); // Slate 400
 
@@ -197,29 +196,56 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       child: GestureDetector(
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: _isFocused ? _cardBgHover : _cardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused ? _qualityColor : Colors.transparent,
-              width: _isFocused ? 2 : 1,
-            ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: _qualityColor.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(11),
-            child: _buildMainRow(),
+            borderRadius: BorderRadius.circular(14),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  // Glass effect: translucent background
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _isFocused
+                        ? [
+                            Colors.white.withValues(alpha: 0.15),
+                            Colors.white.withValues(alpha: 0.08),
+                          ]
+                        : [
+                            Colors.white.withValues(alpha: 0.08),
+                            Colors.white.withValues(alpha: 0.04),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  // Subtle glass border
+                  border: Border.all(
+                    color: _isFocused
+                        ? _qualityColor.withValues(alpha: 0.6)
+                        : Colors.white.withValues(alpha: 0.1),
+                    width: _isFocused ? 1.5 : 1,
+                  ),
+                  // Soft outer glow on focus
+                  boxShadow: [
+                    if (_isFocused)
+                      BoxShadow(
+                        color: _qualityColor.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    // Subtle inner shadow for depth
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: _buildMainRow(),
+              ),
+            ),
           ),
         ),
       ),
@@ -230,15 +256,22 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
     return IntrinsicHeight(
       child: Row(
         children: [
-          // Quality accent bar
+          // Quality accent bar with glow
           Container(
             width: 4,
             decoration: BoxDecoration(
               color: _qualityColor,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
+                topLeft: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: _qualityColor.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
           ),
 
