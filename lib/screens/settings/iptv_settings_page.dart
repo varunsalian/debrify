@@ -1265,14 +1265,30 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
 
   void _onStarFocusChange() {
     if (mounted) {
-      setState(() => _starFocused = widget.starFocusNode?.hasFocus ?? false);
+      final hasFocus = widget.starFocusNode?.hasFocus ?? false;
+      setState(() => _starFocused = hasFocus);
+      if (hasFocus) _ensureVisible();
     }
   }
 
   void _onDeleteFocusChange() {
     if (mounted) {
-      setState(() => _deleteFocused = widget.deleteFocusNode?.hasFocus ?? false);
+      final hasFocus = widget.deleteFocusNode?.hasFocus ?? false;
+      setState(() => _deleteFocused = hasFocus);
+      if (hasFocus) _ensureVisible();
     }
+  }
+
+  void _ensureVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && context.mounted) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+        );
+      }
+    });
   }
 
   @override

@@ -353,27 +353,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   ),
                 ),
               ),
-              const Spacer(),
-              // Refresh button with hover effect
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _loadFavorites,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.refresh_rounded,
-                      size: 16,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
