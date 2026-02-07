@@ -16,7 +16,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String? _selectedAddonUrl;
   String? _selectedCatalogId;
   bool _hideProviderCards = false;
-  String _favoritesTapAction = 'play';
+  String _favoritesTapAction = 'choose';
   List<StremioAddon> _addons = [];
 
   @override
@@ -372,7 +372,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     prefixIcon: Icon(
                       _favoritesTapAction == 'view_files'
                           ? Icons.folder_open_rounded
-                          : Icons.play_arrow_rounded,
+                          : _favoritesTapAction == 'choose'
+                              ? Icons.touch_app_rounded
+                              : Icons.play_arrow_rounded,
                       color: theme.colorScheme.primary,
                     ),
                     border: OutlineInputBorder(
@@ -382,6 +384,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                   ),
                   items: const [
+                    DropdownMenuItem(value: 'choose', child: Text('Let me Choose')),
                     DropdownMenuItem(value: 'play', child: Text('Play')),
                     DropdownMenuItem(value: 'view_files', child: Text('View Files')),
                   ],

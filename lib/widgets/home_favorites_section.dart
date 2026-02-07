@@ -186,8 +186,58 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
-    // Check if user prefers to view files instead of playing
-    final tapAction = await StorageService.getHomeFavoritesTapAction();
+    // Check user's preferred tap action
+    String tapAction = await StorageService.getHomeFavoritesTapAction();
+    if (tapAction == 'choose') {
+      if (!mounted) return;
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'play'),
+              child: const Row(
+                children: [
+                  Icon(Icons.play_arrow_rounded, size: 20),
+                  SizedBox(width: 12),
+                  Text('Play'),
+                ],
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'view_files'),
+              child: const Row(
+                children: [
+                  Icon(Icons.folder_open_rounded, size: 20),
+                  SizedBox(width: 12),
+                  Text('View Files'),
+                ],
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'remove'),
+              child: const Row(
+                children: [
+                  Icon(Icons.favorite_border_rounded, size: 20),
+                  SizedBox(width: 12),
+                  Text('Remove from Favorites'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      if (choice == 'remove') {
+        _confirmRemoveFavorite(item);
+        return;
+      }
+      tapAction = choice;
+    }
     if (tapAction == 'view_files') {
       if (!mounted) return;
       await Navigator.of(context).push(

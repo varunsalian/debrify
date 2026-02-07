@@ -2390,7 +2390,7 @@ class StorageService {
 
   static Future<String> getHomeFavoritesTapAction() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'play';
+    return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
   }
 
   static Future<void> setHomeFavoritesTapAction(String value) async {
