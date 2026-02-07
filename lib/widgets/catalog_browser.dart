@@ -1019,25 +1019,24 @@ class _CatalogItemCard extends StatefulWidget {
 
 class _CatalogItemCardState extends State<_CatalogItemCard> {
   bool _isFocused = false;
-  // For DPAD: track which button is focused (true = Quick Play, false = Torrents)
-  // Default to Torrents (first button)
+  // For DPAD: track which button is focused (true = Quick Play, false = Browse)
   bool _isQuickPlayButtonFocused = false;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // Left/Right arrow navigation between buttons
-    // Order: [Torrents] [Quick Play]
+    // Order: [Browse] [Quick Play]
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = false); // Move to Torrents
+        setState(() => _isQuickPlayButtonFocused = false);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (!_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = true); // Move to Quick Play
+      if (!_isQuickPlayButtonFocused && widget.showQuickPlay) {
+        setState(() => _isQuickPlayButtonFocused = true);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -1058,6 +1057,11 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     return widget.onKeyEvent(event, isQuickPlayFocused: _isQuickPlayButtonFocused);
   }
 
+  /// Strip HTML tags from description text
+  String _stripHtml(String text) {
+    return text.replaceAll(RegExp(r'<[^>]*>'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1068,8 +1072,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       onFocusChange: (focused) {
         setState(() {
           _isFocused = focused;
-          // Reset to Torrents button (first) when card gains focus
-          if (focused) {
+          if (focused || !widget.showQuickPlay) {
             _isQuickPlayButtonFocused = false;
           }
         });
@@ -1088,7 +1091,6 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
           builder: (context, constraints) {
             // Use vertical layout on narrow screens (< 500px)
             final useVerticalLayout = constraints.maxWidth < 500;
-
             return AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(12),
@@ -1115,13 +1117,14 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
   /// Horizontal layout for wide screens - thumbnail, details, and buttons in a row
   Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         // Thumbnail
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            width: 70,
-            height: 100,
+            width: 80,
+            height: 120,
             child: _buildPoster(colorScheme),
           ),
         ),
@@ -1144,6 +1147,49 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               const SizedBox(height: 4),
               // Metadata row
               _buildMetadataRow(theme, colorScheme),
+              // Genres
+              if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: widget.item.genres!.take(3).map((genre) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      child: Text(
+                        genre,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              // Description
+              if (widget.item.description != null && widget.item.description!.isNotEmpty &&
+                  _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _stripHtml(widget.item.description!),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
           ),
         ),
@@ -1164,7 +1210,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               _buildActionButton(
                 icon: Icons.play_arrow_rounded,
                 label: 'Quick Play',
-                color: const Color(0xFF10B981),
+                color: const Color(0xFFB91C1C),
                 isHighlighted: _isFocused && _isQuickPlayButtonFocused,
                 onTap: widget.onQuickPlay,
               ),
@@ -1212,6 +1258,19 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                   const SizedBox(height: 4),
                   // Metadata row
                   _buildMetadataRow(theme, colorScheme),
+                  // Genres
+                  if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.item.genres!.join(', '),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1236,7 +1295,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
-                  color: const Color(0xFF10B981),
+                  color: const Color(0xFFB91C1C),
                   isHighlighted: _isFocused && _isQuickPlayButtonFocused,
                   onTap: widget.onQuickPlay,
                 ),
@@ -1263,16 +1322,26 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         ],
         if (widget.item.imdbRating != null) ...[
           const SizedBox(width: 8),
-          const Icon(
-            Icons.star,
-            size: 14,
-            color: Colors.amber,
-          ),
-          const SizedBox(width: 2),
-          Text(
-            widget.item.imdbRating!.toStringAsFixed(1),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.star, size: 12, color: Colors.amber),
+                const SizedBox(width: 3),
+                Text(
+                  widget.item.imdbRating!.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: Colors.amber,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1448,3 +1517,4 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     }
   }
 }
+
