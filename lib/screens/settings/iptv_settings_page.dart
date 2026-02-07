@@ -340,8 +340,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
             labelText: 'Playlist Name',
             hintText: 'e.g., My IPTV',
             prefixIcon: const Icon(Icons.label_outline),
-            onUpArrow: () => _urlTabFocusNode.requestFocus(),
-            onDownArrow: () => _urlInputFocusNode.requestFocus(),
           ),
         ),
         const SizedBox(height: 12),
@@ -355,8 +353,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
             labelText: 'Playlist URL',
             hintText: 'https://example.com/playlist.m3u',
             prefixIcon: const Icon(Icons.link),
-            onUpArrow: () => _nameInputFocusNode.requestFocus(),
-            onDownArrow: () => _addButtonFocusNode.requestFocus(),
             onSubmitted: (_) => _addPlaylist(),
           ),
         ),
@@ -582,10 +578,6 @@ class _TvFriendlyTextField extends StatefulWidget {
     required this.hintText,
     required this.prefixIcon,
     this.onSubmitted,
-    this.onLeftArrow,
-    this.onRightArrow,
-    this.onUpArrow,
-    this.onDownArrow,
   });
 
   final TextEditingController controller;
@@ -594,10 +586,6 @@ class _TvFriendlyTextField extends StatefulWidget {
   final String hintText;
   final Widget prefixIcon;
   final ValueChanged<String>? onSubmitted;
-  final VoidCallback? onLeftArrow;
-  final VoidCallback? onRightArrow;
-  final VoidCallback? onUpArrow;
-  final VoidCallback? onDownArrow;
 
   @override
   State<_TvFriendlyTextField> createState() => _TvFriendlyTextFieldState();
@@ -637,7 +625,6 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (!mounted) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
     final text = widget.controller.text;
@@ -654,43 +641,36 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         (selection.baseOffset == textLength &&
             selection.extentOffset == textLength);
 
-    // Back/Escape - unfocus the text field
+    // Allow escape from TextField with back button
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
-      widget.focusNode.unfocus();
-      return KeyEventResult.handled;
+      final ctx = node.context;
+      if (ctx != null) {
+        FocusScope.of(ctx).previousFocus();
+        return KeyEventResult.handled;
+      }
     }
 
-    // Navigate up - always allow escaping up (TV pattern)
+    // Navigate up: only when text is empty or cursor at start
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (widget.onUpArrow != null) {
-        widget.onUpArrow!();
-        return KeyEventResult.handled;
+      if (isTextEmpty || isAtStart) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.up);
+          return KeyEventResult.handled;
+        }
       }
     }
 
-    // Navigate down - always allow escaping down (TV pattern)
+    // Navigate down: only when text is empty or cursor at end
     if (key == LogicalKeyboardKey.arrowDown) {
-      if (widget.onDownArrow != null) {
-        widget.onDownArrow!();
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Navigate right - only when at end of text
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if ((isTextEmpty || isAtEnd) && widget.onRightArrow != null) {
-        widget.onRightArrow!();
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Navigate left - only when at start of text
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if ((isTextEmpty || isAtStart) && widget.onLeftArrow != null) {
-        widget.onLeftArrow!();
-        return KeyEventResult.handled;
+      if (isTextEmpty || isAtEnd) {
+        final ctx = node.context;
+        if (ctx != null) {
+          FocusScope.of(ctx).focusInDirection(TraversalDirection.down);
+          return KeyEventResult.handled;
+        }
       }
     }
 
@@ -701,8 +681,8 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Focus(
-      focusNode: widget.focusNode,
       onKeyEvent: _handleKeyEvent,
+      skipTraversal: true,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
@@ -722,6 +702,7 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
         ),
         child: TextField(
           controller: widget.controller,
+          focusNode: widget.focusNode,
           decoration: InputDecoration(
             labelText: widget.labelText,
             hintText: widget.hintText,
