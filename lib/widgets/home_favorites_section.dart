@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
+import '../screens/playlist_content_view_screen.dart';
 import 'home_focus_controller.dart';
 
 /// Horizontal scrollable favorites section for the home screen
@@ -185,6 +186,20 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
+    // Check if user prefers to view files instead of playing
+    final tapAction = await StorageService.getHomeFavoritesTapAction();
+    if (tapAction == 'view_files') {
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PlaylistContentViewScreen(
+            playlistItem: item,
+          ),
+        ),
+      );
+      return;
+    }
+
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
 
     // Check if play handler is available

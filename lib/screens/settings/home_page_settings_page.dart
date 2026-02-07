@@ -16,6 +16,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String? _selectedAddonUrl;
   String? _selectedCatalogId;
   bool _hideProviderCards = false;
+  String _favoritesTapAction = 'play';
   List<StremioAddon> _addons = [];
 
   @override
@@ -33,6 +34,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final addonUrl = await StorageService.getHomeDefaultAddonUrl();
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
+      final favoritesTapAction = await StorageService.getHomeFavoritesTapAction();
 
       setState(() {
         _addons = addons;
@@ -40,6 +42,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _selectedAddonUrl = addonUrl;
         _selectedCatalogId = catalogId;
         _hideProviderCards = hideProviderCards;
+        _favoritesTapAction = favoritesTapAction;
         _loading = false;
       });
     } catch (e) {
@@ -121,6 +124,21 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       await StorageService.setHomeHideProviderCards(value);
       setState(() {
         _hideProviderCards = value;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectFavoritesTapAction(String value) async {
+    try {
+      await StorageService.setHomeFavoritesTapAction(value);
+      setState(() {
+        _favoritesTapAction = value;
       });
     } catch (e) {
       if (mounted) {
@@ -338,6 +356,39 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 value: _hideProviderCards,
                 onChanged: (value) => _toggleHideProviderCards(value),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Favorites tap action
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _favoritesTapAction,
+                  decoration: InputDecoration(
+                    labelText: 'Favorite tap action',
+                    prefixIcon: Icon(
+                      _favoritesTapAction == 'view_files'
+                          ? Icons.folder_open_rounded
+                          : Icons.play_arrow_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'play', child: Text('Play')),
+                    DropdownMenuItem(value: 'view_files', child: Text('View Files')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) _selectFavoritesTapAction(value);
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 16),

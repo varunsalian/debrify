@@ -61,6 +61,7 @@ class StorageService {
   static const String _homeDefaultAddonUrlKey = 'home_default_addon_url';
   static const String _homeDefaultCatalogIdKey = 'home_default_catalog_id';
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
+  static const String _homeFavoritesOpenFolderKey = 'home_favorites_open_folder';
 
   // Startup settings
   static const String _startupAutoLaunchEnabledKey =
@@ -2387,12 +2388,23 @@ class StorageService {
     await prefs.setBool(_homeHideProviderCardsKey, value);
   }
 
+  static Future<String> getHomeFavoritesTapAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'play';
+  }
+
+  static Future<void> setHomeFavoritesTapAction(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_homeFavoritesOpenFolderKey, value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_homeDefaultSourceTypeKey);
     await prefs.remove(_homeDefaultAddonUrlKey);
     await prefs.remove(_homeDefaultCatalogIdKey);
     await prefs.remove(_homeHideProviderCardsKey);
+    await prefs.remove(_homeFavoritesOpenFolderKey);
   }
 
   // Reddit Settings
