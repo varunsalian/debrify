@@ -39,6 +39,10 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user navigates up from the top of the catalog browser
   final VoidCallback? onRequestFocusAbove;
 
+  /// Optional: Default catalog ID to select on first load
+  /// If set and found in the addon's catalogs, it will be auto-selected instead of the first catalog
+  final String? defaultCatalogId;
+
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
@@ -47,6 +51,7 @@ class CatalogBrowser extends StatefulWidget {
     this.filterAddon,
     this.searchQuery,
     this.onRequestFocusAbove,
+    this.defaultCatalogId,
   });
 
   @override
@@ -300,9 +305,19 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           // Auto-select first addon if available
           if (_addons.isNotEmpty && _selectedAddon == null) {
             _selectedAddon = _addons.first;
-            // Auto-select first catalog of first addon
+            // Auto-select catalog: use defaultCatalogId if provided and found, otherwise first
+            // defaultCatalogId uses composite "type:id" format to handle addons with duplicate IDs across types
             if (_selectedAddon!.catalogs.isNotEmpty) {
-              _selectedCatalog = _selectedAddon!.catalogs.first;
+              StremioAddonCatalog? defaultCatalog;
+              if (widget.defaultCatalogId != null) {
+                final parts = widget.defaultCatalogId!.split(':');
+                if (parts.length == 2) {
+                  defaultCatalog = _selectedAddon!.catalogs
+                      .where((c) => c.type == parts[0] && c.id == parts[1])
+                      .firstOrNull;
+                }
+              }
+              _selectedCatalog = defaultCatalog ?? _selectedAddon!.catalogs.first;
               _loadContent();
             }
           }

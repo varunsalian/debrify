@@ -56,6 +56,12 @@ class StorageService {
       'debrify_tv_random_start_percent';
   static const String _debrifyTvChannelsKey = 'debrify_tv_channels';
 
+  // Home page default keys
+  static const String _homeDefaultSourceTypeKey = 'home_default_source_type';
+  static const String _homeDefaultAddonUrlKey = 'home_default_addon_url';
+  static const String _homeDefaultCatalogIdKey = 'home_default_catalog_id';
+  static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
+
   // Startup settings
   static const String _startupAutoLaunchEnabledKey =
       'startup_auto_launch_enabled';
@@ -2326,6 +2332,67 @@ class StorageService {
     } else {
       await prefs.setString(_startupPlaylistItemIdKey, itemId);
     }
+  }
+
+  // Home Page Default Settings
+  static Future<String?> getHomeDefaultSourceType() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeDefaultSourceTypeKey);
+  }
+
+  static Future<void> setHomeDefaultSourceType(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null) {
+      await prefs.remove(_homeDefaultSourceTypeKey);
+    } else {
+      await prefs.setString(_homeDefaultSourceTypeKey, value);
+    }
+  }
+
+  static Future<String?> getHomeDefaultAddonUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeDefaultAddonUrlKey);
+  }
+
+  static Future<void> setHomeDefaultAddonUrl(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null) {
+      await prefs.remove(_homeDefaultAddonUrlKey);
+    } else {
+      await prefs.setString(_homeDefaultAddonUrlKey, value);
+    }
+  }
+
+  static Future<String?> getHomeDefaultCatalogId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeDefaultCatalogIdKey);
+  }
+
+  static Future<void> setHomeDefaultCatalogId(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null) {
+      await prefs.remove(_homeDefaultCatalogIdKey);
+    } else {
+      await prefs.setString(_homeDefaultCatalogIdKey, value);
+    }
+  }
+
+  static Future<bool> getHomeHideProviderCards() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_homeHideProviderCardsKey) ?? false;
+  }
+
+  static Future<void> setHomeHideProviderCards(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_homeHideProviderCardsKey, value);
+  }
+
+  static Future<void> clearAllHomePageSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_homeDefaultSourceTypeKey);
+    await prefs.remove(_homeDefaultAddonUrlKey);
+    await prefs.remove(_homeDefaultCatalogIdKey);
+    await prefs.remove(_homeHideProviderCardsKey);
   }
 
   // Reddit Settings

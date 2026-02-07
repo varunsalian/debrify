@@ -22,6 +22,7 @@ import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/reddit_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
+import 'settings/home_page_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
@@ -238,6 +239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenQuickPlaySettings: _openQuickPlaySettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
+      onOpenHomePageSettings: _openHomePageSettings,
       onOpenStartupSettings: _openStartupSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
@@ -288,6 +290,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const IptvSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openHomePageSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const HomePageSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -464,6 +474,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllPlaylistMetadata();
     await StorageService.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
+    await StorageService.clearAllHomePageSettings();
     await StorageService.clearAllIntegrationStates();
     await StorageService.clearDebrifyTvProviderAndLegacy();
     await StorageService.clearAllFilterSettings();
@@ -505,6 +516,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenQuickPlaySettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
+  final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenStartupSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
@@ -522,6 +534,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenQuickPlaySettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
+    required this.onOpenHomePageSettings,
     required this.onOpenStartupSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
@@ -544,6 +557,41 @@ class _SettingsLayout extends StatelessWidget {
           const SizedBox(height: 24),
           // Connections section with cards
           connections,
+          const SizedBox(height: 24),
+          // General section
+          _SettingsSection(
+            title: 'General',
+            children: [
+              _SettingsTile(
+                icon: Icons.home_rounded,
+                title: 'Home Page',
+                subtitle: 'Default view when app opens',
+                onTap: onOpenHomePageSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.open_in_new_rounded,
+                title: 'Player Settings',
+                subtitle: 'Configure preferred video player',
+                onTap: onOpenExternalPlayerSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.rocket_launch_rounded,
+                title: 'Startup',
+                subtitle: 'Decide what happens on app launch',
+                onTap: onOpenStartupSettings,
+              ),
+              // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
+              // Only show on desktop platforms
+              if (!kIsWeb &&
+                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+                _SettingsTile(
+                  icon: Icons.phonelink_rounded,
+                  title: 'Remote Control',
+                  subtitle: 'Control Debrify TV from your phone',
+                  onTap: () async => onOpenRemoteControl(),
+                ),
+            ],
+          ),
           const SizedBox(height: 24),
           // Search section
           _SettingsSection(
@@ -586,35 +634,6 @@ class _SettingsLayout extends StatelessWidget {
                 subtitle: 'Limits, channels, and playback configuration',
                 onTap: onOpenDebrifyTvSettings,
               ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // General section
-          _SettingsSection(
-            title: 'General',
-            children: [
-              _SettingsTile(
-                icon: Icons.rocket_launch_rounded,
-                title: 'Startup',
-                subtitle: 'Decide what happens on app launch',
-                onTap: onOpenStartupSettings,
-              ),
-              _SettingsTile(
-                icon: Icons.open_in_new_rounded,
-                title: 'Player Settings',
-                subtitle: 'Configure preferred video player',
-                onTap: onOpenExternalPlayerSettings,
-              ),
-              // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
-              // Only show on desktop platforms
-              if (!kIsWeb &&
-                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
-                _SettingsTile(
-                  icon: Icons.phonelink_rounded,
-                  title: 'Remote Control',
-                  subtitle: 'Control Debrify TV from your phone',
-                  onTap: () async => onOpenRemoteControl(),
-                ),
             ],
           ),
           const SizedBox(height: 24),

@@ -255,6 +255,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   SearchSourceOption _selectedSource = SearchSourceOption.all();
   List<SearchSourceOption> _availableSourceOptions = [];
   bool _isLoadingSourceOptions = false;
+  String? _defaultCatalogId;
+  bool _hideProviderCards = false;
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
   final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
 
@@ -1176,11 +1178,42 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final options = await loader.loadOptions();
 
       if (!mounted) return;
+
+      // Try to apply stored default source
+      final defaultSourceType = await StorageService.getHomeDefaultSourceType();
+      final defaultAddonUrl = await StorageService.getHomeDefaultAddonUrl();
+      final defaultCatalogId = await StorageService.getHomeDefaultCatalogId();
+      final hideProviderCards = await StorageService.getHomeHideProviderCards();
+
+      SearchSourceOption? defaultOption;
+      if (defaultSourceType != null && options.isNotEmpty) {
+        if (defaultSourceType == 'addon' && defaultAddonUrl != null) {
+          // Find matching addon option by manifest URL
+          defaultOption = options.where((o) =>
+            o.type == SearchSourceType.addon &&
+            o.addon?.manifestUrl == defaultAddonUrl
+          ).firstOrNull;
+        } else {
+          // Find matching option by source type
+          final targetType = _sourceTypeFromString(defaultSourceType);
+          if (targetType != null) {
+            defaultOption = options.where((o) => o.type == targetType).firstOrNull;
+          }
+        }
+      }
+
       setState(() {
         _availableSourceOptions = options;
         _isLoadingSourceOptions = false;
-        // Default to "All" if available
-        if (_availableSourceOptions.isNotEmpty) {
+        _defaultCatalogId = defaultCatalogId;
+        _hideProviderCards = hideProviderCards;
+        if (defaultOption != null) {
+          _selectedSource = defaultOption;
+          // Set _searchMode to match the source type (mirrors _onSearchSourceChanged logic)
+          if (defaultOption.type == SearchSourceType.addon) {
+            _searchMode = SearchMode.browse;
+          }
+        } else if (_availableSourceOptions.isNotEmpty) {
           _selectedSource = _availableSourceOptions.first;
         }
       });
@@ -1197,6 +1230,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _selectedSource = _availableSourceOptions.first;
         });
       }
+    }
+  }
+
+  /// Converts a stored source type string to SearchSourceType enum
+  SearchSourceType? _sourceTypeFromString(String type) {
+    switch (type) {
+      case 'all': return SearchSourceType.all;
+      case 'keyword': return SearchSourceType.keyword;
+      case 'addon': return SearchSourceType.addon;
+      case 'iptv': return SearchSourceType.iptv;
+      case 'reddit': return SearchSourceType.reddit;
+      default: return null;
     }
   }
 
@@ -10389,6 +10434,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         child: CatalogBrowser(
                           key: _catalogBrowserKey,
                           filterAddon: _selectedSource.addon,
+                          defaultCatalogId: _defaultCatalogId,
                           // Freeze searchQuery while offstage to prevent reload/scroll reset
                           searchQuery: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
                           onItemSelected: (selection) {
@@ -10618,22 +10664,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   }
                                 },
                               ),
-                              const SizedBox(height: 16),
-                              // Debrid services section
-                              ProviderStatusCards(
-                                focusController: _homeFocusController,
-                                isTelevision: _isTelevision,
-                                onTapRealDebrid: () => MainPageBridge.switchTab?.call(4),
-                                onTapTorbox: () => MainPageBridge.switchTab?.call(5),
-                                onTapPikPak: () => MainPageBridge.switchTab?.call(6),
-                                onRequestFocusAbove: () {
-                                  final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
-                                  if (prev != null) {
-                                    _homeFocusController.focusSection(prev);
-                                  }
-                                },
-                                // Providers is the last section, no onRequestFocusBelow needed
-                              ),
+                              if (!_hideProviderCards) ...[
+                                const SizedBox(height: 16),
+                                // Debrid services section
+                                ProviderStatusCards(
+                                  focusController: _homeFocusController,
+                                  isTelevision: _isTelevision,
+                                  onTapRealDebrid: () => MainPageBridge.switchTab?.call(4),
+                                  onTapTorbox: () => MainPageBridge.switchTab?.call(5),
+                                  onTapPikPak: () => MainPageBridge.switchTab?.call(6),
+                                  onRequestFocusAbove: () {
+                                    final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
+                                    if (prev != null) {
+                                      _homeFocusController.focusSection(prev);
+                                    }
+                                  },
+                                  // Providers is the last section, no onRequestFocusBelow needed
+                                ),
+                              ],
                             ],
                           );
                         }
@@ -11279,21 +11327,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
-        // Debrid services section
-        ProviderStatusCards(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
-          onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
-          onTapPikPak: () => MainPageBridge.switchTab?.call(6), // PikPak tab
-          onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
-            if (prev != null) {
-              _homeFocusController.focusSection(prev);
-            }
-          },
-        ),
+        if (!_hideProviderCards) ...[
+          const SizedBox(height: 16),
+          // Debrid services section
+          ProviderStatusCards(
+            focusController: _homeFocusController,
+            isTelevision: _isTelevision,
+            onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
+            onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
+            onTapPikPak: () => MainPageBridge.switchTab?.call(6), // PikPak tab
+            onRequestFocusAbove: () {
+              final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
+              if (prev != null) {
+                _homeFocusController.focusSection(prev);
+              }
+            },
+          ),
+        ],
       ],
     );
   }
