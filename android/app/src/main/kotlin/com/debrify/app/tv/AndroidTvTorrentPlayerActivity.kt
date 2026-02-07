@@ -3517,7 +3517,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
         val currentPlayer = player ?: return
         val currentItem = currentPlayer.currentMediaItem ?: return
-        val currentPosition = currentPlayer.currentPosition
+        // If a resume seek is pending (player hasn't reached STATE_READY yet),
+        // use that as the target position instead of currentPosition (which would be 0).
+        val targetPosition = if (pendingSeekMs > 0) pendingSeekMs else currentPlayer.currentPosition
+        if (pendingSeekMs > 0) {
+            // We'll handle the resume seek in our listener below, so clear the pending seek
+            // to prevent the main playbackListener from also seeking (avoiding a double-seek race).
+            pendingSeekMs = 0
+        }
         val wasPlaying = currentPlayer.isPlaying
 
         // Extract path without query string for MIME type detection
@@ -3547,14 +3554,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         // Set the new media item, preserving position
-        currentPlayer.setMediaItem(newMediaItem, currentPosition)
+        currentPlayer.setMediaItem(newMediaItem, targetPosition)
         currentPlayer.prepare()
 
         // Wait for player to be ready, then seek again to force subtitle sync
         currentPlayer.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
-                    currentPlayer.seekTo(currentPosition)
+                    currentPlayer.seekTo(targetPosition)
                     currentPlayer.removeListener(this)
                 }
             }
