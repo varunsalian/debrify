@@ -10,6 +10,7 @@ import '../../services/debrid_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
+import '../video_player/models/playlist_entry.dart';
 import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
@@ -871,6 +872,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.hasValidImdbId ? item.id : null,
             contentType: item.type,
+            playlist: [
+              PlaylistEntry(
+                url: streamUrl,
+                title: item.name,
+                provider: 'pikpak',
+              ),
+            ],
+            startIndex: 0,
           ),
         );
         return true;
