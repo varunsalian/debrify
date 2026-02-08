@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
@@ -220,6 +221,58 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Playback
   // ============================================================================
 
+  /// Minimum content size (200 MB) to consider a direct stream valid.
+  /// Anything smaller is likely a placeholder/error video.
+  static const int _minContentBytes = 200 * 1024 * 1024;
+
+  /// Check if a direct stream URL has sufficient content size.
+  /// Returns false for placeholder videos (< 200 MB).
+  /// Follows up to 5 redirects to reach the final URL.
+  Future<bool> _isValidStreamUrl(String url) async {
+    try {
+      final client = http.Client();
+      try {
+        var currentUrl = url;
+        for (int i = 0; i < 5; i++) {
+          final request = http.Request('HEAD', Uri.parse(currentUrl));
+          request.followRedirects = false;
+          final streamed = await client.send(request).timeout(
+                const Duration(seconds: 5),
+              );
+          // Drain response stream to release resources
+          await streamed.stream.drain();
+
+          if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
+            final location = streamed.headers['location'];
+            if (location == null || location.isEmpty) {
+              debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode} (redirect, no location)');
+              return true;
+            }
+            // Resolve relative redirects
+            currentUrl = Uri.parse(currentUrl).resolve(location).toString();
+            debugPrint('StremioTV: HEAD → ${streamed.statusCode}, following redirect');
+            continue;
+          }
+
+          final contentLength =
+              int.tryParse(streamed.headers['content-length'] ?? '') ?? 0;
+          final sizeMb = (contentLength / (1024 * 1024)).toStringAsFixed(1);
+          debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB');
+          if (contentLength == 0) return true;
+          return contentLength >= _minContentBytes;
+        }
+        // Too many redirects — allow through
+        debugPrint('StremioTV: HEAD $url → too many redirects, allowing');
+        return true;
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      debugPrint('StremioTV: HEAD check failed for $url: $e');
+      return true;
+    }
+  }
+
   Future<void> _playChannel(StremioTvChannel channel) async {
     // Ensure items are loaded before trying to play
     if (!channel.hasItems) {
@@ -305,12 +358,21 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       // Try to find the best stream to play
-      // Priority: direct URL streams first, then highest-seeded torrents
+      // Priority: direct URL streams first (validated), then torrents via debrid
       final directStreams =
           torrents.where((t) => t.isDirectStream).toList();
-      if (directStreams.isNotEmpty) {
-        await _playDirectStream(directStreams.first, item);
-        return;
+      for (final stream in directStreams) {
+        if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
+        if (!mounted) return;
+        final valid = await _isValidStreamUrl(stream.directUrl!);
+        if (!mounted) return;
+        if (valid) {
+          await _playDirectStream(stream, item);
+          return;
+        }
+        debugPrint(
+          'StremioTV: Skipping small stream (< 200MB): ${stream.source}',
+        );
       }
 
       // For torrent streams, try to resolve via debrid
