@@ -12,6 +12,7 @@ import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../utils/file_utils.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
@@ -241,6 +242,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Playback
   // ============================================================================
 
+
   /// Extract normalized quality from a stream/torrent name.
   /// Returns '2160p', '1080p', '720p', '480p', or null.
   static final RegExp _qualityPattern = RegExp(
@@ -431,9 +433,43 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       // For torrent streams, try to resolve via debrid (up to 5 attempts)
-      final torrentStreams = _sortStreamsByQuality(
+      var torrentStreams = _sortStreamsByQuality(
         torrents.where((t) => t.streamType == StreamType.torrent).toList(),
       );
+
+      // For TorBox (explicitly selected), batch-check cache and only attempt cached torrents
+      if (torrentStreams.isNotEmpty && _debridProvider == 'torbox') {
+        final tbKey = await StorageService.getTorboxApiKey();
+        if (tbKey != null && tbKey.isNotEmpty) {
+          final hashes = torrentStreams
+              .map((t) => t.infohash.trim().toLowerCase())
+              .where((h) => h.isNotEmpty)
+              .toList();
+          if (hashes.isNotEmpty) {
+            final cachedHashes = await TorboxService.checkCachedTorrents(
+              apiKey: tbKey,
+              infoHashes: hashes,
+            );
+            if (cachedHashes.isNotEmpty) {
+              final cachedNormalized = cachedHashes
+                  .map((h) => h.trim().toLowerCase())
+                  .toSet();
+              torrentStreams = torrentStreams
+                  .where((t) => cachedNormalized
+                      .contains(t.infohash.trim().toLowerCase()))
+                  .toList();
+              debugPrint(
+                'StremioTV: TorBox cache check: ${cachedHashes.length} cached '
+                'out of ${hashes.length} torrents',
+              );
+            } else {
+              debugPrint('StremioTV: TorBox cache check: none cached');
+              torrentStreams = [];
+            }
+          }
+        }
+      }
+
       final maxTorrentAttempts = torrentStreams.length.clamp(0, 5);
       for (int i = 0; i < maxTorrentAttempts; i++) {
         if (!mounted) return;
@@ -669,7 +705,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         apiKey: tbKey,
         magnet: magnet,
       );
-      final torrentId = result['torrent_id'] ?? result['id'];
+      final data = result['data'];
+      final torrentId = data is Map
+          ? (data['torrent_id'] ?? data['id'])
+          : (result['torrent_id'] ?? result['id']);
 
       if (torrentId == null) {
         if (!mounted) return false;
@@ -695,16 +734,30 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return false;
       }
 
-      // Request download link for the first file
-      final files = torrentInfo.files;
+      // Filter to video files only
+      final allFiles = torrentInfo.files;
+      final videoFiles = allFiles
+          .where((f) => FileUtils.isVideoFile(f.name))
+          .toList();
+      final files = videoFiles.isNotEmpty ? videoFiles : allFiles;
       if (files.isEmpty) {
         return false;
+      }
+
+      // For movies, pick the largest video file
+      var targetFile = files.first;
+      if (item.type.toLowerCase() == 'movie' && files.length > 1) {
+        for (final f in files) {
+          if (f.size > targetFile.size) {
+            targetFile = f;
+          }
+        }
       }
 
       final downloadLink = await TorboxService.requestFileDownloadLink(
         apiKey: tbKey,
         torrentId: torrentId is int ? torrentId : int.parse(torrentId.toString()),
-        fileId: files.first.id,
+        fileId: targetFile.id,
       );
 
       if (downloadLink.isNotEmpty && mounted) {
