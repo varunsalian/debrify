@@ -47,6 +47,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final List<FocusNode> _rowFocusNodes = [];
   int _focusedIndex = 0;
 
+  // Mix salt (0-9, cycles on shuffle button)
+  int _mixSalt = 0;
+
+  // Header buttons
+  final FocusNode _shuffleFocusNode = FocusNode(debugLabel: 'shuffleBtn');
+  final FocusNode _refreshFocusNode = FocusNode(debugLabel: 'refreshBtn');
+
   // Search
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -107,6 +114,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _shuffleFocusNode.dispose();
+    _refreshFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     for (final node in _rowFocusNodes) {
@@ -351,6 +360,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final nowPlaying = _service.getNowPlaying(
       channel,
       rotationMinutes: _rotationMinutes,
+      salt: _mixSalt,
     );
     if (nowPlaying == null) {
       if (mounted) {
@@ -970,6 +980,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
     }
 
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (text.isEmpty || isAtStart) {
+        _shuffleFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (text.isEmpty || isAtStart) {
         MainPageBridge.focusTvSidebar?.call();
@@ -1040,18 +1057,124 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             ),
                           ),
                           const Spacer(),
-                          IconButton(
-                            onPressed: _refreshing ? null : _refresh,
-                            icon: _refreshing
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.refresh_rounded),
-                            tooltip: 'Refresh channels',
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Text(
+                              'Mix ${_mixSalt + 1}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Focus(
+                            focusNode: _shuffleFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                _refreshFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                _searchFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                MainPageBridge.focusTvSidebar?.call();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter) {
+                                setState(() {
+                                  _mixSalt = (_mixSalt + 1) % 10;
+                                });
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: ListenableBuilder(
+                              listenable: _shuffleFocusNode,
+                              builder: (context, child) => Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: _shuffleFocusNode.hasFocus
+                                      ? theme.colorScheme.primaryContainer
+                                      : null,
+                                  border: _shuffleFocusNode.hasFocus
+                                      ? Border.all(
+                                          color: theme.colorScheme.primary,
+                                          width: 2,
+                                        )
+                                      : null,
+                                ),
+                                child: IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _mixSalt = (_mixSalt + 1) % 10;
+                                    });
+                                  },
+                                  icon: const Icon(Icons.shuffle_rounded),
+                                  tooltip: 'Shuffle mix',
+                                ),
+                              ),
+                            ),
+                          ),
+                          Focus(
+                            focusNode: _refreshFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                              if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+                                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                _shuffleFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                _searchFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter) {
+                                if (!_refreshing) _refresh();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: ListenableBuilder(
+                              listenable: _refreshFocusNode,
+                              builder: (context, child) => Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: _refreshFocusNode.hasFocus
+                                      ? theme.colorScheme.primaryContainer
+                                      : null,
+                                  border: _refreshFocusNode.hasFocus
+                                      ? Border.all(
+                                          color: theme.colorScheme.primary,
+                                          width: 2,
+                                        )
+                                      : null,
+                                ),
+                                child: IconButton(
+                                  onPressed: _refreshing ? null : _refresh,
+                                  icon: _refreshing
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.refresh_rounded),
+                                  tooltip: 'Refresh channels',
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1116,6 +1239,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               final nowPlaying = _service.getNowPlaying(
                                 channel,
                                 rotationMinutes: _rotationMinutes,
+                                salt: _mixSalt,
                               );
                               final isLoading =
                                   _loadingChannelIds.contains(channel.id);

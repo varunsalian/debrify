@@ -175,6 +175,7 @@ class StremioTvService {
   StremioTvNowPlaying? getNowPlaying(
     StremioTvChannel channel, {
     int rotationMinutes = 90,
+    int salt = 0,
   }) {
     if (channel.items.isEmpty) return null;
 
@@ -184,7 +185,9 @@ class StremioTvService {
     final adjusted = now.millisecondsSinceEpoch - offset;
     final slotNumber = adjusted ~/ slotDurationMs;
 
-    final seed = '${channel.id}:$slotNumber';
+    final seed = salt == 0
+        ? '${channel.id}:$slotNumber'
+        : '${channel.id}:$slotNumber:$salt';
     final hash = _djb2(seed);
     final index = hash % channel.items.length;
 
@@ -206,6 +209,7 @@ class StremioTvService {
   StremioTvNowPlaying? getNextPlaying(
     StremioTvChannel channel, {
     int rotationMinutes = 90,
+    int salt = 0,
   }) {
     if (channel.items.isEmpty) return null;
 
@@ -216,7 +220,9 @@ class StremioTvService {
     final currentSlotNumber = adjusted ~/ slotDurationMs;
     final nextSlotNumber = currentSlotNumber + 1;
 
-    final seed = '${channel.id}:$nextSlotNumber';
+    final seed = salt == 0
+        ? '${channel.id}:$nextSlotNumber'
+        : '${channel.id}:$nextSlotNumber:$salt';
     final hash = _djb2(seed);
     final index = hash % channel.items.length;
 
