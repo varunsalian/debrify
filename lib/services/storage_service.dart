@@ -191,6 +191,8 @@ class StorageService {
       'stremio_tv_favorite_channels_v1';
   static const String _stremioTvPreferredQualityKey =
       'stremio_tv_preferred_quality';
+  static const String _stremioTvDebridProviderKey =
+      'stremio_tv_debrid_provider';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3565,6 +3567,18 @@ class StorageService {
   static Future<void> setStremioTvPreferredQuality(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_stremioTvPreferredQualityKey, value);
+  }
+
+  /// Get preferred debrid provider for Stremio TV (auto = first available)
+  static Future<String> getStremioTvDebridProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_stremioTvDebridProviderKey) ?? 'auto';
+  }
+
+  /// Save preferred debrid provider for Stremio TV
+  static Future<void> setStremioTvDebridProvider(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_stremioTvDebridProviderKey, value);
   }
 
   // ==========================================================================

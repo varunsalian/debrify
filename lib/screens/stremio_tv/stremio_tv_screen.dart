@@ -36,6 +36,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _rotationMinutes = 90;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
+  String _debridProvider = 'auto';
   double? _currentSlotProgress;
 
   Timer? _refreshTimer;
@@ -109,6 +110,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
+    _debridProvider = await StorageService.getStremioTvDebridProvider();
   }
 
   Future<void> _discoverAndLoad() async {
@@ -428,13 +430,20 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         );
       }
 
-      // For torrent streams, try to resolve via debrid
+      // For torrent streams, try to resolve via debrid (up to 5 attempts)
       final torrentStreams = _sortStreamsByQuality(
         torrents.where((t) => t.streamType == StreamType.torrent).toList(),
       );
-      if (torrentStreams.isNotEmpty) {
-        await _playTorrentViaDebrid(torrentStreams.first, item);
-        return;
+      final maxTorrentAttempts = torrentStreams.length.clamp(0, 5);
+      for (int i = 0; i < maxTorrentAttempts; i++) {
+        if (!mounted) return;
+        final success =
+            await _playTorrentViaDebrid(torrentStreams[i], item);
+        if (success) return;
+        debugPrint(
+          'StremioTV: Torrent ${i + 1}/$maxTorrentAttempts failed, '
+          '${i + 1 < maxTorrentAttempts ? "trying next..." : "giving up."}',
+        );
       }
 
       if (mounted) {
@@ -467,27 +476,43 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
   }
 
-  Future<void> _playTorrentViaDebrid(
+  /// Returns true if playback was launched successfully, false on failure.
+  Future<bool> _playTorrentViaDebrid(
     Torrent torrent,
     StremioMeta item,
   ) async {
-    // Try Real Debrid first, then Torbox, then PikPak
+    // Try the selected provider first
+    if (_debridProvider == 'realdebrid') {
+      final rdKey = await StorageService.getApiKey();
+      if (rdKey != null && rdKey.isNotEmpty) {
+        return _playViaRealDebrid(torrent, item, rdKey);
+      }
+    } else if (_debridProvider == 'torbox') {
+      final tbKey = await StorageService.getTorboxApiKey();
+      if (tbKey != null && tbKey.isNotEmpty) {
+        return _playViaTorbox(torrent, item);
+      }
+    } else if (_debridProvider == 'pikpak') {
+      final pikpakEnabled = await StorageService.getPikPakEnabled();
+      if (pikpakEnabled) {
+        return _playViaPikPak(torrent, item);
+      }
+    }
+
+    // Auto or fallback if selected provider is unavailable
     final rdKey = await StorageService.getApiKey();
     if (rdKey != null && rdKey.isNotEmpty) {
-      await _playViaRealDebrid(torrent, item, rdKey);
-      return;
+      return _playViaRealDebrid(torrent, item, rdKey);
     }
 
     final tbKey = await StorageService.getTorboxApiKey();
     if (tbKey != null && tbKey.isNotEmpty) {
-      await _playViaTorbox(torrent, item);
-      return;
+      return _playViaTorbox(torrent, item);
     }
 
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     if (pikpakEnabled) {
-      await _playViaPikPak(torrent, item);
-      return;
+      return _playViaPikPak(torrent, item);
     }
 
     if (mounted) {
@@ -499,16 +524,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ),
       );
     }
+    return false;
   }
 
-  Future<void> _playViaRealDebrid(
+  Future<bool> _playViaRealDebrid(
     Torrent torrent,
     StremioMeta item,
     String apiKey,
   ) async {
+    bool dialogShown = false;
     try {
       // Show progress
-      if (!mounted) return;
+      if (!mounted) return false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -526,37 +553,57 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           ),
         ),
       );
+      dialogShown = true;
 
       final magnet =
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
-      final addResult = await DebridService.addMagnet(apiKey, magnet);
-      final torrentId = addResult['id'];
 
-      // Select all files (empty list = 'all')
-      await DebridService.selectFiles(apiKey, torrentId, []);
+      // Use video file selection mode with fallback chain
+      final result = await DebridService.addTorrentToDebridPreferVideos(
+        apiKey,
+        magnet,
+      );
 
-      // Wait briefly for processing
-      await Future.delayed(const Duration(seconds: 2));
+      final links = result['links'] as List<dynamic>? ?? [];
+      final updatedInfo =
+          result['updatedInfo'] as Map<String, dynamic>? ?? {};
+      final files =
+          updatedInfo['files'] as List<dynamic>? ?? [];
 
-      final info = await DebridService.getTorrentInfo(apiKey, torrentId);
-      final links = info['links'] as List<dynamic>? ?? [];
-
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Dismiss progress
+      if (!mounted) return false;
+      Navigator.of(context).pop();
+      dialogShown = false;
 
       if (links.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No links available from Real Debrid')),
-          );
-        }
-        return;
+        return false;
       }
 
-      // Unrestrict the first link
+      // For movies, pick the largest file; otherwise use the first link
+      String linkToUnrestrict = links.first.toString();
+
+      if (item.type.toLowerCase() == 'movie' && links.length > 1) {
+        // Selected files map to links in order — find index of the largest
+        final selectedFiles = files
+            .where((f) => f is Map && f['selected'] == 1)
+            .toList();
+
+        if (selectedFiles.length == links.length) {
+          int largestIndex = 0;
+          int largestSize = 0;
+          for (int i = 0; i < selectedFiles.length; i++) {
+            final size = (selectedFiles[i]['bytes'] as int?) ?? 0;
+            if (size > largestSize) {
+              largestSize = size;
+              largestIndex = i;
+            }
+          }
+          linkToUnrestrict = links[largestIndex].toString();
+        }
+      }
+
       final unrestrictResult = await DebridService.unrestrictLink(
         apiKey,
-        links.first.toString(),
+        linkToUnrestrict,
       );
       final videoUrl = unrestrictResult['download'] as String?;
 
@@ -571,23 +618,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             contentType: item.type,
           ),
         );
+        return true;
       }
+      return false;
     } catch (e) {
-      if (!mounted) return;
-      // Dismiss dialog if still showing
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Real Debrid error: $e')),
-      );
+      if (!mounted) return false;
+      if (dialogShown) Navigator.of(context).pop();
+      debugPrint('StremioTV: Real Debrid error: $e');
+      return false;
     }
   }
 
-  Future<void> _playViaTorbox(
+  Future<bool> _playViaTorbox(
     Torrent torrent,
     StremioMeta item,
   ) async {
+    bool dialogShown = false;
     try {
-      if (!mounted) return;
+      if (!mounted) return false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -605,12 +653,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           ),
         ),
       );
+      dialogShown = true;
 
       final tbKey = await StorageService.getTorboxApiKey();
       if (tbKey == null || tbKey.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) return false;
         Navigator.of(context).pop();
-        return;
+        dialogShown = false;
+        return false;
       }
 
       final magnet =
@@ -622,12 +672,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final torrentId = result['torrent_id'] ?? result['id'];
 
       if (torrentId == null) {
-        if (!mounted) return;
+        if (!mounted) return false;
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to add torrent to Torbox')),
-        );
-        return;
+        dialogShown = false;
+        return false;
       }
 
       // Wait for processing
@@ -639,29 +687,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         torrentId is int ? torrentId : int.parse(torrentId.toString()),
       );
 
-      if (!mounted) return;
+      if (!mounted) return false;
       Navigator.of(context).pop();
+      dialogShown = false;
 
       if (torrentInfo == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not get torrent info from Torbox'),
-            ),
-          );
-        }
-        return;
+        return false;
       }
 
       // Request download link for the first file
       final files = torrentInfo.files;
       if (files.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No files found in Torbox torrent')),
-          );
-        }
-        return;
+        return false;
       }
 
       final downloadLink = await TorboxService.requestFileDownloadLink(
@@ -681,30 +718,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             contentType: item.type,
           ),
         );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No download link available from Torbox'),
-            ),
-          );
-        }
+        return true;
       }
+      return false;
     } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Torbox error: $e')),
-      );
+      if (!mounted) return false;
+      if (dialogShown) Navigator.of(context).pop();
+      debugPrint('StremioTV: Torbox error: $e');
+      return false;
     }
   }
 
-  Future<void> _playViaPikPak(
+  Future<bool> _playViaPikPak(
     Torrent torrent,
     StremioMeta item,
   ) async {
+    bool dialogShown = false;
     try {
-      if (!mounted) return;
+      if (!mounted) return false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -722,6 +753,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           ),
         ),
       );
+      dialogShown = true;
 
       final pikpak = PikPakApiService.instance;
       final magnet =
@@ -730,12 +762,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final fileId = result['task']?['file_id'] as String?;
 
       if (fileId == null || fileId.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) return false;
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to add torrent to PikPak')),
-        );
-        return;
+        dialogShown = false;
+        return false;
       }
 
       // Wait for processing
@@ -744,8 +774,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final fileData = await pikpak.getFileDetails(fileId);
       final url = pikpak.getStreamingUrl(fileData);
 
-      if (!mounted) return;
+      if (!mounted) return false;
       Navigator.of(context).pop();
+      dialogShown = false;
 
       if (url != null && url.isNotEmpty) {
         await VideoPlayerLauncher.push(
@@ -758,21 +789,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             contentType: item.type,
           ),
         );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No streaming URL available from PikPak'),
-            ),
-          );
-        }
+        return true;
       }
+      return false;
     } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PikPak error: $e')),
-      );
+      if (!mounted) return false;
+      if (dialogShown) Navigator.of(context).pop();
+      debugPrint('StremioTV: PikPak error: $e');
+      return false;
     }
   }
 

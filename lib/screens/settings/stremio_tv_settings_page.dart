@@ -13,6 +13,8 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   int _rotationMinutes = 90;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
+  String _debridProvider = 'auto';
+  List<MapEntry<String, String>> _availableProviders = [];
 
   @override
   void initState() {
@@ -27,11 +29,35 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       final rotationMinutes = await StorageService.getStremioTvRotationMinutes();
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
       final preferredQuality = await StorageService.getStremioTvPreferredQuality();
+      final debridProvider = await StorageService.getStremioTvDebridProvider();
+
+      // Detect which providers are configured
+      final providers = <MapEntry<String, String>>[];
+      final rdKey = await StorageService.getApiKey();
+      if (rdKey != null && rdKey.isNotEmpty) {
+        providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
+      }
+      final tbKey = await StorageService.getTorboxApiKey();
+      if (tbKey != null && tbKey.isNotEmpty) {
+        providers.add(const MapEntry('torbox', 'TorBox'));
+      }
+      final pikpakEnabled = await StorageService.getPikPakEnabled();
+      if (pikpakEnabled) {
+        providers.add(const MapEntry('pikpak', 'PikPak'));
+      }
 
       setState(() {
         _rotationMinutes = rotationMinutes;
         _autoRefresh = autoRefresh;
         _preferredQuality = preferredQuality;
+        _debridProvider = debridProvider;
+        _availableProviders = providers;
+        // Reset to auto if saved provider is no longer configured
+        if (_debridProvider != 'auto' &&
+            !providers.any((p) => p.key == _debridProvider)) {
+          _debridProvider = 'auto';
+          StorageService.setStremioTvDebridProvider('auto');
+        }
         _loading = false;
       });
     } catch (e) {
@@ -74,6 +100,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvPreferredQuality(value);
       setState(() => _preferredQuality = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setDebridProvider(String value) async {
+    try {
+      await StorageService.setStremioTvDebridProvider(value);
+      setState(() => _debridProvider = value);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -265,6 +304,56 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                               ),
                             ],
                           ),
+                          if (_availableProviders.isNotEmpty) ...[
+                            const Divider(height: 32),
+                            // Debrid provider dropdown
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Debrid Provider',
+                                        style: theme.textTheme.bodyMedium,
+                                      ),
+                                      Text(
+                                        'Which provider to use for torrent streams',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                DropdownButton<String>(
+                                  value: _debridProvider,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: 'auto',
+                                      child: Text(
+                                        'Auto (${_availableProviders.first.value})',
+                                      ),
+                                    ),
+                                    ..._availableProviders
+                                        .map((p) => DropdownMenuItem(
+                                              value: p.key,
+                                              child: Text(p.value),
+                                            )),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      _setDebridProvider(value);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
