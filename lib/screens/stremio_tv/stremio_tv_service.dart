@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../services/storage_service.dart';
@@ -79,19 +80,49 @@ class StremioTvService {
   // Item Loading
   // ============================================================================
 
-  /// Load items for a single channel from its addon catalog.
-  /// Passes the channel's genre filter if set. Caches results for 30 minutes.
+  /// Page size used by most Stremio addons.
+  static const int _pageSize = 100;
+
+  /// Max number of pages to consider when picking a random page.
+  static const int _maxPages = 50;
+
+  /// Load items for a single channel from a random catalog page.
+  /// Uses a deterministic hash of the channel ID to pick a page, so the
+  /// same channel always loads the same page (until cache expires).
+  /// Falls back to page 0 if the random page returns no results.
+  /// Caches results for 30 minutes.
   Future<void> loadChannelItems(StremioTvChannel channel) async {
     if (channel.hasItems && !channel.isCacheStale) return;
 
     try {
-      final items = await _stremioService.fetchCatalog(
-        channel.addon,
-        channel.catalog,
-        genre: channel.genre,
-      );
-      // Only keep items with valid IMDb IDs (needed for stream search)
-      channel.items = items.where((m) => m.hasValidImdbId).toList();
+      // Pick a deterministic page based on channel ID
+      final pageHash = _djb2('page:${channel.id}');
+      final page = pageHash % _maxPages; // 0.._maxPages-1
+      final skip = page * _pageSize;
+
+      List<StremioMeta> items = [];
+
+      if (skip > 0) {
+        final fetched = await _stremioService.fetchCatalog(
+          channel.addon,
+          channel.catalog,
+          genre: channel.genre,
+          skip: skip,
+        );
+        items = fetched.where((m) => m.hasValidImdbId).toList();
+      }
+
+      // Fall back to first page if random page was empty or skip was 0
+      if (items.isEmpty) {
+        final fetched = await _stremioService.fetchCatalog(
+          channel.addon,
+          channel.catalog,
+          genre: channel.genre,
+        );
+        items = fetched.where((m) => m.hasValidImdbId).toList();
+      }
+
+      channel.items = items;
       channel.lastFetched = DateTime.now();
     } catch (e) {
       debugPrint(

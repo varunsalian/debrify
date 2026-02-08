@@ -12,6 +12,7 @@ import 'stremio_tv_now_playing_card.dart';
 class StremioTvChannelRow extends StatelessWidget {
   final StremioTvChannel channel;
   final StremioTvNowPlaying? nowPlaying;
+  final bool isLoading;
   final bool isFocused;
   final FocusNode focusNode;
   final VoidCallback onTap;
@@ -21,6 +22,7 @@ class StremioTvChannelRow extends StatelessWidget {
     super.key,
     required this.channel,
     required this.nowPlaying,
+    this.isLoading = false,
     required this.isFocused,
     required this.focusNode,
     required this.onTap,
@@ -160,7 +162,9 @@ class StremioTvChannelRow extends StatelessWidget {
                   Expanded(
                     child: nowPlaying != null
                         ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
-                        : _buildLoadingPlaceholder(theme),
+                        : isLoading
+                            ? _buildLoadingPlaceholder(theme)
+                            : _buildEmptyPlaceholder(theme),
                   ),
                 ],
               ),
@@ -172,10 +176,32 @@ class StremioTvChannelRow extends StatelessWidget {
   }
 
   Widget _buildLoadingPlaceholder(ThemeData theme) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Loading...',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPlaceholder(ThemeData theme) {
     return Text(
-      'Loading...',
+      'No items available',
       style: theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
+        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
       ),
     );
   }

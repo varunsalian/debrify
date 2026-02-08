@@ -40,6 +40,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final List<FocusNode> _rowFocusNodes = [];
   int _focusedIndex = 0;
 
+  // Lazy loading: track channels currently being fetched to avoid duplicates
+  final Set<String> _loadingChannelIds = {};
+
   // Track mounted state for auto-play
   String? _pendingChannelId;
 
@@ -93,10 +96,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     setState(() => _loading = true);
 
     final channels = await _service.discoverChannels();
-    await _service.loadAllChannelItems(channels);
-
-    // Remove channels with no usable items (e.g., IPTV addons with no IMDb IDs)
-    channels.removeWhere((ch) => ch.items.isEmpty);
 
     // Set up focus nodes
     for (final node in _rowFocusNodes) {
@@ -114,11 +113,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       });
     }
 
-    // Handle pending auto-play
+    // Handle pending auto-play (eagerly load the target channel first)
     if (_pendingChannelId != null && mounted) {
       final id = _pendingChannelId!;
       _pendingChannelId = null;
-      _playChannelById(id);
+      await _ensureChannelLoaded(id);
+      if (mounted) _playChannelById(id);
     }
   }
 
@@ -128,14 +128,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     await _loadSettings();
     final channels = await _service.discoverChannels();
-    // Force reload items (clear cache)
+
+    // Clear loading tracker and invalidate cache so channels refetch
+    _loadingChannelIds.clear();
     for (final ch in channels) {
       ch.lastFetched = null;
     }
-    await _service.loadAllChannelItems(channels);
-
-    // Remove channels with no usable items
-    channels.removeWhere((ch) => ch.items.isEmpty);
 
     // Reset focus nodes
     for (final node in _rowFocusNodes) {
@@ -171,10 +169,64 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   // ============================================================================
+  // Lazy Loading
+  // ============================================================================
+
+  /// Lazy-load items for a single channel by ID.
+  Future<void> _ensureChannelLoaded(String channelId) async {
+    final idx = _channels.indexWhere((ch) => ch.id == channelId);
+    if (idx == -1) return;
+    await _ensureChannelItemsLoaded(_channels[idx]);
+  }
+
+  /// Lazy-load items for a single channel.
+  /// Prevents duplicate concurrent fetches via [_loadingChannelIds].
+  /// Removes the channel from the list if it loads with zero items.
+  Future<void> _ensureChannelItemsLoaded(StremioTvChannel channel) async {
+    if (channel.hasItems && !channel.isCacheStale) return;
+    if (_loadingChannelIds.contains(channel.id)) return;
+
+    _loadingChannelIds.add(channel.id);
+
+    try {
+      await _service.loadChannelItems(channel);
+    } catch (_) {
+      // Mark as fetched so we don't retry every frame
+      channel.lastFetched = DateTime.now();
+    } finally {
+      _loadingChannelIds.remove(channel.id);
+    }
+
+    if (!mounted) return;
+
+    // Remove channels that loaded with no usable items
+    if (channel.items.isEmpty && channel.lastFetched != null) {
+      setState(() {
+        final idx = _channels.indexWhere((ch) => ch.id == channel.id);
+        if (idx != -1) {
+          _channels.removeAt(idx);
+          if (idx < _rowFocusNodes.length) {
+            _rowFocusNodes[idx].dispose();
+            _rowFocusNodes.removeAt(idx);
+          }
+        }
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  // ============================================================================
   // Playback
   // ============================================================================
 
   Future<void> _playChannel(StremioTvChannel channel) async {
+    // Ensure items are loaded before trying to play
+    if (!channel.hasItems) {
+      await _ensureChannelItemsLoaded(channel);
+      if (!mounted) return;
+    }
+
     final nowPlaying = _service.getNowPlaying(
       channel,
       rotationMinutes: _rotationMinutes,
@@ -704,10 +756,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         itemCount: _channels.length,
                         itemBuilder: (context, index) {
                           final channel = _channels[index];
+
+                          // Trigger lazy load for visible channels
+                          if (!channel.hasItems &&
+                              !_loadingChannelIds.contains(channel.id)) {
+                            _ensureChannelItemsLoaded(channel);
+                          }
+
                           final nowPlaying = _service.getNowPlaying(
                             channel,
                             rotationMinutes: _rotationMinutes,
                           );
+                          final isLoading =
+                              _loadingChannelIds.contains(channel.id);
                           final focusNode = index < _rowFocusNodes.length
                               ? _rowFocusNodes[index]
                               : FocusNode();
@@ -728,6 +789,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               return StremioTvChannelRow(
                                 channel: channel,
                                 nowPlaying: nowPlaying,
+                                isLoading: isLoading,
                                 isFocused: focusNode.hasFocus,
                                 focusNode: focusNode,
                                 onTap: () => _playChannel(channel),
