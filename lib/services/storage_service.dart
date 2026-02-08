@@ -183,6 +183,13 @@ class StorageService {
   static const String _iptvFavoriteChannelsKey =
       'iptv_favorite_channels_v1';
 
+  // Stremio TV settings
+  static const String _stremioTvRotationMinutesKey =
+      'stremio_tv_rotation_minutes';
+  static const String _stremioTvAutoRefreshKey = 'stremio_tv_auto_refresh';
+  static const String _stremioTvFavoriteChannelsKey =
+      'stremio_tv_favorite_channels_v1';
+
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _playlistFavoritesKey = 'playlist_favorites_v1';
@@ -3515,6 +3522,95 @@ class StorageService {
   static Future<void> clearRemoteLastDevice() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_remoteLastDeviceKey);
+  }
+
+  // ==========================================================================
+  // Stremio TV Settings
+  // ==========================================================================
+
+  /// Get the Stremio TV rotation interval in minutes (default: 60)
+  static Future<int> getStremioTvRotationMinutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_stremioTvRotationMinutesKey) ?? 60;
+  }
+
+  /// Save the Stremio TV rotation interval in minutes
+  static Future<void> setStremioTvRotationMinutes(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_stremioTvRotationMinutesKey, value);
+  }
+
+  /// Get whether Stremio TV auto-refreshes catalogs (default: true)
+  static Future<bool> getStremioTvAutoRefresh() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_stremioTvAutoRefreshKey) ?? true;
+  }
+
+  /// Save whether Stremio TV auto-refreshes catalogs
+  static Future<void> setStremioTvAutoRefresh(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_stremioTvAutoRefreshKey, value);
+  }
+
+  // ==========================================================================
+  // Stremio TV Channel Favorites
+  // ==========================================================================
+
+  /// Check if a Stremio TV channel is favorited
+  static Future<bool> isStremioTvChannelFavorited(String channelId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return false;
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.containsKey(channelId);
+    } catch (e) {
+      debugPrint('Error reading Stremio TV channel favorites: $e');
+      return false;
+    }
+  }
+
+  /// Set favorite status for a Stremio TV channel
+  static Future<void> setStremioTvChannelFavorited(
+    String channelId,
+    bool isFavorited,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
+
+    Map<String, dynamic> favorites = {};
+    if (favoritesJson != null) {
+      try {
+        favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    if (isFavorited) {
+      favorites[channelId] = true;
+    } else {
+      favorites.remove(channelId);
+    }
+
+    await prefs.setString(
+        _stremioTvFavoriteChannelsKey, jsonEncode(favorites));
+  }
+
+  /// Get all favorite Stremio TV channel IDs
+  static Future<Set<String>> getStremioTvFavoriteChannelIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
+
+    if (favoritesJson == null) return {};
+
+    try {
+      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+      return favorites.keys.toSet();
+    } catch (e) {
+      debugPrint('Error reading Stremio TV channel favorites: $e');
+      return {};
+    }
   }
 }
 

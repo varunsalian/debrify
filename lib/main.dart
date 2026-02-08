@@ -12,6 +12,7 @@ import 'screens/pikpak/pikpak_files_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
+import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
@@ -444,15 +445,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _remoteControlEnabled = true;
 
   final List<Widget> _pages = [
-    const TorrentSearchScreen(),
-    const PlaylistScreen(),
-    const DownloadsScreen(),
-    const DebrifyTVScreen(),
-    const DebridDownloadsScreen(),
-    const TorboxDownloadsScreen(),
-    const PikPakFilesScreen(),
-    const AddonsScreen(),
-    const SettingsScreen(),
+    const TorrentSearchScreen(),      // 0: Home
+    const PlaylistScreen(),           // 1: Playlist
+    const DownloadsScreen(),          // 2: Downloads
+    const DebrifyTVScreen(),          // 3: Debrify TV
+    const DebridDownloadsScreen(),    // 4: Real Debrid
+    const TorboxDownloadsScreen(),    // 5: Torbox
+    const PikPakFilesScreen(),        // 6: PikPak
+    const AddonsScreen(),             // 7: Addons
+    const SettingsScreen(),           // 8: Settings
+    const StremioTvScreen(),          // 9: Stremio TV
   ];
 
   final List<String> _titles = [
@@ -465,6 +467,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'PikPak',
     'Addons',
     'Settings',
+    'Stremio TV',
   ];
 
   final List<IconData> _icons = [
@@ -477,6 +480,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_circle_rounded,
     Icons.extension_rounded,
     Icons.settings_rounded,
+    Icons.smart_display_rounded,
   ];
 
   @override
@@ -1243,7 +1247,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
-      final indices = <int>[0, 1, 3]; // Torrent, Playlist, Debrify TV
+      final indices = <int>[0, 1, 3, 9]; // Torrent, Playlist, Debrify TV, Stremio TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
@@ -1265,10 +1269,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
     final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
     if (!rd && !tb && !pikpak) {
-      return [0, 7, 8]; // Home, Addons, Settings
+      return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[0, 1, 2, 3];
+    final indices = <int>[0, 1, 2, 3, 9];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);

@@ -1,0 +1,746 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../models/stremio_addon.dart';
+import '../../models/stremio_tv/stremio_tv_channel.dart';
+import '../../models/torrent.dart';
+import '../../services/debrid_service.dart';
+import '../../services/main_page_bridge.dart';
+import '../../services/storage_service.dart';
+import '../../services/video_player_launcher.dart';
+import '../../services/torbox_service.dart';
+import '../../services/pikpak_api_service.dart';
+import 'stremio_tv_service.dart';
+import 'widgets/stremio_tv_channel_row.dart';
+import 'widgets/stremio_tv_empty_state.dart';
+
+/// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
+///
+/// Each addon catalog becomes a "channel" with a deterministic "now playing"
+/// item that rotates on a configurable schedule.
+class StremioTvScreen extends StatefulWidget {
+  const StremioTvScreen({super.key});
+
+  @override
+  State<StremioTvScreen> createState() => _StremioTvScreenState();
+}
+
+class _StremioTvScreenState extends State<StremioTvScreen> {
+  final StremioTvService _service = StremioTvService.instance;
+
+  List<StremioTvChannel> _channels = [];
+  bool _loading = true;
+  bool _refreshing = false;
+  int _rotationMinutes = 60;
+  bool _autoRefresh = true;
+  double? _currentSlotProgress;
+
+  Timer? _refreshTimer;
+  final List<FocusNode> _rowFocusNodes = [];
+  int _focusedIndex = 0;
+
+  // Track mounted state for auto-play
+  String? _pendingChannelId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings().then((_) => _discoverAndLoad());
+
+    // Register the auto-play bridge
+    MainPageBridge.watchStremioTvChannel = (channelId) async {
+      if (mounted) {
+        _playChannelById(channelId);
+      }
+    };
+
+    // Check for pending auto-play
+    final pending = MainPageBridge.getAndClearStremioTvChannelToAutoPlay();
+    if (pending != null) {
+      _pendingChannelId = pending;
+    }
+
+    // Start periodic refresh for progress bars
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _autoRefresh) {
+        setState(() {}); // Refresh progress bars
+        // Check if any slot boundaries have been crossed
+        _checkRotationBoundaries();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    for (final node in _rowFocusNodes) {
+      node.dispose();
+    }
+    // Only clear if we're the active handler
+    if (MainPageBridge.watchStremioTvChannel != null) {
+      MainPageBridge.watchStremioTvChannel = null;
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
+    _autoRefresh = await StorageService.getStremioTvAutoRefresh();
+  }
+
+  Future<void> _discoverAndLoad() async {
+    setState(() => _loading = true);
+
+    final channels = await _service.discoverChannels();
+    await _service.loadAllChannelItems(channels);
+
+    // Remove channels with no usable items (e.g., IPTV addons with no IMDb IDs)
+    channels.removeWhere((ch) => ch.items.isEmpty);
+
+    // Set up focus nodes
+    for (final node in _rowFocusNodes) {
+      node.dispose();
+    }
+    _rowFocusNodes.clear();
+    for (int i = 0; i < channels.length; i++) {
+      _rowFocusNodes.add(FocusNode(debugLabel: 'stremioTvRow$i'));
+    }
+
+    if (mounted) {
+      setState(() {
+        _channels = _sortedChannels(channels);
+        _loading = false;
+      });
+    }
+
+    // Handle pending auto-play
+    if (_pendingChannelId != null && mounted) {
+      final id = _pendingChannelId!;
+      _pendingChannelId = null;
+      _playChannelById(id);
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+
+    await _loadSettings();
+    final channels = await _service.discoverChannels();
+    // Force reload items (clear cache)
+    for (final ch in channels) {
+      ch.lastFetched = null;
+    }
+    await _service.loadAllChannelItems(channels);
+
+    // Remove channels with no usable items
+    channels.removeWhere((ch) => ch.items.isEmpty);
+
+    // Reset focus nodes
+    for (final node in _rowFocusNodes) {
+      node.dispose();
+    }
+    _rowFocusNodes.clear();
+    for (int i = 0; i < channels.length; i++) {
+      _rowFocusNodes.add(FocusNode(debugLabel: 'stremioTvRow$i'));
+    }
+
+    if (mounted) {
+      setState(() {
+        _channels = _sortedChannels(channels);
+        _refreshing = false;
+      });
+    } else {
+      _refreshing = false;
+    }
+  }
+
+  List<StremioTvChannel> _sortedChannels(List<StremioTvChannel> channels) {
+    final favorites = channels.where((ch) => ch.isFavorite).toList();
+    final rest = channels.where((ch) => !ch.isFavorite).toList();
+    favorites.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
+    rest.sort((a, b) => a.channelNumber.compareTo(b.channelNumber));
+    return [...favorites, ...rest];
+  }
+
+  void _checkRotationBoundaries() {
+    // If items need to rotate, reload channels where the slot changed
+    // This is lightweight — just recalculates getNowPlaying()
+    setState(() {}); // The getNowPlaying call in build() handles this
+  }
+
+  // ============================================================================
+  // Playback
+  // ============================================================================
+
+  Future<void> _playChannel(StremioTvChannel channel) async {
+    final nowPlaying = _service.getNowPlaying(
+      channel,
+      rotationMinutes: _rotationMinutes,
+    );
+    if (nowPlaying == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No items available for this channel')),
+        );
+      }
+      return;
+    }
+
+    final item = nowPlaying.item;
+    _currentSlotProgress = nowPlaying.progress;
+
+    if (!item.hasValidImdbId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${item.name} does not have a valid IMDB ID for stream search',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Searching streams for ${item.name}...',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final results = await _service.searchStreams(
+        type: item.type,
+        imdbId: item.id,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss loading dialog
+
+      final torrents = results['torrents'] as List<Torrent>? ?? [];
+
+      if (torrents.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No streams found for ${item.name}'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Try to find the best stream to play
+      // Priority: direct URL streams first, then highest-seeded torrents
+      final directStreams =
+          torrents.where((t) => t.isDirectStream).toList();
+      if (directStreams.isNotEmpty) {
+        await _playDirectStream(directStreams.first, item);
+        return;
+      }
+
+      // For torrent streams, try to resolve via debrid
+      final torrentStreams =
+          torrents.where((t) => t.streamType == StreamType.torrent).toList();
+      if (torrentStreams.isNotEmpty) {
+        await _playTorrentViaDebrid(torrentStreams.first, item);
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No playable streams found for ${item.name}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error searching streams: $e')),
+      );
+    }
+  }
+
+  Future<void> _playDirectStream(Torrent torrent, StremioMeta item) async {
+    if (torrent.directUrl == null || torrent.directUrl!.isEmpty) return;
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: torrent.directUrl!,
+        title: item.name,
+        subtitle: torrent.source,
+        startAtPercent: _currentSlotProgress,
+        contentImdbId: item.hasValidImdbId ? item.id : null,
+        contentType: item.type,
+      ),
+    );
+  }
+
+  Future<void> _playTorrentViaDebrid(
+    Torrent torrent,
+    StremioMeta item,
+  ) async {
+    // Try Real Debrid first, then Torbox, then PikPak
+    final rdKey = await StorageService.getApiKey();
+    if (rdKey != null && rdKey.isNotEmpty) {
+      await _playViaRealDebrid(torrent, item, rdKey);
+      return;
+    }
+
+    final tbKey = await StorageService.getTorboxApiKey();
+    if (tbKey != null && tbKey.isNotEmpty) {
+      await _playViaTorbox(torrent, item);
+      return;
+    }
+
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    if (pikpakEnabled) {
+      await _playViaPikPak(torrent, item);
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No debrid provider configured. Connect Real Debrid, Torbox, or PikPak in Settings.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _playViaRealDebrid(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey,
+  ) async {
+    try {
+      // Show progress
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(child: Text('Resolving via Real Debrid...')),
+            ],
+          ),
+        ),
+      );
+
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final addResult = await DebridService.addMagnet(apiKey, magnet);
+      final torrentId = addResult['id'];
+
+      // Select all files (empty list = 'all')
+      await DebridService.selectFiles(apiKey, torrentId, []);
+
+      // Wait briefly for processing
+      await Future.delayed(const Duration(seconds: 2));
+
+      final info = await DebridService.getTorrentInfo(apiKey, torrentId);
+      final links = info['links'] as List<dynamic>? ?? [];
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss progress
+
+      if (links.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No links available from Real Debrid')),
+          );
+        }
+        return;
+      }
+
+      // Unrestrict the first link
+      final unrestrictResult = await DebridService.unrestrictLink(
+        apiKey,
+        links.first.toString(),
+      );
+      final videoUrl = unrestrictResult['download'] as String?;
+
+      if (videoUrl != null && videoUrl.isNotEmpty && mounted) {
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: videoUrl,
+            title: item.name,
+            startAtPercent: _currentSlotProgress,
+            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentType: item.type,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Dismiss dialog if still showing
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Real Debrid error: $e')),
+      );
+    }
+  }
+
+  Future<void> _playViaTorbox(
+    Torrent torrent,
+    StremioMeta item,
+  ) async {
+    try {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(child: Text('Resolving via Torbox...')),
+            ],
+          ),
+        ),
+      );
+
+      final tbKey = await StorageService.getTorboxApiKey();
+      if (tbKey == null || tbKey.isEmpty) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final result = await TorboxService.createTorrent(
+        apiKey: tbKey,
+        magnet: magnet,
+      );
+      final torrentId = result['torrent_id'] ?? result['id'];
+
+      if (torrentId == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add torrent to Torbox')),
+        );
+        return;
+      }
+
+      // Wait for processing
+      await Future.delayed(const Duration(seconds: 3));
+
+      // Get torrent info to find a file to download
+      final torrentInfo = await TorboxService.getTorrentById(
+        tbKey,
+        torrentId is int ? torrentId : int.parse(torrentId.toString()),
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      if (torrentInfo == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not get torrent info from Torbox'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Request download link for the first file
+      final files = torrentInfo.files;
+      if (files.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No files found in Torbox torrent')),
+          );
+        }
+        return;
+      }
+
+      final downloadLink = await TorboxService.requestFileDownloadLink(
+        apiKey: tbKey,
+        torrentId: torrentId is int ? torrentId : int.parse(torrentId.toString()),
+        fileId: files.first.id,
+      );
+
+      if (downloadLink.isNotEmpty && mounted) {
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: downloadLink,
+            title: item.name,
+            startAtPercent: _currentSlotProgress,
+            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentType: item.type,
+          ),
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No download link available from Torbox'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Torbox error: $e')),
+      );
+    }
+  }
+
+  Future<void> _playViaPikPak(
+    Torrent torrent,
+    StremioMeta item,
+  ) async {
+    try {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(child: Text('Resolving via PikPak...')),
+            ],
+          ),
+        ),
+      );
+
+      final pikpak = PikPakApiService.instance;
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final result = await pikpak.addOfflineDownload(magnet);
+      final fileId = result['task']?['file_id'] as String?;
+
+      if (fileId == null || fileId.isEmpty) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add torrent to PikPak')),
+        );
+        return;
+      }
+
+      // Wait for processing
+      await Future.delayed(const Duration(seconds: 3));
+
+      final fileData = await pikpak.getFileDetails(fileId);
+      final url = pikpak.getStreamingUrl(fileData);
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      if (url != null && url.isNotEmpty) {
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: url,
+            title: item.name,
+            startAtPercent: _currentSlotProgress,
+            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentType: item.type,
+          ),
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No streaming URL available from PikPak'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PikPak error: $e')),
+      );
+    }
+  }
+
+  void _playChannelById(String channelId) {
+    if (_channels.isEmpty) return;
+    final channel = _channels.firstWhere(
+      (ch) => ch.id == channelId,
+      orElse: () => _channels.first,
+    );
+    _playChannel(channel);
+  }
+
+  // ============================================================================
+  // Favorites
+  // ============================================================================
+
+  Future<void> _toggleFavorite(StremioTvChannel channel) async {
+    final newState = !channel.isFavorite;
+    await StorageService.setStremioTvChannelFavorited(channel.id, newState);
+    if (!mounted) return;
+    setState(() {
+      channel.isFavorite = newState;
+      _channels = _sortedChannels(_channels);
+    });
+  }
+
+  // ============================================================================
+  // Build
+  // ============================================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _channels.isEmpty
+              ? const StremioTvEmptyState()
+              : Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.smart_display_rounded,
+                            color: theme.colorScheme.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Stremio TV',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: theme.colorScheme.primaryContainer,
+                            ),
+                            child: Text(
+                              '${_channels.length} channels',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: _refreshing ? null : _refresh,
+                            icon: _refreshing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.refresh_rounded),
+                            tooltip: 'Refresh channels',
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Channel list
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(top: 8, bottom: 16),
+                        itemCount: _channels.length,
+                        itemBuilder: (context, index) {
+                          final channel = _channels[index];
+                          final nowPlaying = _service.getNowPlaying(
+                            channel,
+                            rotationMinutes: _rotationMinutes,
+                          );
+                          final focusNode = index < _rowFocusNodes.length
+                              ? _rowFocusNodes[index]
+                              : FocusNode();
+
+                          return ListenableBuilder(
+                            listenable: focusNode,
+                            builder: (context, _) {
+                              if (focusNode.hasFocus &&
+                                  _focusedIndex != index) {
+                                WidgetsBinding.instance
+                                    .addPostFrameCallback((_) {
+                                  if (mounted) {
+                                    setState(
+                                        () => _focusedIndex = index);
+                                  }
+                                });
+                              }
+                              return StremioTvChannelRow(
+                                channel: channel,
+                                nowPlaying: nowPlaying,
+                                isFocused: focusNode.hasFocus,
+                                focusNode: focusNode,
+                                onTap: () => _playChannel(channel),
+                                onLongPress: () =>
+                                    _toggleFavorite(channel),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+    );
+  }
+}

@@ -30,6 +30,7 @@ import 'settings/filter_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -238,6 +239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenProviderSettings: _openProviderSettings,
       onOpenQuickPlaySettings: _openQuickPlaySettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
+      onOpenStremioTvSettings: _openStremioTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenStartupSettings: _openStartupSettings,
@@ -263,6 +265,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const DebrifyTvSettingsPage()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openStremioTvSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StremioTvSettingsPage()));
     if (!mounted) return;
     setState(() {});
   }
@@ -515,6 +525,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenProviderSettings;
   final Future<void> Function() onOpenQuickPlaySettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
+  final Future<void> Function() onOpenStremioTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenStartupSettings;
@@ -533,6 +544,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenProviderSettings,
     required this.onOpenQuickPlaySettings,
     required this.onOpenDebrifyTvSettings,
+    required this.onOpenStremioTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenHomePageSettings,
     required this.onOpenStartupSettings,
@@ -633,6 +645,12 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Debrify TV Settings',
                 subtitle: 'Limits, channels, and playback configuration',
                 onTap: onOpenDebrifyTvSettings,
+              ),
+              _SettingsTile(
+                icon: Icons.smart_display_rounded,
+                title: 'Stremio TV Settings',
+                subtitle: 'Rotation interval and channel preferences',
+                onTap: onOpenStremioTvSettings,
               ),
             ],
           ),

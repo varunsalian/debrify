@@ -94,6 +94,8 @@ class VideoPlayerScreen extends StatefulWidget {
   // Advanced: start each video at a random timestamp
   final bool startFromRandom;
   final int randomStartMaxPercent;
+  // Start video at a specific percentage (0.0 to 1.0)
+  final double? startAtPercent;
   // Advanced: hide seekbar (double-tap seek still enabled)
   final bool hideSeekbar;
   // Channel name badge overlay
@@ -134,6 +136,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.channelDirectory,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
+    this.startAtPercent,
     this.hideSeekbar = false,
     this.showChannelName = false,
     this.channelName,
@@ -373,6 +376,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return Duration(milliseconds: milliseconds);
   }
 
+  Duration? _percentStartOffset(Duration duration) {
+    final percent = widget.startAtPercent;
+    if (percent == null || percent <= 0 || duration <= Duration.zero) {
+      return null;
+    }
+    final clamped = percent.clamp(0.0, 0.99);
+    final ms = (duration.inMilliseconds * clamped).floor();
+    return ms > 0 ? Duration(milliseconds: ms) : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -563,13 +576,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isPikPakDebrifyTV).then((_) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
-          // Random start takes precedence over resume
+          // Random start takes precedence over resume, then startAtPercent
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
             if (offset != null) {
               await _player.seek(offset);
             } else {
               await _maybeRestoreResume();
+            }
+          } else if (widget.startAtPercent != null) {
+            final offset = _percentStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
             }
           } else {
             await _maybeRestoreResume();
@@ -581,13 +599,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _player.open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders)).then((_) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
-          // Random start takes precedence over resume
+          // Random start takes precedence over resume, then startAtPercent
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
             if (offset != null) {
               await _player.seek(offset);
             } else {
               await _maybeRestoreResume();
+            }
+          } else if (widget.startAtPercent != null) {
+            final offset = _percentStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
             }
           } else {
             await _maybeRestoreResume();
@@ -1151,6 +1174,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (offset != null) {
               await _player.seek(offset);
             }
+          } else if (widget.startAtPercent != null) {
+            await _waitForVideoReady();
+            final offset = _percentStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
+            }
           }
           if (title.isNotEmpty) {
             setState(() {
@@ -1493,6 +1522,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (widget.startFromRandom) {
       await _waitForVideoReady();
       final offset = _randomStartOffset(_duration);
+      if (offset != null) {
+        await _player.seek(offset);
+      }
+    } else if (widget.startAtPercent != null) {
+      await _waitForVideoReady();
+      final offset = _percentStartOffset(_duration);
       if (offset != null) {
         await _player.seek(offset);
       }

@@ -158,6 +158,7 @@ class VideoPlayerLaunchArgs {
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   final bool startFromRandom;
   final int randomStartMaxPercent;
+  final double? startAtPercent;
   final bool hideSeekbar;
   final bool showChannelName;
   final String? channelName;
@@ -187,6 +188,7 @@ class VideoPlayerLaunchArgs {
     this.requestNextChannel,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
+    this.startAtPercent,
     this.hideSeekbar = false,
     this.showChannelName = false,
     this.channelName,
@@ -217,6 +219,7 @@ class VideoPlayerLaunchArgs {
       requestNextChannel: requestNextChannel,
       startFromRandom: startFromRandom,
       randomStartMaxPercent: randomStartMaxPercent,
+      startAtPercent: startAtPercent,
       hideSeekbar: hideSeekbar,
       showChannelName: showChannelName,
       channelName: channelName,

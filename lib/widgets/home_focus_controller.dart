@@ -6,6 +6,7 @@ enum HomeSection {
   favorites,
   iptvFavorites,
   tvFavorites,
+  stremioTvFavorites,
   providers,
 }
 
@@ -24,6 +25,7 @@ class HomeFocusController extends ChangeNotifier {
     HomeSection.favorites: 0,
     HomeSection.iptvFavorites: 0,
     HomeSection.tvFavorites: 0,
+    HomeSection.stremioTvFavorites: 0,
     HomeSection.providers: 0,
   };
 
@@ -33,6 +35,7 @@ class HomeFocusController extends ChangeNotifier {
     HomeSection.favorites: false,
     HomeSection.iptvFavorites: false,
     HomeSection.tvFavorites: false,
+    HomeSection.stremioTvFavorites: false,
     HomeSection.providers: false,
   };
 

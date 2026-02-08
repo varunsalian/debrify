@@ -18,6 +18,7 @@ class MainPageBridge {
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(Map<String, dynamic> playlistItem)? playPlaylistItem;
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
+  static Future<void> Function(String channelId)? watchStremioTvChannel;
 
   // ==========================================================================
   // Back Navigation Handling
@@ -130,6 +131,19 @@ class MainPageBridge {
   static String? getAndClearDebrifyTvChannelToAutoPlay() {
     final channelId = _debrifyTvChannelToAutoPlay;
     _debrifyTvChannelToAutoPlay = null;
+    return channelId;
+  }
+
+  // Store a Stremio TV channel ID that should be auto-played when StremioTvScreen initializes
+  static String? _stremioTvChannelToAutoPlay;
+
+  static void notifyStremioTvChannelToAutoPlay(String channelId) {
+    _stremioTvChannelToAutoPlay = channelId;
+  }
+
+  static String? getAndClearStremioTvChannelToAutoPlay() {
+    final channelId = _stremioTvChannelToAutoPlay;
+    _stremioTvChannelToAutoPlay = null;
     return channelId;
   }
 

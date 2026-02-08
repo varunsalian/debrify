@@ -49,6 +49,7 @@ import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
+import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
@@ -10664,6 +10665,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   }
                                 },
                               ),
+                              const SizedBox(height: 16),
+                              // Stremio TV favorites section (horizontal scroll)
+                              HomeStremioTvFavoritesSection(
+                                focusController: _homeFocusController,
+                                isTelevision: _isTelevision,
+                                onRequestFocusAbove: () {
+                                  final prev = _homeFocusController.getPreviousSection(HomeSection.stremioTvFavorites);
+                                  if (prev != null) {
+                                    _homeFocusController.focusSection(prev);
+                                  }
+                                },
+                                onRequestFocusBelow: () {
+                                  final next = _homeFocusController.getNextSection(HomeSection.stremioTvFavorites);
+                                  if (next != null) {
+                                    _homeFocusController.focusSection(next);
+                                  }
+                                },
+                              ),
                               if (!_hideProviderCards) ...[
                                 const SizedBox(height: 16),
                                 // Debrid services section
@@ -11322,6 +11341,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
           onRequestFocusBelow: () {
             final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        // Stremio TV favorites section (horizontal scroll)
+        HomeStremioTvFavoritesSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          onRequestFocusAbove: () {
+            final prev = _homeFocusController.getPreviousSection(HomeSection.stremioTvFavorites);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            }
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.stremioTvFavorites);
             if (next != null) {
               _homeFocusController.focusSection(next);
             }
