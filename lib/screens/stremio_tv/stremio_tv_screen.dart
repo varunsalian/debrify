@@ -12,6 +12,7 @@ import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../services/pikpak_tv_service.dart';
 import '../../utils/file_utils.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
@@ -808,34 +809,64 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
       dialogShown = true;
 
-      final pikpak = PikPakApiService.instance;
-      final magnet =
-          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
-      final result = await pikpak.addOfflineDownload(magnet);
-      final fileId = result['task']?['file_id'] as String?;
+      // Use PikPakTvService for caching detection, progress polling, folder handling
+      final prepared = await PikPakTvService.instance.prepareTorrent(
+        infohash: torrent.infohash.trim().toLowerCase(),
+        torrentName: torrent.name,
+      );
 
-      if (fileId == null || fileId.isEmpty) {
+      if (prepared == null) {
+        // Not cached or not ready — let retry loop try next torrent
         if (!mounted) return false;
         Navigator.of(context).pop();
         dialogShown = false;
         return false;
       }
 
-      // Wait for processing
-      await Future.delayed(const Duration(seconds: 3));
+      // Determine the streaming URL
+      String? streamUrl = prepared['url'] as String?;
 
-      final fileData = await pikpak.getFileDetails(fileId);
-      final url = pikpak.getStreamingUrl(fileData);
+      // For multi-file torrents (folders), pick the largest video file for movies
+      final allVideoFiles =
+          prepared['allVideoFiles'] as List<dynamic>?;
+      if (allVideoFiles != null &&
+          allVideoFiles.isNotEmpty &&
+          item.type.toLowerCase() == 'movie') {
+        // Find largest video file by size
+        Map<String, dynamic>? largestFile;
+        int largestSize = 0;
+        for (final file in allVideoFiles) {
+          if (file is Map<String, dynamic>) {
+            final size = (file['size'] as int?) ?? 0;
+            if (size > largestSize) {
+              largestSize = size;
+              largestFile = file;
+            }
+          }
+        }
+
+        if (largestFile != null) {
+          final largestFileId = largestFile['id'] as String?;
+          if (largestFileId != null && largestFileId.isNotEmpty) {
+            final api = PikPakApiService.instance;
+            final fileData = await api.getFileDetails(largestFileId);
+            final url = api.getStreamingUrl(fileData);
+            if (url != null && url.isNotEmpty) {
+              streamUrl = url;
+            }
+          }
+        }
+      }
 
       if (!mounted) return false;
       Navigator.of(context).pop();
       dialogShown = false;
 
-      if (url != null && url.isNotEmpty) {
+      if (streamUrl != null && streamUrl.isNotEmpty) {
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
-            videoUrl: url,
+            videoUrl: streamUrl,
             title: item.name,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.hasValidImdbId ? item.id : null,
