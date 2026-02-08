@@ -10,7 +10,7 @@ class StremioTvSettingsPage extends StatefulWidget {
 
 class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   bool _loading = true;
-  int _rotationMinutes = 60;
+  int _rotationMinutes = 90;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
 
@@ -174,10 +174,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                 value: _rotationMinutes,
                                 items: const [
                                   DropdownMenuItem(
-                                    value: 15,
-                                    child: Text('15 min'),
-                                  ),
-                                  DropdownMenuItem(
                                     value: 30,
                                     child: Text('30 min'),
                                   ),
@@ -186,12 +182,16 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     child: Text('1 hour'),
                                   ),
                                   DropdownMenuItem(
+                                    value: 90,
+                                    child: Text('1.5 hours'),
+                                  ),
+                                  DropdownMenuItem(
                                     value: 120,
                                     child: Text('2 hours'),
                                   ),
                                   DropdownMenuItem(
-                                    value: 240,
-                                    child: Text('4 hours'),
+                                    value: 180,
+                                    child: Text('3 hours'),
                                   ),
                                 ],
                                 onChanged: (value) {

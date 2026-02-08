@@ -174,7 +174,7 @@ class StremioTvService {
   /// Returns null if the channel has no items.
   StremioTvNowPlaying? getNowPlaying(
     StremioTvChannel channel, {
-    int rotationMinutes = 60,
+    int rotationMinutes = 90,
   }) {
     if (channel.items.isEmpty) return null;
 
@@ -205,7 +205,7 @@ class StremioTvService {
   /// Get the next slot's item (for "Up Next" / skip).
   StremioTvNowPlaying? getNextPlaying(
     StremioTvChannel channel, {
-    int rotationMinutes = 60,
+    int rotationMinutes = 90,
   }) {
     if (channel.items.isEmpty) return null;
 

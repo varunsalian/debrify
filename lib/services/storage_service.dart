@@ -3530,10 +3530,10 @@ class StorageService {
   // Stremio TV Settings
   // ==========================================================================
 
-  /// Get the Stremio TV rotation interval in minutes (default: 60)
+  /// Get the Stremio TV rotation interval in minutes (default: 90)
   static Future<int> getStremioTvRotationMinutes() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_stremioTvRotationMinutesKey) ?? 60;
+    return prefs.getInt(_stremioTvRotationMinutesKey) ?? 90;
   }
 
   /// Save the Stremio TV rotation interval in minutes

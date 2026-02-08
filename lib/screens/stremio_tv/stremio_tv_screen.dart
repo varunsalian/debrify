@@ -33,7 +33,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   List<StremioTvChannel> _channels = [];
   bool _loading = true;
   bool _refreshing = false;
-  int _rotationMinutes = 60;
+  int _rotationMinutes = 90;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   double? _currentSlotProgress;
