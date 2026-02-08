@@ -438,6 +438,7 @@ class MainActivity : FlutterActivity() {
             
             putExtra("startFromRandom", config?.get("startFromRandom") as? Boolean ?: false)
             putExtra("randomStartMaxPercent", (config?.get("randomStartMaxPercent") as? Number)?.toInt() ?: 40)
+            putExtra("startAtPercent", (config?.get("startAtPercent") as? Number)?.toDouble() ?: 0.0)
             putExtra("hideSeekbar", config?.get("hideSeekbar") as? Boolean ?: false)
             putExtra("hideOptions", config?.get("hideOptions") as? Boolean ?: false)
             putExtra("showVideoTitle", config?.get("showVideoTitle") as? Boolean ?: true)

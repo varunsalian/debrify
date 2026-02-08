@@ -248,6 +248,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private boolean startFromRandom;
     private int randomMaxPercent;
+    private double startAtPercent;
+    private boolean percentSeekApplied = false;
     private boolean hideSeekbar;
     private boolean hideOptions;
     private boolean showVideoTitle;
@@ -316,6 +318,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             if (playbackState == Player.STATE_READY) {
                 if (startFromRandom && !randomApplied) {
                     maybeSeekRandomly();
+                } else if (startAtPercent > 0 && !percentSeekApplied) {
+                    maybeSeekToPercent();
                 }
                 // Initialize night mode if needed
                 if (loudnessEnhancer == null && nightModeIndex > 0) {
@@ -447,6 +451,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         startFromRandom = intent.getBooleanExtra("startFromRandom", false);
         randomMaxPercent = intent.getIntExtra("randomStartMaxPercent", 40);
+        startAtPercent = intent.getDoubleExtra("startAtPercent", 0.0);
         hideSeekbar = intent.getBooleanExtra("hideSeekbar", false);
         hideOptions = intent.getBooleanExtra("hideOptions", false);
         showVideoTitle = intent.getBooleanExtra("showVideoTitle", true);
@@ -2520,6 +2525,21 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player.seekTo(offset);
         }
         randomApplied = true;
+    }
+
+    private void maybeSeekToPercent() {
+        if (player == null) {
+            return;
+        }
+        long duration = player.getDuration();
+        if (duration <= 0) {
+            return;
+        }
+        long offset = (long) (duration * startAtPercent);
+        if (offset > 0 && offset < duration) {
+            player.seekTo(offset);
+        }
+        percentSeekApplied = true;
     }
 
     private void ensureDefaultSubtitleSelected() {

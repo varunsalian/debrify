@@ -48,10 +48,23 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Track mounted state for auto-play
   String? _pendingChannelId;
 
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
   @override
   void initState() {
     super.initState();
     _loadSettings().then((_) => _discoverAndLoad());
+
+    // Register TV sidebar focus handler (tab index 9 = Stremio TV)
+    _tvContentFocusHandler = () {
+      // Focus the first channel row if available
+      if (_rowFocusNodes.isNotEmpty) {
+        _rowFocusNodes[_focusedIndex.clamp(0, _rowFocusNodes.length - 1)]
+            .requestFocus();
+      }
+    };
+    MainPageBridge.registerTvContentFocusHandler(9, _tvContentFocusHandler!);
 
     // Register the auto-play bridge
     MainPageBridge.watchStremioTvChannel = (channelId) async {
@@ -85,6 +98,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // Only clear if we're the active handler
     if (MainPageBridge.watchStremioTvChannel != null) {
       MainPageBridge.watchStremioTvChannel = null;
+    }
+    if (_tvContentFocusHandler != null) {
+      MainPageBridge.unregisterTvContentFocusHandler(9, _tvContentFocusHandler!);
     }
     super.dispose();
   }
@@ -895,6 +911,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 onTap: () => _playChannel(channel),
                                 onLongPress: () =>
                                     _toggleFavorite(channel),
+                                onLeftPress: MainPageBridge.focusTvSidebar,
                               );
                             },
                           );

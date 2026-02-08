@@ -131,6 +131,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var payload: PlaybackPayload? = null
     private var currentIndex = 0
     private var pendingSeekMs: Long = 0
+    private var percentSeekApplied = false
     private var controlsMenuVisible = false
     private var playlistVisible = false
     private var seekbarVisible = false
@@ -242,7 +243,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> {
-                    if (pendingSeekMs > 0) {
+                    val startPct = payload?.startAtPercent ?: 0.0
+                    if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
+                        val duration = player?.duration ?: 0
+                        if (duration > 0) {
+                            val offset = (duration * startPct).toLong()
+                            if (offset in 1 until duration) {
+                                player?.seekTo(offset)
+                                android.util.Log.d("AndroidTvPlayer", "Seeked to ${startPct * 100}% ($offset ms of $duration ms)")
+                            }
+                            percentSeekApplied = true
+                            pendingSeekMs = 0
+                        }
+                    } else if (pendingSeekMs > 0) {
                         val duration = player?.duration ?: 0
                         if (duration > 0 && pendingSeekMs < duration) {
                             player?.seekTo(pendingSeekMs)
@@ -3794,7 +3807,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Parse IMDB ID for external subtitles
             val imdbId = obj.optString("imdbId").takeIf { it.isNotEmpty() }
 
-            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId")
+            // Parse startAtPercent for seeking to a specific position (e.g., Stremio TV slot progress)
+            val startAtPercent = obj.optDouble("startAtPercent", 0.0).let {
+                if (it.isNaN() || it.isInfinite()) 0.0 else it
+            }
+
+            android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
             PlaybackPayload(
                 title = obj.optString("title"),
@@ -3806,7 +3824,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 nextEpisodeMap = nextEpisodeMap,
                 prevEpisodeMap = prevEpisodeMap,
                 collectionGroups = collectionGroups,
-                imdbId = imdbId
+                imdbId = imdbId,
+                startAtPercent = startAtPercent,
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
@@ -3993,7 +4012,8 @@ private data class PlaybackPayload(
     val prevEpisodeMap: Map<Int, Int> = emptyMap(),
     val collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
     var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
-    val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf() // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
+    val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
+    val startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration
 )
 
 private data class PlaybackItem(

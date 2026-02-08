@@ -300,6 +300,7 @@ class AndroidTvPlayerBridge {
     PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
+    double? startAtPercent,
     bool hideSeekbar = false,
     bool hideOptions = false,
     bool showVideoTitle = true,
@@ -343,6 +344,8 @@ class AndroidTvPlayerBridge {
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
+            if (startAtPercent != null && startAtPercent > 0)
+              'startAtPercent': startAtPercent,
             'hideSeekbar': hideSeekbar,
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
@@ -375,6 +378,7 @@ class AndroidTvPlayerBridge {
     PlaybackFinishedCallback? onFinished,
     bool startFromRandom = false,
     int randomStartMaxPercent = 40,
+    double? startAtPercent,
     bool hideSeekbar = false,
     bool hideOptions = false,
     bool showVideoTitle = true,
@@ -426,6 +430,8 @@ class AndroidTvPlayerBridge {
           'config': {
             'startFromRandom': startFromRandom,
             'randomStartMaxPercent': randomStartMaxPercent,
+            if (startAtPercent != null && startAtPercent > 0)
+              'startAtPercent': startAtPercent,
             'hideSeekbar': hideSeekbar,
             'hideOptions': hideOptions,
             'showVideoTitle': showVideoTitle,
@@ -434,7 +440,7 @@ class AndroidTvPlayerBridge {
           ...fontInfo,
         },
       );
-      
+
       debugPrint('AndroidTvPlayerBridge: Method channel returned: $launched');
       
       if (launched == true) {

@@ -1292,6 +1292,8 @@ class _AndroidTvPlaybackPayload {
   final List<_AndroidTvCollectionGroup>? collectionGroups;
   final String? imdbId;
 
+  final double? startAtPercent;
+
   const _AndroidTvPlaybackPayload({
     required this.contentType,
     required this.title,
@@ -1304,6 +1306,7 @@ class _AndroidTvPlaybackPayload {
     this.prevEpisodeMap = const {},
     this.collectionGroups,
     this.imdbId,
+    this.startAtPercent,
   });
 
   Map<String, dynamic> toMap() {
@@ -1320,6 +1323,8 @@ class _AndroidTvPlaybackPayload {
       'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
       'collectionGroups': collectionGroups?.map((e) => e.toMap()).toList(),
       'imdbId': imdbId,
+      if (startAtPercent != null && startAtPercent! > 0)
+        'startAtPercent': startAtPercent,
     };
   }
 }
@@ -1666,6 +1671,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       prevEpisodeMap: navigationMaps.prevMap,
       collectionGroups: collectionGroups,
       imdbId: effectiveImdbId,
+      startAtPercent: args.startAtPercent,
     );
 
     return _AndroidTvPlaybackPayloadResult(

@@ -17,6 +17,7 @@ class StremioTvChannelRow extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onLeftPress;
 
   const StremioTvChannelRow({
     super.key,
@@ -27,6 +28,7 @@ class StremioTvChannelRow extends StatelessWidget {
     required this.focusNode,
     required this.onTap,
     required this.onLongPress,
+    this.onLeftPress,
   });
 
   @override
@@ -36,9 +38,14 @@ class StremioTvChannelRow extends StatelessWidget {
     return Focus(
       focusNode: focusNode,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.select) {
           onTap();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            onLeftPress != null) {
+          onLeftPress!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
