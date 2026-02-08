@@ -12,6 +12,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   bool _loading = true;
   int _rotationMinutes = 60;
   bool _autoRefresh = true;
+  String _preferredQuality = 'auto';
 
   @override
   void initState() {
@@ -25,10 +26,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       final rotationMinutes = await StorageService.getStremioTvRotationMinutes();
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
+      final preferredQuality = await StorageService.getStremioTvPreferredQuality();
 
       setState(() {
         _rotationMinutes = rotationMinutes;
         _autoRefresh = autoRefresh;
+        _preferredQuality = preferredQuality;
         _loading = false;
       });
     } catch (e) {
@@ -58,6 +61,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvAutoRefresh(value);
       setState(() => _autoRefresh = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setPreferredQuality(String value) async {
+    try {
+      await StorageService.setStremioTvPreferredQuality(value);
+      setState(() => _preferredQuality = value);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -196,6 +212,58 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             ),
                             value: _autoRefresh,
                             onChanged: _setAutoRefresh,
+                          ),
+                          const Divider(height: 32),
+                          // Preferred quality dropdown
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Preferred Quality',
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      'Prioritize streams matching this quality',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              DropdownButton<String>(
+                                value: _preferredQuality,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'auto',
+                                    child: Text('Auto'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: '720p',
+                                    child: Text('720p'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: '1080p',
+                                    child: Text('1080p'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: '2160p',
+                                    child: Text('4K'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _setPreferredQuality(value);
+                                  }
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),

@@ -189,6 +189,8 @@ class StorageService {
   static const String _stremioTvAutoRefreshKey = 'stremio_tv_auto_refresh';
   static const String _stremioTvFavoriteChannelsKey =
       'stremio_tv_favorite_channels_v1';
+  static const String _stremioTvPreferredQualityKey =
+      'stremio_tv_preferred_quality';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3550,6 +3552,19 @@ class StorageService {
   static Future<void> setStremioTvAutoRefresh(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_stremioTvAutoRefreshKey, value);
+  }
+
+  /// Get preferred quality for Stremio TV streams (default: 'auto')
+  /// Values: 'auto', '720p', '1080p', '2160p'
+  static Future<String> getStremioTvPreferredQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_stremioTvPreferredQualityKey) ?? 'auto';
+  }
+
+  /// Save preferred quality for Stremio TV streams
+  static Future<void> setStremioTvPreferredQuality(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_stremioTvPreferredQualityKey, value);
   }
 
   // ==========================================================================

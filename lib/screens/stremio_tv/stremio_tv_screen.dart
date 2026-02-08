@@ -35,6 +35,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _refreshing = false;
   int _rotationMinutes = 60;
   bool _autoRefresh = true;
+  String _preferredQuality = 'auto';
   double? _currentSlotProgress;
 
   Timer? _refreshTimer;
@@ -91,6 +92,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   Future<void> _loadSettings() async {
     _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
+    _preferredQuality = await StorageService.getStremioTvPreferredQuality();
   }
 
   Future<void> _discoverAndLoad() async {
@@ -220,6 +222,37 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // ============================================================================
   // Playback
   // ============================================================================
+
+  /// Extract normalized quality from a stream/torrent name.
+  /// Returns '2160p', '1080p', '720p', '480p', or null.
+  static final RegExp _qualityPattern = RegExp(
+    r'\b(2160p|1080p|720p|480p|4K|UHD|FHD)\b',
+    caseSensitive: false,
+  );
+
+  static String? _extractQuality(String name) {
+    final match = _qualityPattern.firstMatch(name);
+    if (match == null) return null;
+    final q = match.group(1)!.toLowerCase();
+    if (q == '4k' || q == 'uhd') return '2160p';
+    if (q == 'fhd') return '1080p';
+    return q;
+  }
+
+  /// Sort streams so those matching [_preferredQuality] come first.
+  /// Within same-quality group, preserves original order.
+  List<Torrent> _sortStreamsByQuality(List<Torrent> streams) {
+    if (_preferredQuality == 'auto') return streams;
+    final sorted = List<Torrent>.from(streams);
+    sorted.sort((a, b) {
+      final qa = _extractQuality(a.name);
+      final qb = _extractQuality(b.name);
+      final aMatch = qa == _preferredQuality ? 0 : 1;
+      final bMatch = qb == _preferredQuality ? 0 : 1;
+      return aMatch.compareTo(bMatch);
+    });
+    return sorted;
+  }
 
   /// Minimum content size (200 MB) to consider a direct stream valid.
   /// Anything smaller is likely a placeholder/error video.
@@ -358,9 +391,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       // Try to find the best stream to play
-      // Priority: direct URL streams first (validated), then torrents via debrid
-      final directStreams =
-          torrents.where((t) => t.isDirectStream).toList();
+      // Priority: direct URL streams first (validated, sorted by quality), then torrents via debrid
+      if (_preferredQuality != 'auto') {
+        debugPrint('StremioTV: Preferred quality: $_preferredQuality');
+      }
+      final directStreams = _sortStreamsByQuality(
+        torrents.where((t) => t.isDirectStream).toList(),
+      );
       for (final stream in directStreams) {
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
         if (!mounted) return;
@@ -376,8 +413,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       // For torrent streams, try to resolve via debrid
-      final torrentStreams =
-          torrents.where((t) => t.streamType == StreamType.torrent).toList();
+      final torrentStreams = _sortStreamsByQuality(
+        torrents.where((t) => t.streamType == StreamType.torrent).toList(),
+      );
       if (torrentStreams.isNotEmpty) {
         await _playTorrentViaDebrid(torrentStreams.first, item);
         return;
