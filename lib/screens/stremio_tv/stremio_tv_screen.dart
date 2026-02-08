@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/stremio_addon.dart';
@@ -46,6 +47,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final List<FocusNode> _rowFocusNodes = [];
   int _focusedIndex = 0;
 
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+
   // Lazy loading: track channels currently being fetched to avoid duplicates
   final Set<String> _loadingChannelIds = {};
 
@@ -60,13 +66,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     super.initState();
     _loadSettings().then((_) => _discoverAndLoad());
 
+    // Search DPAD key handler
+    _searchFocusNode.onKeyEvent = _handleSearchKeyEvent;
+    _searchController.addListener(() {
+      final q = _searchController.text.toLowerCase().trim();
+      if (q != _searchQuery) {
+        setState(() => _searchQuery = q);
+      }
+    });
+
     // Register TV sidebar focus handler (tab index 9 = Stremio TV)
     _tvContentFocusHandler = () {
-      // Focus the first channel row if available
-      if (_rowFocusNodes.isNotEmpty) {
-        _rowFocusNodes[_focusedIndex.clamp(0, _rowFocusNodes.length - 1)]
-            .requestFocus();
-      }
+      _searchFocusNode.requestFocus();
     };
     MainPageBridge.registerTvContentFocusHandler(9, _tvContentFocusHandler!);
 
@@ -96,6 +107,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     for (final node in _rowFocusNodes) {
       node.dispose();
     }
@@ -917,6 +930,65 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   // ============================================================================
+  // Search
+  // ============================================================================
+
+  List<StremioTvChannel> get _filteredChannels {
+    if (_searchQuery.isEmpty) return _channels;
+    return _channels.where((ch) {
+      final q = _searchQuery;
+      return ch.displayName.toLowerCase().contains(q) ||
+          ch.addon.name.toLowerCase().contains(q) ||
+          ch.catalog.name.toLowerCase().contains(q) ||
+          (ch.genre?.toLowerCase().contains(q) ?? false) ||
+          ch.type.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  KeyEventResult _handleSearchKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final text = _searchController.text;
+    final selection = _searchController.selection;
+    final isAtEnd = !selection.isValid ||
+        (selection.baseOffset == text.length &&
+            selection.extentOffset == text.length);
+    final isAtStart = !selection.isValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (text.isEmpty || isAtEnd) {
+        // Focus first channel row
+        final filtered = _filteredChannels;
+        if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
+          final firstIdx = _channels.indexOf(filtered.first);
+          if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+            _rowFocusNodes[firstIdx].requestFocus();
+          }
+        }
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (text.isEmpty || isAtStart) {
+        MainPageBridge.focusTvSidebar?.call();
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      if (text.isNotEmpty) {
+        _searchController.clear();
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // ============================================================================
   // Build
   // ============================================================================
 
@@ -959,7 +1031,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               color: theme.colorScheme.primaryContainer,
                             ),
                             child: Text(
-                              '${_channels.length} channels',
+                              _searchQuery.isNotEmpty
+                                  ? '${_filteredChannels.length}/${_channels.length} channels'
+                                  : '${_channels.length} channels',
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: theme.colorScheme.onPrimaryContainer,
                               ),
@@ -982,53 +1056,104 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         ],
                       ),
                     ),
+                    // Search box
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Search channels...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 20),
+                                  onPressed: _searchController.clear,
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        textInputAction: TextInputAction.search,
+                      ),
+                    ),
                     // Channel list
                     Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(top: 8, bottom: 16),
-                        itemCount: _channels.length,
-                        itemBuilder: (context, index) {
-                          final channel = _channels[index];
-
-                          // Trigger lazy load for visible channels
-                          if (!channel.hasItems &&
-                              !_loadingChannelIds.contains(channel.id)) {
-                            _ensureChannelItemsLoaded(channel);
+                      child: Builder(
+                        builder: (context) {
+                          final filtered = _filteredChannels;
+                          if (filtered.isEmpty && _searchQuery.isNotEmpty) {
+                            return Center(
+                              child: Text(
+                                'No channels match "$_searchQuery"',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            );
                           }
+                          return ListView.builder(
+                            padding:
+                                const EdgeInsets.only(top: 8, bottom: 16),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final channel = filtered[index];
+                              final realIndex = _channels.indexOf(channel);
 
-                          final nowPlaying = _service.getNowPlaying(
-                            channel,
-                            rotationMinutes: _rotationMinutes,
-                          );
-                          final isLoading =
-                              _loadingChannelIds.contains(channel.id);
-                          final focusNode = index < _rowFocusNodes.length
-                              ? _rowFocusNodes[index]
-                              : FocusNode();
-
-                          return ListenableBuilder(
-                            listenable: focusNode,
-                            builder: (context, _) {
-                              if (focusNode.hasFocus &&
-                                  _focusedIndex != index) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  if (mounted) {
-                                    setState(
-                                        () => _focusedIndex = index);
-                                  }
-                                });
+                              // Trigger lazy load for visible channels
+                              if (!channel.hasItems &&
+                                  !_loadingChannelIds
+                                      .contains(channel.id)) {
+                                _ensureChannelItemsLoaded(channel);
                               }
-                              return StremioTvChannelRow(
-                                channel: channel,
-                                nowPlaying: nowPlaying,
-                                isLoading: isLoading,
-                                isFocused: focusNode.hasFocus,
-                                focusNode: focusNode,
-                                onTap: () => _playChannel(channel),
-                                onLongPress: () =>
-                                    _toggleFavorite(channel),
-                                onLeftPress: MainPageBridge.focusTvSidebar,
+
+                              final nowPlaying = _service.getNowPlaying(
+                                channel,
+                                rotationMinutes: _rotationMinutes,
+                              );
+                              final isLoading =
+                                  _loadingChannelIds.contains(channel.id);
+                              final focusNode =
+                                  realIndex < _rowFocusNodes.length
+                                      ? _rowFocusNodes[realIndex]
+                                      : FocusNode();
+
+                              return ListenableBuilder(
+                                listenable: focusNode,
+                                builder: (context, _) {
+                                  if (focusNode.hasFocus &&
+                                      _focusedIndex != realIndex) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      if (mounted) {
+                                        setState(() =>
+                                            _focusedIndex = realIndex);
+                                      }
+                                    });
+                                  }
+                                  return StremioTvChannelRow(
+                                    channel: channel,
+                                    nowPlaying: nowPlaying,
+                                    isLoading: isLoading,
+                                    isFocused: focusNode.hasFocus,
+                                    focusNode: focusNode,
+                                    onTap: () => _playChannel(channel),
+                                    onLongPress: () =>
+                                        _toggleFavorite(channel),
+                                    onLeftPress:
+                                        MainPageBridge.focusTvSidebar,
+                                    onUpPress: index == 0
+                                        ? () => _searchFocusNode
+                                            .requestFocus()
+                                        : null,
+                                  );
+                                },
                               );
                             },
                           );

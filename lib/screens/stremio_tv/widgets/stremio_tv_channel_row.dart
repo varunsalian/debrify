@@ -18,6 +18,7 @@ class StremioTvChannelRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onLeftPress;
+  final VoidCallback? onUpPress;
 
   const StremioTvChannelRow({
     super.key,
@@ -29,6 +30,7 @@ class StremioTvChannelRow extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.onLeftPress,
+    this.onUpPress,
   });
 
   @override
@@ -46,6 +48,11 @@ class StremioTvChannelRow extends StatelessWidget {
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
             onLeftPress != null) {
           onLeftPress!();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            onUpPress != null) {
+          onUpPress!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
