@@ -36,15 +36,12 @@ class StremioTvService {
       final channels = <StremioTvChannel>[];
       int channelNumber = 1;
 
-      // TODO: Add 'series' support later (needs season/episode selection)
-      const allowedTypes = {'movie'};
+      // Block series for now (needs season/episode selection)
+      const blockedTypes = {'series'};
 
       for (final addon in addons) {
-        // Skip addons that don't handle IMDB IDs (e.g., IPTV/M3U addons)
-        if (!addon.handlesImdbIds) continue;
-
         for (final catalog in addon.catalogs) {
-          if (!allowedTypes.contains(catalog.type.toLowerCase())) continue;
+          if (blockedTypes.contains(catalog.type.toLowerCase())) continue;
           final genres = catalog.genreOptions;
 
           if (genres.isNotEmpty) {
@@ -95,7 +92,7 @@ class StremioTvService {
   /// Falls back to page 0 if the random page returns no results.
   /// Caches results for 30 minutes.
   Future<void> loadChannelItems(StremioTvChannel channel) async {
-    if (channel.hasItems && !channel.isCacheStale) return;
+    if (!channel.isCacheStale) return;
 
     try {
       // Pick a deterministic page based on channel ID
@@ -112,7 +109,7 @@ class StremioTvService {
           genre: channel.genre,
           skip: skip,
         );
-        items = fetched.where((m) => m.hasValidImdbId).toList();
+        items = fetched.toList();
       }
 
       // Fall back to first page if random page was empty or skip was 0
@@ -122,7 +119,7 @@ class StremioTvService {
           channel.catalog,
           genre: channel.genre,
         );
-        items = fetched.where((m) => m.hasValidImdbId).toList();
+        items = fetched.toList();
       }
 
       channel.items = items;

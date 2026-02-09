@@ -308,7 +308,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   /// Check if a direct stream URL has sufficient content size.
   /// Returns false for placeholder videos (< 200 MB).
   /// Follows up to 5 redirects to reach the final URL.
-  Future<bool> _isValidStreamUrl(String url) async {
+  Future<bool> _isValidStreamUrl(String url, {bool checkSize = true}) async {
     try {
       final client = http.Client();
       try {
@@ -338,7 +338,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               int.tryParse(streamed.headers['content-length'] ?? '') ?? 0;
           final sizeMb = (contentLength / (1024 * 1024)).toStringAsFixed(1);
           debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB');
-          if (contentLength == 0) return true;
+          if (contentLength == 0 || !checkSize) return true;
           return contentLength >= _minContentBytes;
         }
         // Too many redirects — allow through
@@ -380,12 +380,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       nowPlaying.progress,
     );
 
-    if (!item.hasValidImdbId) {
+    if (!item.hasValidId) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.name} does not have a valid IMDB ID for stream search',
+              '${item.name} does not have a valid ID for stream search',
             ),
           ),
         );
@@ -452,7 +452,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       for (final stream in directStreams) {
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
         if (!mounted) return;
-        final valid = await _isValidStreamUrl(stream.directUrl!);
+        final isMovie = item.type.toLowerCase() == 'movie';
+        final valid = await _isValidStreamUrl(
+          stream.directUrl!,
+          checkSize: isMovie,
+        );
         if (!mounted) return;
         if (valid) {
           await _playDirectStream(stream, item);
@@ -537,7 +541,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         title: item.name,
         subtitle: torrent.source,
         startAtPercent: _currentSlotProgress,
-        contentImdbId: item.hasValidImdbId ? item.id : null,
+        contentImdbId: item.hasValidId ? item.id : null,
         contentType: item.type,
       ),
     );
@@ -681,7 +685,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: videoUrl,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentImdbId: item.hasValidId ? item.id : null,
             contentType: item.type,
           ),
         );
@@ -798,7 +802,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: downloadLink,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentImdbId: item.hasValidId ? item.id : null,
             contentType: item.type,
           ),
         );
@@ -899,7 +903,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: streamUrl,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidImdbId ? item.id : null,
+            contentImdbId: item.hasValidId ? item.id : null,
             contentType: item.type,
             playlist: [
               PlaylistEntry(
