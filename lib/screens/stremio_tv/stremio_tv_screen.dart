@@ -1260,12 +1260,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 salt: _mixSalt,
                               );
                               // Compute display progress (capped/randomized per settings)
-                              final cappedProgress = nowPlaying != null
-                                  ? _computeStartProgress(
-                                      channel.id,
-                                      nowPlaying.progress,
-                                    )
-                                  : null;
+                              double? cappedProgress;
+                              if (nowPlaying != null) {
+                                if (_maxStartPercent == 0) {
+                                  cappedProgress = 0.0;
+                                } else {
+                                  cappedProgress = _computeStartProgress(
+                                    channel.id,
+                                    nowPlaying.progress,
+                                  );
+                                }
+                              }
                               final isLoading =
                                   _loadingChannelIds.contains(channel.id);
                               final focusNode =
