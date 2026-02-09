@@ -205,6 +205,50 @@ class StremioTvService {
     );
   }
 
+  /// Get a schedule of N consecutive slot items starting from the current slot.
+  ///
+  /// Returns a list of [StremioTvNowPlaying] for the current slot plus
+  /// the next [count]-1 future slots. Useful for showing a channel guide.
+  List<StremioTvNowPlaying> getSchedule(
+    StremioTvChannel channel, {
+    int count = 5,
+    int rotationMinutes = 90,
+    int salt = 0,
+  }) {
+    if (channel.items.isEmpty) return [];
+
+    final now = DateTime.now();
+    final slotDurationMs = rotationMinutes * 60 * 1000;
+    final offset = _channelOffsetMs(channel.id, slotDurationMs);
+    final adjusted = now.millisecondsSinceEpoch - offset;
+    final currentSlotNumber = adjusted ~/ slotDurationMs;
+
+    final schedule = <StremioTvNowPlaying>[];
+    for (int i = 0; i < count; i++) {
+      final slotNumber = currentSlotNumber + i;
+      final seed = salt == 0
+          ? '${channel.id}:$slotNumber'
+          : '${channel.id}:$slotNumber:$salt';
+      final hash = _djb2(seed);
+      final index = hash % channel.items.length;
+
+      final slotStartMs = slotNumber * slotDurationMs + offset;
+      final slotStart = DateTime.fromMillisecondsSinceEpoch(slotStartMs);
+      final slotEnd = DateTime.fromMillisecondsSinceEpoch(
+        slotStartMs + slotDurationMs,
+      );
+
+      schedule.add(StremioTvNowPlaying(
+        item: channel.items[index],
+        itemIndex: index,
+        slotStart: slotStart,
+        slotEnd: slotEnd,
+      ));
+    }
+
+    return schedule;
+  }
+
   /// Get the next slot's item (for "Up Next" / skip).
   StremioTvNowPlaying? getNextPlaying(
     StremioTvChannel channel, {

@@ -19,6 +19,7 @@ import '../../utils/file_utils.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
+import 'widgets/stremio_tv_guide_sheet.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -944,6 +945,43 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   // ============================================================================
+  // Channel Guide
+  // ============================================================================
+
+  Future<void> _showGuide(StremioTvChannel channel) async {
+    if (!channel.hasItems) {
+      await _ensureChannelItemsLoaded(channel);
+      if (!mounted) return;
+    }
+    if (channel.items.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No items available for this channel')),
+        );
+      }
+      return;
+    }
+
+    final schedule = _service.getSchedule(
+      channel,
+      count: 5,
+      rotationMinutes: _rotationMinutes,
+      salt: _mixSalt,
+    );
+    if (schedule.isEmpty || !mounted) return;
+
+    final tappedIndex = await StremioTvGuideSheet.show(
+      context,
+      channel: channel,
+      schedule: schedule,
+    );
+
+    if (tappedIndex != null && mounted) {
+      _playChannel(channel);
+    }
+  }
+
+  // ============================================================================
   // Favorites
   // ============================================================================
 
@@ -1300,6 +1338,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     onTap: () => _playChannel(channel),
                                     onLongPress: () =>
                                         _toggleFavorite(channel),
+                                    onGuidePressed: () =>
+                                        _showGuide(channel),
                                     onLeftPress:
                                         MainPageBridge.focusTvSidebar,
                                     onUpPress: index == 0

@@ -9,7 +9,9 @@ import 'stremio_tv_now_playing_card.dart';
 ///
 /// Shows: channel number | channel name | now playing poster + metadata + progress.
 /// Tap to play, long press to favorite/unfavorite.
-class StremioTvChannelRow extends StatelessWidget {
+/// A guide icon at the right edge opens the channel schedule.
+/// DPAD: right arrow switches to guide icon, select triggers it.
+class StremioTvChannelRow extends StatefulWidget {
   final StremioTvChannel channel;
   final StremioTvNowPlaying? nowPlaying;
   final bool isLoading;
@@ -17,6 +19,7 @@ class StremioTvChannelRow extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onGuidePressed;
   final VoidCallback? onLeftPress;
   final VoidCallback? onUpPress;
   final double? displayProgress;
@@ -30,33 +33,70 @@ class StremioTvChannelRow extends StatelessWidget {
     required this.focusNode,
     required this.onTap,
     required this.onLongPress,
+    this.onGuidePressed,
     this.onLeftPress,
     this.onUpPress,
     this.displayProgress,
   });
 
   @override
+  State<StremioTvChannelRow> createState() => _StremioTvChannelRowState();
+}
+
+class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
+  /// false = play (row default), true = guide icon
+  bool _guideActive = false;
+
+  @override
+  void didUpdateWidget(StremioTvChannelRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isFocused && oldWidget.isFocused) {
+      _guideActive = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasGuide = widget.onGuidePressed != null;
 
     return Focus(
-      focusNode: focusNode,
+      focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.select) {
-          onTap();
+
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_guideActive) {
+            widget.onGuidePressed?.call();
+          } else {
+            widget.onTap();
+          }
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            onLeftPress != null) {
-          onLeftPress!();
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight && hasGuide) {
+          if (!_guideActive) {
+            setState(() => _guideActive = true);
+          }
           return KeyEventResult.handled;
         }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (_guideActive) {
+            setState(() => _guideActive = false);
+            return KeyEventResult.handled;
+          }
+          widget.onLeftPress?.call();
+          return KeyEventResult.handled;
+        }
+
         if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            onUpPress != null) {
-          onUpPress!();
+            widget.onUpPress != null) {
+          widget.onUpPress!();
           return KeyEventResult.handled;
         }
+
         return KeyEventResult.ignored;
       },
       child: AnimatedContainer(
@@ -64,31 +104,31 @@ class StremioTvChannelRow extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: isFocused
+          color: widget.isFocused
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
               : theme.colorScheme.surfaceContainerHighest,
           border: Border.all(
-            color: isFocused
+            color: widget.isFocused
                 ? theme.colorScheme.primary
                 : theme.colorScheme.outlineVariant.withValues(alpha: 0.15),
-            width: isFocused ? 2 : 1,
+            width: widget.isFocused ? 2 : 1,
           ),
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: onTap,
-            onLongPress: onLongPress,
+            onTap: widget.onTap,
+            onLongPress: widget.onLongPress,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final isCompact = constraints.maxWidth < 500;
                   if (isCompact) {
-                    return _buildCompactLayout(theme);
+                    return _buildCompactLayout(theme, hasGuide);
                   }
-                  return _buildWideLayout(theme);
+                  return _buildWideLayout(theme, hasGuide);
                 },
               ),
             ),
@@ -98,8 +138,84 @@ class StremioTvChannelRow extends StatelessWidget {
     );
   }
 
+  /// Action buttons — Play + Guide.
+  /// Both always look tappable. DPAD-selected one gets a brighter highlight.
+  Widget _buildActionButtons(ThemeData theme) {
+    final focused = widget.isFocused;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildActionBtn(
+          theme,
+          icon: Icons.play_arrow_rounded,
+          label: 'Play',
+          dpadSelected: focused && !_guideActive,
+          onTap: widget.onTap,
+        ),
+        const SizedBox(width: 6),
+        _buildActionBtn(
+          theme,
+          icon: Icons.list_rounded,
+          label: 'Guide',
+          dpadSelected: focused && _guideActive,
+          onTap: widget.onGuidePressed,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionBtn(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required bool dpadSelected,
+    VoidCallback? onTap,
+  }) {
+    return ExcludeFocus(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: dpadSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.primaryContainer,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: dpadSelected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: dpadSelected
+                        ? theme.colorScheme.onPrimary
+                        : theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Compact layout for small screens — channel info on top, now playing below.
-  Widget _buildCompactLayout(ThemeData theme) {
+  Widget _buildCompactLayout(ThemeData theme, bool hasGuide) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -107,7 +223,7 @@ class StremioTvChannelRow extends StatelessWidget {
         // Top: channel header
         Row(
           children: [
-            if (channel.isFavorite) ...[
+            if (widget.channel.isFavorite) ...[
               Icon(
                 Icons.star_rounded,
                 size: 14,
@@ -134,7 +250,7 @@ class StremioTvChannelRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'CH: ${channel.channelNumber}',
+                    'CH: ${widget.channel.channelNumber}',
                     style: theme.textTheme.labelSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
@@ -149,7 +265,7 @@ class StremioTvChannelRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    channel.addon.name,
+                    widget.channel.addon.name,
                     style: theme.textTheme.labelSmall?.copyWith(
                       fontSize: 9,
                       color: theme.colorScheme.onSurfaceVariant
@@ -159,9 +275,9 @@ class StremioTvChannelRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    channel.genre != null
-                        ? '${channel.catalog.name} - ${channel.genre}'
-                        : channel.catalog.name,
+                    widget.channel.genre != null
+                        ? '${widget.channel.catalog.name} - ${widget.channel.genre}'
+                        : widget.channel.catalog.name,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -179,14 +295,14 @@ class StremioTvChannelRow extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: _typeColor(channel.type, theme)
+                color: _typeColor(widget.channel.type, theme)
                     .withValues(alpha: 0.15),
               ),
               child: Text(
-                channel.type.toUpperCase(),
+                widget.channel.type.toUpperCase(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 10,
-                  color: _typeColor(channel.type, theme),
+                  color: _typeColor(widget.channel.type, theme),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -199,17 +315,25 @@ class StremioTvChannelRow extends StatelessWidget {
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
         ),
         // Bottom: now playing
-        nowPlaying != null
-            ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!, displayProgress: displayProgress)
-            : isLoading
-                ? _buildLoadingPlaceholder(theme)
-                : _buildEmptyPlaceholder(theme),
+        if (widget.nowPlaying != null) ...[
+          StremioTvNowPlayingCard(
+            nowPlaying: widget.nowPlaying!,
+            displayProgress: widget.displayProgress,
+          ),
+          if (hasGuide) ...[
+            const SizedBox(height: 8),
+            _buildActionButtons(theme),
+          ],
+        ] else if (widget.isLoading)
+          _buildLoadingPlaceholder(theme)
+        else
+          _buildEmptyPlaceholder(theme),
       ],
     );
   }
 
   /// Wide layout for large screens — horizontal row with fixed columns.
-  Widget _buildWideLayout(ThemeData theme) {
+  Widget _buildWideLayout(ThemeData theme, bool hasGuide) {
     return Row(
       children: [
         // Channel number + favorite star
@@ -218,14 +342,14 @@ class StremioTvChannelRow extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (channel.isFavorite)
+              if (widget.channel.isFavorite)
                 Icon(
                   Icons.star_rounded,
                   size: 16,
                   color: Colors.amber.shade600,
                 ),
               Text(
-                'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
+                'CH ${widget.channel.channelNumber.toString().padLeft(2, '0')}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.onSurfaceVariant,
@@ -249,7 +373,7 @@ class StremioTvChannelRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                channel.addon.name,
+                widget.channel.addon.name,
                 style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 9,
                   color: theme.colorScheme.onSurfaceVariant
@@ -261,9 +385,9 @@ class StremioTvChannelRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                channel.genre != null
-                    ? '${channel.catalog.name} - ${channel.genre}'
-                    : channel.catalog.name,
+                widget.channel.genre != null
+                    ? '${widget.channel.catalog.name} - ${widget.channel.genre}'
+                    : widget.channel.catalog.name,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -278,14 +402,14 @@ class StremioTvChannelRow extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: _typeColor(channel.type, theme)
+                  color: _typeColor(widget.channel.type, theme)
                       .withValues(alpha: 0.15),
                 ),
                 child: Text(
-                  channel.type.toUpperCase(),
+                  widget.channel.type.toUpperCase(),
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize: 10,
-                    color: _typeColor(channel.type, theme),
+                    color: _typeColor(widget.channel.type, theme),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -302,12 +426,20 @@ class StremioTvChannelRow extends StatelessWidget {
         const SizedBox(width: 12),
         // Now playing card
         Expanded(
-          child: nowPlaying != null
-              ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!, displayProgress: displayProgress)
-              : isLoading
+          child: widget.nowPlaying != null
+              ? StremioTvNowPlayingCard(
+                  nowPlaying: widget.nowPlaying!,
+                  displayProgress: widget.displayProgress,
+                )
+              : widget.isLoading
                   ? _buildLoadingPlaceholder(theme)
                   : _buildEmptyPlaceholder(theme),
         ),
+        // Action buttons
+        if (hasGuide) ...[
+          const SizedBox(width: 8),
+          _buildActionButtons(theme),
+        ],
       ],
     );
   }

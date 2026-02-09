@@ -39,11 +39,16 @@ class StremioTvNowPlaying {
   String get progressText {
     final now = DateTime.now();
     if (now.isAfter(slotEnd)) return 'Ended';
-    final hour = slotEnd.hour;
-    final minute = slotEnd.minute;
+    return 'Ends at ${formatTime(slotEnd)}';
+  }
+
+  /// Format a DateTime as "2:30 PM" (12-hour with AM/PM).
+  static String formatTime(DateTime time) {
+    final hour = time.hour;
+    final minute = time.minute;
     final period = hour >= 12 ? 'PM' : 'AM';
     final h12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final mm = minute.toString().padLeft(2, '0');
-    return 'Ends at $h12:$mm $period';
+    return '$h12:$mm $period';
   }
 }
