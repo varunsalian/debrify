@@ -3655,6 +3655,41 @@ class StorageService {
       return {};
     }
   }
+
+  // ==========================================================================
+  // Stremio TV Channel Filters
+  // ==========================================================================
+
+  static const String _stremioTvDisabledChannelFiltersKey =
+      'stremio_tv_disabled_channel_filters_v1';
+
+  /// Get set of disabled channel filter IDs (addon, catalog, or genre level).
+  static Future<Set<String>> getStremioTvDisabledFilters() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_stremioTvDisabledChannelFiltersKey);
+    if (json == null) return {};
+
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.cast<String>().toSet();
+    } catch (e) {
+      debugPrint('Error reading Stremio TV disabled filters: $e');
+      return {};
+    }
+  }
+
+  /// Save set of disabled channel filter IDs.
+  static Future<void> setStremioTvDisabledFilters(Set<String> disabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (disabled.isEmpty) {
+      await prefs.remove(_stremioTvDisabledChannelFiltersKey);
+    } else {
+      await prefs.setString(
+        _stremioTvDisabledChannelFiltersKey,
+        jsonEncode(disabled.toList()),
+      );
+    }
+  }
 }
 
 class ApiKeyValidator {

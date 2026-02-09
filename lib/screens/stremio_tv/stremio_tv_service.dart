@@ -32,6 +32,7 @@ class StremioTvService {
     try {
       final addons = await _stremioService.getCatalogAddons();
       final favoriteIds = await StorageService.getStremioTvFavoriteChannelIds();
+      final disabled = await StorageService.getStremioTvDisabledFilters();
 
       final channels = <StremioTvChannel>[];
       int channelNumber = 1;
@@ -40,14 +41,24 @@ class StremioTvService {
       const blockedTypes = {'series'};
 
       for (final addon in addons) {
+        // Skip entire addon if disabled
+        if (disabled.contains(addon.id)) continue;
+
         for (final catalog in addon.catalogs) {
           if (blockedTypes.contains(catalog.type.toLowerCase())) continue;
+
+          // Skip catalog if disabled
+          final catalogId = '${addon.id}:${catalog.id}:${catalog.type}';
+          if (disabled.contains(catalogId)) continue;
+
           final genres = catalog.genreOptions;
 
           if (genres.isNotEmpty) {
             // Expand each genre into its own channel
             for (final genre in genres) {
-              final id = '${addon.id}:${catalog.id}:${catalog.type}:$genre';
+              final id = '$catalogId:$genre';
+              // Skip genre if disabled
+              if (disabled.contains(id)) continue;
               channels.add(StremioTvChannel.fromCatalog(
                 addon: addon,
                 catalog: catalog,
@@ -58,12 +69,11 @@ class StremioTvService {
             }
           } else {
             // No genres — single channel for the catalog
-            final id = '${addon.id}:${catalog.id}:${catalog.type}';
             channels.add(StremioTvChannel.fromCatalog(
               addon: addon,
               catalog: catalog,
               channelNumber: channelNumber++,
-              isFavorite: favoriteIds.contains(id),
+              isFavorite: favoriteIds.contains(catalogId),
             ));
           }
         }
@@ -74,6 +84,21 @@ class StremioTvService {
       debugPrint('StremioTvService: Error discovering channels: $e');
       return [];
     }
+  }
+
+  /// Get the raw addon→catalog→genre tree for the filter UI.
+  /// Returns all addons with their catalogs (excluding series type).
+  Future<List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>>
+      getFilterTree() async {
+    final addons = await _stremioService.getCatalogAddons();
+    const blockedTypes = {'series'};
+
+    return addons.map((addon) {
+      final catalogs = addon.catalogs
+          .where((c) => !blockedTypes.contains(c.type.toLowerCase()))
+          .toList();
+      return (addon: addon, catalogs: catalogs);
+    }).where((entry) => entry.catalogs.isNotEmpty).toList();
   }
 
   // ============================================================================
