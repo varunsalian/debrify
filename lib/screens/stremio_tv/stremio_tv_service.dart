@@ -40,6 +40,9 @@ class StremioTvService {
       const allowedTypes = {'movie'};
 
       for (final addon in addons) {
+        // Skip addons that don't handle IMDB IDs (e.g., IPTV/M3U addons)
+        if (!addon.handlesImdbIds) continue;
+
         for (final catalog in addon.catalogs) {
           if (!allowedTypes.contains(catalog.type.toLowerCase())) continue;
           final genres = catalog.genreOptions;
