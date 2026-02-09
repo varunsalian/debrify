@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -156,7 +158,7 @@ class _GuideEntry extends StatelessWidget {
     final theme = Theme.of(context);
     final item = entry.item;
 
-    return Material(
+    final content = Material(
       color: isCurrent
           ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
           : Colors.transparent,
@@ -256,11 +258,22 @@ class _GuideEntry extends StatelessWidget {
                   ],
                 ),
               ),
+              // Equalizer animation for current item
+              if (isCurrent) ...[
+                const SizedBox(width: 8),
+                _EqualizerBars(color: theme.colorScheme.primary),
+              ],
             ],
           ),
         ),
       ),
     );
+
+    // Dim future items
+    if (!isCurrent) {
+      return Opacity(opacity: 0.45, child: content);
+    }
+    return content;
   }
 
   Widget _buildMetaRow(StremioMeta item, ThemeData theme) {
@@ -289,6 +302,76 @@ class _GuideEntry extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Animated equalizer bars — 4 bars that bounce at different speeds,
+/// mimicking a "now playing" media indicator.
+class _EqualizerBars extends StatefulWidget {
+  final Color color;
+  const _EqualizerBars({required this.color});
+
+  @override
+  State<_EqualizerBars> createState() => _EqualizerBarsState();
+}
+
+class _EqualizerBarsState extends State<_EqualizerBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  // Each bar has a different frequency and phase for organic movement
+  static const _barParams = [
+    (freq: 1.8, phase: 0.0),
+    (freq: 2.5, phase: 0.4),
+    (freq: 1.4, phase: 0.8),
+    (freq: 2.1, phase: 1.2),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(_barParams.length, (i) {
+            final p = _barParams[i];
+            final t = _controller.value * 2 * math.pi;
+            // Combine two sine waves for more organic movement
+            final v = (math.sin(t * p.freq + p.phase) + 1) / 2;
+            final v2 =
+                (math.sin(t * p.freq * 0.7 + p.phase + 1.0) + 1) / 2;
+            final combined = (v * 0.7 + v2 * 0.3);
+            final height = 3.0 + combined * 13.0; // 3..16 px
+            return Container(
+              width: 3,
+              height: height,
+              margin: EdgeInsets.only(right: i < _barParams.length - 1 ? 2 : 0),
+              decoration: BoxDecoration(
+                color: widget.color,
+                borderRadius: BorderRadius.circular(1.5),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

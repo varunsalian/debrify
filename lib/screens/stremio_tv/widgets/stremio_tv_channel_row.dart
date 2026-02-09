@@ -312,7 +312,7 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
         Divider(
           height: 16,
           thickness: 1,
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+          color: theme.colorScheme.outlineVariant,
         ),
         // Bottom: now playing
         if (widget.nowPlaying != null) ...[
@@ -321,7 +321,11 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
             displayProgress: widget.displayProgress,
           ),
           if (hasGuide) ...[
-            const SizedBox(height: 8),
+            Divider(
+              height: 16,
+              thickness: 1,
+              color: theme.colorScheme.outlineVariant,
+            ),
             _buildActionButtons(theme),
           ],
         ] else if (widget.isLoading)
