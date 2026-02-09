@@ -80,112 +80,233 @@ class StremioTvChannelRow extends StatelessWidget {
             onLongPress: onLongPress,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  // Channel number + favorite star
-                  SizedBox(
-                    width: 50,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (channel.isFavorite)
-                          Icon(
-                            Icons.star_rounded,
-                            size: 16,
-                            color: Colors.amber.shade600,
-                          ),
-                        Text(
-                          'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Divider
-                  Container(
-                    width: 1,
-                    height: 60,
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(width: 12),
-                  // Channel name + addon label + type
-                  SizedBox(
-                    width: 130,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Addon name as small label
-                        Text(
-                          channel.addon.name,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontSize: 9,
-                            color: theme.colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.6),
-                            letterSpacing: 0.3,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        // Catalog name + genre as main text
-                        Text(
-                          channel.genre != null
-                              ? '${channel.catalog.name} - ${channel.genre}'
-                              : channel.catalog.name,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(4),
-                            color: _typeColor(channel.type, theme)
-                                .withValues(alpha: 0.15),
-                          ),
-                          child: Text(
-                            channel.type.toUpperCase(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 10,
-                              color: _typeColor(channel.type, theme),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Divider
-                  Container(
-                    width: 1,
-                    height: 60,
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(width: 12),
-                  // Now playing card
-                  Expanded(
-                    child: nowPlaying != null
-                        ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
-                        : isLoading
-                            ? _buildLoadingPlaceholder(theme)
-                            : _buildEmptyPlaceholder(theme),
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 500;
+                  if (isCompact) {
+                    return _buildCompactLayout(theme);
+                  }
+                  return _buildWideLayout(theme);
+                },
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Compact layout for small screens — channel info on top, now playing below.
+  Widget _buildCompactLayout(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Top: channel header
+        Row(
+          children: [
+            if (channel.isFavorite) ...[
+              Icon(
+                Icons.star_rounded,
+                size: 14,
+                color: Colors.amber.shade600,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                color: theme.colorScheme.primary.withValues(alpha: 0.15),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.live_tv_rounded,
+                    size: 12,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'CH: ${channel.channelNumber}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    channel.addon.name,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.6),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    channel.genre != null
+                        ? '${channel.catalog.name} - ${channel.genre}'
+                        : channel.catalog.name,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: 1,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: _typeColor(channel.type, theme)
+                    .withValues(alpha: 0.15),
+              ),
+              child: Text(
+                channel.type.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 10,
+                  color: _typeColor(channel.type, theme),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Divider(
+          height: 16,
+          thickness: 1,
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+        ),
+        // Bottom: now playing
+        nowPlaying != null
+            ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
+            : isLoading
+                ? _buildLoadingPlaceholder(theme)
+                : _buildEmptyPlaceholder(theme),
+      ],
+    );
+  }
+
+  /// Wide layout for large screens — horizontal row with fixed columns.
+  Widget _buildWideLayout(ThemeData theme) {
+    return Row(
+      children: [
+        // Channel number + favorite star
+        SizedBox(
+          width: 50,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (channel.isFavorite)
+                Icon(
+                  Icons.star_rounded,
+                  size: 16,
+                  color: Colors.amber.shade600,
+                ),
+              Text(
+                'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Divider
+        Container(
+          width: 1,
+          height: 60,
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+        ),
+        const SizedBox(width: 12),
+        // Channel name + addon label + type
+        SizedBox(
+          width: 130,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                channel.addon.name,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 9,
+                  color: theme.colorScheme.onSurfaceVariant
+                      .withValues(alpha: 0.6),
+                  letterSpacing: 0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                channel.genre != null
+                    ? '${channel.catalog.name} - ${channel.genre}'
+                    : channel.catalog.name,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 3),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: _typeColor(channel.type, theme)
+                      .withValues(alpha: 0.15),
+                ),
+                child: Text(
+                  channel.type.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 10,
+                    color: _typeColor(channel.type, theme),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Divider
+        Container(
+          width: 1,
+          height: 60,
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+        ),
+        const SizedBox(width: 12),
+        // Now playing card
+        Expanded(
+          child: nowPlaying != null
+              ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
+              : isLoading
+                  ? _buildLoadingPlaceholder(theme)
+                  : _buildEmptyPlaceholder(theme),
+        ),
+      ],
     );
   }
 
