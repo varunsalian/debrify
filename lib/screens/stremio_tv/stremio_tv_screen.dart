@@ -41,6 +41,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
+  int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   double? _currentSlotProgress;
 
   Timer? _refreshTimer;
@@ -136,6 +137,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
     _debridProvider = await StorageService.getStremioTvDebridProvider();
+    _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
   }
 
   Future<void> _discoverAndLoad() async {
@@ -372,7 +374,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
 
     final item = nowPlaying.item;
-    _currentSlotProgress = nowPlaying.progress;
+    _currentSlotProgress = _computeStartProgress(
+      channel.id,
+      nowPlaying.progress,
+    );
 
     if (!item.hasValidImdbId) {
       if (mounted) {
@@ -916,6 +921,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
+  /// Compute the start progress for a channel based on the max start percent setting.
+  /// Returns null (beginning), the raw slot progress, or a deterministic random
+  /// value within [0, maxStartPercent] per channel.
+  double? _computeStartProgress(String channelId, double rawProgress) {
+    if (_maxStartPercent == 0) return null; // always from beginning
+    if (_maxStartPercent < 0) return rawProgress; // no limit
+    final cap = _maxStartPercent / 100.0;
+    if (rawProgress <= cap) return rawProgress; // slot hasn't reached cap yet
+    // Deterministic random within [0, cap] based on channel ID
+    final hash = channelId.hashCode.abs();
+    return (hash % 1000) / 1000.0 * cap;
+  }
+
   void _playChannelById(String channelId) {
     if (_channels.isEmpty) return;
     final channel = _channels.firstWhere(
@@ -1241,6 +1259,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 rotationMinutes: _rotationMinutes,
                                 salt: _mixSalt,
                               );
+                              // Compute display progress (capped/randomized per settings)
+                              final cappedProgress = nowPlaying != null
+                                  ? _computeStartProgress(
+                                      channel.id,
+                                      nowPlaying.progress,
+                                    )
+                                  : null;
                               final isLoading =
                                   _loadingChannelIds.contains(channel.id);
                               final focusNode =
@@ -1276,6 +1301,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         ? () => _searchFocusNode
                                             .requestFocus()
                                         : null,
+                                    displayProgress: cappedProgress,
                                   );
                                 },
                               );

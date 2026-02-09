@@ -193,6 +193,8 @@ class StorageService {
       'stremio_tv_preferred_quality';
   static const String _stremioTvDebridProviderKey =
       'stremio_tv_debrid_provider';
+  static const String _stremioTvMaxStartPercentKey =
+      'stremio_tv_max_start_percent';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3579,6 +3581,18 @@ class StorageService {
   static Future<void> setStremioTvDebridProvider(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_stremioTvDebridProviderKey, value);
+  }
+
+  /// Get max start position percent for Stremio TV (0 = always from beginning, -1 = no limit)
+  static Future<int> getStremioTvMaxStartPercent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_stremioTvMaxStartPercentKey) ?? -1;
+  }
+
+  /// Save max start position percent for Stremio TV
+  static Future<void> setStremioTvMaxStartPercent(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_stremioTvMaxStartPercentKey, value);
   }
 
   // ==========================================================================

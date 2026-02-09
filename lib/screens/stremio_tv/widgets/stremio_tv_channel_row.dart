@@ -19,6 +19,7 @@ class StremioTvChannelRow extends StatelessWidget {
   final VoidCallback onLongPress;
   final VoidCallback? onLeftPress;
   final VoidCallback? onUpPress;
+  final double? displayProgress;
 
   const StremioTvChannelRow({
     super.key,
@@ -31,6 +32,7 @@ class StremioTvChannelRow extends StatelessWidget {
     required this.onLongPress,
     this.onLeftPress,
     this.onUpPress,
+    this.displayProgress,
   });
 
   @override
@@ -198,7 +200,7 @@ class StremioTvChannelRow extends StatelessWidget {
         ),
         // Bottom: now playing
         nowPlaying != null
-            ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
+            ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!, displayProgress: displayProgress)
             : isLoading
                 ? _buildLoadingPlaceholder(theme)
                 : _buildEmptyPlaceholder(theme),
@@ -301,7 +303,7 @@ class StremioTvChannelRow extends StatelessWidget {
         // Now playing card
         Expanded(
           child: nowPlaying != null
-              ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!)
+              ? StremioTvNowPlayingCard(nowPlaying: nowPlaying!, displayProgress: displayProgress)
               : isLoading
                   ? _buildLoadingPlaceholder(theme)
                   : _buildEmptyPlaceholder(theme),

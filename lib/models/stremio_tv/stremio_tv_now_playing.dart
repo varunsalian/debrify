@@ -35,9 +35,15 @@ class StremioTvNowPlaying {
     return (elapsed / total).clamp(0.0, 1.0);
   }
 
-  /// Formatted progress percentage string (e.g., "23% complete")
+  /// Formatted text showing when the slot ends (e.g., "Ends at 2:30 PM")
   String get progressText {
-    final pct = (progress * 100).round();
-    return '$pct% complete';
+    final now = DateTime.now();
+    if (now.isAfter(slotEnd)) return 'Ended';
+    final hour = slotEnd.hour;
+    final minute = slotEnd.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final h12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final mm = minute.toString().padLeft(2, '0');
+    return 'Ends at $h12:$mm $period';
   }
 }

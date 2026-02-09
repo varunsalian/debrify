@@ -8,8 +8,13 @@ import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 /// for a Stremio TV channel.
 class StremioTvNowPlayingCard extends StatelessWidget {
   final StremioTvNowPlaying nowPlaying;
+  final double? displayProgress;
 
-  const StremioTvNowPlayingCard({super.key, required this.nowPlaying});
+  const StremioTvNowPlayingCard({
+    super.key,
+    required this.nowPlaying,
+    this.displayProgress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -104,13 +109,14 @@ class StremioTvNowPlayingCard extends StatelessWidget {
   }
 
   Widget _buildProgressBar(ThemeData theme) {
+    final progress = displayProgress ?? nowPlaying.progress;
     return Row(
       children: [
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              value: nowPlaying.progress,
+              value: progress,
               minHeight: 4,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(

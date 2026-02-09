@@ -14,6 +14,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
+  int _maxStartPercent = -1; // -1 = no limit, 0 = beginning, 10/20/30/50 = cap
   List<MapEntry<String, String>> _availableProviders = [];
 
   @override
@@ -30,6 +31,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
       final preferredQuality = await StorageService.getStremioTvPreferredQuality();
       final debridProvider = await StorageService.getStremioTvDebridProvider();
+      final maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
@@ -51,6 +53,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         _autoRefresh = autoRefresh;
         _preferredQuality = preferredQuality;
         _debridProvider = debridProvider;
+        _maxStartPercent = maxStartPercent;
         _availableProviders = providers;
         // Reset to auto if saved provider is no longer configured
         if (_debridProvider != 'auto' &&
@@ -100,6 +103,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvPreferredQuality(value);
       setState(() => _preferredQuality = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setMaxStartPercent(int value) async {
+    try {
+      await StorageService.setStremioTvMaxStartPercent(value);
+      setState(() => _maxStartPercent = value);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -304,6 +320,66 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                               ),
                             ],
                           ),
+                          const Divider(height: 32),
+                          // Start position dropdown
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Start Position',
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      'Where to begin playback within the current slot',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              DropdownButton<int>(
+                                value: _maxStartPercent,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 0,
+                                    child: Text('Beginning'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 10,
+                                    child: Text('Max 10%'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 20,
+                                    child: Text('Max 20%'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 30,
+                                    child: Text('Max 30%'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 50,
+                                    child: Text('Max 50%'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: -1,
+                                    child: Text('Slot progress'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _setMaxStartPercent(value);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                           if (_availableProviders.isNotEmpty) ...[
                             const Divider(height: 32),
                             // Debrid provider dropdown
@@ -389,6 +465,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                           Text(
                             '- Each Stremio addon catalog becomes a TV channel\n'
                             '- The "now playing" item rotates deterministically based on time\n'
+                            '- Start Position controls where playback begins within the slot\n'
                             '- Long press a channel to favorite/unfavorite it\n'
                             '- Favorites appear pinned at the top and on the home screen\n'
                             '- Install more catalog addons (like Cinemeta) for more channels',
