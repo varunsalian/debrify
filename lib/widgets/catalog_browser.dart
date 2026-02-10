@@ -499,7 +499,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     if (widget.onItemSelected == null) return;
 
     final selection = AdvancedSearchSelection(
-      imdbId: item.id,
+      imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
@@ -512,7 +512,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   void _onQuickPlay(StremioMeta item) {
     final selection = AdvancedSearchSelection(
-      imdbId: item.id,
+      imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,

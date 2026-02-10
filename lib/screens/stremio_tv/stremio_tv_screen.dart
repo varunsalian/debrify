@@ -447,7 +447,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     try {
       final results = await _service.searchStreams(
         type: item.type,
-        imdbId: item.id,
+        imdbId: item.effectiveImdbId ?? item.id,
       );
 
       if (!mounted) return;
@@ -566,7 +566,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         title: item.name,
         subtitle: torrent.source,
         startAtPercent: _currentSlotProgress,
-        contentImdbId: item.hasValidId ? item.id : null,
+        contentImdbId: item.effectiveImdbId,
         contentType: item.type,
       ),
     );
@@ -710,7 +710,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: videoUrl,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidId ? item.id : null,
+            contentImdbId: item.effectiveImdbId,
             contentType: item.type,
           ),
         );
@@ -827,7 +827,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: downloadLink,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidId ? item.id : null,
+            contentImdbId: item.effectiveImdbId,
             contentType: item.type,
           ),
         );
@@ -928,7 +928,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             videoUrl: streamUrl,
             title: item.name,
             startAtPercent: _currentSlotProgress,
-            contentImdbId: item.hasValidId ? item.id : null,
+            contentImdbId: item.effectiveImdbId,
             contentType: item.type,
             playlist: [
               PlaylistEntry(

@@ -133,8 +133,11 @@ class StremioAddonCatalog {
 
 /// Represents a meta item (movie/series) from a Stremio catalog
 class StremioMeta {
-  /// IMDB ID (e.g., 'tt1234567')
+  /// Content ID from the addon (e.g., 'tt1234567', 'tmdb:840464', 'trakt:123')
   final String id;
+
+  /// Resolved IMDB ID (e.g., 'tt1234567'), extracted from imdb_id field or links
+  final String? imdbId;
 
   /// Content type ('movie' or 'series')
   final String type;
@@ -162,6 +165,7 @@ class StremioMeta {
 
   const StremioMeta({
     required this.id,
+    this.imdbId,
     required this.type,
     required this.name,
     this.poster,
@@ -191,8 +195,40 @@ class StremioMeta {
       year = yearRaw;
     }
 
+    final id = json['id'] as String? ?? json['imdb_id'] as String? ?? '';
+
+    // Resolve IMDB ID: if id is already IMDB, use it directly.
+    // Otherwise try imdb_id field, then extract from links array.
+    String? imdbId;
+    if (id.startsWith('tt') && id.length >= 9) {
+      imdbId = id;
+    } else {
+      final rawImdbId = json['imdb_id'] as String?;
+      if (rawImdbId != null && rawImdbId.startsWith('tt')) {
+        imdbId = rawImdbId;
+      } else {
+        // Try extracting from links: [{category: "imdb", url: "https://imdb.com/title/tt..."}]
+        final links = json['links'] as List<dynamic>?;
+        if (links != null) {
+          for (final link in links) {
+            if (link is Map<String, dynamic> && link['category'] == 'imdb') {
+              final url = link['url'] as String?;
+              if (url != null) {
+                final match = RegExp(r'(tt\d{7,10})').firstMatch(url);
+                if (match != null) {
+                  imdbId = match.group(1);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     return StremioMeta(
-      id: json['id'] as String? ?? json['imdb_id'] as String? ?? '',
+      id: id,
+      imdbId: imdbId,
       type: json['type'] as String? ?? 'movie',
       name: json['name'] as String? ?? json['title'] as String? ?? 'Unknown',
       poster: json['poster'] as String?,
@@ -204,8 +240,11 @@ class StremioMeta {
     );
   }
 
-  /// Check if this is a valid IMDB ID
-  bool get hasValidImdbId => id.startsWith('tt') && id.length >= 9;
+  /// Check if this has a resolved IMDB ID (either from id or imdb_id/links)
+  bool get hasValidImdbId => imdbId != null;
+
+  /// The effective IMDB ID for torrent search — resolved from imdb_id/links fields
+  String? get effectiveImdbId => imdbId;
 
   /// Check if this has a valid ID (any non-empty ID, not just IMDB)
   bool get hasValidId => id.isNotEmpty;
@@ -214,7 +253,7 @@ class StremioMeta {
   bool get isNonImdb => !hasValidImdbId && hasValidId;
 
   @override
-  String toString() => 'StremioMeta(id: $id, name: $name, year: $year)';
+  String toString() => 'StremioMeta(id: $id, imdbId: $imdbId, name: $name, year: $year)';
 }
 
 /// Represents a section of catalog content for homepage display

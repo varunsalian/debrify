@@ -304,7 +304,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
   void _onItemSelected(StremioMeta item) {
     final selection = AdvancedSearchSelection(
-      imdbId: item.id,
+      imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
@@ -316,7 +316,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
   void _onQuickPlay(StremioMeta item) {
     final selection = AdvancedSearchSelection(
-      imdbId: item.id,
+      imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
