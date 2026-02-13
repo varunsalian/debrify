@@ -618,7 +618,7 @@ class _StyleTab extends StatelessWidget {
                     color: subtitleStyle.color.color,
                     fontSize: subtitleStyle.size.sizePx * 0.5,
                     fontFamily: subtitleStyle.fontFamily,
-                    shadows: subtitleStyle.style.shadows,
+                    shadows: subtitleStyle.resolvedShadows,
                   ),
                 ),
               ),
@@ -675,6 +675,28 @@ class _StyleTab extends StatelessWidget {
                   .clamp(0, SubtitleColor.options.length - 1);
               await SubtitleSettingsService.instance.setColorIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(colorIndex: newIndex));
+            },
+          ),
+
+          _StyleOption(
+            label: 'Outline',
+            value: subtitleStyle.outlineColor.label,
+            valueColor: subtitleStyle.outlineColor.color,
+            onDecrease: () async {
+              final newIndex = (subtitleStyle.outlineColorIndex - 1)
+                  .clamp(0, SubtitleOutlineColor.options.length - 1);
+              await SubtitleSettingsService.instance
+                  .setOutlineColorIndex(newIndex);
+              onStyleChanged(
+                  subtitleStyle.copyWith(outlineColorIndex: newIndex));
+            },
+            onIncrease: () async {
+              final newIndex = (subtitleStyle.outlineColorIndex + 1)
+                  .clamp(0, SubtitleOutlineColor.options.length - 1);
+              await SubtitleSettingsService.instance
+                  .setOutlineColorIndex(newIndex);
+              onStyleChanged(
+                  subtitleStyle.copyWith(outlineColorIndex: newIndex));
             },
           ),
 

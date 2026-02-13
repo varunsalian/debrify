@@ -165,6 +165,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleValueBg: TextView? = null
     private var subtitleValueFont: TextView? = null
     private var subtitleColorSwatch: View? = null
+    private var subtitleColumnOutline: View? = null
+    private var subtitleValueOutline: TextView? = null
+    private var subtitleOutlineSwatch: View? = null
     private var subtitlePreviewText: TextView? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
@@ -557,6 +560,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleValueBg = findViewById(R.id.subtitle_value_bg)
         subtitleValueFont = findViewById(R.id.subtitle_value_font)
         subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch)
+        subtitleColumnOutline = findViewById(R.id.subtitle_column_outline)
+        subtitleValueOutline = findViewById(R.id.subtitle_value_outline)
+        subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch)
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
     }
@@ -3347,6 +3353,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleValueColor?.text = colorOption.label
         subtitleColorSwatch?.backgroundTintList = android.content.res.ColorStateList.valueOf(colorOption.color)
 
+        // Outline Color
+        val outlineOption = SubtitleSettings.getCurrentOutlineColor(this)
+        subtitleValueOutline?.text = outlineOption.label
+        if (outlineOption.color != null) {
+            subtitleOutlineSwatch?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineOption.color)
+            subtitleOutlineSwatch?.visibility = View.VISIBLE
+        } else {
+            subtitleOutlineSwatch?.visibility = View.INVISIBLE
+        }
+
         // Background
         subtitleValueBg?.text = SubtitleSettings.getCurrentBg(this).label
 
@@ -3362,7 +3378,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val styleOption = SubtitleSettings.getCurrentStyle(this)
         val sizeOption = SubtitleSettings.getCurrentSize(this)
         val bgOption = SubtitleSettings.getCurrentBg(this)
+        val outlineOption = SubtitleSettings.getCurrentOutlineColor(this)
         val typeface = SubtitleFontManager.getTypeface(this)
+
+        // Resolve outline/edge color for preview
+        val previewEdgeColor = if (outlineOption.isAuto || outlineOption.color == null) {
+            Color.BLACK
+        } else {
+            outlineOption.color
+        }
 
         subtitlePreviewText?.apply {
             setTextColor(colorOption.color)
@@ -3372,10 +3396,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Apply shadow based on edge style
             when (styleOption.edgeType) {
                 CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> {
-                    setShadowLayer(4f, 2f, 2f, Color.BLACK)
+                    setShadowLayer(4f, 2f, 2f, previewEdgeColor)
                 }
                 CaptionStyleCompat.EDGE_TYPE_OUTLINE -> {
-                    setShadowLayer(2f, 1f, 1f, Color.BLACK)
+                    setShadowLayer(2f, 1f, 1f, previewEdgeColor)
                 }
                 else -> {
                     setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
@@ -3410,6 +3434,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.subtitle_column_color -> {
                 SubtitleSettings.cycleColorUp(this)
             }
+            R.id.subtitle_column_outline -> {
+                SubtitleSettings.cycleOutlineColorUp(this)
+            }
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgUp(this)
             }
@@ -3442,6 +3469,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             R.id.subtitle_column_color -> {
                 SubtitleSettings.cycleColorDown(this)
+            }
+            R.id.subtitle_column_outline -> {
+                SubtitleSettings.cycleOutlineColorDown(this)
             }
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgDown(this)

@@ -18,6 +18,7 @@ object SubtitleSettings {
     private const val KEY_STYLE_INDEX = "subtitle_style_index"
     private const val KEY_COLOR_INDEX = "subtitle_color_index"
     private const val KEY_BG_INDEX = "subtitle_bg_index"
+    private const val KEY_OUTLINE_COLOR_INDEX = "subtitle_outline_color_index"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
     private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
@@ -26,6 +27,7 @@ object SubtitleSettings {
     const val DEFAULT_STYLE_INDEX = 1     // Outline
     const val DEFAULT_COLOR_INDEX = 0     // White
     const val DEFAULT_BG_INDEX = 0        // None
+    const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
 
     // Size options (in SP)
     data class SizeOption(val label: String, val sizeSp: Float)
@@ -70,6 +72,21 @@ object SubtitleSettings {
         BgOption("Medium", Color.parseColor("#80000000")),
         BgOption("Dark", Color.parseColor("#B3000000")),
         BgOption("Solid", Color.parseColor("#E6000000"))
+    )
+
+    // Outline/edge color options (null color = auto contrast-based)
+    data class OutlineColorOption(val label: String, val color: Int?, val isAuto: Boolean = false)
+    val OUTLINE_COLOR_OPTIONS = listOf(
+        OutlineColorOption("Auto", null, isAuto = true),
+        OutlineColorOption("Black", Color.BLACK),
+        OutlineColorOption("White", Color.WHITE),
+        OutlineColorOption("Yellow", Color.parseColor("#FFFF00")),
+        OutlineColorOption("Cyan", Color.parseColor("#00FFFF")),
+        OutlineColorOption("Green", Color.parseColor("#00FF00")),
+        OutlineColorOption("Magenta", Color.parseColor("#FF00FF")),
+        OutlineColorOption("Red", Color.parseColor("#FF4444")),
+        OutlineColorOption("Blue", Color.parseColor("#4488FF")),
+        OutlineColorOption("Orange", Color.parseColor("#FF8800"))
     )
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -119,6 +136,11 @@ object SubtitleSettings {
         return getPrefs(context).getInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
     }
 
+    @JvmStatic
+    fun getOutlineColorIndex(context: Context): Int {
+        return getPrefs(context).getInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
+    }
+
     // Setters
     @JvmStatic
     fun setSizeIndex(context: Context, index: Int) {
@@ -140,6 +162,11 @@ object SubtitleSettings {
         getPrefs(context).edit().putInt(KEY_BG_INDEX, index.coerceIn(0, BG_OPTIONS.size - 1)).apply()
     }
 
+    @JvmStatic
+    fun setOutlineColorIndex(context: Context, index: Int) {
+        getPrefs(context).edit().putInt(KEY_OUTLINE_COLOR_INDEX, index.coerceIn(0, OUTLINE_COLOR_OPTIONS.size - 1)).apply()
+    }
+
     // Get current values
     @JvmStatic
     fun getCurrentSize(context: Context): SizeOption = SIZE_OPTIONS[getSizeIndex(context).coerceIn(0, SIZE_OPTIONS.size - 1)]
@@ -152,6 +179,9 @@ object SubtitleSettings {
 
     @JvmStatic
     fun getCurrentBg(context: Context): BgOption = BG_OPTIONS[getBgIndex(context).coerceIn(0, BG_OPTIONS.size - 1)]
+
+    @JvmStatic
+    fun getCurrentOutlineColor(context: Context): OutlineColorOption = OUTLINE_COLOR_OPTIONS[getOutlineColorIndex(context).coerceIn(0, OUTLINE_COLOR_OPTIONS.size - 1)]
 
     // Cycle functions (for up/down navigation)
     @JvmStatic
@@ -214,6 +244,21 @@ object SubtitleSettings {
         return newIndex
     }
 
+    @JvmStatic
+    fun cycleOutlineColorUp(context: Context): Int {
+        val newIndex = (getOutlineColorIndex(context) + 1) % OUTLINE_COLOR_OPTIONS.size
+        setOutlineColorIndex(context, newIndex)
+        return newIndex
+    }
+
+    @JvmStatic
+    fun cycleOutlineColorDown(context: Context): Int {
+        val current = getOutlineColorIndex(context)
+        val newIndex = if (current == 0) OUTLINE_COLOR_OPTIONS.size - 1 else current - 1
+        setOutlineColorIndex(context, newIndex)
+        return newIndex
+    }
+
     /**
      * Reset all subtitle settings to defaults.
      */
@@ -224,6 +269,7 @@ object SubtitleSettings {
             .putInt(KEY_STYLE_INDEX, DEFAULT_STYLE_INDEX)
             .putInt(KEY_COLOR_INDEX, DEFAULT_COLOR_INDEX)
             .putInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
+            .putInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
             .apply()
     }
 
@@ -235,7 +281,8 @@ object SubtitleSettings {
         return getSizeIndex(context) == DEFAULT_SIZE_INDEX &&
                 getStyleIndex(context) == DEFAULT_STYLE_INDEX &&
                 getColorIndex(context) == DEFAULT_COLOR_INDEX &&
-                getBgIndex(context) == DEFAULT_BG_INDEX
+                getBgIndex(context) == DEFAULT_BG_INDEX &&
+                getOutlineColorIndex(context) == DEFAULT_OUTLINE_COLOR_INDEX
     }
 
     /**
@@ -246,13 +293,18 @@ object SubtitleSettings {
         val colorOption = getCurrentColor(context)
         val styleOption = getCurrentStyle(context)
         val bgOption = getCurrentBg(context)
+        val outlineColorOption = getCurrentOutlineColor(context)
 
-        // Determine edge color based on text color (contrast)
-        val edgeColor = when {
-            colorOption.color == Color.WHITE -> Color.BLACK
-            colorOption.color == Color.parseColor("#FFFF00") -> Color.BLACK  // Yellow
-            colorOption.color == Color.parseColor("#00FFFF") -> Color.BLACK  // Cyan
-            else -> Color.parseColor("#CC000000")  // Darker edge for colored text
+        // Determine edge color: use stored value or auto-calculate from text color
+        val edgeColor = if (outlineColorOption.isAuto || outlineColorOption.color == null) {
+            when {
+                colorOption.color == Color.WHITE -> Color.BLACK
+                colorOption.color == Color.parseColor("#FFFF00") -> Color.BLACK  // Yellow
+                colorOption.color == Color.parseColor("#00FFFF") -> Color.BLACK  // Cyan
+                else -> Color.parseColor("#CC000000")  // Darker edge for colored text
+            }
+        } else {
+            outlineColorOption.color ?: Color.BLACK
         }
 
         // Get typeface from font manager

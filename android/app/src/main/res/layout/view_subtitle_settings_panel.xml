@@ -221,7 +221,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/subtitle_column_style"
-                android:nextFocusRight="@+id/subtitle_column_bg"
+                android:nextFocusRight="@+id/subtitle_column_outline"
                 android:layout_marginEnd="6dp">
 
                 <TextView
@@ -275,7 +275,76 @@
 
             </LinearLayout>
 
-            <!-- Column 5: Background -->
+            <!-- Column 5: Outline Color -->
+            <LinearLayout
+                android:id="@+id/subtitle_column_outline"
+                android:layout_width="72dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:background="@drawable/subtitle_column_bg"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/subtitle_column_color"
+                android:nextFocusRight="@+id/subtitle_column_bg"
+                android:layout_marginEnd="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="OUTLINE"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="9sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.05" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="▲"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <View
+                        android:id="@+id/subtitle_outline_swatch"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/subtitle_color_swatch"
+                        android:backgroundTint="#000000" />
+
+                    <TextView
+                        android:id="@+id/subtitle_value_outline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="Auto"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:fontFamily="sans-serif-medium" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+            </LinearLayout>
+
+            <!-- Column 6: Background -->
             <LinearLayout
                 android:id="@+id/subtitle_column_bg"
                 android:layout_width="72dp"
@@ -289,7 +358,7 @@
                 android:background="@drawable/subtitle_column_bg"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_color"
+                android:nextFocusLeft="@id/subtitle_column_outline"
                 android:nextFocusRight="@+id/subtitle_column_font"
                 android:layout_marginEnd="6dp">
 

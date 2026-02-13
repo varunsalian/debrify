@@ -294,6 +294,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView subtitleValueBg;
     private TextView subtitleValueFont;
     private View subtitleColorSwatch;
+    private View subtitleColumnOutline;
+    private TextView subtitleValueOutline;
+    private View subtitleOutlineSwatch;
     private TextView subtitlePreviewText;
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
@@ -416,6 +419,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         subtitleValueBg = findViewById(R.id.subtitle_value_bg);
         subtitleValueFont = findViewById(R.id.subtitle_value_font);
         subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch);
+        subtitleColumnOutline = findViewById(R.id.subtitle_column_outline);
+        subtitleValueOutline = findViewById(R.id.subtitle_value_outline);
+        subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch);
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text);
         subtitleResetButton = findViewById(R.id.subtitle_reset_button);
 
@@ -3299,6 +3305,22 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     android.content.res.ColorStateList.valueOf(colorOption.getColor()));
         }
 
+        // Outline Color
+        SubtitleSettings.OutlineColorOption outlineOption = SubtitleSettings.getCurrentOutlineColor(this);
+        if (subtitleValueOutline != null) {
+            subtitleValueOutline.setText(outlineOption.getLabel());
+        }
+        if (subtitleOutlineSwatch != null) {
+            Integer outlineSwatchColor = outlineOption.getColor();
+            if (outlineSwatchColor != null) {
+                subtitleOutlineSwatch.setBackgroundTintList(
+                        android.content.res.ColorStateList.valueOf(outlineSwatchColor));
+                subtitleOutlineSwatch.setVisibility(View.VISIBLE);
+            } else {
+                subtitleOutlineSwatch.setVisibility(View.INVISIBLE);
+            }
+        }
+
         // Background
         if (subtitleValueBg != null) {
             subtitleValueBg.setText(SubtitleSettings.getCurrentBg(this).getLabel());
@@ -3320,7 +3342,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         SubtitleSettings.StyleOption styleOption = SubtitleSettings.getCurrentStyle(this);
         SubtitleSettings.SizeOption sizeOption = SubtitleSettings.getCurrentSize(this);
         SubtitleSettings.BgOption bgOption = SubtitleSettings.getCurrentBg(this);
+        SubtitleSettings.OutlineColorOption outlineOption = SubtitleSettings.getCurrentOutlineColor(this);
         android.graphics.Typeface typeface = SubtitleFontManager.getTypeface(this);
+
+        // Resolve outline/edge color for preview
+        Integer outlineColorValue = outlineOption.getColor();
+        int previewEdgeColor = (outlineOption.isAuto() || outlineColorValue == null)
+                ? Color.BLACK : outlineColorValue;
 
         subtitlePreviewText.setTextColor(colorOption.getColor());
         subtitlePreviewText.setTextSize(sizeOption.getSizeSp());
@@ -3329,10 +3357,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Apply shadow based on edge style
         switch (styleOption.getEdgeType()) {
             case CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW:
-                subtitlePreviewText.setShadowLayer(4f, 2f, 2f, Color.BLACK);
+                subtitlePreviewText.setShadowLayer(4f, 2f, 2f, previewEdgeColor);
                 break;
             case CaptionStyleCompat.EDGE_TYPE_OUTLINE:
-                subtitlePreviewText.setShadowLayer(2f, 1f, 1f, Color.BLACK);
+                subtitlePreviewText.setShadowLayer(2f, 1f, 1f, previewEdgeColor);
                 break;
             default:
                 subtitlePreviewText.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
@@ -3363,6 +3391,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleStyleUp(this);
         } else if (viewId == R.id.subtitle_column_color) {
             SubtitleSettings.cycleColorUp(this);
+        } else if (viewId == R.id.subtitle_column_outline) {
+            SubtitleSettings.cycleOutlineColorUp(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgUp(this);
         } else if (viewId == R.id.subtitle_column_font) {
@@ -3390,6 +3420,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleStyleDown(this);
         } else if (viewId == R.id.subtitle_column_color) {
             SubtitleSettings.cycleColorDown(this);
+        } else if (viewId == R.id.subtitle_column_outline) {
+            SubtitleSettings.cycleOutlineColorDown(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgDown(this);
         } else if (viewId == R.id.subtitle_column_font) {
