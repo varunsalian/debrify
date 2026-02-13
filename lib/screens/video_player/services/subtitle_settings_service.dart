@@ -107,6 +107,24 @@ class SubtitleOutlineColor {
   static const int defaultIndex = 0; // Auto
 }
 
+/// Subtitle elevation (vertical position) options
+class SubtitleElevation {
+  final String label;
+  final double bottomPadding; // bottom padding in pixels
+
+  const SubtitleElevation(this.label, this.bottomPadding);
+
+  static const List<SubtitleElevation> options = [
+    SubtitleElevation('Bottom', 48),
+    SubtitleElevation('Low', 80),
+    SubtitleElevation('Medium', 120),
+    SubtitleElevation('High', 180),
+    SubtitleElevation('Higher', 260),
+  ];
+
+  static const int defaultIndex = 0; // Bottom
+}
+
 /// Subtitle background options
 class SubtitleBackground {
   final String label;
@@ -133,6 +151,7 @@ class SubtitleSettingsService {
   static const String _keyColorIndex = 'subtitle_color_index';
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
+  static const String _keyElevationIndex = 'subtitle_elevation_index';
 
   static SubtitleSettingsService? _instance;
   static SubtitleSettingsService get instance {
@@ -175,6 +194,12 @@ class SubtitleSettingsService {
         SubtitleOutlineColor.defaultIndex;
   }
 
+  Future<int> getElevationIndex() async {
+    await _ensurePrefs();
+    return _prefs!.getInt(_keyElevationIndex) ??
+        SubtitleElevation.defaultIndex;
+  }
+
   // Setters
   Future<void> setSizeIndex(int index) async {
     await _ensurePrefs();
@@ -206,6 +231,12 @@ class SubtitleSettingsService {
         index.clamp(0, SubtitleOutlineColor.options.length - 1));
   }
 
+  Future<void> setElevationIndex(int index) async {
+    await _ensurePrefs();
+    await _prefs!.setInt(_keyElevationIndex,
+        index.clamp(0, SubtitleElevation.options.length - 1));
+  }
+
   // Get current values
   Future<SubtitleSize> getCurrentSize() async {
     final idx = await getSizeIndex();
@@ -234,6 +265,12 @@ class SubtitleSettingsService {
         .options[idx.clamp(0, SubtitleOutlineColor.options.length - 1)];
   }
 
+  Future<SubtitleElevation> getCurrentElevation() async {
+    final idx = await getElevationIndex();
+    return SubtitleElevation
+        .options[idx.clamp(0, SubtitleElevation.options.length - 1)];
+  }
+
   /// Load all settings at once
   Future<SubtitleSettingsData> loadAll() async {
     await _ensurePrefs();
@@ -249,6 +286,8 @@ class SubtitleSettingsService {
       bgIndex: _prefs!.getInt(_keyBgIndex) ?? SubtitleBackground.defaultIndex,
       outlineColorIndex: _prefs!.getInt(_keyOutlineColorIndex) ??
           SubtitleOutlineColor.defaultIndex,
+      elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
+          SubtitleElevation.defaultIndex,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
       fontLabel: selectedFont.label,
@@ -264,6 +303,7 @@ class SubtitleSettingsService {
     await _prefs!.setInt(_keyBgIndex, SubtitleBackground.defaultIndex);
     await _prefs!.setInt(
         _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
+    await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
     await SubtitleFontService.instance.resetToDefault();
   }
 
@@ -275,6 +315,7 @@ class SubtitleSettingsService {
         data.colorIndex == SubtitleColor.defaultIndex &&
         data.bgIndex == SubtitleBackground.defaultIndex &&
         data.outlineColorIndex == SubtitleOutlineColor.defaultIndex &&
+        data.elevationIndex == SubtitleElevation.defaultIndex &&
         data.fontIndex == SubtitleFont.defaultIndex;
   }
 }
@@ -286,6 +327,7 @@ class SubtitleSettingsData {
   final int colorIndex;
   final int bgIndex;
   final int outlineColorIndex;
+  final int elevationIndex;
   final int fontIndex;
   final String? fontFamily; // Resolved font family (null = system default)
   final String fontLabel; // Display label for the font
@@ -296,6 +338,7 @@ class SubtitleSettingsData {
     required this.colorIndex,
     required this.bgIndex,
     this.outlineColorIndex = 0,
+    this.elevationIndex = 0,
     this.fontIndex = 0,
     this.fontFamily,
     this.fontLabel = 'Default',
@@ -315,6 +358,9 @@ class SubtitleSettingsData {
 
   SubtitleOutlineColor get outlineColor => SubtitleOutlineColor
       .options[outlineColorIndex.clamp(0, SubtitleOutlineColor.options.length - 1)];
+
+  SubtitleElevation get elevation => SubtitleElevation
+      .options[elevationIndex.clamp(0, SubtitleElevation.options.length - 1)];
 
   /// Get shadows with outline color applied (null color = auto/keep original)
   List<Shadow>? get resolvedShadows {
@@ -351,6 +397,7 @@ class SubtitleSettingsData {
     int? colorIndex,
     int? bgIndex,
     int? outlineColorIndex,
+    int? elevationIndex,
     int? fontIndex,
     String? fontFamily,
     String? fontLabel,
@@ -361,6 +408,7 @@ class SubtitleSettingsData {
       colorIndex: colorIndex ?? this.colorIndex,
       bgIndex: bgIndex ?? this.bgIndex,
       outlineColorIndex: outlineColorIndex ?? this.outlineColorIndex,
+      elevationIndex: elevationIndex ?? this.elevationIndex,
       fontIndex: fontIndex ?? this.fontIndex,
       fontFamily: fontFamily ?? this.fontFamily,
       fontLabel: fontLabel ?? this.fontLabel,

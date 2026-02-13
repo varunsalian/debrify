@@ -359,7 +359,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/subtitle_column_outline"
-                android:nextFocusRight="@+id/subtitle_column_font"
+                android:nextFocusRight="@+id/subtitle_column_elevation"
                 android:layout_marginEnd="6dp">
 
                 <TextView
@@ -397,7 +397,60 @@
 
             </LinearLayout>
 
-            <!-- Column 6: Font -->
+            <!-- Column 7: Elevation -->
+            <LinearLayout
+                android:id="@+id/subtitle_column_elevation"
+                android:layout_width="72dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:background="@drawable/subtitle_column_bg"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusLeft="@id/subtitle_column_bg"
+                android:nextFocusRight="@+id/subtitle_column_font"
+                android:layout_marginEnd="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ELEVATE"
+                    android:textColor="#80FFFFFF"
+                    android:textSize="9sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.05" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="▲"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+                <TextView
+                    android:id="@+id/subtitle_value_elevation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Bottom"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▼"
+                    android:textColor="#60FFFFFF"
+                    android:textSize="8sp" />
+
+            </LinearLayout>
+
+            <!-- Column 8: Font -->
             <LinearLayout
                 android:id="@+id/subtitle_column_font"
                 android:layout_width="80dp"
@@ -411,7 +464,7 @@
                 android:background="@drawable/subtitle_column_bg"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_bg"
+                android:nextFocusLeft="@id/subtitle_column_elevation"
                 android:nextFocusRight="@+id/subtitle_reset_button"
                 android:layout_marginEnd="6dp">
 

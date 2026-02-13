@@ -168,6 +168,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleColumnOutline: View? = null
     private var subtitleValueOutline: TextView? = null
     private var subtitleOutlineSwatch: View? = null
+    private var subtitleColumnElevation: View? = null
+    private var subtitleValueElevation: TextView? = null
     private var subtitlePreviewText: TextView? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
@@ -563,6 +565,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleColumnOutline = findViewById(R.id.subtitle_column_outline)
         subtitleValueOutline = findViewById(R.id.subtitle_value_outline)
         subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch)
+        subtitleColumnElevation = findViewById(R.id.subtitle_column_elevation)
+        subtitleValueElevation = findViewById(R.id.subtitle_value_elevation)
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
     }
@@ -658,7 +662,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Setup subtitle styling from saved preferences
         subtitleOverlay.setApplyEmbeddedStyles(false)
         subtitleOverlay.setApplyEmbeddedFontSizes(false)
-        subtitleOverlay.setBottomPaddingFraction(0.0f)
         applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
@@ -3369,6 +3372,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Font
         subtitleValueFont?.text = SubtitleFontManager.getCurrentFontLabel(this)
 
+        // Elevation
+        subtitleValueElevation?.text = SubtitleSettings.getCurrentElevation(this).label
+
         // Update preview
         updateSubtitlePreview()
     }
@@ -3440,6 +3446,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgUp(this)
             }
+            R.id.subtitle_column_elevation -> {
+                SubtitleSettings.cycleElevationUp(this)
+            }
             R.id.subtitle_column_font -> {
                 SubtitleFontManager.cycleFontUp(this)
             }
@@ -3475,6 +3484,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             R.id.subtitle_column_bg -> {
                 SubtitleSettings.cycleBgDown(this)
+            }
+            R.id.subtitle_column_elevation -> {
+                SubtitleSettings.cycleElevationDown(this)
             }
             R.id.subtitle_column_font -> {
                 SubtitleFontManager.cycleFontDown(this)
@@ -3658,6 +3670,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             SubtitleSettings.getFontSizeSp(this)
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
+        subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
     }
 
     // Aspect ratio

@@ -740,6 +740,27 @@ class _StyleTab extends StatelessWidget {
             },
           ),
 
+          _StyleOption(
+            label: 'Elevation',
+            value: subtitleStyle.elevation.label,
+            onDecrease: () async {
+              final newIndex = (subtitleStyle.elevationIndex - 1)
+                  .clamp(0, SubtitleElevation.options.length - 1);
+              await SubtitleSettingsService.instance
+                  .setElevationIndex(newIndex);
+              onStyleChanged(
+                  subtitleStyle.copyWith(elevationIndex: newIndex));
+            },
+            onIncrease: () async {
+              final newIndex = (subtitleStyle.elevationIndex + 1)
+                  .clamp(0, SubtitleElevation.options.length - 1);
+              await SubtitleSettingsService.instance
+                  .setElevationIndex(newIndex);
+              onStyleChanged(
+                  subtitleStyle.copyWith(elevationIndex: newIndex));
+            },
+          ),
+
           const SizedBox(height: 20),
 
           // Reset button

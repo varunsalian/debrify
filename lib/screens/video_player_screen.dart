@@ -3095,13 +3095,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     return mkv.SubtitleViewConfiguration(
       style: settings.buildTextStyle(),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 48),
+      padding: EdgeInsets.fromLTRB(16, 0, 16, settings.elevation.bottomPadding),
     );
   }
 
   // Build video with custom aspect ratio
   Widget _buildCustomAspectRatioVideo() {
     return AspectRatioVideo(
+      key: ValueKey('video_elevation_${_subtitleSettings?.elevationIndex ?? 0}'),
       videoController: _videoController,
       customAspectRatio: _getCustomAspectRatio(),
       currentFit: _currentFit(),
@@ -3355,6 +3356,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _getCustomAspectRatio() != null
                     ? _buildCustomAspectRatioVideo()
                     : mkv.Video(
+                        key: ValueKey('video_elevation_${_subtitleSettings?.elevationIndex ?? 0}'),
                         controller: _videoController,
                         controls: null,
                         fit: _currentFit(),

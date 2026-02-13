@@ -297,6 +297,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View subtitleColumnOutline;
     private TextView subtitleValueOutline;
     private View subtitleOutlineSwatch;
+    private View subtitleColumnElevation;
+    private TextView subtitleValueElevation;
     private TextView subtitlePreviewText;
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
@@ -422,6 +424,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         subtitleColumnOutline = findViewById(R.id.subtitle_column_outline);
         subtitleValueOutline = findViewById(R.id.subtitle_value_outline);
         subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch);
+        subtitleColumnElevation = findViewById(R.id.subtitle_column_elevation);
+        subtitleValueElevation = findViewById(R.id.subtitle_value_elevation);
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text);
         subtitleResetButton = findViewById(R.id.subtitle_reset_button);
 
@@ -616,9 +620,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (subtitleOverlay != null) {
             subtitleOverlay.setApplyEmbeddedStyles(false);
             subtitleOverlay.setApplyEmbeddedFontSizes(false);
-            // No padding fraction - using XML padding for fixed screen-bottom positioning
-            subtitleOverlay.setBottomPaddingFraction(0.0f);
-            // Apply subtitle settings from preferences
+            // Apply subtitle settings from preferences (includes elevation padding)
             applySubtitleSettings();
         }
         playerView.requestFocus();
@@ -3326,6 +3328,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleValueBg.setText(SubtitleSettings.getCurrentBg(this).getLabel());
         }
 
+        // Elevation
+        if (subtitleValueElevation != null) {
+            subtitleValueElevation.setText(SubtitleSettings.getCurrentElevation(this).getLabel());
+        }
+
         // Font
         if (subtitleValueFont != null) {
             subtitleValueFont.setText(SubtitleFontManager.getCurrentFontLabel(this));
@@ -3395,6 +3402,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleOutlineColorUp(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgUp(this);
+        } else if (viewId == R.id.subtitle_column_elevation) {
+            SubtitleSettings.cycleElevationUp(this);
         } else if (viewId == R.id.subtitle_column_font) {
             SubtitleFontManager.cycleFontUp(this);
         } else if (viewId == R.id.subtitle_reset_button) {
@@ -3424,6 +3433,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             SubtitleSettings.cycleOutlineColorDown(this);
         } else if (viewId == R.id.subtitle_column_bg) {
             SubtitleSettings.cycleBgDown(this);
+        } else if (viewId == R.id.subtitle_column_elevation) {
+            SubtitleSettings.cycleElevationDown(this);
         } else if (viewId == R.id.subtitle_column_font) {
             SubtitleFontManager.cycleFontDown(this);
         } else if (viewId == R.id.subtitle_reset_button) {
@@ -3548,6 +3559,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     TypedValue.COMPLEX_UNIT_SP,
                     SubtitleSettings.getFontSizeSp(this));
             subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
+            subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
         }
     }
 

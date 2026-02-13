@@ -19,6 +19,7 @@ object SubtitleSettings {
     private const val KEY_COLOR_INDEX = "subtitle_color_index"
     private const val KEY_BG_INDEX = "subtitle_bg_index"
     private const val KEY_OUTLINE_COLOR_INDEX = "subtitle_outline_color_index"
+    private const val KEY_ELEVATION_INDEX = "subtitle_elevation_index"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
     private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
@@ -28,6 +29,7 @@ object SubtitleSettings {
     const val DEFAULT_COLOR_INDEX = 0     // White
     const val DEFAULT_BG_INDEX = 0        // None
     const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
+    const val DEFAULT_ELEVATION_INDEX = 0      // Bottom
 
     // Size options (in SP)
     data class SizeOption(val label: String, val sizeSp: Float)
@@ -89,6 +91,16 @@ object SubtitleSettings {
         OutlineColorOption("Orange", Color.parseColor("#FF8800"))
     )
 
+    // Elevation (vertical position) options — fraction of view height for bottom padding
+    data class ElevationOption(val label: String, val paddingFraction: Float)
+    val ELEVATION_OPTIONS = listOf(
+        ElevationOption("Bottom", 0.0f),
+        ElevationOption("Low", 0.04f),
+        ElevationOption("Medium", 0.08f),
+        ElevationOption("High", 0.15f),
+        ElevationOption("Higher", 0.25f)
+    )
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
@@ -141,6 +153,11 @@ object SubtitleSettings {
         return getPrefs(context).getInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
     }
 
+    @JvmStatic
+    fun getElevationIndex(context: Context): Int {
+        return getPrefs(context).getInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
+    }
+
     // Setters
     @JvmStatic
     fun setSizeIndex(context: Context, index: Int) {
@@ -167,6 +184,11 @@ object SubtitleSettings {
         getPrefs(context).edit().putInt(KEY_OUTLINE_COLOR_INDEX, index.coerceIn(0, OUTLINE_COLOR_OPTIONS.size - 1)).apply()
     }
 
+    @JvmStatic
+    fun setElevationIndex(context: Context, index: Int) {
+        getPrefs(context).edit().putInt(KEY_ELEVATION_INDEX, index.coerceIn(0, ELEVATION_OPTIONS.size - 1)).apply()
+    }
+
     // Get current values
     @JvmStatic
     fun getCurrentSize(context: Context): SizeOption = SIZE_OPTIONS[getSizeIndex(context).coerceIn(0, SIZE_OPTIONS.size - 1)]
@@ -182,6 +204,9 @@ object SubtitleSettings {
 
     @JvmStatic
     fun getCurrentOutlineColor(context: Context): OutlineColorOption = OUTLINE_COLOR_OPTIONS[getOutlineColorIndex(context).coerceIn(0, OUTLINE_COLOR_OPTIONS.size - 1)]
+
+    @JvmStatic
+    fun getCurrentElevation(context: Context): ElevationOption = ELEVATION_OPTIONS[getElevationIndex(context).coerceIn(0, ELEVATION_OPTIONS.size - 1)]
 
     // Cycle functions (for up/down navigation)
     @JvmStatic
@@ -259,6 +284,21 @@ object SubtitleSettings {
         return newIndex
     }
 
+    @JvmStatic
+    fun cycleElevationUp(context: Context): Int {
+        val newIndex = (getElevationIndex(context) + 1) % ELEVATION_OPTIONS.size
+        setElevationIndex(context, newIndex)
+        return newIndex
+    }
+
+    @JvmStatic
+    fun cycleElevationDown(context: Context): Int {
+        val current = getElevationIndex(context)
+        val newIndex = if (current == 0) ELEVATION_OPTIONS.size - 1 else current - 1
+        setElevationIndex(context, newIndex)
+        return newIndex
+    }
+
     /**
      * Reset all subtitle settings to defaults.
      */
@@ -270,6 +310,7 @@ object SubtitleSettings {
             .putInt(KEY_COLOR_INDEX, DEFAULT_COLOR_INDEX)
             .putInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
             .putInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
+            .putInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
             .apply()
     }
 
@@ -282,7 +323,8 @@ object SubtitleSettings {
                 getStyleIndex(context) == DEFAULT_STYLE_INDEX &&
                 getColorIndex(context) == DEFAULT_COLOR_INDEX &&
                 getBgIndex(context) == DEFAULT_BG_INDEX &&
-                getOutlineColorIndex(context) == DEFAULT_OUTLINE_COLOR_INDEX
+                getOutlineColorIndex(context) == DEFAULT_OUTLINE_COLOR_INDEX &&
+                getElevationIndex(context) == DEFAULT_ELEVATION_INDEX
     }
 
     /**
@@ -326,5 +368,13 @@ object SubtitleSettings {
     @JvmStatic
     fun getFontSizeSp(context: Context): Float {
         return getCurrentSize(context).sizeSp
+    }
+
+    /**
+     * Get the elevation bottom padding fraction from current settings.
+     */
+    @JvmStatic
+    fun getElevationPaddingFraction(context: Context): Float {
+        return getCurrentElevation(context).paddingFraction
     }
 }
