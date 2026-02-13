@@ -216,6 +216,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var pikPakRetryId: Int = 0
     private val pikPakRetryHandler = Handler(Looper.getMainLooper())
 
+    // Buffering indicator
+    private lateinit var bufferingIndicator: View
+    private var hasEverBeenReady = false
+    private val bufferingHandler = Handler(Looper.getMainLooper())
+    private var bufferingDebounceRunnable: Runnable? = null
+
     private val progressRunnable = object : Runnable {
         override fun run() {
             sendProgress(completed = false)
@@ -248,6 +254,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> {
+                    hasEverBeenReady = true
+                    hideBufferingIndicator()
                     val startPct = payload?.startAtPercent ?: 0.0
                     if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
                         val duration = player?.duration ?: 0
@@ -272,7 +280,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         initializeLoudnessEnhancer()
                     }
                 }
+                Player.STATE_BUFFERING -> {
+                    if (hasEverBeenReady) {
+                        showBufferingIndicatorDebounced()
+                    }
+                }
                 Player.STATE_ENDED -> {
+                    hideBufferingIndicator()
                     sendProgress(completed = true)
                     val model = payload ?: return
                     val nextIndex = getNextPlayableIndex(currentIndex)
@@ -569,6 +583,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleValueElevation = findViewById(R.id.subtitle_value_elevation)
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
+        bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
     }
 
     private fun setupPlayer() {
@@ -1393,6 +1408,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("AndroidTvPlayer", "playItem - index out of bounds! index: $index, size: ${model.items.size}")
             return
         }
+
+        // Reset buffering state for new content
+        hasEverBeenReady = false
+        hideBufferingIndicator()
 
         // Cancel any ongoing PikPak retry before starting new item
         cancelPikPakRetry()
@@ -3954,6 +3973,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelPikPakRetry()
     }
 
+    private fun showBufferingIndicatorDebounced() {
+        bufferingDebounceRunnable?.let { bufferingHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            val state = player?.playbackState ?: return@Runnable
+            if (state == Player.STATE_BUFFERING && hasEverBeenReady && nextOverlay.visibility != View.VISIBLE) {
+                bufferingIndicator.visibility = View.VISIBLE
+                bufferingIndicator.animate().alpha(1f).setDuration(250).start()
+            }
+        }
+        bufferingDebounceRunnable = runnable
+        bufferingHandler.postDelayed(runnable, 800)
+    }
+
+    private fun hideBufferingIndicator() {
+        bufferingDebounceRunnable?.let { bufferingHandler.removeCallbacks(it) }
+        bufferingDebounceRunnable = null
+        if (bufferingIndicator.visibility == View.VISIBLE) {
+            bufferingIndicator.animate().alpha(0f).setDuration(200).withEndAction {
+                bufferingIndicator.visibility = View.GONE
+            }.start()
+        }
+    }
+
     override fun onDestroy() {
         // Clean up seek feedback manager
         if (::seekFeedbackManager.isInitialized) {
@@ -3963,6 +4005,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Cancel PikPak retry operations
         cancelPikPakRetry()
         pikPakRetryHandler.removeCallbacksAndMessages(null)
+
+        // Clean up buffering indicator
+        bufferingIndicator.animate().cancel()
+        bufferingHandler.removeCallbacksAndMessages(null)
 
         // Unregister broadcast receiver
         metadataUpdateReceiver?.let {

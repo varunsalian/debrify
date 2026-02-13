@@ -180,6 +180,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View loadingDot3;
     private android.animation.ValueAnimator dotsAnimator;
 
+    // Buffering indicator
+    private View bufferingIndicator;
+    private boolean hasEverBeenReady = false;
+    private final Handler bufferingHandler = new Handler(Looper.getMainLooper());
+    private Runnable bufferingDebounceRunnable;
+
     private boolean controlsMenuVisible = false;
     private final Handler controlsMenuHandler = new Handler(Looper.getMainLooper());
     private final Runnable hideControlsMenuRunnable = () -> {
@@ -321,6 +327,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
             if (playbackState == Player.STATE_READY) {
+                hasEverBeenReady = true;
+                hideBufferingIndicator();
                 if (startFromRandom && !randomApplied) {
                     maybeSeekRandomly();
                 } else if (startAtPercent > 0 && !percentSeekApplied) {
@@ -330,7 +338,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (loudnessEnhancer == null && nightModeIndex > 0) {
                     initializeLoudnessEnhancer();
                 }
+            } else if (playbackState == Player.STATE_BUFFERING) {
+                if (hasEverBeenReady) {
+                    showBufferingIndicatorDebounced();
+                }
             } else if (playbackState == Player.STATE_ENDED) {
+                hideBufferingIndicator();
                 randomApplied = false;
                 requestNextStream();
             }
@@ -394,6 +407,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         loadingDot1 = findViewById(R.id.loading_dot_1);
         loadingDot2 = findViewById(R.id.loading_dot_2);
         loadingDot3 = findViewById(R.id.loading_dot_3);
+
+        bufferingIndicator = findViewById(R.id.player_buffering_indicator);
 
         // Initialize PikPak retry overlay (reuse loading indicator for now)
         setupPikPakRetryOverlay();
@@ -2664,7 +2679,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void requestNextStream() {
         android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: requestNextStream() called");
-        
+        hasEverBeenReady = false;
+        hideBufferingIndicator();
+
         if (requestingNext) {
             android.util.Log.d("DebrifyTV", "TorboxTvPlayerActivity: Already requesting next, ignoring");
             return;
@@ -3786,6 +3803,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         hideUnifiedGuide();
+        hasEverBeenReady = false;
+        hideBufferingIndicator();
         showLoadingBar(LoadingType.CHANNEL, entry.number > 0 ? entry.number : null, entry.name);
 
         lastChannelSwitchTime = now;
@@ -4261,7 +4280,36 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         cancelPikPakRetry();
     }
 
-    @Override
+    private void showBufferingIndicatorDebounced() {
+        if (bufferingDebounceRunnable != null) {
+            bufferingHandler.removeCallbacks(bufferingDebounceRunnable);
+        }
+        bufferingDebounceRunnable = () -> {
+            if (player == null) return;
+            int state = player.getPlaybackState();
+            boolean overlayVisible = (nextOverlay != null && nextOverlay.getVisibility() == View.VISIBLE)
+                    || (channelOverlay != null && channelOverlay.getVisibility() == View.VISIBLE)
+                    || (loadingIndicator != null && loadingIndicator.getVisibility() == View.VISIBLE);
+            if (state == Player.STATE_BUFFERING && hasEverBeenReady && !overlayVisible) {
+                bufferingIndicator.setVisibility(View.VISIBLE);
+                bufferingIndicator.animate().alpha(1f).setDuration(250).start();
+            }
+        };
+        bufferingHandler.postDelayed(bufferingDebounceRunnable, 800);
+    }
+
+    private void hideBufferingIndicator() {
+        if (bufferingDebounceRunnable != null) {
+            bufferingHandler.removeCallbacks(bufferingDebounceRunnable);
+            bufferingDebounceRunnable = null;
+        }
+        if (bufferingIndicator != null && bufferingIndicator.getVisibility() == View.VISIBLE) {
+            bufferingIndicator.animate().alpha(0f).setDuration(200).withEndAction(() -> {
+                bufferingIndicator.setVisibility(View.GONE);
+            }).start();
+        }
+    }
+
     protected void onDestroy() {
         // Clean up unified guide text watcher to prevent memory leak
         if (unifiedGuideSearch != null && unifiedGuideTextWatcher != null) {
@@ -4292,6 +4340,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (pikPakRetryHandler != null) {
             pikPakRetryHandler.removeCallbacksAndMessages(null);
         }
+
+        // Clean up buffering indicator
+        if (bufferingIndicator != null) {
+            bufferingIndicator.animate().cancel();
+        }
+        bufferingHandler.removeCallbacksAndMessages(null);
 
         // Stop progress bar updates
         stopProgressBarUpdates();

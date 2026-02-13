@@ -16,6 +16,9 @@ class VideoPlayerTimingConstants {
   static const longDelay = Duration(milliseconds: 500);
   static const speedChangeDelay = Duration(milliseconds: 1500);
 
+  // Buffering
+  static const bufferingDebounceDelay = Duration(milliseconds: 800);
+
   // Auto-hide timers
   static const controlsAutoHideDuration = Duration(seconds: 3);
   static const badgeDisplayDuration = Duration(seconds: 4);

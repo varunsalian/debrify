@@ -287,4 +287,27 @@
     <!-- Subtitle Settings Panel -->
     <include layout="@layout/view_subtitle_settings_panel" />
 
+    <!-- Buffering Indicator (OTT-style centered spinner) -->
+    <FrameLayout
+        android:id="@+id/android_tv_buffering_indicator"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        android:alpha="0"
+        android:elevation="25dp">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/buffering_backdrop" />
+
+        <ProgressBar
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:indeterminateTint="@android:color/white" />
+    </FrameLayout>
+
 </FrameLayout>

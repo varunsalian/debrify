@@ -48,6 +48,7 @@ import 'video_player/widgets/title_badge.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
+import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
@@ -307,6 +308,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _playSub;
   StreamSubscription? _paramsSub;
   StreamSubscription? _completedSub;
+  StreamSubscription? _bufferingSub;
+
+  // Buffering indicator
+  final ValueNotifier<bool> _showBufferingIndicator = ValueNotifier(false);
+  Timer? _bufferingDebounceTimer;
 
   // Gesture state
   GestureMode _mode = GestureMode.none;
@@ -667,6 +673,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // No need to observe video params for sizing; we use a fixed logical surface
     _completedSub = _player.stream.completed.listen((done) {
       if (done) _onPlaybackEnded();
+    });
+    _bufferingSub = _player.stream.buffering.listen((isBuffering) {
+      if (!_isReady || _isTransitioning) return;
+      if (isBuffering) {
+        _bufferingDebounceTimer?.cancel();
+        _bufferingDebounceTimer = Timer(
+          VideoPlayerTimingConstants.bufferingDebounceDelay,
+          () {
+            if (mounted && _player.state.buffering && _isReady && !_isTransitioning && !_isPikPakRetrying) {
+              _showBufferingIndicator.value = true;
+            }
+          },
+        );
+      } else {
+        _bufferingDebounceTimer?.cancel();
+        _showBufferingIndicator.value = false;
+      }
     });
 
     _autosaveTimer = Timer.periodic(
@@ -1097,12 +1120,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return _findPreviousEpisodeIndex() != -1;
   }
 
+  void _clearBufferingIndicator() {
+    _bufferingDebounceTimer?.cancel();
+    _showBufferingIndicator.value = false;
+  }
+
   /// Navigate to next episode
   Future<void> _goToNextEpisode() async {
     // Check if widget is still mounted before any state changes
     if (!mounted) return;
 
     // Show black screen during transition to hide previous frame
+    _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
     });
@@ -1282,6 +1311,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
       _currentChannelId = channel.id;
@@ -1409,6 +1439,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
     });
@@ -1546,6 +1577,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Navigate to previous episode
   Future<void> _goToPreviousEpisode() async {
     // Show black screen during transition to hide previous frame
+    _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
     });
@@ -2375,6 +2407,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playSub?.cancel();
     _paramsSub?.cancel();
     _completedSub?.cancel();
+    _bufferingSub?.cancel();
+    _bufferingDebounceTimer?.cancel();
+    _showBufferingIndicator.dispose();
     _player.dispose();
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
@@ -3434,6 +3469,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               : AspectRatioHud(hud: hud),
                         ),
                       ),
+                    ),
+                  );
+                },
+              ),
+              // Buffering indicator (OTT-style centered spinner)
+              ValueListenableBuilder<bool>(
+                valueListenable: _showBufferingIndicator,
+                builder: (context, show, _) {
+                  return IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedOpacity(
+                      opacity: show ? 1 : 0,
+                      duration: show
+                          ? const Duration(milliseconds: 250)
+                          : const Duration(milliseconds: 200),
+                      child: const Center(child: BufferingIndicator()),
                     ),
                   );
                 },
