@@ -1466,6 +1466,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             play()
         }
 
+        // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
+        player?.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                player?.removeListener(this)
+                if (isFinishing || isDestroyed) return
+                val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
+                if (defaultSubtitleLang == "off") return
+                val hasTextSelected = tracks.groups.any { group ->
+                    group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
+                }
+                if (hasTextSelected) {
+                    embeddedSubtitleSelected = true
+                }
+            }
+        })
+
         updateTitle(item)
         playlistAdapter?.setActiveIndex(currentIndex)
         restartProgressUpdates()
@@ -2058,6 +2074,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun tryAutoSelectAddonSubtitle() {
         // Skip if embedded subtitle was already selected
         if (embeddedSubtitleSelected) {
+            return
+        }
+
+        // Check if ExoPlayer auto-selected an embedded subtitle via TrackSelector preferences
+        // (covers non-PikPak content where ensureDefaultSubtitleSelected() isn't called)
+        val hasEmbeddedSubSelected = player?.currentTracks?.groups?.any { group ->
+            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
+        } ?: false
+        if (hasEmbeddedSubSelected && currentStremioSubtitleIndex == -1) {
+            embeddedSubtitleSelected = true
             return
         }
 
