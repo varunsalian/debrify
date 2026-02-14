@@ -1101,9 +1101,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return Scaffold(
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _channels.isEmpty
-              ? const StremioTvEmptyState()
-              : Column(
+          : Column(
                   children: [
                     // Header
                     Padding(
@@ -1345,6 +1343,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                     Expanded(
                       child: Builder(
                         builder: (context) {
+                          if (_channels.isEmpty) {
+                            return const StremioTvEmptyState();
+                          }
                           final filtered = _filteredChannels;
                           if (filtered.isEmpty && _searchQuery.isNotEmpty) {
                             return Center(
