@@ -56,7 +56,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   // Header menu button
   final FocusNode _menuFocusNode = FocusNode(debugLabel: 'menuBtn');
-  final GlobalKey<PopupMenuButtonState> _menuKey = GlobalKey<PopupMenuButtonState>();
+  final MenuController _menuController = MenuController();
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -240,28 +240,31 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  void _onMenuAction(String action) {
-    switch (action) {
-      case 'shuffle':
-        setState(() => _mixSalt = (_mixSalt + 1) % 10);
-        break;
-      case 'refresh':
-        if (!_refreshing) _refresh();
-        break;
-      case 'filter':
-        _openChannelFilter();
-        break;
-      case 'import':
-        _openLocalCatalogs();
-        break;
-    }
-  }
-
   Future<void> _openLocalCatalogs() async {
     final changed = await StremioTvLocalCatalogsDialog.show(context);
     if (changed == true && mounted) {
       _refresh();
     }
+  }
+
+  Future<void> _importFromFile() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromFile(context);
+    if (imported && mounted) _refresh();
+  }
+
+  Future<void> _importFromUrl() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromUrl(context);
+    if (imported && mounted) _refresh();
+  }
+
+  Future<void> _importFromJson() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromJson(context);
+    if (imported && mounted) _refresh();
+  }
+
+  Future<void> _importFromRepo() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromRepo(context);
+    if (imported && mounted) _refresh();
   }
 
   // ============================================================================
@@ -1187,6 +1190,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             focusNode: _menuFocusNode,
                             onKeyEvent: (node, event) {
                               if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                              // When menu is open, let menu handle its own key events
+                              if (_menuController.isOpen) return KeyEventResult.ignored;
                               if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
                                   event.logicalKey == LogicalKeyboardKey.arrowRight) {
                                 return KeyEventResult.handled;
@@ -1201,7 +1206,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               }
                               if (event.logicalKey == LogicalKeyboardKey.select ||
                                   event.logicalKey == LogicalKeyboardKey.enter) {
-                                _menuKey.currentState?.showButtonMenu();
+                                _menuController.open();
                                 return KeyEventResult.handled;
                               }
                               return KeyEventResult.ignored;
@@ -1221,50 +1226,70 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         )
                                       : null,
                                 ),
-                                child: PopupMenuButton<String>(
-                                  key: _menuKey,
-                                  icon: const Icon(Icons.more_vert_rounded),
-                                  tooltip: 'Options',
-                                  onSelected: _onMenuAction,
-                                  itemBuilder: (context) => [
-                                    PopupMenuItem(
-                                      value: 'shuffle',
-                                      child: ListTile(
-                                        leading: const Icon(Icons.shuffle_rounded),
-                                        title: Text('Shuffle (Mix ${_mixSalt + 1})'),
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
+                                child: MenuAnchor(
+                                  controller: _menuController,
+                                  menuChildren: [
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(Icons.shuffle_rounded),
+                                      onPressed: () {
+                                        setState(() => _mixSalt = (_mixSalt + 1) % 10);
+                                      },
+                                      child: Text('Shuffle (Mix ${_mixSalt + 1})'),
                                     ),
-                                    PopupMenuItem(
-                                      enabled: !_refreshing,
-                                      value: 'refresh',
-                                      child: ListTile(
-                                        leading: const Icon(Icons.refresh_rounded),
-                                        title: const Text('Refresh'),
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(Icons.refresh_rounded),
+                                      onPressed: _refreshing ? null : () => _refresh(),
+                                      child: const Text('Refresh'),
                                     ),
-                                    PopupMenuItem(
-                                      value: 'filter',
-                                      child: ListTile(
-                                        leading: const Icon(Icons.tune_rounded),
-                                        title: const Text('Filter channels'),
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
+                                    MenuItemButton(
+                                      leadingIcon: const Icon(Icons.tune_rounded),
+                                      onPressed: () => _openChannelFilter(),
+                                      child: const Text('Filter channels'),
                                     ),
-                                    PopupMenuItem(
-                                      value: 'import',
-                                      child: ListTile(
-                                        leading: const Icon(Icons.playlist_add_rounded),
-                                        title: const Text('Local catalogs'),
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
+                                    SubmenuButton(
+                                      leadingIcon: const Icon(Icons.playlist_add_rounded),
+                                      menuChildren: [
+                                        MenuItemButton(
+                                          leadingIcon: const Icon(Icons.list_rounded),
+                                          onPressed: _openLocalCatalogs,
+                                          child: const Text('Manage'),
+                                        ),
+                                        MenuItemButton(
+                                          leadingIcon: const Icon(Icons.file_upload_outlined),
+                                          onPressed: _importFromFile,
+                                          child: const Text('From File'),
+                                        ),
+                                        MenuItemButton(
+                                          leadingIcon: const Icon(Icons.link_rounded),
+                                          onPressed: _importFromUrl,
+                                          child: const Text('From URL'),
+                                        ),
+                                        MenuItemButton(
+                                          leadingIcon: const Icon(Icons.data_object_rounded),
+                                          onPressed: _importFromJson,
+                                          child: const Text('Paste JSON'),
+                                        ),
+                                        MenuItemButton(
+                                          leadingIcon: const Icon(Icons.source_rounded),
+                                          onPressed: _importFromRepo,
+                                          child: const Text('From Repository'),
+                                        ),
+                                      ],
+                                      child: const Text('Local Catalogs'),
                                     ),
                                   ],
+                                  builder: (context, controller, child) =>
+                                      IconButton(
+                                    icon: const Icon(Icons.more_vert_rounded),
+                                    tooltip: 'Options',
+                                    onPressed: () {
+                                      if (controller.isOpen) {
+                                        controller.close();
+                                      } else {
+                                        controller.open();
+                                      }
+                                    },
+                                  ),
                                 ),
                               ),
                             ),

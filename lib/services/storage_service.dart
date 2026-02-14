@@ -197,6 +197,8 @@ class StorageService {
       'stremio_tv_max_start_percent';
   static const String _stremioTvLocalCatalogsKey =
       'stremio_tv_local_catalogs_v1';
+  static const String _stremioTvCatalogRepoUrlsKey =
+      'stremio_tv_catalog_repo_urls_v1';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3711,6 +3713,38 @@ class StorageService {
     final existing = await getStremioTvLocalCatalogs();
     existing.removeWhere((c) => c['id'] == catalogId);
     await setStremioTvLocalCatalogs(existing);
+  }
+
+  // --------------------------------------------------------------------------
+  // Stremio TV Catalog Repo URLs
+  // --------------------------------------------------------------------------
+
+  /// Get saved catalog repository URLs.
+  static Future<List<String>> getStremioTvCatalogRepoUrls() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_stremioTvCatalogRepoUrlsKey) ?? [];
+  }
+
+  /// Set catalog repository URLs.
+  static Future<void> setStremioTvCatalogRepoUrls(List<String> urls) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_stremioTvCatalogRepoUrlsKey, urls);
+  }
+
+  /// Add a catalog repository URL. Returns false if already present.
+  static Future<bool> addStremioTvCatalogRepoUrl(String url) async {
+    final urls = await getStremioTvCatalogRepoUrls();
+    if (urls.contains(url)) return false;
+    urls.add(url);
+    await setStremioTvCatalogRepoUrls(urls);
+    return true;
+  }
+
+  /// Remove a catalog repository URL.
+  static Future<void> removeStremioTvCatalogRepoUrl(String url) async {
+    final urls = await getStremioTvCatalogRepoUrls();
+    urls.remove(url);
+    await setStremioTvCatalogRepoUrls(urls);
   }
 
   // ==========================================================================

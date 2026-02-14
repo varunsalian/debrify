@@ -1,22 +1,160 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 import '../../../services/storage_service.dart';
+import 'stremio_tv_repo_browser_dialog.dart';
 
-/// Dialog for managing local JSON catalogs in Stremio TV.
-/// Shows existing catalogs (with delete) and an import section.
+// ─── Import helper ──────────────────────────────────────────────────────────
+
+/// Shared validation and save logic for local catalog imports.
+class LocalCatalogImporter {
+  LocalCatalogImporter._();
+
+  /// Generate a unique catalog ID from the name.
+  static String generateId(String name) {
+    final sanitized = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final ts = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+    return '${sanitized}_$ts';
+  }
+
+  /// Validate JSON catalog content. Returns error message or null if valid.
+  static String? validate(String content) {
+    final dynamic parsed;
+    try {
+      parsed = jsonDecode(content);
+    } catch (e) {
+      return 'Invalid JSON: $e';
+    }
+    if (parsed is! Map<String, dynamic>) return 'Expected a JSON object';
+    final name = parsed['name'] as String?;
+    if (name == null || name.trim().isEmpty) return 'Missing "name" field';
+    final items = parsed['items'] as List<dynamic>?;
+    if (items == null || items.isEmpty) return '"items" is missing or empty';
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item is! Map<String, dynamic>) return 'Item $i: not an object';
+      if ((item['id'] as String?)?.isEmpty ?? true) {
+        return 'Item $i: missing "id"';
+      }
+      if ((item['name'] as String?)?.isEmpty ?? true) {
+        return 'Item $i: missing "name"';
+      }
+    }
+    return null;
+  }
+
+  /// Validate and save JSON content as a local catalog.
+  /// Returns error message or null on success.
+  static Future<String?> import(String content) async {
+    final err = validate(content);
+    if (err != null) return err;
+
+    final parsed = jsonDecode(content) as Map<String, dynamic>;
+    final name = (parsed['name'] as String).trim();
+
+    final existing = await StorageService.getStremioTvLocalCatalogs();
+    if (existing.any((c) => c['name'] == name)) {
+      return 'Catalog "$name" already exists';
+    }
+
+    final catalog = <String, dynamic>{
+      'id': generateId(name),
+      'name': name,
+      'type': parsed['type'] as String? ?? 'movie',
+      'addedAt': DateTime.now().toIso8601String(),
+      'items': parsed['items'],
+    };
+
+    await StorageService.addStremioTvLocalCatalog(catalog);
+    return null;
+  }
+}
+
+// ─── Manage dialog ──────────────────────────────────────────────────────────
+
+/// Dialog for viewing and deleting local catalogs (manage only).
 class StremioTvLocalCatalogsDialog extends StatefulWidget {
   const StremioTvLocalCatalogsDialog({super.key});
 
-  /// Show the dialog. Returns `true` if catalogs were changed.
+  /// Show the manage dialog. Returns `true` if catalogs were changed.
   static Future<bool?> show(BuildContext context) {
     return showDialog<bool>(
       context: context,
       builder: (context) => const Center(
         child: StremioTvLocalCatalogsDialog(),
+      ),
+    );
+  }
+
+  /// Pick and import a JSON file. Returns true if imported.
+  static Future<bool> importFromFile(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return false;
+
+      final bytes = result.files.first.bytes;
+      if (bytes == null) {
+        if (context.mounted) _showSnackBar(context, 'Could not read file', true);
+        return false;
+      }
+
+      final content = utf8.decode(bytes);
+      final err = await LocalCatalogImporter.import(content);
+      if (err != null) {
+        if (context.mounted) _showSnackBar(context, err, true);
+        return false;
+      }
+      if (context.mounted) _showSnackBar(context, 'Catalog imported', false);
+      return true;
+    } catch (e) {
+      if (context.mounted) _showSnackBar(context, 'Failed: $e', true);
+      return false;
+    }
+  }
+
+  /// Show URL input dialog. Returns true if imported.
+  static Future<bool> importFromUrl(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const _ImportUrlDialog(),
+    );
+    return result == true;
+  }
+
+  /// Show JSON paste dialog. Returns true if imported.
+  static Future<bool> importFromJson(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => const _ImportJsonDialog(),
+    );
+    return result == true;
+  }
+
+  /// Open repository browser. Returns true if imported.
+  static Future<bool> importFromRepo(BuildContext context) async {
+    final result = await StremioTvRepoBrowserDialog.show(context);
+    return result == true;
+  }
+
+  static void _showSnackBar(BuildContext context, String message, bool isError) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red.shade700 : null,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: isError ? 4 : 2),
       ),
     );
   }
@@ -28,36 +166,26 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
 
 class _StremioTvLocalCatalogsDialogState
     extends State<StremioTvLocalCatalogsDialog> {
-  final TextEditingController _jsonController = TextEditingController();
-  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'closeBtn');
-  final FocusNode _jsonFocusNode = FocusNode(debugLabel: 'jsonField');
-  final FocusNode _fileButtonFocusNode = FocusNode(debugLabel: 'fileBtn');
-  final FocusNode _importButtonFocusNode = FocusNode(debugLabel: 'importBtn');
-  final ScrollController _listScrollController = ScrollController();
-  final List<FocusNode> _deleteFocusNodes = [];
-  String? _error;
-  bool _importing = false;
-  bool _changed = false;
   List<Map<String, dynamic>> _catalogs = [];
   bool _loadingCatalogs = true;
+  bool _changed = false;
+
+  final _closeFocusNode = FocusNode(debugLabel: 'close');
+  final List<FocusNode> _deleteFocusNodes = [];
+  final _listScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadCatalogs();
-    _setupFocusNavigation();
   }
 
   @override
   void dispose() {
-    _jsonController.dispose();
-    _closeFocusNode.dispose();
-    _jsonFocusNode.dispose();
-    _fileButtonFocusNode.dispose();
-    _importButtonFocusNode.dispose();
     _listScrollController.dispose();
-    for (final node in _deleteFocusNodes) {
-      node.dispose();
+    _closeFocusNode.dispose();
+    for (final n in _deleteFocusNodes) {
+      n.dispose();
     }
     super.dispose();
   }
@@ -70,51 +198,44 @@ class _StremioTvLocalCatalogsDialogState
       _catalogs = catalogs;
       _loadingCatalogs = false;
     });
+    _rebuildNavigation();
   }
 
   void _syncDeleteFocusNodes(int count) {
     while (_deleteFocusNodes.length < count) {
-      final idx = _deleteFocusNodes.length;
-      final node = FocusNode(debugLabel: 'deleteBtn$idx');
-      _deleteFocusNodes.add(node);
+      _deleteFocusNodes
+          .add(FocusNode(debugLabel: 'del${_deleteFocusNodes.length}'));
     }
     while (_deleteFocusNodes.length > count) {
       _deleteFocusNodes.removeLast().dispose();
     }
-    // Re-setup navigation since nodes changed
-    _setupDeleteNodeNavigation();
   }
 
-  void _setupDeleteNodeNavigation() {
-    for (int i = 0; i < _deleteFocusNodes.length; i++) {
-      final node = _deleteFocusNodes[i];
+  void _rebuildNavigation() {
+    final order = <FocusNode>[_closeFocusNode, ..._deleteFocusNodes];
+
+    for (int i = 0; i < order.length; i++) {
+      final node = order[i];
+      final prev = i > 0 ? order[i - 1] : null;
+      final next = i < order.length - 1 ? order[i + 1] : null;
+
       node.onKeyEvent = (n, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
-        if (key == LogicalKeyboardKey.arrowUp) {
-          if (i == 0) {
-            _closeFocusNode.requestFocus();
-          } else {
-            _deleteFocusNodes[i - 1].requestFocus();
-          }
-          // Scroll to keep focused item visible
-          _scrollToDeleteButton(i > 0 ? i - 1 : 0);
+
+        if (key == LogicalKeyboardKey.arrowUp && prev != null) {
+          prev.requestFocus();
+          _scrollToNode(prev);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.arrowDown) {
-          if (i < _deleteFocusNodes.length - 1) {
-            _deleteFocusNodes[i + 1].requestFocus();
-            _scrollToDeleteButton(i + 1);
-          } else {
-            _jsonFocusNode.requestFocus();
-          }
+        if (key == LogicalKeyboardKey.arrowDown && next != null) {
+          next.requestFocus();
+          _scrollToNode(next);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter) {
-          if (i < _catalogs.length) {
-            _deleteLocalCatalog(_catalogs[i]);
-          }
+        if (key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.select) {
+          _handleActivate(node);
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -122,245 +243,27 @@ class _StremioTvLocalCatalogsDialogState
     }
   }
 
-  void _scrollToDeleteButton(int index) {
-    if (!_listScrollController.hasClients) return;
-    // Each list tile is roughly 56px tall
+  void _handleActivate(FocusNode node) {
+    if (node == _closeFocusNode) {
+      Navigator.of(context).pop(_changed);
+    } else {
+      final idx = _deleteFocusNodes.indexOf(node);
+      if (idx >= 0 && idx < _catalogs.length) {
+        _deleteLocalCatalog(_catalogs[idx]);
+      }
+    }
+  }
+
+  void _scrollToNode(FocusNode node) {
+    final idx = _deleteFocusNodes.indexOf(node);
+    if (idx < 0 || !_listScrollController.hasClients) return;
     const itemHeight = 56.0;
-    final targetOffset = index * itemHeight;
-    final maxOffset = _listScrollController.position.maxScrollExtent;
+    final targetOffset = idx * itemHeight;
     _listScrollController.animateTo(
-      targetOffset.clamp(0.0, maxOffset),
+      targetOffset.clamp(0.0, _listScrollController.position.maxScrollExtent),
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
-  }
-
-  void _setupFocusNavigation() {
-    // Close button
-    _closeFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowDown) {
-        // Go to first delete button if catalogs exist, otherwise JSON field
-        if (_deleteFocusNodes.isNotEmpty) {
-          _deleteFocusNodes.first.requestFocus();
-        } else {
-          _jsonFocusNode.requestFocus();
-        }
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.select ||
-          key == LogicalKeyboardKey.enter) {
-        Navigator.of(context).pop(_changed);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
-
-    // JSON text field
-    _jsonFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      final key = event.logicalKey;
-      final text = _jsonController.text;
-      final selection = _jsonController.selection;
-      final isAtStart = !selection.isValid ||
-          (selection.baseOffset == 0 && selection.extentOffset == 0);
-      final isAtEnd = !selection.isValid ||
-          (selection.baseOffset == text.length &&
-              selection.extentOffset == text.length);
-
-      if (key == LogicalKeyboardKey.arrowUp) {
-        if (text.isEmpty || isAtStart) {
-          if (_deleteFocusNodes.isNotEmpty) {
-            _deleteFocusNodes.last.requestFocus();
-          } else {
-            _closeFocusNode.requestFocus();
-          }
-          return KeyEventResult.handled;
-        }
-      }
-      if (key == LogicalKeyboardKey.arrowDown) {
-        if (text.isEmpty || isAtEnd) {
-          _fileButtonFocusNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-      }
-      return KeyEventResult.ignored;
-    };
-
-    // Import File button
-    _fileButtonFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowUp) {
-        _jsonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.arrowDown) {
-        _importButtonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.select ||
-          key == LogicalKeyboardKey.enter) {
-        if (!_importing) _importFromFile();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
-
-    // Import button
-    _importButtonFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      final key = event.logicalKey;
-      if (key == LogicalKeyboardKey.arrowUp) {
-        _fileButtonFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (key == LogicalKeyboardKey.select ||
-          key == LogicalKeyboardKey.enter) {
-        if (!_importing) _import();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
-  }
-
-  /// Generate a unique catalog ID from the name.
-  String _generateCatalogId(String name) {
-    final sanitized = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    final ts = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
-    return '${sanitized}_$ts';
-  }
-
-  /// Validate and import JSON content. Returns error message or null on success.
-  String? _processJson(String content) {
-    final dynamic parsed;
-    try {
-      parsed = jsonDecode(content);
-    } catch (e) {
-      return 'Invalid JSON: $e';
-    }
-
-    if (parsed is! Map<String, dynamic>) {
-      return 'Invalid JSON: expected an object';
-    }
-
-    final name = parsed['name'] as String?;
-    if (name == null || name.trim().isEmpty) {
-      return 'Invalid catalog: missing "name"';
-    }
-
-    final rawItems = parsed['items'] as List<dynamic>?;
-    if (rawItems == null || rawItems.isEmpty) {
-      return 'Invalid catalog: "items" is missing or empty';
-    }
-
-    for (int i = 0; i < rawItems.length; i++) {
-      final item = rawItems[i];
-      if (item is! Map<String, dynamic>) {
-        return 'Invalid item at index $i: not an object';
-      }
-      final itemId = item['id'] as String?;
-      final itemName = item['name'] as String?;
-      if (itemId == null ||
-          itemId.isEmpty ||
-          itemName == null ||
-          itemName.isEmpty) {
-        return 'Invalid item at index $i: missing "id" or "name"';
-      }
-    }
-
-    return null; // valid
-  }
-
-  Future<void> _importFromFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        setState(() => _error = 'Could not read file data');
-        return;
-      }
-
-      final content = utf8.decode(bytes);
-      setState(() {
-        _jsonController.text = content;
-        _error = null;
-      });
-    } catch (e) {
-      setState(() => _error = 'Failed to read file: $e');
-    }
-  }
-
-  Future<void> _import() async {
-    final content = _jsonController.text.trim();
-    if (content.isEmpty) {
-      setState(() => _error = 'Please paste JSON or import a file');
-      return;
-    }
-
-    final validationError = _processJson(content);
-    if (validationError != null) {
-      setState(() => _error = validationError);
-      return;
-    }
-
-    setState(() {
-      _importing = true;
-      _error = null;
-    });
-
-    try {
-      final parsed = jsonDecode(content) as Map<String, dynamic>;
-      final name = (parsed['name'] as String).trim();
-      final rawItems = parsed['items'] as List<dynamic>;
-      final type = parsed['type'] as String? ?? 'movie';
-      final catalogId = _generateCatalogId(name);
-
-      final catalog = <String, dynamic>{
-        'id': catalogId,
-        'name': name,
-        'type': type,
-        'addedAt': DateTime.now().toIso8601String(),
-        'items': rawItems,
-      };
-
-      // Check for duplicate name
-      if (_catalogs.any((c) => c['name'] == name)) {
-        setState(() {
-          _error = 'A catalog with this name already exists';
-          _importing = false;
-        });
-        return;
-      }
-
-      await StorageService.addStremioTvLocalCatalog(catalog);
-
-      _changed = true;
-      _jsonController.clear();
-      await _loadCatalogs();
-      if (mounted) {
-        setState(() {
-          _importing = false;
-          _error = null;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to import: $e';
-        _importing = false;
-      });
-    }
   }
 
   Future<void> _deleteLocalCatalog(Map<String, dynamic> catalog) async {
@@ -395,14 +298,13 @@ class _StremioTvLocalCatalogsDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.8;
 
     return Material(
       type: MaterialType.transparency,
       child: Container(
         constraints: BoxConstraints(
           maxWidth: 500,
-          maxHeight: maxHeight,
+          maxHeight: screenHeight * 0.7,
         ),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
@@ -414,7 +316,7 @@ class _StremioTvLocalCatalogsDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // ── Header ──
               Row(
                 children: [
                   Icon(
@@ -440,7 +342,8 @@ class _StremioTvLocalCatalogsDialogState
                 ],
               ),
               const SizedBox(height: 12),
-              // Catalog list
+
+              // ── Catalog list ──
               if (_loadingCatalogs)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
@@ -454,9 +357,9 @@ class _StremioTvLocalCatalogsDialogState
                 )
               else if (_catalogs.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Text(
-                    'No local catalogs yet.',
+                    'No local catalogs yet.\nUse the menu to import catalogs.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -464,8 +367,7 @@ class _StremioTvLocalCatalogsDialogState
                   ),
                 )
               else
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200),
+                Flexible(
                   child: ListView.builder(
                     controller: _listScrollController,
                     shrinkWrap: true,
@@ -510,94 +412,220 @@ class _StremioTvLocalCatalogsDialogState
                             color: theme.colorScheme.error,
                             size: 20,
                           ),
-                          onPressed: () =>
-                              _deleteLocalCatalog(catalog),
+                          onPressed: () => _deleteLocalCatalog(catalog),
                           tooltip: 'Delete catalog',
                         ),
                       );
                     },
                   ),
                 ),
-              const Divider(height: 24),
-              // Import section
-              Text(
-                'Import',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Paste JSON
-              TextField(
-                controller: _jsonController,
-                focusNode: _jsonFocusNode,
-                maxLines: 6,
-                decoration: InputDecoration(
-                  hintText: 'Paste JSON here...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                ),
-              ),
-              // Error text
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              // OR divider
-              Row(
-                children: [
-                  const Expanded(child: Divider()),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'or',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const Expanded(child: Divider()),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Import file button
-              OutlinedButton.icon(
-                focusNode: _fileButtonFocusNode,
-                onPressed: _importing ? null : _importFromFile,
-                icon: const Icon(Icons.file_upload_outlined, size: 18),
-                label: const Text('Import File'),
-              ),
-              const SizedBox(height: 16),
-              // Import button
-              FilledButton(
-                focusNode: _importButtonFocusNode,
-                onPressed: _importing ? null : _import,
-                child: _importing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Import'),
-              ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Import from URL dialog ─────────────────────────────────────────────────
+
+class _ImportUrlDialog extends StatefulWidget {
+  const _ImportUrlDialog();
+
+  @override
+  State<_ImportUrlDialog> createState() => _ImportUrlDialogState();
+}
+
+class _ImportUrlDialogState extends State<_ImportUrlDialog> {
+  final _controller = TextEditingController();
+  String? _error;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    final url = _controller.text.trim();
+    if (url.isEmpty) {
+      setState(() => _error = 'Enter a URL');
+      return;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      setState(() => _error = 'Invalid URL');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final resp =
+          await http.get(uri).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+
+      if (resp.statusCode != 200) {
+        setState(() {
+          _error = 'HTTP ${resp.statusCode}';
+          _loading = false;
+        });
+        return;
+      }
+
+      final err = await LocalCatalogImporter.import(resp.body);
+      if (!mounted) return;
+
+      if (err != null) {
+        setState(() {
+          _error = err;
+          _loading = false;
+        });
+        return;
+      }
+
+      Navigator.of(context).pop(true);
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Request timed out';
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Import from URL'),
+      content: TextField(
+        controller: _controller,
+        decoration: InputDecoration(
+          hintText: 'https://example.com/catalog.json',
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          errorText: _error,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        autofocus: true,
+        onSubmitted: (_) {
+          if (!_loading) _import();
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _import,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Import'),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Paste JSON dialog ──────────────────────────────────────────────────────
+
+class _ImportJsonDialog extends StatefulWidget {
+  const _ImportJsonDialog();
+
+  @override
+  State<_ImportJsonDialog> createState() => _ImportJsonDialogState();
+}
+
+class _ImportJsonDialogState extends State<_ImportJsonDialog> {
+  final _controller = TextEditingController();
+  String? _error;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    final content = _controller.text.trim();
+    if (content.isEmpty) {
+      setState(() => _error = 'Paste JSON content');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final err = await LocalCatalogImporter.import(content);
+    if (!mounted) return;
+
+    if (err != null) {
+      setState(() {
+        _error = err;
+        _loading = false;
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Paste JSON'),
+      content: TextField(
+        controller: _controller,
+        maxLines: 6,
+        decoration: InputDecoration(
+          hintText: '{"name": "My Catalog", "items": [...]}',
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          errorText: _error,
+          contentPadding: const EdgeInsets.all(12),
+        ),
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _import,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Import'),
+        ),
+      ],
     );
   }
 }
