@@ -46,6 +46,7 @@ class PremiumNavBar extends StatelessWidget {
                         selected: i == currentIndex,
                         icon: items[i].icon,
                         label: items[i].label,
+                        tag: items[i].tag,
                         badge: (badges != null && i < badges!.length) ? badges![i] : null,
                         autofocus: i == currentIndex,
                         onPressed: () {
@@ -68,6 +69,7 @@ class _PremiumNavButton extends StatefulWidget {
   final bool selected;
   final IconData icon;
   final String label;
+  final String? tag;
   final int? badge;
   final VoidCallback onPressed;
   final bool autofocus;
@@ -77,6 +79,7 @@ class _PremiumNavButton extends StatefulWidget {
     required this.selected,
     required this.icon,
     required this.label,
+    this.tag,
     required this.onPressed,
     this.badge,
     this.autofocus = false,
@@ -214,11 +217,41 @@ class _PremiumNavButtonState extends State<_PremiumNavButton> {
                           ? Padding(
                               key: const ValueKey('label'),
                               padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                widget.label,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      widget.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  if (widget.tag != null) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
+                                      ),
+                                      child: Text(
+                                        widget.tag!,
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.amber,
+                                          letterSpacing: 0.5,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             )
                           : const SizedBox.shrink(key: ValueKey('empty')),
@@ -259,7 +292,8 @@ class _PremiumNavButtonState extends State<_PremiumNavButton> {
 class NavItem {
   final IconData icon;
   final String label;
-  const NavItem(this.icon, this.label);
+  final String? tag;
+  const NavItem(this.icon, this.label, {this.tag});
 }
 
 List<NavItem> buildDefaultNavItems(List<IconData> icons, List<String> labels) {

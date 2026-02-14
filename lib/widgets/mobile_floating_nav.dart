@@ -595,16 +595,44 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
             const SizedBox(width: 12),
             // Label
             Expanded(
-              child: Text(
-                widget.item.label,
-                style: TextStyle(
-                  color: widget.isSelected
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.85),
-                  fontSize: 14,
-                  fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
-                  letterSpacing: 0.2,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      widget.item.label,
+                      style: TextStyle(
+                        color: widget.isSelected
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.85),
+                        fontSize: 14,
+                        fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  if (widget.item.tag != null) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
+                      ),
+                      child: Text(
+                        widget.item.tag!,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.amber,
+                          letterSpacing: 0.5,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             // Selected indicator
@@ -781,6 +809,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
 class MobileNavItem {
   final IconData icon;
   final String label;
+  final String? tag;
 
-  const MobileNavItem(this.icon, this.label);
+  const MobileNavItem(this.icon, this.label, {this.tag});
 }

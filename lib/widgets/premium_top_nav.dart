@@ -156,6 +156,7 @@ class _PremiumTopNavState extends State<PremiumTopNav> {
                                     compact: showAllLabels,
                                     icon: items[i].icon,
                                     label: items[i].label,
+                                    tag: items[i].tag,
                                     badge: (badges != null && i < badges.length)
                                         ? badges[i]
                                         : null,
@@ -245,6 +246,7 @@ class _TopNavButton extends StatefulWidget {
   final bool compact;
   final IconData icon;
   final String label;
+  final String? tag;
   final int? badge;
   final VoidCallback onPressed;
   final bool autofocus;
@@ -256,6 +258,7 @@ class _TopNavButton extends StatefulWidget {
     this.compact = false,
     required this.icon,
     required this.label,
+    this.tag,
     required this.onPressed,
     this.badge,
     this.autofocus = false,
@@ -396,17 +399,43 @@ class _TopNavButtonState extends State<_TopNavButton> {
                           ? Padding(
                               key: const ValueKey('label'),
                               padding: EdgeInsets.only(left: labelPadding),
-                              child: Text(
-                                widget.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                                  color: selected
-                                      ? Colors.white
-                                      : (highlighted ? Colors.white : Colors.white60),
-                                  fontSize: fontSize,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    widget.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                                      color: selected
+                                          ? Colors.white
+                                          : (highlighted ? Colors.white : Colors.white60),
+                                      fontSize: fontSize,
+                                    ),
+                                  ),
+                                  if (widget.tag != null) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
+                                      ),
+                                      child: Text(
+                                        widget.tag!,
+                                        style: TextStyle(
+                                          fontSize: fontSize - 3,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.amber,
+                                          letterSpacing: 0.5,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             )
                           : const SizedBox.shrink(key: ValueKey('empty')),

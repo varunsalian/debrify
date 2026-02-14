@@ -1315,7 +1315,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
     final navItems = [
-      for (final index in visibleIndices) NavItem(_icons[index], _titles[index]),
+      for (final index in visibleIndices) NavItem(_icons[index], _titles[index], tag: index == 9 ? 'BETA' : null),
     ];
     final navBadges = List<int>.filled(navItems.length, 0);
     final selectedNavIndex = visibleIndices.indexOf(_selectedIndex);
@@ -1394,7 +1394,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           currentIndex: currentNavIndex,
                           items: [
                             for (final navItem in navItems)
-                              TvNavItem(navItem.icon, navItem.label),
+                              TvNavItem(navItem.icon, navItem.label, tag: navItem.tag),
                           ],
                           onTap: (relativeIndex) {
                             final actualIndex = visibleIndices[relativeIndex];
@@ -1500,7 +1500,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           currentIndex: currentNavIndex,
                           items: [
                             for (final navItem in navItems)
-                              MobileNavItem(navItem.icon, navItem.label),
+                              MobileNavItem(navItem.icon, navItem.label, tag: navItem.tag),
                           ],
                           onTap: (relativeIndex) {
                             final actualIndex = visibleIndices[relativeIndex];
