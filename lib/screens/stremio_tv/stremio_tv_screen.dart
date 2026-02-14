@@ -277,12 +277,32 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (channel.items.isEmpty && channel.lastFetched != null) {
       setState(() {
         final idx = _channels.indexWhere((ch) => ch.id == channel.id);
-        if (idx != -1) {
-          _channels.removeAt(idx);
-          if (idx < _rowFocusNodes.length) {
-            _rowFocusNodes[idx].dispose();
-            _rowFocusNodes.removeAt(idx);
+        if (idx == -1) return;
+
+        // Rescue focus before disposing the node
+        final removingFocused =
+            idx < _rowFocusNodes.length && _rowFocusNodes[idx].hasFocus;
+        if (removingFocused) {
+          if (idx > 0 && idx - 1 < _rowFocusNodes.length) {
+            _rowFocusNodes[idx - 1].requestFocus();
+          } else if (idx + 1 < _rowFocusNodes.length) {
+            _rowFocusNodes[idx + 1].requestFocus();
+          } else {
+            _searchFocusNode.requestFocus();
           }
+        }
+
+        _channels.removeAt(idx);
+        if (idx < _rowFocusNodes.length) {
+          _rowFocusNodes[idx].dispose();
+          _rowFocusNodes.removeAt(idx);
+        }
+
+        // Keep _focusedIndex in sync
+        if (removingFocused) {
+          _focusedIndex = idx > 0 ? idx - 1 : 0;
+        } else if (_focusedIndex > idx) {
+          _focusedIndex--;
         }
       });
     } else {
