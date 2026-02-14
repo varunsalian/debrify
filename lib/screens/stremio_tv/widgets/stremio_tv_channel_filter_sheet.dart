@@ -253,19 +253,36 @@ class _StremioTvChannelFilterSheetState
   // DPAD key handling
   // ========================================================================
 
+  void _scrollToNode(String nodeId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final focusNode = _focusNodeFor(nodeId);
+      if (focusNode.context != null) {
+        Scrollable.ensureVisible(
+          focusNode.context!,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 150),
+        );
+      }
+    });
+  }
+
   KeyEventResult _handleRowKey(int index, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final node = _flatList[index];
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (index > 0) {
-        _focusNodeFor(_flatList[index - 1].id).requestFocus();
+        final targetId = _flatList[index - 1].id;
+        _focusNodeFor(targetId).requestFocus();
+        _scrollToNode(targetId);
       }
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (index < _flatList.length - 1) {
-        _focusNodeFor(_flatList[index + 1].id).requestFocus();
+        final targetId = _flatList[index + 1].id;
+        _focusNodeFor(targetId).requestFocus();
+        _scrollToNode(targetId);
       }
       return KeyEventResult.handled;
     }
@@ -289,7 +306,9 @@ class _StremioTvChannelFilterSheetState
         final parentDepth = node.depth - 1;
         for (int i = index - 1; i >= 0; i--) {
           if (_flatList[i].depth == parentDepth) {
-            _focusNodeFor(_flatList[i].id).requestFocus();
+            final parentId = _flatList[i].id;
+            _focusNodeFor(parentId).requestFocus();
+            _scrollToNode(parentId);
             break;
           }
         }
