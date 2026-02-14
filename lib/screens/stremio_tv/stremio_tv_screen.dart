@@ -550,7 +550,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       }
 
-      final maxTorrentAttempts = torrentStreams.length.clamp(0, 5);
+      final maxTorrentAttempts = torrentStreams.length.clamp(0, 15);
       for (int i = 0; i < maxTorrentAttempts; i++) {
         if (!mounted) return;
         final success =
