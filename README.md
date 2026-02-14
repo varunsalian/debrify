@@ -129,9 +129,23 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 </td>
 <td width="50%">
 
+### Stremio TV *(Beta)*
+- **TV guide experience** — Addon catalogs as live TV channels
+- **Auto-rotation** — "Now playing" rotates on a configurable schedule
+- **Channel filters** — Filter by addon or content type
+- **Favorites** — Pin channels to home screen
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
 ### Reddit Videos
 - **Audio merged** — Plays videos with audio properly combined
 - **Download support** — Save Reddit videos locally
+
+</td>
+<td width="50%">
 
 </td>
 </tr>
