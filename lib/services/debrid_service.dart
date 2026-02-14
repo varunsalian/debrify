@@ -8,6 +8,16 @@ import '../services/storage_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/rd_folder_tree_builder.dart';
 
+/// Thrown when a torrent is added to Real-Debrid but is not cached (no links available).
+/// Carries the torrentId so the caller can decide whether to keep or delete it.
+class TorrentNotCachedException implements Exception {
+  final String torrentId;
+  final String apiKey;
+  TorrentNotCachedException(this.torrentId, this.apiKey);
+  @override
+  String toString() => 'File is not readily available in Real Debrid';
+}
+
 class DebridService {
   static const String _primaryEndpoint = 'https://api.real-debrid.com/rest/1.0';
   static const String _backupEndpoint = 'https://api-2.real-debrid.com/rest/1.0';
@@ -596,8 +606,7 @@ class DebridService {
       }
 
       if (links.isEmpty) {
-        await deleteTorrent(apiKey, torrentId);
-        throw Exception('File is not readily available in Real Debrid');
+        throw TorrentNotCachedException(torrentId, apiKey);
       }
 
       // Step 6: Unrestrict the link
@@ -620,6 +629,8 @@ class DebridService {
         'files': files, // Add the files information for lazy loading
         'updatedInfo': updatedInfo, // Add the full updated info
       };
+    } on TorrentNotCachedException {
+      rethrow;
     } catch (e) {
       throw Exception('Failed to add torrent to Real Debrid: $e');
     }

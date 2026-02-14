@@ -443,6 +443,11 @@ class MagnetLinkHandler {
           _showSuccess('Successfully added to RealDebrid');
         }
       }
+    } on TorrentNotCachedException catch (e) {
+      await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      _showError('File is not readily available in Real Debrid');
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop(); // Close loading dialog

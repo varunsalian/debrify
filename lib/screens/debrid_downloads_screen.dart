@@ -4121,6 +4121,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Refresh the torrent list
       await _fetchTorrents(_apiKey!, reset: true);
+    } on TorrentNotCachedException catch (e) {
+      await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) _showError('File is not readily available in Real Debrid');
     } catch (e) {
       // Close loading dialog
       if (mounted) {
@@ -4277,6 +4281,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Refresh the torrent list
       await _fetchTorrents(_apiKey!, reset: true);
+    } on TorrentNotCachedException catch (e) {
+      await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+      if (mounted) Navigator.of(context).pop();
+      if (mounted) _showError('File is not readily available in Real Debrid');
     } catch (e) {
       // Close loading dialog
       if (mounted) {

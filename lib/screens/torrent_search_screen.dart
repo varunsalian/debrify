@@ -5854,6 +5854,39 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay);
+    } on TorrentNotCachedException catch (e) {
+      // Close loading dialog
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      // For Quick Play, delete and try next torrent
+      if (forcePlay) {
+        await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+        if (_tryNextQuickPlayTorrent(provider: 'debrid')) return;
+        _resetQuickPlayState();
+        return;
+      }
+
+      if (!mounted) return;
+      final addAnyway = await _showNotCachedDialog('debrid');
+      if (addAnyway) {
+        // Keep torrent in RD — it will download and appear in the RD page
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Torrent added to Real-Debrid. Check the Real-Debrid page once downloaded.'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // User cancelled — delete the torrent from RD
+        await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+      }
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -5905,6 +5938,124 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       );
     }
+  }
+
+  /// Shows a dialog when a torrent is not cached, asking the user if they want
+  /// to add it anyway. Returns true if the user wants to add it.
+  Future<bool> _showNotCachedDialog(String provider) async {
+    final pageName = provider == 'torbox' ? 'Torbox' : 'Real-Debrid';
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.cloud_off_rounded,
+                    color: Color(0xFFF59E0B),
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Torrent Not Cached',
+                  style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'This torrent is not cached on $pageName. Would you like to add it anyway?\n\nOnce downloaded, it will be available in the $pageName page.',
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white70,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () {
+                          DialogTapGuard.markKeyAction();
+                          Navigator.of(ctx).pop(false);
+                        },
+                        style: ButtonStyle(
+                          padding: WidgetStatePropertyAll(
+                            const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          shape: WidgetStateProperty.resolveWith((states) {
+                            final focused = states.contains(WidgetState.focused);
+                            return RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: BorderSide(
+                                color: focused ? Colors.white : Colors.white24,
+                                width: focused ? 2 : 1,
+                              ),
+                            );
+                          }),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        autofocus: true,
+                        onPressed: () {
+                          DialogTapGuard.markKeyAction();
+                          Navigator.of(ctx).pop(true);
+                        },
+                        style: ButtonStyle(
+                          backgroundColor: const WidgetStatePropertyAll(
+                            Color(0xFF6366F1),
+                          ),
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          shape: WidgetStateProperty.resolveWith((states) {
+                            final focused = states.contains(WidgetState.focused);
+                            return RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: focused
+                                  ? const BorderSide(color: Colors.white, width: 2)
+                                  : BorderSide.none,
+                            );
+                          }),
+                        ),
+                        child: const Text(
+                          'Add Anyway',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    return result == true;
   }
 
   Future<void> _showFileSelectionDialog(
@@ -6263,6 +6414,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index);
+    } on TorrentNotCachedException catch (e) {
+      // Close loading dialog
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (!mounted) return;
+      final addAnyway = await _showNotCachedDialog('debrid');
+      if (addAnyway) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Torrent added to Real-Debrid. Check the Real-Debrid page once downloaded.'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+      }
     } catch (e) {
       // Close loading dialog
       Navigator.of(context).pop();
@@ -6442,10 +6616,58 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) {
             return; // Next torrent is being tried
           }
-          _showTorboxSnack(
-            'This torrent is not cached on Torbox. Please try a different torrent.',
-            isError: true,
-          );
+          if (forcePlay) {
+            _resetQuickPlayState();
+            _showTorboxSnack(
+              'This torrent is not cached on Torbox.',
+              isError: true,
+            );
+            return;
+          }
+          // Ask user if they want to add it anyway
+          if (!mounted) return;
+          final addAnyway = await _showNotCachedDialog('torbox');
+          if (addAnyway) {
+            // Re-add without cache-only restriction
+            if (!mounted) return;
+            _showTorboxLoadingDialog(torrentName);
+            try {
+              final retryResponse = await TorboxService.createTorrent(
+                apiKey: apiKey,
+                magnet: magnetLink,
+                seed: true,
+                allowZip: true,
+                addOnlyIfCached: false,
+              );
+              if (mounted && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+              final retrySuccess = retryResponse['success'] as bool? ?? false;
+              if (retrySuccess) {
+                _showTorboxSnack(
+                  'Torrent added to Torbox. Check the Torbox page once downloaded.',
+                );
+              } else {
+                final retryError = (retryResponse['error'] ?? '').toString();
+                _showTorboxSnack(
+                  _formatTorboxError(retryError).isNotEmpty
+                      ? _formatTorboxError(retryError)
+                      : 'Failed to add torrent to Torbox.',
+                  isError: true,
+                );
+              }
+            } catch (retryErr) {
+              if (mounted && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+              if (mounted) {
+                _showTorboxSnack(
+                  'Failed to add torrent: ${_formatTorboxError(retryErr)}',
+                  isError: true,
+                );
+              }
+            }
+          }
         } else if (error.contains('INVALID_API_KEY') || error.contains('UNAUTHORIZED')) {
           _showTorboxSnack(
             'Invalid API key. Please check your Torbox settings.',
