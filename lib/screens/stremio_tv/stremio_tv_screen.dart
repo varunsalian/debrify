@@ -257,6 +257,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   /// Prevents duplicate concurrent fetches via [_loadingChannelIds].
   /// Removes the channel from the list if it loads with zero items.
   Future<void> _ensureChannelItemsLoaded(StremioTvChannel channel) async {
+    if (channel.isLocal) return;
     if (channel.hasItems && !channel.isCacheStale) return;
     if (_loadingChannelIds.contains(channel.id)) return;
 

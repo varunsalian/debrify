@@ -30,6 +30,9 @@ class StremioTvChannel {
   /// Whether this channel is favorited by the user
   bool isFavorite;
 
+  /// Whether this channel is backed by a local JSON catalog (not a remote addon)
+  final bool isLocal;
+
   /// Lazily loaded catalog items (cached)
   List<StremioMeta> items;
 
@@ -44,6 +47,7 @@ class StremioTvChannel {
     required this.channelNumber,
     this.genre,
     this.isFavorite = false,
+    this.isLocal = false,
     this.items = const [],
     this.lastFetched,
   });
@@ -70,6 +74,39 @@ class StremioTvChannel {
       channelNumber: channelNumber,
       genre: genre,
       isFavorite: isFavorite,
+    );
+  }
+
+  /// Create a local channel from a user-imported JSON catalog.
+  factory StremioTvChannel.local({
+    required String catalogId,
+    required String catalogName,
+    required String catalogType,
+    required int channelNumber,
+    required List<StremioMeta> items,
+    bool isFavorite = false,
+  }) {
+    final addon = StremioAddon(
+      id: 'local',
+      name: 'Local',
+      manifestUrl: '',
+      baseUrl: '',
+    );
+    final catalog = StremioAddonCatalog(
+      id: catalogId,
+      type: catalogType,
+      name: catalogName,
+    );
+    return StremioTvChannel(
+      id: 'local:$catalogId:$catalogType',
+      displayName: 'Local: $catalogName',
+      addon: addon,
+      catalog: catalog,
+      channelNumber: channelNumber,
+      isLocal: true,
+      isFavorite: isFavorite,
+      items: items,
+      lastFetched: DateTime.now(),
     );
   }
 

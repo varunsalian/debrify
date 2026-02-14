@@ -195,6 +195,8 @@ class StorageService {
       'stremio_tv_debrid_provider';
   static const String _stremioTvMaxStartPercentKey =
       'stremio_tv_max_start_percent';
+  static const String _stremioTvLocalCatalogsKey =
+      'stremio_tv_local_catalogs_v1';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3654,6 +3656,61 @@ class StorageService {
       debugPrint('Error reading Stremio TV channel favorites: $e');
       return {};
     }
+  }
+
+  // ==========================================================================
+  // Stremio TV Local Catalogs
+  // ==========================================================================
+
+  /// Get all locally imported catalogs for Stremio TV.
+  static Future<List<Map<String, dynamic>>> getStremioTvLocalCatalogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_stremioTvLocalCatalogsKey);
+    if (json == null) return [];
+
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      return list.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('Error reading Stremio TV local catalogs: $e');
+      return [];
+    }
+  }
+
+  /// Save all locally imported catalogs for Stremio TV.
+  static Future<void> setStremioTvLocalCatalogs(
+    List<Map<String, dynamic>> catalogs,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (catalogs.isEmpty) {
+      await prefs.remove(_stremioTvLocalCatalogsKey);
+    } else {
+      await prefs.setString(
+        _stremioTvLocalCatalogsKey,
+        jsonEncode(catalogs),
+      );
+    }
+  }
+
+  /// Add a single local catalog. Returns false if a catalog with the same ID
+  /// already exists.
+  static Future<bool> addStremioTvLocalCatalog(
+    Map<String, dynamic> catalog,
+  ) async {
+    final existing = await getStremioTvLocalCatalogs();
+    final id = catalog['id'] as String?;
+    if (id == null) return false;
+    if (existing.any((c) => c['id'] == id)) return false;
+    existing.add(catalog);
+    await setStremioTvLocalCatalogs(existing);
+    return true;
+  }
+
+  /// Remove a local catalog by its ID.
+  static Future<void> removeStremioTvLocalCatalog(String catalogId) async {
+    final existing = await getStremioTvLocalCatalogs();
+    existing.removeWhere((c) => c['id'] == catalogId);
+    await setStremioTvLocalCatalogs(existing);
   }
 
   // ==========================================================================

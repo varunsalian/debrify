@@ -79,6 +79,43 @@ class StremioTvService {
         }
       }
 
+      // Append local catalog channels
+      final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
+      for (final catalog in localCatalogs) {
+        final catalogId = catalog['id'] as String? ?? '';
+        final catalogName = catalog['name'] as String? ?? 'Unknown';
+        final catalogType = catalog['type'] as String? ?? 'movie';
+        final channelId = 'local:$catalogId:$catalogType';
+
+        // Skip if disabled (addon-level 'local' or specific channel ID)
+        if (disabled.contains('local') || disabled.contains(channelId)) {
+          continue;
+        }
+
+        final rawItems = catalog['items'] as List<dynamic>? ?? [];
+        final items = rawItems
+            .whereType<Map<String, dynamic>>()
+            .map((json) {
+              // Auto-fill type from catalog type if not present in item
+              if (!json.containsKey('type')) {
+                json = {...json, 'type': catalogType};
+              }
+              return StremioMeta.fromJson(json);
+            })
+            .toList();
+
+        if (items.isEmpty) continue;
+
+        channels.add(StremioTvChannel.local(
+          catalogId: catalogId,
+          catalogName: catalogName,
+          catalogType: catalogType,
+          channelNumber: channelNumber++,
+          items: items,
+          isFavorite: favoriteIds.contains(channelId),
+        ));
+      }
+
       return channels;
     } catch (e) {
       debugPrint('StremioTvService: Error discovering channels: $e');
@@ -87,18 +124,40 @@ class StremioTvService {
   }
 
   /// Get the raw addon→catalog→genre tree for the filter UI.
-  /// Returns all addons with their catalogs (excluding series type).
+  /// Returns all addons with their catalogs (excluding series type),
+  /// plus a synthetic "Local Catalogs" addon entry.
   Future<List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>>
       getFilterTree() async {
     final addons = await _stremioService.getCatalogAddons();
     const blockedTypes = {'series'};
 
-    return addons.map((addon) {
+    final tree = addons.map((addon) {
       final catalogs = addon.catalogs
           .where((c) => !blockedTypes.contains(c.type.toLowerCase()))
           .toList();
       return (addon: addon, catalogs: catalogs);
     }).where((entry) => entry.catalogs.isNotEmpty).toList();
+
+    // Append local catalogs as a synthetic addon entry
+    final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
+    if (localCatalogs.isNotEmpty) {
+      final localAddon = StremioAddon(
+        id: 'local',
+        name: 'Local Catalogs',
+        manifestUrl: '',
+        baseUrl: '',
+      );
+      final localCatalogEntries = localCatalogs.map((c) {
+        return StremioAddonCatalog(
+          id: c['id'] as String? ?? '',
+          type: c['type'] as String? ?? 'movie',
+          name: c['name'] as String? ?? 'Unknown',
+        );
+      }).toList();
+      tree.add((addon: localAddon, catalogs: localCatalogEntries));
+    }
+
+    return tree;
   }
 
   // ============================================================================
@@ -117,6 +176,7 @@ class StremioTvService {
   /// Falls back to page 0 if the random page returns no results.
   /// Caches results for 30 minutes.
   Future<void> loadChannelItems(StremioTvChannel channel) async {
+    if (channel.isLocal) return;
     if (!channel.isCacheStale) return;
 
     try {
