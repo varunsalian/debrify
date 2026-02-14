@@ -120,8 +120,9 @@ class StremioTvService {
     if (!channel.isCacheStale) return;
 
     try {
-      // Pick a deterministic page based on channel ID
-      final pageHash = _djb2('page:${channel.id}');
+      // Pick a deterministic page based on channel ID + day, so the pool rotates daily
+      final dayKey = DateTime.now().millisecondsSinceEpoch ~/ (24 * 60 * 60 * 1000);
+      final pageHash = _djb2('page:${channel.id}:$dayKey');
       final page = pageHash % _maxPages; // 0.._maxPages-1
       final skip = page * _pageSize;
 
