@@ -6,39 +6,45 @@ import 'package:flutter/services.dart';
 
 import '../../../services/storage_service.dart';
 
-/// Dialog for importing a local JSON catalog into Stremio TV.
-/// Supports pasting JSON directly or picking a .json file.
-class StremioTvImportCatalogDialog extends StatefulWidget {
-  const StremioTvImportCatalogDialog({super.key});
+/// Dialog for managing local JSON catalogs in Stremio TV.
+/// Shows existing catalogs (with delete) and an import section.
+class StremioTvLocalCatalogsDialog extends StatefulWidget {
+  const StremioTvLocalCatalogsDialog({super.key});
 
-  /// Show the import dialog. Returns `true` if a catalog was imported.
+  /// Show the dialog. Returns `true` if catalogs were changed.
   static Future<bool?> show(BuildContext context) {
     return showDialog<bool>(
       context: context,
       builder: (context) => const Center(
-        child: StremioTvImportCatalogDialog(),
+        child: StremioTvLocalCatalogsDialog(),
       ),
     );
   }
 
   @override
-  State<StremioTvImportCatalogDialog> createState() =>
-      _StremioTvImportCatalogDialogState();
+  State<StremioTvLocalCatalogsDialog> createState() =>
+      _StremioTvLocalCatalogsDialogState();
 }
 
-class _StremioTvImportCatalogDialogState
-    extends State<StremioTvImportCatalogDialog> {
+class _StremioTvLocalCatalogsDialogState
+    extends State<StremioTvLocalCatalogsDialog> {
   final TextEditingController _jsonController = TextEditingController();
   final FocusNode _closeFocusNode = FocusNode(debugLabel: 'closeBtn');
   final FocusNode _jsonFocusNode = FocusNode(debugLabel: 'jsonField');
   final FocusNode _fileButtonFocusNode = FocusNode(debugLabel: 'fileBtn');
   final FocusNode _importButtonFocusNode = FocusNode(debugLabel: 'importBtn');
+  final ScrollController _listScrollController = ScrollController();
+  final List<FocusNode> _deleteFocusNodes = [];
   String? _error;
   bool _importing = false;
+  bool _changed = false;
+  List<Map<String, dynamic>> _catalogs = [];
+  bool _loadingCatalogs = true;
 
   @override
   void initState() {
     super.initState();
+    _loadCatalogs();
     _setupFocusNavigation();
   }
 
@@ -49,7 +55,84 @@ class _StremioTvImportCatalogDialogState
     _jsonFocusNode.dispose();
     _fileButtonFocusNode.dispose();
     _importButtonFocusNode.dispose();
+    _listScrollController.dispose();
+    for (final node in _deleteFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  Future<void> _loadCatalogs() async {
+    final catalogs = await StorageService.getStremioTvLocalCatalogs();
+    if (!mounted) return;
+    _syncDeleteFocusNodes(catalogs.length);
+    setState(() {
+      _catalogs = catalogs;
+      _loadingCatalogs = false;
+    });
+  }
+
+  void _syncDeleteFocusNodes(int count) {
+    while (_deleteFocusNodes.length < count) {
+      final idx = _deleteFocusNodes.length;
+      final node = FocusNode(debugLabel: 'deleteBtn$idx');
+      _deleteFocusNodes.add(node);
+    }
+    while (_deleteFocusNodes.length > count) {
+      _deleteFocusNodes.removeLast().dispose();
+    }
+    // Re-setup navigation since nodes changed
+    _setupDeleteNodeNavigation();
+  }
+
+  void _setupDeleteNodeNavigation() {
+    for (int i = 0; i < _deleteFocusNodes.length; i++) {
+      final node = _deleteFocusNodes[i];
+      node.onKeyEvent = (n, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowUp) {
+          if (i == 0) {
+            _closeFocusNode.requestFocus();
+          } else {
+            _deleteFocusNodes[i - 1].requestFocus();
+          }
+          // Scroll to keep focused item visible
+          _scrollToDeleteButton(i > 0 ? i - 1 : 0);
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          if (i < _deleteFocusNodes.length - 1) {
+            _deleteFocusNodes[i + 1].requestFocus();
+            _scrollToDeleteButton(i + 1);
+          } else {
+            _jsonFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter) {
+          if (i < _catalogs.length) {
+            _deleteLocalCatalog(_catalogs[i]);
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      };
+    }
+  }
+
+  void _scrollToDeleteButton(int index) {
+    if (!_listScrollController.hasClients) return;
+    // Each list tile is roughly 56px tall
+    const itemHeight = 56.0;
+    final targetOffset = index * itemHeight;
+    final maxOffset = _listScrollController.position.maxScrollExtent;
+    _listScrollController.animateTo(
+      targetOffset.clamp(0.0, maxOffset),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   void _setupFocusNavigation() {
@@ -58,12 +141,17 @@ class _StremioTvImportCatalogDialogState
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       final key = event.logicalKey;
       if (key == LogicalKeyboardKey.arrowDown) {
-        _jsonFocusNode.requestFocus();
+        // Go to first delete button if catalogs exist, otherwise JSON field
+        if (_deleteFocusNodes.isNotEmpty) {
+          _deleteFocusNodes.first.requestFocus();
+        } else {
+          _jsonFocusNode.requestFocus();
+        }
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.select ||
           key == LogicalKeyboardKey.enter) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(_changed);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -83,7 +171,11 @@ class _StremioTvImportCatalogDialogState
 
       if (key == LogicalKeyboardKey.arrowUp) {
         if (text.isEmpty || isAtStart) {
-          _closeFocusNode.requestFocus();
+          if (_deleteFocusNodes.isNotEmpty) {
+            _deleteFocusNodes.last.requestFocus();
+          } else {
+            _closeFocusNode.requestFocus();
+          }
           return KeyEventResult.handled;
         }
       }
@@ -243,8 +335,8 @@ class _StremioTvImportCatalogDialogState
         'items': rawItems,
       };
 
-      final added = await StorageService.addStremioTvLocalCatalog(catalog);
-      if (!added) {
+      // Check for duplicate name
+      if (_catalogs.any((c) => c['name'] == name)) {
         setState(() {
           _error = 'A catalog with this name already exists';
           _importing = false;
@@ -252,8 +344,16 @@ class _StremioTvImportCatalogDialogState
         return;
       }
 
+      await StorageService.addStremioTvLocalCatalog(catalog);
+
+      _changed = true;
+      _jsonController.clear();
+      await _loadCatalogs();
       if (mounted) {
-        Navigator.of(context).pop(true);
+        setState(() {
+          _importing = false;
+          _error = null;
+        });
       }
     } catch (e) {
       setState(() {
@@ -261,6 +361,34 @@ class _StremioTvImportCatalogDialogState
         _importing = false;
       });
     }
+  }
+
+  Future<void> _deleteLocalCatalog(Map<String, dynamic> catalog) async {
+    final name = catalog['name'] as String? ?? 'Unknown';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Catalog'),
+        content: Text('Remove "$name" and all its items?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final id = catalog['id'] as String? ?? '';
+    await StorageService.removeStremioTvLocalCatalog(id);
+    _changed = true;
+    if (!mounted) return;
+    await _loadCatalogs();
   }
 
   @override
@@ -297,7 +425,7 @@ class _StremioTvImportCatalogDialogState
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Import Local Catalog',
+                      'Local Catalogs',
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -305,18 +433,105 @@ class _StremioTvImportCatalogDialogState
                   ),
                   IconButton(
                     focusNode: _closeFocusNode,
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop(_changed),
                     icon: const Icon(Icons.close),
                     tooltip: 'Close',
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              // Catalog list
+              if (_loadingCatalogs)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_catalogs.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'No local catalogs yet.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    controller: _listScrollController,
+                    shrinkWrap: true,
+                    itemCount: _catalogs.length,
+                    itemBuilder: (context, index) {
+                      final catalog = _catalogs[index];
+                      final name =
+                          catalog['name'] as String? ?? 'Unknown';
+                      final type =
+                          catalog['type'] as String? ?? 'movie';
+                      final items =
+                          catalog['items'] as List<dynamic>? ?? [];
+                      final deleteFocus =
+                          index < _deleteFocusNodes.length
+                              ? _deleteFocusNodes[index]
+                              : null;
+
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          type == 'series'
+                              ? Icons.tv_rounded
+                              : Icons.movie_rounded,
+                          color: theme.colorScheme.primary,
+                          size: 20,
+                        ),
+                        title: Text(
+                          name,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        subtitle: Text(
+                          '${items.length} items',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          focusNode: deleteFocus,
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: theme.colorScheme.error,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              _deleteLocalCatalog(catalog),
+                          tooltip: 'Delete catalog',
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const Divider(height: 24),
+              // Import section
+              Text(
+                'Import',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
               // Paste JSON
               TextField(
                 controller: _jsonController,
                 focusNode: _jsonFocusNode,
-                maxLines: 8,
+                maxLines: 6,
                 decoration: InputDecoration(
                   hintText: 'Paste JSON here...',
                   border: OutlineInputBorder(

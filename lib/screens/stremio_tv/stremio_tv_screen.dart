@@ -21,7 +21,7 @@ import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
 import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
-import 'widgets/stremio_tv_import_catalog_dialog.dart';
+import 'widgets/stremio_tv_local_catalogs_dialog.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -252,14 +252,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _openChannelFilter();
         break;
       case 'import':
-        _openImportDialog();
+        _openLocalCatalogs();
         break;
     }
   }
 
-  Future<void> _openImportDialog() async {
-    final imported = await StremioTvImportCatalogDialog.show(context);
-    if (imported == true && mounted) {
+  Future<void> _openLocalCatalogs() async {
+    final changed = await StremioTvLocalCatalogsDialog.show(context);
+    if (changed == true && mounted) {
       _refresh();
     }
   }
@@ -1258,8 +1258,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     PopupMenuItem(
                                       value: 'import',
                                       child: ListTile(
-                                        leading: const Icon(Icons.add_rounded),
-                                        title: const Text('Import catalog'),
+                                        leading: const Icon(Icons.playlist_add_rounded),
+                                        title: const Text('Local catalogs'),
                                         dense: true,
                                         contentPadding: EdgeInsets.zero,
                                       ),

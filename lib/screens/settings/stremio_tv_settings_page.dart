@@ -16,8 +16,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   String _debridProvider = 'auto';
   int _maxStartPercent = -1; // -1 = no limit, 0 = beginning, 10/20/30/50 = cap
   List<MapEntry<String, String>> _availableProviders = [];
-  List<Map<String, dynamic>> _localCatalogs = [];
-
   @override
   void initState() {
     super.initState();
@@ -49,8 +47,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         providers.add(const MapEntry('pikpak', 'PikPak'));
       }
 
-      final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
-
       setState(() {
         _rotationMinutes = rotationMinutes;
         _autoRefresh = autoRefresh;
@@ -58,7 +54,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         _debridProvider = debridProvider;
         _maxStartPercent = maxStartPercent;
         _availableProviders = providers;
-        _localCatalogs = localCatalogs;
         // Reset to auto if saved provider is no longer configured
         if (_debridProvider != 'auto' &&
             !providers.any((p) => p.key == _debridProvider)) {
@@ -139,38 +134,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
           SnackBar(content: Text('Failed to save setting: $e')),
         );
       }
-    }
-  }
-
-  Future<void> _deleteLocalCatalog(Map<String, dynamic> catalog) async {
-    final name = catalog['name'] as String? ?? 'Unknown';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Catalog'),
-        content: Text('Remove "$name" and all its items?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    final id = catalog['id'] as String? ?? '';
-    await StorageService.removeStremioTvLocalCatalog(id);
-    final updated = await StorageService.getStremioTvLocalCatalogs();
-    if (mounted) {
-      setState(() => _localCatalogs = updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted "$name"')),
-      );
     }
   }
 
@@ -471,73 +434,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Local Catalogs card
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Local Catalogs',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Import custom JSON catalog files as local TV channels.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          if (_localCatalogs.isNotEmpty) ...[
-                            const Divider(height: 24),
-                            ..._localCatalogs.map((catalog) {
-                              final name = catalog['name'] as String? ?? 'Unknown';
-                              final type = catalog['type'] as String? ?? 'movie';
-                              final items = catalog['items'] as List<dynamic>? ?? [];
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(
-                                  type == 'series'
-                                      ? Icons.tv_rounded
-                                      : Icons.movie_rounded,
-                                  color: theme.colorScheme.primary,
-                                ),
-                                title: Text(name),
-                                subtitle: Text(
-                                  '$type - ${items.length} items',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                trailing: IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: theme.colorScheme.error,
-                                  ),
-                                  onPressed: () => _deleteLocalCatalog(catalog),
-                                  tooltip: 'Delete catalog',
-                                ),
-                              );
-                            }),
-                          ] else
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Text(
-                                'No local catalogs imported yet.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   // Info card
                   Card(
                     color: theme.colorScheme.surfaceContainerHighest
@@ -572,7 +468,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             '- Long press a channel to favorite/unfavorite it\n'
                             '- Favorites appear pinned at the top and on the home screen\n'
                             '- Install more catalog addons (like Cinemeta) for more channels\n'
-                            '- Import custom JSON catalogs for personalized local channels',
+                            '- Manage local catalogs from the 3-dot menu on the Stremio TV screen',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
