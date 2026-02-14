@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../services/storage_service.dart';
 
@@ -140,140 +137,6 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save setting: $e')),
-        );
-      }
-    }
-  }
-
-  /// Generate a unique catalog ID from the name.
-  String _generateCatalogId(String name) {
-    final sanitized = name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    final ts = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
-    return '${sanitized}_$ts';
-  }
-
-  Future<void> _importLocalCatalog() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not read file data')),
-          );
-        }
-        return;
-      }
-
-      final content = utf8.decode(bytes);
-      final dynamic parsed = jsonDecode(content);
-      if (parsed is! Map<String, dynamic>) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid JSON: expected an object')),
-          );
-        }
-        return;
-      }
-
-      // Validate required fields
-      final name = parsed['name'] as String?;
-      if (name == null || name.trim().isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid catalog: missing "name"')),
-          );
-        }
-        return;
-      }
-
-      final rawItems = parsed['items'] as List<dynamic>?;
-      if (rawItems == null || rawItems.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invalid catalog: "items" is missing or empty'),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Validate each item has id + name
-      for (int i = 0; i < rawItems.length; i++) {
-        final item = rawItems[i];
-        if (item is! Map<String, dynamic>) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Invalid item at index $i: not an object')),
-            );
-          }
-          return;
-        }
-        final itemId = item['id'] as String?;
-        final itemName = item['name'] as String?;
-        if (itemId == null || itemId.isEmpty || itemName == null || itemName.isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Invalid item at index $i: missing "id" or "name"',
-                ),
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      final type = parsed['type'] as String? ?? 'movie';
-      final catalogId = _generateCatalogId(name);
-
-      final catalog = <String, dynamic>{
-        'id': catalogId,
-        'name': name.trim(),
-        'type': type,
-        'addedAt': DateTime.now().toIso8601String(),
-        'items': rawItems,
-      };
-
-      final added = await StorageService.addStremioTvLocalCatalog(catalog);
-      if (!added) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('A catalog with this name already exists'),
-            ),
-          );
-        }
-        return;
-      }
-
-      final updated = await StorageService.getStremioTvLocalCatalogs();
-      if (mounted) {
-        setState(() => _localCatalogs = updated);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Imported "$name" with ${rawItems.length} items',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e')),
         );
       }
     }
@@ -615,22 +478,11 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Local Catalogs',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              FilledButton.tonalIcon(
-                                onPressed: _importLocalCatalog,
-                                icon: const Icon(Icons.file_upload_outlined, size: 18),
-                                label: const Text('Import JSON'),
-                              ),
-                            ],
+                          Text(
+                            'Local Catalogs',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(

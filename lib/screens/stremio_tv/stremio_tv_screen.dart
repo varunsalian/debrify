@@ -21,6 +21,7 @@ import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
 import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
+import 'widgets/stremio_tv_import_catalog_dialog.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -57,6 +58,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final FocusNode _shuffleFocusNode = FocusNode(debugLabel: 'shuffleBtn');
   final FocusNode _refreshFocusNode = FocusNode(debugLabel: 'refreshBtn');
   final FocusNode _filterFocusNode = FocusNode(debugLabel: 'filterBtn');
+  final FocusNode _addFocusNode = FocusNode(debugLabel: 'addBtn');
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -121,6 +123,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _shuffleFocusNode.dispose();
     _refreshFocusNode.dispose();
     _filterFocusNode.dispose();
+    _addFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     for (final node in _rowFocusNodes) {
@@ -238,6 +241,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     if (disabledBefore.length != disabledAfter.length ||
         !disabledBefore.containsAll(disabledAfter)) {
+      _refresh();
+    }
+  }
+
+  Future<void> _openImportDialog() async {
+    final imported = await StremioTvImportCatalogDialog.show(context);
+    if (imported == true && mounted) {
       _refresh();
     }
   }
@@ -1288,8 +1298,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             focusNode: _filterFocusNode,
                             onKeyEvent: (node, event) {
                               if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                              if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
-                                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                _addFocusNode.requestFocus();
                                 return KeyEventResult.handled;
                               }
                               if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
@@ -1326,6 +1339,53 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   onPressed: _openChannelFilter,
                                   icon: const Icon(Icons.tune_rounded),
                                   tooltip: 'Filter channels',
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Add/Import button
+                          Focus(
+                            focusNode: _addFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                              if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+                                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                _filterFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                _searchFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey == LogicalKeyboardKey.select ||
+                                  event.logicalKey == LogicalKeyboardKey.enter) {
+                                _openImportDialog();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: ListenableBuilder(
+                              listenable: _addFocusNode,
+                              builder: (context, child) => Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: _addFocusNode.hasFocus
+                                      ? theme.colorScheme.primaryContainer
+                                      : null,
+                                  border: _addFocusNode.hasFocus
+                                      ? Border.all(
+                                          color: theme.colorScheme.primary,
+                                          width: 2,
+                                        )
+                                      : null,
+                                ),
+                                child: IconButton(
+                                  onPressed: _openImportDialog,
+                                  icon: const Icon(Icons.add_rounded),
+                                  tooltip: 'Import local catalog',
                                 ),
                               ),
                             ),
