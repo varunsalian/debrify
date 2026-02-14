@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../services/storage_service.dart';
 
@@ -28,13 +29,108 @@ class StremioTvImportCatalogDialog extends StatefulWidget {
 class _StremioTvImportCatalogDialogState
     extends State<StremioTvImportCatalogDialog> {
   final TextEditingController _jsonController = TextEditingController();
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'closeBtn');
+  final FocusNode _jsonFocusNode = FocusNode(debugLabel: 'jsonField');
+  final FocusNode _fileButtonFocusNode = FocusNode(debugLabel: 'fileBtn');
+  final FocusNode _importButtonFocusNode = FocusNode(debugLabel: 'importBtn');
   String? _error;
   bool _importing = false;
 
   @override
+  void initState() {
+    super.initState();
+    _setupFocusNavigation();
+  }
+
+  @override
   void dispose() {
     _jsonController.dispose();
+    _closeFocusNode.dispose();
+    _jsonFocusNode.dispose();
+    _fileButtonFocusNode.dispose();
+    _importButtonFocusNode.dispose();
     super.dispose();
+  }
+
+  void _setupFocusNavigation() {
+    // Close button
+    _closeFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _jsonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter) {
+        Navigator.of(context).pop();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // JSON text field
+    _jsonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      final text = _jsonController.text;
+      final selection = _jsonController.selection;
+      final isAtStart = !selection.isValid ||
+          (selection.baseOffset == 0 && selection.extentOffset == 0);
+      final isAtEnd = !selection.isValid ||
+          (selection.baseOffset == text.length &&
+              selection.extentOffset == text.length);
+
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (text.isEmpty || isAtStart) {
+          _closeFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        if (text.isEmpty || isAtEnd) {
+          _fileButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Import File button
+    _fileButtonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        _jsonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _importButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter) {
+        if (!_importing) _importFromFile();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Import button
+    _importButtonFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        _fileButtonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter) {
+        if (!_importing) _import();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   /// Generate a unique catalog ID from the name.
@@ -208,6 +304,7 @@ class _StremioTvImportCatalogDialogState
                     ),
                   ),
                   IconButton(
+                    focusNode: _closeFocusNode,
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
                     tooltip: 'Close',
@@ -218,6 +315,7 @@ class _StremioTvImportCatalogDialogState
               // Paste JSON
               TextField(
                 controller: _jsonController,
+                focusNode: _jsonFocusNode,
                 maxLines: 8,
                 decoration: InputDecoration(
                   hintText: 'Paste JSON here...',
@@ -260,6 +358,7 @@ class _StremioTvImportCatalogDialogState
               const SizedBox(height: 12),
               // Import file button
               OutlinedButton.icon(
+                focusNode: _fileButtonFocusNode,
                 onPressed: _importing ? null : _importFromFile,
                 icon: const Icon(Icons.file_upload_outlined, size: 18),
                 label: const Text('Import File'),
@@ -267,6 +366,7 @@ class _StremioTvImportCatalogDialogState
               const SizedBox(height: 16),
               // Import button
               FilledButton(
+                focusNode: _importButtonFocusNode,
                 onPressed: _importing ? null : _import,
                 child: _importing
                     ? const SizedBox(
