@@ -105,12 +105,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final TextEditingController _linkController = TextEditingController();
   bool _isAddingLink = false;
 
+  // Multi-select state
+  bool _isSelectionMode = false;
+  final Set<String> _selectedTorrentIds = {};
+  final Set<String> _selectedDownloadIds = {};
+
+  Set<String> get _activeSelectedIds =>
+      _selectedView == _DebridDownloadsView.torrents
+          ? _selectedTorrentIds
+          : _selectedDownloadIds;
+
+  int get _activeItemCount =>
+      _selectedView == _DebridDownloadsView.torrents
+          ? _torrents.length
+          : _downloads.length;
+
+  bool get _isAllSelected =>
+      _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
+
   // TV/DPAD navigation
   bool _isTelevision = false;
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
   final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'rd-first-item');
+  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'rd-delete-btn');
+  List<FocusNode> _selectionFocusNodes = [];
 
   // Flag to focus first item after data loads (set by TV content focus handler)
   bool _shouldFocusOnLoad = false;
@@ -263,6 +283,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _refreshButtonFocusNode.dispose();
     _viewModeDropdownFocusNode.dispose();
     _firstItemFocusNode.dispose();
+    _deleteButtonFocusNode.dispose();
+    _disposeSelectionFocusNodes();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
@@ -274,6 +296,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Exit selection mode first if active
+    if (_isSelectionMode) {
+      _exitSelectionMode();
+      return true;
+    }
+
     // Close search first if active
     if (_isSearchActive) {
       _toggleSearch();
@@ -1228,8 +1256,258 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  // Removed deprecated _showMultipleLinksDialog method
-  // The method has been replaced with _navigateIntoTorrent for multi-file torrents
+  // --- Multi-select helpers ---
+
+  void _disposeSelectionFocusNodes() {
+    for (final node in _selectionFocusNodes) {
+      node.dispose();
+    }
+    _selectionFocusNodes = [];
+  }
+
+  FocusNode _getSelectionFocusNode(int index) {
+    if (index == 0) return _firstItemFocusNode;
+    // Grow list if needed (index-1 because index 0 uses _firstItemFocusNode)
+    while (_selectionFocusNodes.length < index) {
+      _selectionFocusNodes.add(FocusNode(debugLabel: 'rd-sel-$index'));
+    }
+    return _selectionFocusNodes[index - 1];
+  }
+
+  void _toggleSelectionMode() {
+    if (_isSelectionMode) {
+      _disposeSelectionFocusNodes();
+    }
+    setState(() {
+      if (_isSelectionMode) {
+        _selectedTorrentIds.clear();
+        _selectedDownloadIds.clear();
+      }
+      _isSelectionMode = !_isSelectionMode;
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_isSelectionMode) return;
+    _disposeSelectionFocusNodes();
+    setState(() {
+      _isSelectionMode = false;
+      _selectedTorrentIds.clear();
+      _selectedDownloadIds.clear();
+    });
+  }
+
+  void _toggleTorrentSelection(String id) {
+    setState(() {
+      if (_selectedTorrentIds.contains(id)) {
+        _selectedTorrentIds.remove(id);
+      } else {
+        _selectedTorrentIds.add(id);
+      }
+    });
+  }
+
+  void _toggleDownloadSelection(String id) {
+    setState(() {
+      if (_selectedDownloadIds.contains(id)) {
+        _selectedDownloadIds.remove(id);
+      } else {
+        _selectedDownloadIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _activeSelectedIds.clear();
+      } else {
+        if (_selectedView == _DebridDownloadsView.torrents) {
+          _selectedTorrentIds.addAll(_torrents.map((t) => t.id));
+        } else {
+          _selectedDownloadIds.addAll(_downloads.map((d) => d.id));
+        }
+      }
+    });
+  }
+
+  Future<void> _handleDeleteSelected() async {
+    if (_apiKey == null || _activeSelectedIds.isEmpty) return;
+
+    final isTorrents = _selectedView == _DebridDownloadsView.torrents;
+    final count = _activeSelectedIds.length;
+    final itemType = isTorrents ? 'torrent' : 'download';
+    final itemTypePlural = isTorrents ? 'torrents' : 'downloads';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete $count ${count == 1 ? itemType : itemTypePlural}',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _showDeleteSelectedProgressDialog(
+        Set<String>.from(_activeSelectedIds),
+        isTorrents,
+      );
+    }
+  }
+
+  Future<void> _showDeleteSelectedProgressDialog(
+    Set<String> ids,
+    bool isTorrents,
+  ) async {
+    bool isCancelled = false;
+    bool dialogOpen = true;
+    int completed = 0;
+    final int total = ids.length;
+    List<String> failedDeletes = [];
+    StateSetter? setDialogState;
+    final nav = Navigator.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, dialogStateSetter) {
+          setDialogState = dialogStateSetter;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              'Deleting ${isTorrents ? 'Torrents' : 'Downloads'}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Deleting... ($completed/$total)',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: total > 0 ? completed / total : null,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFEF4444),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (failedDeletes.isNotEmpty)
+                  Text(
+                    'Failed: ${failedDeletes.length}',
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  dialogOpen = false;
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final deletedIds = <String>{};
+
+    for (final id in ids) {
+      if (isCancelled) break;
+
+      try {
+        if (isTorrents) {
+          await DebridService.deleteTorrent(_apiKey!, id);
+        } else {
+          await DebridService.deleteDownload(_apiKey!, id);
+        }
+        deletedIds.add(id);
+      } catch (e) {
+        failedDeletes.add(id);
+      }
+
+      completed++;
+      if (!isCancelled && setDialogState != null) {
+        setDialogState!(() {});
+      }
+
+      if (isCancelled) break;
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    // Close progress dialog if still open
+    if (dialogOpen && mounted) {
+      dialogOpen = false;
+      nav.pop();
+    }
+
+    if (!isCancelled && mounted) {
+      setState(() {
+        if (isTorrents) {
+          _torrents.removeWhere((t) => deletedIds.contains(t.id));
+        } else {
+          _downloads.removeWhere((d) => deletedIds.contains(d.id));
+        }
+        _selectedTorrentIds.clear();
+        _selectedDownloadIds.clear();
+        _isSelectionMode = false;
+      });
+
+      if (failedDeletes.isEmpty) {
+        _showSuccess('${deletedIds.length} ${isTorrents ? 'torrents' : 'downloads'} deleted successfully!');
+      } else {
+        _showError(
+          'Deleted ${deletedIds.length}. ${failedDeletes.length} failed to delete.',
+        );
+      }
+    } else if (mounted) {
+      // Cancelled — remove already-deleted items and deselect them, but stay in selection mode
+      setState(() {
+        if (isTorrents) {
+          _torrents.removeWhere((t) => deletedIds.contains(t.id));
+          _selectedTorrentIds.removeAll(deletedIds);
+        } else {
+          _downloads.removeWhere((d) => deletedIds.contains(d.id));
+          _selectedDownloadIds.removeAll(deletedIds);
+        }
+      });
+    }
+  }
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
@@ -1375,6 +1653,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Navigate into a torrent (shows root level folders/files)
   Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
     if (_apiKey == null) return;
+
+    _exitSelectionMode();
 
     // Focus first item after folder contents load
     _shouldFocusOnLoad = true;
@@ -2645,10 +2925,86 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ],
           onChanged: (value) {
             if (value != null && value != _selectedView) {
+              _exitSelectionMode();
               setState(() => _selectedView = value);
             }
           },
         ),
+      ),
+    );
+  }
+
+  /// Handle DPAD key events for selection mode cards.
+  /// At index 0, pressing up jumps to the Delete button.
+  KeyEventResult _handleSelectionCardKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+    int index,
+    VoidCallback onSelect,
+  ) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      onSelect();
+      return KeyEventResult.handled;
+    }
+
+    // At first item, pressing up goes to Delete button
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp && index == 0) {
+      _deleteButtonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildSelectionBar() {
+    final theme = Theme.of(context);
+    final count = _activeSelectedIds.length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '$count selected',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: _toggleSelectAll,
+            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            focusNode: _deleteButtonFocusNode,
+            onPressed: count > 0 ? _handleDeleteSelected : null,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              disabledBackgroundColor: theme.colorScheme.error.withValues(alpha: 0.3),
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.focused)) {
+                  return const BorderSide(color: Colors.white, width: 3);
+                }
+                return null;
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2667,7 +3023,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
-          if (_torrents.isNotEmpty)
+          if (_torrents.isNotEmpty) ...[
+            Tooltip(
+              message: _isSelectionMode ? 'Exit selection' : 'Select items',
+              child: IconButton(
+                onPressed: _toggleSelectionMode,
+                icon: Icon(
+                  _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                ),
+                color: _isSelectionMode
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurface,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
             Tooltip(
               message: 'Delete all torrents',
               child: IconButton(
@@ -2677,6 +3046,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 visualDensity: VisualDensity.compact,
               ),
             ),
+          ],
           Tooltip(
             message: 'Add magnet link',
             child: IconButton(
@@ -2705,7 +3075,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
-          if (_downloads.isNotEmpty)
+          if (_downloads.isNotEmpty) ...[
+            Tooltip(
+              message: _isSelectionMode ? 'Exit selection' : 'Select items',
+              child: IconButton(
+                onPressed: _toggleSelectionMode,
+                icon: Icon(
+                  _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                ),
+                color: _isSelectionMode
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurface,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
             Tooltip(
               message: 'Delete all downloads',
               child: IconButton(
@@ -2715,6 +3098,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 visualDensity: VisualDensity.compact,
               ),
             ),
+          ],
           Tooltip(
             message: 'Add file link',
             child: IconButton(
@@ -2849,6 +3233,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Column(
       children: [
         _buildTorrentToolbar(),
+        if (_isSelectionMode) _buildSelectionBar(),
         Expanded(child: body),
       ],
     );
@@ -2974,26 +3359,41 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Column(
       children: [
         _buildDownloadToolbar(),
+        if (_isSelectionMode) _buildSelectionBar(),
         Expanded(child: body),
       ],
     );
   }
 
   Widget _buildTorrentCard(RDTorrent torrent, int index) {
-    // Always treat torrents as folders - user needs to "Open" to see actual files
-    // Never show Play button at root level
+    final isSelected = _selectedTorrentIds.contains(torrent.id);
+    final theme = Theme.of(context);
+
     final cardContent = Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: _isSelectionMode && isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top section: Icon + Name + Metadata
+            // Top section: Checkbox (if selection mode) + Icon + Name + Metadata
             Row(
               children: [
+                if (_isSelectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleTorrentSelection(torrent.id),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 Icon(
-                  Icons.folder, // Always show folder icon
+                  Icons.folder,
                   color: Colors.amber,
                 ),
                 const SizedBox(width: 12),
@@ -3053,111 +3453,223 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
 
-            // Bottom section: Action buttons
-            Row(
-              children: [
-                // Always show Open and Play buttons for all torrents
-                Expanded(
-                  child: FilledButton.icon(
-                    focusNode: index == 0 ? _firstItemFocusNode : null,
-                    autofocus: index == 0,
-                    onPressed: () => _navigateIntoTorrent(torrent),
-                    icon: const Icon(Icons.folder_open, size: 18),
-                    label: const Text('Open'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                    ).copyWith(
-                      side: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.focused)) {
-                          return const BorderSide(color: Colors.white, width: 3);
-                        }
-                        return null;
-                      }),
+            // Bottom section: Action buttons (hidden in selection mode)
+            if (!_isSelectionMode) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
+                      autofocus: index == 0,
+                      onPressed: () => _navigateIntoTorrent(torrent),
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      label: const Text('Open'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                      ).copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _handlePlayMultiFileTorrent(torrent),
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('Play'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                    ).copyWith(
-                      side: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.focused)) {
-                          return const BorderSide(color: Colors.white, width: 3);
-                        }
-                        return null;
-                      }),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _handlePlayMultiFileTorrent(torrent),
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                      ).copyWith(
+                        side: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.focused)) {
+                            return const BorderSide(color: Colors.white, width: 3);
+                          }
+                          return null;
+                        }),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-
-                // Three-dot menu
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'download') {
-                      _handleDownloadTorrent(torrent);
-                    } else if (value == 'add_to_playlist') {
-                      _handleAddTorrentToPlaylist(torrent);
-                    } else if (value == 'delete') {
-                      _handleDeleteTorrent(torrent);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Row(
-                        children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
-                          SizedBox(width: 12),
-                          Text('Download'),
-                        ],
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      if (value == 'download') {
+                        _handleDownloadTorrent(torrent);
+                      } else if (value == 'add_to_playlist') {
+                        _handleAddTorrentToPlaylist(torrent);
+                      } else if (value == 'delete') {
+                        _handleDeleteTorrent(torrent);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download, size: 18, color: Colors.green),
+                            SizedBox(width: 12),
+                            Text('Download'),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'add_to_playlist',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.playlist_add,
-                            size: 18,
-                            color: Colors.blue,
-                          ),
-                          SizedBox(width: 12),
-                          Text('Add to Playlist'),
-                        ],
+                      const PopupMenuItem(
+                        value: 'add_to_playlist',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.playlist_add,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
+                            SizedBox(width: 12),
+                            Text('Add to Playlist'),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ],
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: Colors.red,
+                            ),
+                            SizedBox(width: 12),
+                            Text('Delete'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
+
+    if (_isSelectionMode) {
+      final focusNode = _getSelectionFocusNode(index);
+      return TvFocusScrollWrapper(
+        child: Focus(
+          focusNode: focusNode,
+          autofocus: index == 0,
+          onKeyEvent: (node, event) => _handleSelectionCardKeyEvent(
+            node, event, index, () => _toggleTorrentSelection(torrent.id),
+          ),
+          child: ListenableBuilder(
+            listenable: focusNode,
+            builder: (context, _) {
+              final hasFocus = focusNode.hasFocus;
+              return InkWell(
+                onTap: () => _toggleTorrentSelection(torrent.id),
+                borderRadius: BorderRadius.circular(12),
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: hasFocus
+                        ? const BorderSide(color: Colors.white, width: 3)
+                        : isSelected
+                            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+                            : BorderSide.none,
+                  ),
+                  color: hasFocus
+                      ? theme.colorScheme.surface.withOpacity(0.9)
+                      : null,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              onChanged: (_) => _toggleTorrentSelection(torrent.id),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.folder,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    torrent.filename,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        Formatters.formatFileSize(torrent.bytes),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '•',
+                                        style: TextStyle(color: Colors.grey.shade600),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${torrent.links.length} ${torrent.links.length == 1 ? 'file' : 'files'}',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '•',
+                                        style: TextStyle(color: Colors.grey.shade600),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _formatDate(torrent.added),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
 
     return TvFocusScrollWrapper(child: cardContent);
   }
@@ -3479,10 +3991,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildDownloadCard(DebridDownload download, int index) {
     final canStream = download.streamable == 1;
     final isVideo = FileUtils.isVideoFile(download.filename);
+    final isSelected = _selectedDownloadIds.contains(download.id);
+    final theme = Theme.of(context);
 
-    return TvFocusScrollWrapper(
-      child: Card(
+    final cardContent = Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: _isSelectionMode && isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -3490,6 +4009,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           children: [
             Row(
               children: [
+                if (_isSelectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleDownloadSelection(download.id),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 Icon(
                   canStream || isVideo
                       ? Icons.play_circle_outline
@@ -3542,17 +4068,38 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (canStream) ...[
+            if (!_isSelectionMode) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (canStream) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
+                        onPressed: () => _handlePlayDownload(download),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play'),
+                        style: FilledButton.styleFrom().copyWith(
+                          side: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.focused)) {
+                              return const BorderSide(color: Colors.white, width: 3);
+                            }
+                            return null;
+                          }),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: FilledButton.icon(
-                      focusNode: index == 0 ? _firstItemFocusNode : null,
-                      onPressed: () => _handlePlayDownload(download),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play'),
-                      style: FilledButton.styleFrom().copyWith(
+                      focusNode: index == 0 && !canStream ? _firstItemFocusNode : null,
+                      onPressed: () => _handleQueueDownload(download),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Download'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                      ).copyWith(
                         side: WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.focused)) {
                             return const BorderSide(color: Colors.white, width: 3);
@@ -3563,67 +4110,152 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: FilledButton.icon(
-                    focusNode: index == 0 && !canStream ? _firstItemFocusNode : null,
-                    onPressed: () => _handleQueueDownload(download),
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text('Download'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                    ).copyWith(
-                      side: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.focused)) {
-                          return const BorderSide(color: Colors.white, width: 3);
-                        }
-                        return null;
-                      }),
-                    ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      if (value == 'copy_link') {
+                        _handleDownloadAction(download);
+                      } else if (value == 'delete') {
+                        _handleDeleteDownload(download);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'copy_link',
+                        child: Row(
+                          children: [
+                            Icon(Icons.link, size: 18, color: Colors.orange),
+                            SizedBox(width: 12),
+                            Text('Copy Link'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Delete'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                // 3-dot menu
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'copy_link') {
-                      _handleDownloadAction(download);
-                    } else if (value == 'delete') {
-                      _handleDeleteDownload(download);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'copy_link',
-                      child: Row(
-                        children: [
-                          Icon(Icons.link, size: 18, color: Colors.orange),
-                          SizedBox(width: 12),
-                          Text('Copy Link'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
-      ),
     );
+
+    if (_isSelectionMode) {
+      final focusNode = _getSelectionFocusNode(index);
+      return TvFocusScrollWrapper(
+        child: Focus(
+          focusNode: focusNode,
+          autofocus: index == 0,
+          onKeyEvent: (node, event) => _handleSelectionCardKeyEvent(
+            node, event, index, () => _toggleDownloadSelection(download.id),
+          ),
+          child: ListenableBuilder(
+            listenable: focusNode,
+            builder: (context, _) {
+              final hasFocus = focusNode.hasFocus;
+              return InkWell(
+                onTap: () => _toggleDownloadSelection(download.id),
+                borderRadius: BorderRadius.circular(12),
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: hasFocus
+                        ? const BorderSide(color: Colors.white, width: 3)
+                        : isSelected
+                            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+                            : BorderSide.none,
+                  ),
+                  color: hasFocus
+                      ? theme.colorScheme.surface.withOpacity(0.9)
+                      : null,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              onChanged: (_) => _toggleDownloadSelection(download.id),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              canStream || isVideo
+                                  ? Icons.play_circle_outline
+                                  : Icons.insert_drive_file,
+                              color: canStream || isVideo ? Colors.blue : Colors.grey,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    download.filename,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        Formatters.formatFileSize(download.filesize),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text('•', style: TextStyle(color: Colors.grey.shade600)),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          download.host,
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 13,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    return TvFocusScrollWrapper(child: cardContent);
   }
 
   Future<void> _handlePlayMultiFileTorrent(RDTorrent torrent) async {
