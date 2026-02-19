@@ -104,6 +104,26 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'torbox-search-clear');
   List<_TorboxSearchResult> _searchResults = [];
 
+  // Multi-select state
+  bool _isSelectionMode = false;
+  final Set<int> _selectedTorrentIds = {};
+  final Set<int> _selectedWebDownloadIds = {};
+
+  Set<int> get _activeSelectedIds =>
+      _selectedView == _TorboxDownloadsView.torrents
+          ? _selectedTorrentIds
+          : _selectedWebDownloadIds;
+
+  int get _activeItemCount =>
+      _selectedView == _TorboxDownloadsView.torrents
+          ? _torrents.length
+          : _webDownloads.length;
+
+  bool get _isAllSelected =>
+      _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
+
+  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'torbox-delete-btn');
+
   static const int _limit = 50;
 
   @override
@@ -748,6 +768,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       setState(() {
         _torrents.clear();
         _hasMore = false;
+        _selectedTorrentIds.clear();
+        _isSelectionMode = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -892,12 +914,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
     _searchClearFocusNode.dispose();
+    _deleteButtonFocusNode.dispose();
     super.dispose();
   }
 
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Exit selection mode first if active
+    if (_isSelectionMode) {
+      _exitSelectionMode();
+      return true;
+    }
+
     // Close search first if active
     if (_isSearchActive) {
       _toggleSearch();
@@ -1671,6 +1700,246 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to delete web download: ${_formatTorboxError(e)}');
+    }
+  }
+
+  // --- Multi-select helpers ---
+
+  void _toggleSelectionMode() {
+    setState(() {
+      if (_isSelectionMode) {
+        _selectedTorrentIds.clear();
+        _selectedWebDownloadIds.clear();
+      }
+      _isSelectionMode = !_isSelectionMode;
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_isSelectionMode) return;
+    setState(() {
+      _isSelectionMode = false;
+      _selectedTorrentIds.clear();
+      _selectedWebDownloadIds.clear();
+    });
+  }
+
+  void _toggleTorrentSelection(int id) {
+    setState(() {
+      if (_selectedTorrentIds.contains(id)) {
+        _selectedTorrentIds.remove(id);
+      } else {
+        _selectedTorrentIds.add(id);
+      }
+    });
+  }
+
+  void _toggleWebDownloadSelection(int id) {
+    setState(() {
+      if (_selectedWebDownloadIds.contains(id)) {
+        _selectedWebDownloadIds.remove(id);
+      } else {
+        _selectedWebDownloadIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _activeSelectedIds.clear();
+      } else {
+        if (_selectedView == _TorboxDownloadsView.torrents) {
+          _selectedTorrentIds.addAll(_torrents.map((t) => t.id));
+        } else {
+          _selectedWebDownloadIds.addAll(_webDownloads.map((d) => d.id));
+        }
+      }
+    });
+  }
+
+  Future<void> _handleDeleteSelected() async {
+    if (_apiKey == null || _activeSelectedIds.isEmpty) return;
+
+    final isTorrents = _selectedView == _TorboxDownloadsView.torrents;
+    final count = _activeSelectedIds.length;
+    final itemType = isTorrents ? 'torrent' : 'web download';
+    final itemTypePlural = isTorrents ? 'torrents' : 'web downloads';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete $count ${count == 1 ? itemType : itemTypePlural}',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _showDeleteSelectedProgressDialog(
+        Set<int>.from(_activeSelectedIds),
+        isTorrents,
+      );
+    }
+  }
+
+  Future<void> _showDeleteSelectedProgressDialog(
+    Set<int> ids,
+    bool isTorrents,
+  ) async {
+    bool isCancelled = false;
+    bool dialogOpen = true;
+    int completed = 0;
+    final int total = ids.length;
+    List<int> failedDeletes = [];
+    StateSetter? setDialogState;
+    final nav = Navigator.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, dialogStateSetter) {
+          setDialogState = dialogStateSetter;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              'Deleting ${isTorrents ? 'Torrents' : 'Web Downloads'}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Deleting... ($completed/$total)',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: total > 0 ? completed / total : null,
+                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFEF4444),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (failedDeletes.isNotEmpty)
+                  Text(
+                    'Failed: ${failedDeletes.length}',
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  dialogOpen = false;
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final deletedIds = <int>{};
+
+    for (final id in ids) {
+      if (isCancelled) break;
+
+      try {
+        if (isTorrents) {
+          await TorboxTorrentControlService.deleteTorrent(
+            apiKey: _apiKey!,
+            torrentId: id,
+          );
+        } else {
+          await TorboxService.deleteWebDownload(
+            apiKey: _apiKey!,
+            webId: id,
+          );
+        }
+        deletedIds.add(id);
+      } catch (e) {
+        failedDeletes.add(id);
+      }
+
+      completed++;
+      if (!isCancelled && setDialogState != null) {
+        setDialogState!(() {});
+      }
+
+      if (isCancelled) break;
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    // Close progress dialog if still open
+    if (dialogOpen && mounted) {
+      dialogOpen = false;
+      nav.pop();
+    }
+
+    if (!isCancelled && mounted) {
+      setState(() {
+        if (isTorrents) {
+          _torrents.removeWhere((t) => deletedIds.contains(t.id));
+        } else {
+          _webDownloads.removeWhere((d) => deletedIds.contains(d.id));
+        }
+        _selectedTorrentIds.clear();
+        _selectedWebDownloadIds.clear();
+        _isSelectionMode = false;
+      });
+
+      final label = isTorrents ? 'torrents' : 'web downloads';
+      if (failedDeletes.isEmpty) {
+        _showSnackBar('${deletedIds.length} $label deleted successfully!', isError: false);
+      } else {
+        _showSnackBar(
+          'Deleted ${deletedIds.length}. ${failedDeletes.length} failed to delete.',
+        );
+      }
+    } else if (mounted) {
+      // Cancelled — remove already-deleted items and deselect them, but stay in selection mode
+      setState(() {
+        if (isTorrents) {
+          _torrents.removeWhere((t) => deletedIds.contains(t.id));
+          _selectedTorrentIds.removeAll(deletedIds);
+        } else {
+          _webDownloads.removeWhere((d) => deletedIds.contains(d.id));
+          _selectedWebDownloadIds.removeAll(deletedIds);
+        }
+      });
     }
   }
 
@@ -4545,6 +4814,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Navigate into a torrent (show its folder structure)
   void _navigateIntoTorrent(TorboxTorrent torrent) {
+    _exitSelectionMode();
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
 
@@ -4601,6 +4871,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Navigate into a web download (show its folder structure)
   void _navigateIntoWebDownload(TorboxWebDownload webDownload) {
+    _exitSelectionMode();
     // Focus first item after navigation
     _shouldFocusOnLoad = true;
 
@@ -5458,6 +5729,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
+          if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
           if (!_isAtRoot) _buildViewModeDropdown(),
           if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
@@ -5665,10 +5937,20 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   Widget _buildWebDownloadCard(TorboxWebDownload webDownload, int index) {
     final videoCount = webDownload.files.where(_torboxFileLooksLikeVideo).length;
+    final isSelected = _selectedWebDownloadIds.contains(webDownload.id);
+    final theme = Theme.of(context);
 
     return TvFocusScrollWrapper(
+      child: GestureDetector(
+      onTap: _isSelectionMode ? () => _toggleWebDownloadSelection(webDownload.id) : null,
       child: Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: _isSelectionMode && isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -5676,6 +5958,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           children: [
             Row(
               children: [
+                if (_isSelectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleWebDownloadSelection(webDownload.id),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 const Icon(Icons.folder, color: Colors.blue, size: 32),
                 const SizedBox(width: 12),
                 Expanded(
@@ -5718,6 +6007,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
               ],
             ),
+            if (!_isSelectionMode) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -5817,8 +6107,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
               ],
             ),
+            ],
           ],
         ),
+      ),
       ),
       ),
     );
@@ -5827,10 +6119,20 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Build a card for a torrent (displayed as a folder at root level)
   Widget _buildTorrentFolderCard(TorboxTorrent torrent, int index) {
     final videoCount = torrent.files.where(_torboxFileLooksLikeVideo).length;
+    final isSelected = _selectedTorrentIds.contains(torrent.id);
+    final theme = Theme.of(context);
 
     return TvFocusScrollWrapper(
+      child: GestureDetector(
+      onTap: _isSelectionMode ? () => _toggleTorrentSelection(torrent.id) : null,
       child: Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: _isSelectionMode && isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -5838,6 +6140,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           children: [
             Row(
               children: [
+                if (_isSelectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleTorrentSelection(torrent.id),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 const Icon(Icons.folder, color: Colors.amber, size: 32),
                 const SizedBox(width: 12),
                 Expanded(
@@ -5880,6 +6189,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
               ],
             ),
+            if (!_isSelectionMode) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -5993,8 +6303,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
               ],
             ),
+            ],
           ],
         ),
+      ),
       ),
       ),
     );
@@ -6228,7 +6540,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ],
           onChanged: (value) {
             if (value != null && value != _selectedView) {
-              setState(() => _selectedView = value);
+              setState(() {
+                _selectedView = value;
+                // Exit selection mode when switching views
+                if (_isSelectionMode) {
+                  _isSelectionMode = false;
+                  _selectedTorrentIds.clear();
+                  _selectedWebDownloadIds.clear();
+                }
+              });
             }
           },
         ),
@@ -6236,9 +6556,60 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
+  Widget _buildSelectionBar() {
+    final theme = Theme.of(context);
+    final count = _activeSelectedIds.length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '$count selected',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: _toggleSelectAll,
+            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            focusNode: _deleteButtonFocusNode,
+            onPressed: count > 0 ? _handleDeleteSelected : null,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              disabledBackgroundColor: theme.colorScheme.error.withValues(alpha: 0.3),
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.focused)) {
+                  return const BorderSide(color: Colors.white, width: 3);
+                }
+                return null;
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final isTorrentsView = _selectedView == _TorboxDownloadsView.torrents;
+    final hasItems = isTorrentsView ? _torrents.isNotEmpty : _webDownloads.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -6252,6 +6623,31 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
+          if (hasItems) ...[
+            Tooltip(
+              message: _isSelectionMode ? 'Exit selection' : 'Select items',
+              child: IconButton(
+                onPressed: _toggleSelectionMode,
+                icon: Icon(
+                  _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                ),
+                color: _isSelectionMode
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurface,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            if (isTorrentsView)
+              Tooltip(
+                message: 'Delete all torrents',
+                child: IconButton(
+                  onPressed: _confirmDeleteAll,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  color: theme.colorScheme.error,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+          ],
           if (isTorrentsView) ...[
             Tooltip(
               message: 'Add magnet link',
