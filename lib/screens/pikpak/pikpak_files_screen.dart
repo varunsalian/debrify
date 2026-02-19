@@ -100,6 +100,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   // Flag to focus first item after data loads (set by TV content focus handler)
   bool _shouldFocusOnLoad = false;
 
+  // Multi-select state
+  bool _isSelectionMode = false;
+  final Set<String> _selectedFileIds = {};
+  int get _selectableFileCount =>
+      _files.where((f) => (f['kind'] ?? '') != 'virtual#season').length;
+  bool get _isAllSelected =>
+      _selectedFileIds.length == _selectableFileCount && _selectableFileCount > 0;
+  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'pikpak-delete-btn');
+
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
@@ -195,12 +204,19 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
     _searchClearFocusNode.dispose();
+    _deleteButtonFocusNode.dispose();
     super.dispose();
   }
 
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Exit selection mode first if active
+    if (_isSelectionMode) {
+      _exitSelectionMode();
+      return true;
+    }
+
     // Close search first if active
     if (_isSearchActive) {
       _toggleSearch();
@@ -457,6 +473,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   void _navigateIntoFolder(String folderId, String folderName) {
+    _exitSelectionMode();
     // Focus first item after folder contents load
     _shouldFocusOnLoad = true;
 
@@ -472,6 +489,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   void _navigateUp() {
+    _exitSelectionMode();
     // Don't navigate above restricted folder
     if (_restrictedFolderId != null &&
         _currentFolderId == _restrictedFolderId) {
@@ -527,6 +545,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Navigate into a virtual Season folder
   void _navigateIntoVirtualFolder(Map<String, dynamic> virtualFolder) {
+    _exitSelectionMode();
     final seasonName = virtualFolder['name'] as String? ?? 'Virtual Folder';
     final virtualFiles = virtualFolder['virtual_files'] as List<dynamic>? ?? [];
 
@@ -906,6 +925,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Future<void> _refreshFiles() async {
+    _exitSelectionMode();
+
     // Clear cache for current folder when refreshing
     if (_currentFolderId != null) {
       _recursiveFileCache.remove(_currentFolderId!);
@@ -1007,6 +1028,145 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      _showSnackBar('Failed to delete: $e');
+    }
+  }
+
+  // --- Multi-select helpers ---
+
+  void _toggleSelectionMode() {
+    setState(() {
+      if (_isSelectionMode) {
+        _selectedFileIds.clear();
+      }
+      _isSelectionMode = !_isSelectionMode;
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_isSelectionMode) return;
+    setState(() {
+      _isSelectionMode = false;
+      _selectedFileIds.clear();
+    });
+  }
+
+  void _toggleFileSelection(String id) {
+    setState(() {
+      if (_selectedFileIds.contains(id)) {
+        _selectedFileIds.remove(id);
+      } else {
+        _selectedFileIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _selectedFileIds.clear();
+      } else {
+        for (final file in _files) {
+          final kind = file['kind'] ?? '';
+          if (kind == 'virtual#season') continue; // Skip virtual folders
+          final id = file['id'] as String?;
+          if (id != null) _selectedFileIds.add(id);
+        }
+      }
+    });
+  }
+
+  Future<void> _handleDeleteSelected() async {
+    if (_selectedFileIds.isEmpty) return;
+
+    final count = _selectedFileIds.length;
+    final itemType = count == 1 ? 'file' : 'files';
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete $count $itemType',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'What would you like to do with $count selected $itemType?',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Move to Trash: Files can be recovered later\nDelete Permanently: Cannot be undone',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('trash'),
+            child: const Text('Move to Trash'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('permanent'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      await _executeDeleteSelected(
+        List<String>.from(_selectedFileIds),
+        permanent: result == 'permanent',
+      );
+    }
+  }
+
+  Future<void> _executeDeleteSelected(
+    List<String> ids, {
+    required bool permanent,
+  }) async {
+    final count = ids.length;
+    final label = permanent ? 'Deleting permanently' : 'Moving to trash';
+
+    _showSnackBar('$label $count ${count == 1 ? 'file' : 'files'}...', isError: false);
+
+    try {
+      if (permanent) {
+        await PikPakApiService.instance.batchDeleteFiles(ids);
+      } else {
+        await PikPakApiService.instance.batchTrashFiles(ids);
+      }
+
+      if (!mounted) return;
+
+      final deletedSet = ids.toSet();
+      setState(() {
+        _files.removeWhere((f) => deletedSet.contains(f['id']));
+        _selectedFileIds.clear();
+        _isSelectionMode = false;
+      });
+
+      _showSnackBar(
+        permanent
+            ? '$count ${count == 1 ? 'file' : 'files'} deleted permanently'
+            : '$count ${count == 1 ? 'file' : 'files'} moved to trash',
+        isError: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _exitSelectionMode();
       _showSnackBar('Failed to delete: $e');
     }
   }
@@ -1781,6 +1941,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ],
         ),
         actions: [
+          if (_files.isNotEmpty && !_isInVirtualFolder)
+            IconButton(
+              icon: Icon(_isSelectionMode ? Icons.close : Icons.checklist_outlined),
+              onPressed: _toggleSelectionMode,
+              tooltip: _isSelectionMode ? 'Exit selection' : 'Select items',
+              color: _isSelectionMode
+                  ? Theme.of(context).colorScheme.error
+                  : null,
+            ),
           if (showSearch)
             IconButton(
               focusNode: _searchButtonFocusNode,
@@ -1804,6 +1973,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       ),
       body: Column(
         children: [
+          if (_isSelectionMode) _buildSelectionBar(),
           // View mode dropdown (only shown when inside folders)
           if (showViewModeDropdown && !_isInVirtualFolder) _buildViewModeDropdown(),
           if (_isSearchActive && showSearch) _buildSearchBar(),
@@ -1952,6 +2122,56 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
   }
 
+  Widget _buildSelectionBar() {
+    final theme = Theme.of(context);
+    final count = _selectedFileIds.length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '$count selected',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: _toggleSelectAll,
+            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            focusNode: _deleteButtonFocusNode,
+            onPressed: count > 0 ? _handleDeleteSelected : null,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              disabledBackgroundColor: theme.colorScheme.error.withValues(alpha: 0.3),
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.focused)) {
+                  return const BorderSide(color: Colors.white, width: 3);
+                }
+                return null;
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFileList() {
     // Add 1 to item count for loading indicator when loading more
     final itemCount = _files.length + (_isLoadingMore || _hasMore ? 1 : 0);
@@ -2009,6 +2229,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final kind = file['kind'] ?? '';
     final phase = file['phase'] ?? '';
     final createdTime = file['created_time'] ?? '';
+    final fileId = file['id'] as String?;
 
     final isFolder = kind == 'drive#folder';
     final isVirtualFolder = kind == 'virtual#season'; // Virtual Season folder
@@ -2019,9 +2240,22 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // We'll check for actual streaming links when playing
     final hasStreamingLink = isVideo && isComplete;
 
+    final isSelected = fileId != null && _selectedFileIds.contains(fileId);
+    final theme = Theme.of(context);
+
     return TvFocusScrollWrapper(
+      child: GestureDetector(
+      onTap: _isSelectionMode && fileId != null && !isVirtualFolder
+          ? () => _toggleFileSelection(fileId)
+          : null,
       child: Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: _isSelectionMode && isSelected
+            ? BorderSide(color: theme.colorScheme.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2029,6 +2263,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           children: [
             Row(
               children: [
+                if (_isSelectionMode && fileId != null && !isVirtualFolder) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleFileSelection(fileId),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 Icon(
                   isVirtualFolder
                       ? Icons.video_library
@@ -2093,7 +2334,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 ),
               ],
             ),
-            if (!isComplete) ...[
+            if (!isComplete && !_isSelectionMode) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -2114,6 +2355,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 ],
               ),
             ],
+            if (!_isSelectionMode) ...[
             const SizedBox(height: 12),
             // Wrap buttons in FocusTraversalGroup for horizontal navigation
             FocusTraversalGroup(
@@ -2261,8 +2503,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 ],
               ),
             ),
+            ],
           ],
         ),
+      ),
       ),
       ),
     );
