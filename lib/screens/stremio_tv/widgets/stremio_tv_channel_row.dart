@@ -23,6 +23,7 @@ class StremioTvChannelRow extends StatefulWidget {
   final VoidCallback? onLeftPress;
   final VoidCallback? onUpPress;
   final double? displayProgress;
+  final bool hideNowPlaying;
 
   const StremioTvChannelRow({
     super.key,
@@ -37,6 +38,7 @@ class StremioTvChannelRow extends StatefulWidget {
     this.onLeftPress,
     this.onUpPress,
     this.displayProgress,
+    this.hideNowPlaying = false,
   });
 
   @override
@@ -319,6 +321,8 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
           StremioTvNowPlayingCard(
             nowPlaying: widget.nowPlaying!,
             displayProgress: widget.displayProgress,
+            hideDetails: widget.hideNowPlaying,
+            channelGenre: widget.channel.genre,
           ),
           if (hasGuide) ...[
             Divider(
@@ -434,6 +438,8 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
               ? StremioTvNowPlayingCard(
                   nowPlaying: widget.nowPlaying!,
                   displayProgress: widget.displayProgress,
+                  hideDetails: widget.hideNowPlaying,
+                  channelGenre: widget.channel.genre,
                 )
               : widget.isLoading
                   ? _buildLoadingPlaceholder(theme)

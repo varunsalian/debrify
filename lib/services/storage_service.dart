@@ -199,6 +199,8 @@ class StorageService {
       'stremio_tv_local_catalogs_v1';
   static const String _stremioTvCatalogRepoUrlsKey =
       'stremio_tv_catalog_repo_urls_v1';
+  static const String _stremioTvHideNowPlayingKey =
+      'stremio_tv_hide_now_playing';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -3560,6 +3562,18 @@ class StorageService {
   static Future<void> setStremioTvAutoRefresh(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_stremioTvAutoRefreshKey, value);
+  }
+
+  /// Get whether Stremio TV hides now-playing details (default: false)
+  static Future<bool> getStremioTvHideNowPlaying() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_stremioTvHideNowPlayingKey) ?? false;
+  }
+
+  /// Save whether Stremio TV hides now-playing details
+  static Future<void> setStremioTvHideNowPlaying(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_stremioTvHideNowPlayingKey, value);
   }
 
   /// Get preferred quality for Stremio TV streams (default: 'auto')

@@ -15,6 +15,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
   int _maxStartPercent = -1; // -1 = no limit, 0 = beginning, 10/20/30/50 = cap
+  bool _hideNowPlaying = false;
   List<MapEntry<String, String>> _availableProviders = [];
   @override
   void initState() {
@@ -31,6 +32,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       final preferredQuality = await StorageService.getStremioTvPreferredQuality();
       final debridProvider = await StorageService.getStremioTvDebridProvider();
       final maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
+      final hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
@@ -53,6 +55,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         _preferredQuality = preferredQuality;
         _debridProvider = debridProvider;
         _maxStartPercent = maxStartPercent;
+        _hideNowPlaying = hideNowPlaying;
         _availableProviders = providers;
         // Reset to auto if saved provider is no longer configured
         if (_debridProvider != 'auto' &&
@@ -115,6 +118,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvMaxStartPercent(value);
       setState(() => _maxStartPercent = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setHideNowPlaying(bool value) async {
+    try {
+      await StorageService.setStremioTvHideNowPlaying(value);
+      setState(() => _hideNowPlaying = value);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -266,6 +282,16 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             ),
                             value: _autoRefresh,
                             onChanged: _setAutoRefresh,
+                          ),
+                          const Divider(height: 32),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Hide Currently Playing'),
+                            subtitle: const Text(
+                              'Blur poster and hide details for a surprise when playing',
+                            ),
+                            value: _hideNowPlaying,
+                            onChanged: _setHideNowPlaying,
                           ),
                           const Divider(height: 32),
                           // Preferred quality dropdown

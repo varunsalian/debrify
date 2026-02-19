@@ -45,6 +45,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
+  bool _hideNowPlaying = false;
   double? _currentSlotProgress;
 
   Timer? _refreshTimer;
@@ -140,6 +141,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
     _debridProvider = await StorageService.getStremioTvDebridProvider();
     _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
+    _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
   }
 
   Future<void> _discoverAndLoad() async {
@@ -1400,11 +1402,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     isLoading: isLoading,
                                     isFocused: focusNode.hasFocus,
                                     focusNode: focusNode,
+                                    hideNowPlaying: _hideNowPlaying,
                                     onTap: () => _playChannel(channel),
                                     onLongPress: () =>
                                         _toggleFavorite(channel),
-                                    onGuidePressed: () =>
-                                        _showGuide(channel),
+                                    onGuidePressed: _hideNowPlaying
+                                        ? null
+                                        : () => _showGuide(channel),
                                     onLeftPress:
                                         MainPageBridge.focusTvSidebar,
                                     onUpPress: index == 0

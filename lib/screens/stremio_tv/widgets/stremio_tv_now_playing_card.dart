@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -9,11 +11,15 @@ import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 class StremioTvNowPlayingCard extends StatelessWidget {
   final StremioTvNowPlaying nowPlaying;
   final double? displayProgress;
+  final bool hideDetails;
+  final String? channelGenre;
 
   const StremioTvNowPlayingCard({
     super.key,
     required this.nowPlaying,
     this.displayProgress,
+    this.hideDetails = false,
+    this.channelGenre,
   });
 
   @override
@@ -29,29 +35,34 @@ class StremioTvNowPlayingCard extends StatelessWidget {
           child: SizedBox(
             width: 60,
             height: 85,
-            child: item.poster != null
-                ? CachedNetworkImage(
-                    imageUrl: item.poster!,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
+            child: ImageFiltered(
+              imageFilter: hideDetails
+                  ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
+                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+              child: item.poster != null
+                  ? CachedNetworkImage(
+                      imageUrl: item.poster!,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        child: const Center(
+                          child: Icon(Icons.movie_rounded, size: 24),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        child: const Center(
+                          child: Icon(Icons.broken_image_rounded, size: 24),
+                        ),
+                      ),
+                    )
+                  : Container(
                       color: theme.colorScheme.surfaceContainerHighest,
                       child: const Center(
                         child: Icon(Icons.movie_rounded, size: 24),
                       ),
                     ),
-                    errorWidget: (_, __, ___) => Container(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      child: const Center(
-                        child: Icon(Icons.broken_image_rounded, size: 24),
-                      ),
-                    ),
-                  )
-                : Container(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: const Center(
-                      child: Icon(Icons.movie_rounded, size: 24),
-                    ),
-                  ),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -62,15 +73,24 @@ class StremioTvNowPlayingCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                item.name,
+                hideDetails ? _buildTeaserTitle(item.type) : item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
+                  fontStyle: hideDetails ? FontStyle.italic : null,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
-              _buildMetaRow(item, theme),
+              if (hideDetails)
+                Text(
+                  'Press play to find out!',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                _buildMetaRow(item, theme),
               const SizedBox(height: 6),
               _buildProgressBar(theme),
             ],
@@ -78,6 +98,17 @@ class StremioTvNowPlayingCard extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _buildTeaserTitle(String type) {
+    final genre = channelGenre;
+    if (genre != null && genre.isNotEmpty) {
+      // "An Action movie awaits..." / "A Comedy series awaits..."
+      final article = 'aeiouAEIOU'.contains(genre[0]) ? 'An' : 'A';
+      final kind = type == 'series' ? 'series' : 'film';
+      return '$article $genre $kind awaits...';
+    }
+    return type == 'series' ? 'A Series awaits...' : 'A Movie awaits...';
   }
 
   Widget _buildMetaRow(StremioMeta item, ThemeData theme) {
