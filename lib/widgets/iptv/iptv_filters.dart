@@ -15,6 +15,11 @@ class IptvFiltersBar extends StatelessWidget {
   final VoidCallback? onAddPlaylist;
   final FocusNode? playlistFocusNode;
   final FocusNode? categoryFocusNode;
+  // Content type filter (for Xtream Codes)
+  final bool showContentTypeFilter;
+  final String selectedContentType;
+  final ValueChanged<String>? onContentTypeChanged;
+  final FocusNode? contentTypeFocusNode;
   // DPAD navigation callbacks
   final VoidCallback? onUpArrowPressed;
   final VoidCallback? onDownArrowPressed;
@@ -32,6 +37,10 @@ class IptvFiltersBar extends StatelessWidget {
     this.onAddPlaylist,
     this.playlistFocusNode,
     this.categoryFocusNode,
+    this.showContentTypeFilter = false,
+    this.selectedContentType = 'live',
+    this.onContentTypeChanged,
+    this.contentTypeFocusNode,
     this.onUpArrowPressed,
     this.onDownArrowPressed,
   });
@@ -49,6 +58,22 @@ class IptvFiltersBar extends StatelessWidget {
           // Hide channel count on small screens (< 400px)
           final showChannelCount = constraints.maxWidth >= 400;
 
+          // Determine DPAD right-arrow targets from playlist dropdown
+          VoidCallback? playlistRightArrow;
+          if (showContentTypeFilter) {
+            playlistRightArrow = () => contentTypeFocusNode?.requestFocus();
+          } else if (hasCategories) {
+            playlistRightArrow = () => categoryFocusNode?.requestFocus();
+          }
+
+          // Determine DPAD left-arrow target from category dropdown
+          VoidCallback? categoryLeftArrow;
+          if (showContentTypeFilter) {
+            categoryLeftArrow = () => contentTypeFocusNode?.requestFocus();
+          } else {
+            categoryLeftArrow = () => playlistFocusNode?.requestFocus();
+          }
+
           return Row(
             children: [
               // Playlist dropdown - flexible to shrink on small screens
@@ -61,9 +86,23 @@ class IptvFiltersBar extends StatelessWidget {
                   focusNode: playlistFocusNode,
                   onUpArrowPressed: onUpArrowPressed,
                   onDownArrowPressed: onDownArrowPressed,
-                  onRightArrowPressed: hasCategories ? () => categoryFocusNode?.requestFocus() : null,
+                  onRightArrowPressed: playlistRightArrow,
                 ),
               ),
+
+              // Content type toggle (only for Xtream Codes playlists)
+              if (showContentTypeFilter) ...[
+                const SizedBox(width: 8),
+                _ContentTypeToggle(
+                  selectedContentType: selectedContentType,
+                  onChanged: onContentTypeChanged ?? (_) {},
+                  focusNode: contentTypeFocusNode,
+                  onUpArrowPressed: onUpArrowPressed,
+                  onDownArrowPressed: onDownArrowPressed,
+                  onLeftArrowPressed: () => playlistFocusNode?.requestFocus(),
+                  onRightArrowPressed: hasCategories ? () => categoryFocusNode?.requestFocus() : null,
+                ),
+              ],
               const SizedBox(width: 8),
 
               // Category dropdown (only if we have categories)
@@ -76,7 +115,7 @@ class IptvFiltersBar extends StatelessWidget {
                     focusNode: categoryFocusNode,
                     onUpArrowPressed: onUpArrowPressed,
                     onDownArrowPressed: onDownArrowPressed,
-                    onLeftArrowPressed: () => playlistFocusNode?.requestFocus(),
+                    onLeftArrowPressed: categoryLeftArrow,
                   ),
                 ),
 
@@ -219,9 +258,11 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.selectedPlaylist?.isLocalFile == true
-                    ? Icons.folder
-                    : Icons.playlist_play,
+                widget.selectedPlaylist?.isXtreamCodes == true
+                    ? Icons.login
+                    : widget.selectedPlaylist?.isLocalFile == true
+                        ? Icons.folder
+                        : Icons.playlist_play,
                 size: 16,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -389,6 +430,172 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
   }
 }
 
+/// Content type toggle (Live TV / Movies) for Xtream Codes playlists
+class _ContentTypeToggle extends StatefulWidget {
+  final String selectedContentType;
+  final ValueChanged<String> onChanged;
+  final FocusNode? focusNode;
+  final VoidCallback? onUpArrowPressed;
+  final VoidCallback? onDownArrowPressed;
+  final VoidCallback? onLeftArrowPressed;
+  final VoidCallback? onRightArrowPressed;
+
+  const _ContentTypeToggle({
+    required this.selectedContentType,
+    required this.onChanged,
+    this.focusNode,
+    this.onUpArrowPressed,
+    this.onDownArrowPressed,
+    this.onLeftArrowPressed,
+    this.onRightArrowPressed,
+  });
+
+  @override
+  State<_ContentTypeToggle> createState() => _ContentTypeToggleState();
+}
+
+class _ContentTypeToggleState extends State<_ContentTypeToggle> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
+  }
+
+  void _toggle() {
+    widget.onChanged(widget.selectedContentType == 'live' ? 'vod' : 'live');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isLive = widget.selectedContentType == 'live';
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          _toggle();
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrowPressed != null) {
+          widget.onUpArrowPressed!();
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowPressed != null) {
+          widget.onDownArrowPressed!();
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftArrowPressed != null) {
+          widget.onLeftArrowPressed!();
+          return KeyEventResult.handled;
+        }
+
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.onRightArrowPressed != null) {
+          widget.onRightArrowPressed!();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: _toggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _isFocused
+                  ? colorScheme.primary
+                  : colorScheme.outline.withOpacity(0.3),
+              width: _isFocused ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Live TV segment
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isLive ? colorScheme.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.live_tv,
+                      size: 14,
+                      color: isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Live',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                        fontWeight: isLive ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Movies segment
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: !isLive ? colorScheme.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.movie,
+                      size: 14,
+                      color: !isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Movies',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: !isLive ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                        fontWeight: !isLive ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Bottom sheet for selecting playlist with DPAD support
 class _PlaylistPickerSheet extends StatefulWidget {
   final List<IptvPlaylist> playlists;
@@ -534,10 +741,14 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                 return _FocusablePickerTile(
                   focusNode: index < _focusNodes.length ? _focusNodes[index] : null,
                   label: playlist.name,
-                  subtitle: playlist.isLocalFile ? 'Local file' : playlist.url,
+                  subtitle: playlist.isXtreamCodes
+                      ? 'Xtream Codes - ${playlist.serverUrl}'
+                      : playlist.isLocalFile ? 'Local file' : playlist.url,
                   icon: isSelected
                       ? Icons.check_circle
-                      : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
+                      : playlist.isXtreamCodes
+                          ? Icons.login
+                          : (playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
                   isSelected: isSelected,
                   onTap: () => Navigator.of(context).pop(playlist),
                   onKeyEvent: (node, event) => _handleKeyEvent(

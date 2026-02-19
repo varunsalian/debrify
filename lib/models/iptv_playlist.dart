@@ -6,6 +6,9 @@ class IptvPlaylist {
   final String name;
   final String url;
   final String? content; // Raw M3U content for file-based playlists
+  final String? serverUrl;  // Xtream Codes server URL
+  final String? username;   // Xtream Codes username
+  final String? password;   // Xtream Codes password
   final DateTime addedAt;
 
   const IptvPlaylist({
@@ -13,17 +16,26 @@ class IptvPlaylist {
     required this.name,
     required this.url,
     this.content,
+    this.serverUrl,
+    this.username,
+    this.password,
     required this.addedAt,
   });
 
   /// Returns true if this playlist was imported from a local file
   bool get isLocalFile => content != null && content!.isNotEmpty;
 
+  /// Returns true if this is an Xtream Codes playlist
+  bool get isXtreamCodes => serverUrl != null && serverUrl!.isNotEmpty;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'url': url,
     if (content != null) 'content': content,
+    if (serverUrl != null) 'serverUrl': serverUrl,
+    if (username != null) 'username': username,
+    if (password != null) 'password': password,
     'addedAt': addedAt.toIso8601String(),
   };
 
@@ -32,6 +44,9 @@ class IptvPlaylist {
     name: json['name'] as String,
     url: json['url'] as String,
     content: json['content'] as String?,
+    serverUrl: json['serverUrl'] as String?,
+    username: json['username'] as String?,
+    password: json['password'] as String?,
     addedAt: DateTime.parse(json['addedAt'] as String),
   );
 
@@ -53,6 +68,7 @@ class IptvChannel {
   final String? logoUrl;
   final String? group; // Category/group
   final int? duration; // -1 for live streams
+  final String? contentType; // 'live', 'vod', or null (M3U channels)
   final Map<String, String> attributes; // Additional tvg-* attributes
 
   const IptvChannel({
@@ -61,6 +77,7 @@ class IptvChannel {
     this.logoUrl,
     this.group,
     this.duration,
+    this.contentType,
     this.attributes = const {},
   });
 

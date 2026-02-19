@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_service.dart';
+import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/m3u_parser.dart';
 
@@ -22,9 +23,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
   final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'iptv-add-button');
   final FocusNode _importFileButtonFocusNode = FocusNode(debugLabel: 'iptv-import-file-button');
 
+  // Xtream Codes controllers and focus nodes
+  final TextEditingController _xcServerController = TextEditingController();
+  final TextEditingController _xcUsernameController = TextEditingController();
+  final TextEditingController _xcPasswordController = TextEditingController();
+  final FocusNode _xcServerFocusNode = FocusNode(debugLabel: 'iptv-xc-server');
+  final FocusNode _xcUsernameFocusNode = FocusNode(debugLabel: 'iptv-xc-username');
+  final FocusNode _xcPasswordFocusNode = FocusNode(debugLabel: 'iptv-xc-password');
+  final FocusNode _xcLoginButtonFocusNode = FocusNode(debugLabel: 'iptv-xc-login-button');
+  bool _isXcAdding = false;
+
   // Tab focus nodes
   final FocusNode _urlTabFocusNode = FocusNode(debugLabel: 'iptv-url-tab');
   final FocusNode _fileTabFocusNode = FocusNode(debugLabel: 'iptv-file-tab');
+  final FocusNode _xcTabFocusNode = FocusNode(debugLabel: 'iptv-xc-tab');
 
   late TabController _tabController;
 
@@ -39,7 +51,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadSettings();
   }
 
@@ -53,8 +65,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     _urlInputFocusNode.dispose();
     _addButtonFocusNode.dispose();
     _importFileButtonFocusNode.dispose();
+    _xcServerController.dispose();
+    _xcUsernameController.dispose();
+    _xcPasswordController.dispose();
+    _xcServerFocusNode.dispose();
+    _xcUsernameFocusNode.dispose();
+    _xcPasswordFocusNode.dispose();
+    _xcLoginButtonFocusNode.dispose();
     _urlTabFocusNode.dispose();
     _fileTabFocusNode.dispose();
+    _xcTabFocusNode.dispose();
     for (final node in _playlistFocusNodes) {
       node.dispose();
     }
@@ -255,6 +275,84 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     }
   }
 
+  Future<void> _addXtreamCodes() async {
+    final server = _xcServerController.text.trim();
+    final username = _xcUsernameController.text.trim();
+    final password = _xcPasswordController.text.trim();
+
+    if (server.isEmpty) {
+      _showSnackBar('Please enter a server URL');
+      return;
+    }
+    if (username.isEmpty) {
+      _showSnackBar('Please enter a username');
+      return;
+    }
+    if (password.isEmpty) {
+      _showSnackBar('Please enter a password');
+      return;
+    }
+
+    // Normalize server URL
+    var serverUrl = server;
+    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+      serverUrl = 'http://$serverUrl';
+    }
+    if (serverUrl.endsWith('/')) {
+      serverUrl = serverUrl.substring(0, serverUrl.length - 1);
+    }
+
+    // Check for duplicate
+    if (_playlists.any((p) => p.isXtreamCodes && p.serverUrl == serverUrl && p.username == username)) {
+      _showSnackBar('This Xtream Codes login already exists');
+      return;
+    }
+
+    setState(() => _isXcAdding = true);
+
+    final result = await XtreamCodesService.instance.authenticate(serverUrl, username, password);
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      setState(() => _isXcAdding = false);
+      _showSnackBar(result.error ?? 'Authentication failed');
+      return;
+    }
+
+    // Create playlist with XC fields
+    final playlist = IptvPlaylist(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: '$username@${Uri.parse(serverUrl).host}',
+      url: '',
+      serverUrl: serverUrl,
+      username: username,
+      password: password,
+      addedAt: DateTime.now(),
+    );
+
+    final newPlaylists = [..._playlists, playlist];
+    await StorageService.setIptvPlaylists(newPlaylists);
+
+    setState(() {
+      _playlists = newPlaylists;
+      _xcServerController.clear();
+      _xcUsernameController.clear();
+      _xcPasswordController.clear();
+      _isXcAdding = false;
+    });
+    _ensureFocusNodes();
+
+    // Build status message
+    String statusMsg = 'Added Xtream Codes login';
+    if (result.status != null) statusMsg += ' (${result.status}';
+    if (result.expDate != null) {
+      statusMsg += ', expires ${result.expDate!.year}-${result.expDate!.month.toString().padLeft(2, '0')}-${result.expDate!.day.toString().padLeft(2, '0')}';
+    }
+    if (result.status != null) statusMsg += ')';
+    _showSnackBar(statusMsg, isError: false);
+  }
+
   Future<void> _removePlaylist(IptvPlaylist playlist) async {
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
     await StorageService.setIptvPlaylists(newPlaylists);
@@ -265,8 +363,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       setState(() => _defaultPlaylistId = null);
     }
 
-    // Clear cache for this playlist (only if URL-based)
-    if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
+    // Clear cache for this playlist
+    if (playlist.isXtreamCodes) {
+      XtreamCodesService.instance.clearCache(playlist.serverUrl);
+    } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
     }
 
@@ -417,6 +517,70 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     );
   }
 
+  Widget _buildXcTabContent() {
+    return Column(
+      children: [
+        // Server URL input
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(2),
+          child: _TvFriendlyTextField(
+            controller: _xcServerController,
+            focusNode: _xcServerFocusNode,
+            labelText: 'Server URL',
+            hintText: 'http://example.com:8080',
+            prefixIcon: const Icon(Icons.dns),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Username input
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(3),
+          child: _TvFriendlyTextField(
+            controller: _xcUsernameController,
+            focusNode: _xcUsernameFocusNode,
+            labelText: 'Username',
+            hintText: 'your username',
+            prefixIcon: const Icon(Icons.person),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Password input
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(3.5),
+          child: _TvFriendlyTextField(
+            controller: _xcPasswordController,
+            focusNode: _xcPasswordFocusNode,
+            labelText: 'Password',
+            hintText: 'your password',
+            prefixIcon: const Icon(Icons.lock),
+            onSubmitted: (_) => _addXtreamCodes(),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Login button
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(4),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _TvFocusableButton(
+              focusNode: _xcLoginButtonFocusNode,
+              icon: _isXcAdding ? Icons.hourglass_empty : Icons.login,
+              label: _isXcAdding ? 'Logging in...' : 'Login & Add',
+              onPressed: _isXcAdding ? () {} : _addXtreamCodes,
+              onUpArrow: () => _xcPasswordFocusNode.requestFocus(),
+              onDownArrow: _playlists.isNotEmpty && _playlistFocusNodes.isNotEmpty
+                  ? () => _playlistFocusNodes[0].requestFocus()
+                  : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -440,12 +604,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
           padding: const EdgeInsets.all(16),
           children: [
             const Text(
-              'IPTV M3U Playlists',
+              'IPTV Playlists',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Add M3U playlists from a URL or import from a file.',
+              'Add M3U playlists from a URL, import from a file, or login with Xtream Codes.',
               style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
@@ -464,15 +628,17 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
               tabController: _tabController,
               urlTabFocusNode: _urlTabFocusNode,
               fileTabFocusNode: _fileTabFocusNode,
+              xcTabFocusNode: _xcTabFocusNode,
               onUpArrow: () => _backButtonFocusNode.requestFocus(),
               onDownArrowFromUrlTab: () => _nameInputFocusNode.requestFocus(),
               onDownArrowFromFileTab: () => _importFileButtonFocusNode.requestFocus(),
+              onDownArrowFromXcTab: () => _xcServerFocusNode.requestFocus(),
             ),
             const SizedBox(height: 16),
 
             // Tab content (fixed height container)
             SizedBox(
-              height: 180, // Fixed height for tab content
+              height: 260, // Fixed height for tab content
               child: TabBarView(
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
@@ -481,6 +647,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
                   _buildUrlTabContent(),
                   // Tab 2: From File
                   _buildFileTabContent(),
+                  // Tab 3: Xtream Login
+                  _buildXcTabContent(),
                 ],
               ),
             ),
@@ -845,17 +1013,21 @@ class _TvFocusableTabBar extends StatefulWidget {
     required this.tabController,
     required this.urlTabFocusNode,
     required this.fileTabFocusNode,
+    this.xcTabFocusNode,
     this.onUpArrow,
     this.onDownArrowFromUrlTab,
     this.onDownArrowFromFileTab,
+    this.onDownArrowFromXcTab,
   });
 
   final TabController tabController;
   final FocusNode urlTabFocusNode;
   final FocusNode fileTabFocusNode;
+  final FocusNode? xcTabFocusNode;
   final VoidCallback? onUpArrow;
   final VoidCallback? onDownArrowFromUrlTab;
   final VoidCallback? onDownArrowFromFileTab;
+  final VoidCallback? onDownArrowFromXcTab;
 
   @override
   State<_TvFocusableTabBar> createState() => _TvFocusableTabBarState();
@@ -864,18 +1036,21 @@ class _TvFocusableTabBar extends StatefulWidget {
 class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
   bool _urlTabFocused = false;
   bool _fileTabFocused = false;
+  bool _xcTabFocused = false;
 
   @override
   void initState() {
     super.initState();
     widget.urlTabFocusNode.addListener(_onUrlTabFocusChange);
     widget.fileTabFocusNode.addListener(_onFileTabFocusChange);
+    widget.xcTabFocusNode?.addListener(_onXcTabFocusChange);
   }
 
   @override
   void dispose() {
     widget.urlTabFocusNode.removeListener(_onUrlTabFocusChange);
     widget.fileTabFocusNode.removeListener(_onFileTabFocusChange);
+    widget.xcTabFocusNode?.removeListener(_onXcTabFocusChange);
     super.dispose();
   }
 
@@ -888,6 +1063,12 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
   void _onFileTabFocusChange() {
     if (mounted) {
       setState(() => _fileTabFocused = widget.fileTabFocusNode.hasFocus);
+    }
+  }
+
+  void _onXcTabFocusChange() {
+    if (mounted) {
+      setState(() => _xcTabFocused = widget.xcTabFocusNode?.hasFocus ?? false);
     }
   }
 
@@ -1011,6 +1192,11 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                     return KeyEventResult.handled;
                   }
 
+                  if (event.logicalKey == LogicalKeyboardKey.arrowRight && widget.xcTabFocusNode != null) {
+                    widget.xcTabFocusNode!.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+
                   if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
                     widget.onUpArrow!();
                     return KeyEventResult.handled;
@@ -1077,6 +1263,98 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
               ),
             ),
           ),
+          // Xtream Codes Tab
+          if (widget.xcTabFocusNode != null) ...[
+            const SizedBox(width: 4),
+            Expanded(
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(1.75),
+                child: Focus(
+                  focusNode: widget.xcTabFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+                    if (event.logicalKey == LogicalKeyboardKey.select ||
+                        event.logicalKey == LogicalKeyboardKey.enter) {
+                      widget.tabController.animateTo(2);
+                      return KeyEventResult.handled;
+                    }
+
+                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                      widget.fileTabFocusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+
+                    if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.onUpArrow != null) {
+                      widget.onUpArrow!();
+                      return KeyEventResult.handled;
+                    }
+
+                    if (event.logicalKey == LogicalKeyboardKey.arrowDown && widget.onDownArrowFromXcTab != null) {
+                      widget.tabController.animateTo(2);
+                      widget.onDownArrowFromXcTab!();
+                      return KeyEventResult.handled;
+                    }
+
+                    return KeyEventResult.ignored;
+                  },
+                  child: GestureDetector(
+                    onTap: () => widget.tabController.animateTo(2),
+                    child: AnimatedBuilder(
+                      animation: widget.tabController,
+                      builder: (context, child) {
+                        final isSelected = widget.tabController.index == 2;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected ? colorScheme.primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: _xcTabFocused
+                                ? Border.all(color: colorScheme.primary, width: 2)
+                                : null,
+                            boxShadow: _xcTabFocused
+                                ? [
+                                    BoxShadow(
+                                      color: colorScheme.primary.withValues(alpha: 0.3),
+                                      blurRadius: 4,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.login,
+                                size: 18,
+                                color: isSelected
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Xtream Login',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: isSelected
+                                        ? colorScheme.onPrimary
+                                        : colorScheme.onSurfaceVariant,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1306,7 +1584,9 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
         leading: Icon(
           widget.isDefault
               ? Icons.star
-              : (widget.playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
+              : widget.playlist.isXtreamCodes
+                  ? Icons.login
+                  : (widget.playlist.isLocalFile ? Icons.folder : Icons.playlist_play),
           color: widget.isDefault ? Colors.amber : null,
         ),
         title: Text(widget.playlist.name),
@@ -1315,7 +1595,25 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
           children: [
             Row(
               children: [
-                if (widget.playlist.isLocalFile) ...[
+                if (widget.playlist.isXtreamCodes) ...[
+                  Icon(
+                    Icons.login,
+                    size: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Xtream Codes - ${widget.playlist.serverUrl}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ] else if (widget.playlist.isLocalFile) ...[
                   Icon(
                     Icons.sd_card,
                     size: 12,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/iptv_playlist.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_service.dart';
+import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
@@ -43,6 +44,9 @@ class IptvResultsViewState extends State<IptvResultsView> {
   List<String> _categories = [];
   String? _selectedCategory;
 
+  // Content type for Xtream Codes playlists
+  String _selectedContentType = 'live';
+
   // Loading state
   bool _isLoading = false;
   String? _errorMessage;
@@ -53,6 +57,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
   // Focus nodes for DPAD
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
+  final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'iptv-content-type-filter');
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
@@ -157,6 +162,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
     _scrollController.dispose();
     _playlistFilterFocusNode.dispose();
     _categoryFilterFocusNode.dispose();
+    _contentTypeFocusNode.dispose();
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -179,9 +185,16 @@ class IptvResultsViewState extends State<IptvResultsView> {
     }
     _cardFocusNodes.clear();
 
-    // Use parseContent for file-based playlists, fetchPlaylist for URL-based
+    // Determine source: XC API, local file, or URL
     final IptvParseResult result;
-    if (playlist.isLocalFile) {
+    if (playlist.isXtreamCodes) {
+      final xcService = XtreamCodesService.instance;
+      if (_selectedContentType == 'vod') {
+        result = await xcService.fetchVodStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
+      } else {
+        result = await xcService.fetchLiveStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
+      }
+    } else if (playlist.isLocalFile) {
       result = _iptvService.parseContent(playlist.content!);
     } else {
       result = await _iptvService.fetchPlaylist(playlist.url);
@@ -235,9 +248,25 @@ class IptvResultsViewState extends State<IptvResultsView> {
     setState(() {
       _selectedPlaylist = playlist;
       _selectedCategory = null;
+      if (playlist.isXtreamCodes) {
+        _selectedContentType = 'live';
+      }
     });
 
     _loadPlaylist(playlist);
+  }
+
+  void _onContentTypeChanged(String contentType) {
+    if (contentType == _selectedContentType) return;
+
+    setState(() {
+      _selectedContentType = contentType;
+      _selectedCategory = null;
+    });
+
+    if (_selectedPlaylist != null) {
+      _loadPlaylist(_selectedPlaylist!);
+    }
   }
 
   void _onCategoryChanged(String? category) {
@@ -305,6 +334,10 @@ class IptvResultsViewState extends State<IptvResultsView> {
           onAddPlaylist: _navigateToSettings,
           playlistFocusNode: _playlistFilterFocusNode,
           categoryFocusNode: _categoryFilterFocusNode,
+          showContentTypeFilter: _selectedPlaylist?.isXtreamCodes ?? false,
+          selectedContentType: _selectedContentType,
+          onContentTypeChanged: _onContentTypeChanged,
+          contentTypeFocusNode: _contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
         ),

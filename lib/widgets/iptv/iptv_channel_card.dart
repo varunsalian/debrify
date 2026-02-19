@@ -143,8 +143,42 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
                             )
                           : _buildDefaultIcon(colorScheme),
                     ),
-                    // Live badge
-                    if (channel.isLive)
+                    // Live/VOD badge
+                    if (channel.contentType == 'vod')
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.movie,
+                                size: 8,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'MOVIE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (channel.isLive)
                       Positioned(
                         top: 4,
                         left: 4,
@@ -301,7 +335,7 @@ class _IptvChannelCardState extends State<IptvChannelCard> {
   Widget _buildDefaultIcon(ColorScheme colorScheme) {
     return Center(
       child: Icon(
-        Icons.live_tv,
+        widget.channel.contentType == 'vod' ? Icons.movie : Icons.live_tv,
         size: 32,
         color: colorScheme.onSurfaceVariant,
       ),
