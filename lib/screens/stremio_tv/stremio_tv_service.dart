@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
+import '../../services/imdb_lookup_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 
@@ -37,15 +41,11 @@ class StremioTvService {
       final channels = <StremioTvChannel>[];
       int channelNumber = 1;
 
-      // Block series for now (needs season/episode selection)
-      const blockedTypes = {'series'};
-
       for (final addon in addons) {
         // Skip entire addon if disabled
         if (disabled.contains(addon.id)) continue;
 
         for (final catalog in addon.catalogs) {
-          if (blockedTypes.contains(catalog.type.toLowerCase())) continue;
 
           // Skip catalog if disabled
           final catalogId = '${addon.id}:${catalog.id}:${catalog.type}';
@@ -124,18 +124,14 @@ class StremioTvService {
   }
 
   /// Get the raw addon→catalog→genre tree for the filter UI.
-  /// Returns all addons with their catalogs (excluding series type),
+  /// Returns all addons with their catalogs,
   /// plus a synthetic "Local Catalogs" addon entry.
   Future<List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>>
       getFilterTree() async {
     final addons = await _stremioService.getCatalogAddons();
-    const blockedTypes = {'series'};
 
     final tree = addons.map((addon) {
-      final catalogs = addon.catalogs
-          .where((c) => !blockedTypes.contains(c.type.toLowerCase()))
-          .toList();
-      return (addon: addon, catalogs: catalogs);
+      return (addon: addon, catalogs: addon.catalogs.toList());
     }).where((entry) => entry.catalogs.isNotEmpty).toList();
 
     // Append local catalogs as a synthetic addon entry
@@ -207,6 +203,10 @@ class StremioTvService {
         );
         items = fetched.toList();
       }
+
+      // Filter out items that don't match the channel's content type
+      // (mixed catalogs can return series in movie channels and vice versa)
+      items = items.where((m) => m.type == channel.type).toList();
 
       channel.items = items;
       channel.lastFetched = DateTime.now();
@@ -368,6 +368,138 @@ class StremioTvService {
       slotStart: slotStart,
       slotEnd: slotEnd,
     );
+  }
+
+  // ============================================================================
+  // Series Episode Resolution
+  // ============================================================================
+
+  /// Resolve a deterministic episode for a series item.
+  ///
+  /// Uses [seed] (typically channelId:slotStart) to pick the same episode
+  /// for the same time slot, giving a TV-like deterministic experience.
+  ///
+  /// Strategy:
+  /// 1. If the source addon has a `meta` resource, fetch `/meta/series/{id}.json`
+  ///    and pick an episode from the videos array (season > 0) using DJB2 hash.
+  /// 2. Fallback: call IMDbbot to get season list, pick a season via DJB2,
+  ///    then an episode 1-5 via DJB2. If streams fail, caller can retry with episode 1.
+  ///
+  /// Returns `({int season, int episode})` or null if resolution fails entirely.
+  Future<({int season, int episode})?> resolveRandomEpisode({
+    required StremioMeta item,
+    required StremioAddon addon,
+    required String seed,
+  }) async {
+    // Try addon's own meta endpoint first (only if it declares meta resource
+    // and supports this item's ID prefix to avoid pointless 404s)
+    if (addon.resources.contains('meta') &&
+        addon.baseUrl.isNotEmpty &&
+        addon.supportsContentId(item.id)) {
+      final result = await _resolveViaAddonMeta(item, addon, seed);
+      if (result != null) return result;
+    }
+
+    // Fallback: IMDbbot
+    final imdbId = item.effectiveImdbId;
+    if (imdbId != null) {
+      return _resolveViaImdbBot(imdbId, seed);
+    }
+
+    return null;
+  }
+
+  /// Try to resolve an episode via the addon's meta endpoint.
+  /// Uses DJB2 hash of [seed] for deterministic selection.
+  Future<({int season, int episode})?> _resolveViaAddonMeta(
+    StremioMeta item,
+    StremioAddon addon,
+    String seed,
+  ) async {
+    try {
+      final url = '${addon.baseUrl}/meta/series/${Uri.encodeComponent(item.id)}.json';
+      debugPrint('StremioTvService: Fetching meta from $url');
+
+      final response = await http.get(Uri.parse(url)).timeout(
+            const Duration(seconds: 10),
+          );
+      if (response.statusCode != 200) return null;
+
+      final data = json.decode(response.body) as Map<String, dynamic>?;
+      if (data == null) return null;
+
+      final meta = data['meta'] as Map<String, dynamic>?;
+      if (meta == null) return null;
+
+      final videos = meta['videos'] as List<dynamic>?;
+      if (videos == null || videos.isEmpty) return null;
+
+      // Filter to actual episodes (season > 0) that have aired
+      final episodes = videos.where((v) {
+        if (v is! Map<String, dynamic>) return false;
+        final s = v['season'];
+        final seasonNum = s is int ? s : (s is num ? s.toInt() : null);
+        if (seasonNum == null || seasonNum <= 0) return false;
+        return true;
+      }).toList();
+
+      if (episodes.isEmpty) return null;
+
+      // Pick a deterministic episode using DJB2 hash
+      final hash = _djb2('episode:$seed');
+      final picked = episodes[hash % episodes.length] as Map<String, dynamic>;
+      final seasonRaw = picked['season'];
+      final season = seasonRaw is int ? seasonRaw : (seasonRaw as num).toInt();
+      final episodeRaw = picked['number'] ?? picked['episode'];
+      final episode = episodeRaw is int
+          ? episodeRaw
+          : (episodeRaw is num ? episodeRaw.toInt() : 1);
+
+      debugPrint('StremioTvService: Resolved episode via addon meta: S${season}E$episode');
+      return (season: season, episode: episode);
+    } catch (e) {
+      debugPrint('StremioTvService: Addon meta fetch failed: $e');
+      return null;
+    }
+  }
+
+  /// Fallback: resolve an episode via IMDbbot.
+  /// Gets season list, picks a season via DJB2, then episode 1-5 via DJB2.
+  Future<({int season, int episode})?> _resolveViaImdbBot(
+    String imdbId,
+    String seed,
+  ) async {
+    try {
+      final details = await ImdbLookupService.getTitleDetails(imdbId)
+          .timeout(const Duration(seconds: 10));
+      final seasons = details['main']?['episodes']?['seasons'] as List<dynamic>?;
+      if (seasons == null || seasons.isEmpty) return null;
+
+      // Extract season numbers, filter out season 0 (specials)
+      final seasonNumbers = seasons
+          .map((s) {
+            if (s is Map) return s['number'] as int?;
+            if (s is int) return s;
+            return null;
+          })
+          .whereType<int>()
+          .where((s) => s > 0)
+          .toList();
+
+      if (seasonNumbers.isEmpty) return null;
+
+      // Deterministic pick using DJB2
+      final seasonHash = _djb2('season:$seed');
+      final season = seasonNumbers[seasonHash % seasonNumbers.length];
+      final episodeHash = _djb2('episode:$seed');
+      final episode = (episodeHash % 5) + 1; // 1-5
+
+      debugPrint('StremioTvService: Resolved episode via IMDbbot: S${season}E$episode');
+      return (season: season, episode: episode);
+    } catch (e) {
+      debugPrint('StremioTvService: IMDbbot fallback failed: $e');
+      return null;
+    }
   }
 
   // ============================================================================

@@ -47,6 +47,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
+  String? _currentPlayTitle; // Overrides item.name when playing series episodes
 
   Timer? _refreshTimer;
   final List<FocusNode> _rowFocusNodes = [];
@@ -374,9 +375,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return sorted;
   }
 
-  /// Minimum content size (200 MB) to consider a direct stream valid.
+  /// Minimum content size (50 MB) to consider a direct stream valid.
   /// Anything smaller is likely a placeholder/error video.
-  static const int _minContentBytes = 200 * 1024 * 1024;
+  static const int _minContentBytes = 50 * 1024 * 1024;
 
   /// Check if a direct stream URL has sufficient content size.
   /// Returns false for placeholder videos (< 200 MB).
@@ -466,8 +467,68 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return;
     }
 
+    // For series, resolve a random episode first
+    int? season;
+    int? episode;
+    if (item.type.toLowerCase() == 'series') {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'Picking a random episode of ${item.name}...',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final episodeSeed =
+          '${channel.id}:${nowPlaying.slotStart.millisecondsSinceEpoch}';
+      final resolved = await _service.resolveRandomEpisode(
+        item: item,
+        addon: channel.addon,
+        seed: episodeSeed,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Dismiss episode resolution dialog
+
+      if (resolved == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not resolve episode for ${item.name}'),
+            ),
+          );
+        }
+        return;
+      }
+
+      season = resolved.season;
+      episode = resolved.episode;
+      _currentPlayTitle = '${item.name} (S${season}E$episode)';
+      debugPrint('StremioTV: Playing ${item.name} S${season}E$episode');
+    } else {
+      _currentPlayTitle = null;
+    }
+
     // Show loading dialog
     if (!mounted) return;
+    bool streamDialogShown = false;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -482,7 +543,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                'Searching streams for ${item.name}...',
+                season != null
+                    ? 'Searching streams for ${item.name} S${season}E$episode...'
+                    : 'Searching streams for ${item.name}...',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -491,15 +554,41 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ),
       ),
     );
+    streamDialogShown = true;
 
     try {
-      final results = await _service.searchStreams(
+      var results = await _service.searchStreams(
         type: item.type,
         imdbId: item.effectiveImdbId ?? item.id,
+        season: season,
+        episode: episode,
       );
+
+      // For series, retry with episode 1 if the picked episode returns no streams
+      if (item.type.toLowerCase() == 'series' &&
+          episode != null &&
+          episode != 1) {
+        final torrents = results['torrents'] as List<Torrent>? ?? [];
+        if (torrents.isEmpty) {
+          debugPrint('StremioTV: No streams for S${season}E$episode, retrying with E1');
+          final retryResults = await _service.searchStreams(
+            type: item.type,
+            imdbId: item.effectiveImdbId ?? item.id,
+            season: season,
+            episode: 1,
+          );
+          final retryTorrents = retryResults['torrents'] as List<Torrent>? ?? [];
+          if (retryTorrents.isNotEmpty) {
+            results = retryResults;
+            episode = 1;
+            _currentPlayTitle = '${item.name} (S${season}E1)';
+          }
+        }
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop(); // Dismiss loading dialog
+      streamDialogShown = false;
 
       final torrents = results['torrents'] as List<Torrent>? ?? [];
 
@@ -525,11 +614,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       for (final stream in directStreams) {
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
         if (!mounted) return;
-        final isMovie = item.type.toLowerCase() == 'movie';
-        final valid = await _isValidStreamUrl(
-          stream.directUrl!,
-          checkSize: isMovie,
-        );
+        final valid = await _isValidStreamUrl(stream.directUrl!);
         if (!mounted) return;
         if (valid) {
           await _playDirectStream(stream, item);
@@ -597,7 +682,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop(); // Dismiss loading dialog
+      if (streamDialogShown) Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error searching streams: $e')),
       );
@@ -611,7 +696,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       context,
       VideoPlayerLaunchArgs(
         videoUrl: torrent.directUrl!,
-        title: item.name,
+        title: _currentPlayTitle ?? item.name,
         subtitle: torrent.source,
         startAtPercent: _currentSlotProgress,
         contentImdbId: item.effectiveImdbId,
@@ -756,7 +841,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           context,
           VideoPlayerLaunchArgs(
             videoUrl: videoUrl,
-            title: item.name,
+            title: _currentPlayTitle ?? item.name,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
             contentType: item.type,
@@ -873,7 +958,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           context,
           VideoPlayerLaunchArgs(
             videoUrl: downloadLink,
-            title: item.name,
+            title: _currentPlayTitle ?? item.name,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
             contentType: item.type,
@@ -970,18 +1055,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       dialogShown = false;
 
       if (streamUrl != null && streamUrl.isNotEmpty) {
+        final title = _currentPlayTitle ?? item.name;
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
             videoUrl: streamUrl,
-            title: item.name,
+            title: title,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
             contentType: item.type,
             playlist: [
               PlaylistEntry(
                 url: streamUrl,
-                title: item.name,
+                title: title,
                 provider: 'pikpak',
               ),
             ],
