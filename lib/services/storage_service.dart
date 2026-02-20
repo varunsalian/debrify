@@ -186,6 +186,8 @@ class StorageService {
   // Stremio TV settings
   static const String _stremioTvRotationMinutesKey =
       'stremio_tv_rotation_minutes';
+  static const String _stremioTvSeriesRotationMinutesKey =
+      'stremio_tv_series_rotation_minutes';
   static const String _stremioTvAutoRefreshKey = 'stremio_tv_auto_refresh';
   static const String _stremioTvFavoriteChannelsKey =
       'stremio_tv_favorite_channels_v1';
@@ -3550,6 +3552,18 @@ class StorageService {
   static Future<void> setStremioTvRotationMinutes(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_stremioTvRotationMinutesKey, value);
+  }
+
+  /// Get the Stremio TV series rotation interval in minutes (default: 45)
+  static Future<int> getStremioTvSeriesRotationMinutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_stremioTvSeriesRotationMinutesKey) ?? 45;
+  }
+
+  /// Save the Stremio TV series rotation interval in minutes
+  static Future<void> setStremioTvSeriesRotationMinutes(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_stremioTvSeriesRotationMinutesKey, value);
   }
 
   /// Get whether Stremio TV auto-refreshes catalogs (default: true)

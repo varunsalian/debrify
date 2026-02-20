@@ -32,7 +32,11 @@ class _HomeStremioTvFavoritesSectionState
     extends State<HomeStremioTvFavoritesSection> {
   List<StremioTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
-  int _rotationMinutes = 60;
+  int _rotationMinutes = 90;
+  int _seriesRotationMinutes = 45;
+
+  int _rotationFor(StremioTvChannel channel) =>
+      channel.type == 'series' ? _seriesRotationMinutes : _rotationMinutes;
 
   final StremioTvService _service = StremioTvService.instance;
   final List<FocusNode> _cardFocusNodes = [];
@@ -91,6 +95,7 @@ class _HomeStremioTvFavoritesSectionState
 
     try {
       _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
+      _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
       final favoriteIds =
           await StorageService.getStremioTvFavoriteChannelIds();
 
@@ -350,7 +355,7 @@ class _HomeStremioTvFavoritesSectionState
     final theme = Theme.of(context);
     final nowPlaying = _service.getNowPlaying(
       channel,
-      rotationMinutes: _rotationMinutes,
+      rotationMinutes: _rotationFor(channel),
     );
 
     Widget card = Container(

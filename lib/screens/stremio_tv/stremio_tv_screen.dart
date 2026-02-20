@@ -41,6 +41,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _loading = true;
   bool _refreshing = false;
   int _rotationMinutes = 90;
+  int _seriesRotationMinutes = 45;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
@@ -48,6 +49,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
+
+  /// Get the rotation duration for a channel based on its content type.
+  int _rotationFor(StremioTvChannel channel) =>
+      channel.type == 'series' ? _seriesRotationMinutes : _rotationMinutes;
 
   Timer? _refreshTimer;
   final List<FocusNode> _rowFocusNodes = [];
@@ -138,6 +143,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> _loadSettings() async {
     _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
+    _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
     _debridProvider = await StorageService.getStremioTvDebridProvider();
@@ -380,9 +386,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   static const int _minContentBytes = 50 * 1024 * 1024;
 
   /// Check if a direct stream URL has sufficient content size.
-  /// Returns false for placeholder videos (< 200 MB).
+  /// Returns false for non-2xx responses, missing content-length,
+  /// or placeholder videos (< 50 MB).
   /// Follows up to 5 redirects to reach the final URL.
-  Future<bool> _isValidStreamUrl(String url, {bool checkSize = true}) async {
+  Future<bool> _isValidStreamUrl(String url) async {
     try {
       final client = http.Client();
       try {
@@ -400,7 +407,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             final location = streamed.headers['location'];
             if (location == null || location.isEmpty) {
               debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode} (redirect, no location)');
-              return true;
+              return false;
             }
             // Resolve relative redirects
             currentUrl = Uri.parse(currentUrl).resolve(location).toString();
@@ -408,22 +415,31 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             continue;
           }
 
+          // Reject non-2xx responses
+          if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+            debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, rejecting non-2xx');
+            return false;
+          }
+
           final contentLength =
-              int.tryParse(streamed.headers['content-length'] ?? '') ?? 0;
+              int.tryParse(streamed.headers['content-length'] ?? '');
+          if (contentLength == null) {
+            debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, no content-length');
+            return false;
+          }
           final sizeMb = (contentLength / (1024 * 1024)).toStringAsFixed(1);
           debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB');
-          if (contentLength == 0 || !checkSize) return true;
           return contentLength >= _minContentBytes;
         }
-        // Too many redirects — allow through
-        debugPrint('StremioTV: HEAD $url → too many redirects, allowing');
-        return true;
+        // Too many redirects
+        debugPrint('StremioTV: HEAD $url → too many redirects, rejecting');
+        return false;
       } finally {
         client.close();
       }
     } catch (e) {
       debugPrint('StremioTV: HEAD check failed for $url: $e');
-      return true;
+      return false;
     }
   }
 
@@ -436,7 +452,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     final nowPlaying = _service.getNowPlaying(
       channel,
-      rotationMinutes: _rotationMinutes,
+      rotationMinutes: _rotationFor(channel),
       salt: _mixSalt,
     );
     if (nowPlaying == null) {
@@ -1128,7 +1144,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final schedule = _service.getSchedule(
       channel,
       count: 5,
-      rotationMinutes: _rotationMinutes,
+      rotationMinutes: _rotationFor(channel),
       salt: _mixSalt,
     );
     if (schedule.isEmpty || !mounted) return;
@@ -1447,7 +1463,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
                               final nowPlaying = _service.getNowPlaying(
                                 channel,
-                                rotationMinutes: _rotationMinutes,
+                                rotationMinutes: _rotationFor(channel),
                                 salt: _mixSalt,
                               );
                               // Compute display progress (capped/randomized per settings)

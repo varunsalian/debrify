@@ -11,6 +11,7 @@ class StremioTvSettingsPage extends StatefulWidget {
 class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   bool _loading = true;
   int _rotationMinutes = 90;
+  int _seriesRotationMinutes = 45;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
@@ -28,6 +29,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
     try {
       final rotationMinutes = await StorageService.getStremioTvRotationMinutes();
+      final seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
       final preferredQuality = await StorageService.getStremioTvPreferredQuality();
       final debridProvider = await StorageService.getStremioTvDebridProvider();
@@ -51,6 +53,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
       setState(() {
         _rotationMinutes = rotationMinutes;
+        _seriesRotationMinutes = seriesRotationMinutes;
         _autoRefresh = autoRefresh;
         _preferredQuality = preferredQuality;
         _debridProvider = debridProvider;
@@ -79,6 +82,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvRotationMinutes(value);
       setState(() => _rotationMinutes = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save setting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setSeriesRotationMinutes(int value) async {
+    try {
+      await StorageService.setStremioTvSeriesRotationMinutes(value);
+      setState(() => _seriesRotationMinutes = value);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -267,6 +283,62 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                 onChanged: (value) {
                                   if (value != null) {
                                     _setRotationMinutes(value);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          // Series rotation interval dropdown
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Series Rotation Interval',
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      'How often the episode changes on series channels',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              DropdownButton<int>(
+                                value: _seriesRotationMinutes,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 15,
+                                    child: Text('15 min'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 30,
+                                    child: Text('30 min'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 45,
+                                    child: Text('45 min'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 60,
+                                    child: Text('1 hour'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 90,
+                                    child: Text('1.5 hours'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _setSeriesRotationMinutes(value);
                                   }
                                 },
                               ),
