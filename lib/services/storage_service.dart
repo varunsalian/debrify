@@ -197,6 +197,8 @@ class StorageService {
       'stremio_tv_debrid_provider';
   static const String _stremioTvMaxStartPercentKey =
       'stremio_tv_max_start_percent';
+  static const String _stremioTvRandomEpisodesKey =
+      'stremio_tv_random_episodes';
   static const String _stremioTvLocalCatalogsKey =
       'stremio_tv_local_catalogs_v1';
   static const String _stremioTvCatalogRepoUrlsKey =
@@ -3564,6 +3566,18 @@ class StorageService {
   static Future<void> setStremioTvSeriesRotationMinutes(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_stremioTvSeriesRotationMinutesKey, value);
+  }
+
+  /// Get whether Stremio TV picks a random episode each time (default: false)
+  static Future<bool> getStremioTvRandomEpisodes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_stremioTvRandomEpisodesKey) ?? false;
+  }
+
+  /// Save whether Stremio TV picks a random episode each time
+  static Future<void> setStremioTvRandomEpisodes(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_stremioTvRandomEpisodesKey, value);
   }
 
   /// Get whether Stremio TV auto-refreshes catalogs (default: true)

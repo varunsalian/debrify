@@ -42,6 +42,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _refreshing = false;
   int _rotationMinutes = 90;
   int _seriesRotationMinutes = 45;
+  bool _randomEpisodes = false;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
@@ -144,6 +145,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   Future<void> _loadSettings() async {
     _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
     _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
+    _randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
     _debridProvider = await StorageService.getStremioTvDebridProvider();
@@ -512,8 +514,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ),
       );
 
-      final episodeSeed =
-          '${channel.id}:${nowPlaying.slotStart.millisecondsSinceEpoch}';
+      final episodeSeed = _randomEpisodes
+          ? '${channel.id}:${DateTime.now().millisecondsSinceEpoch}'
+          : '${channel.id}:${nowPlaying.slotStart.millisecondsSinceEpoch}';
       final resolved = await _service.resolveRandomEpisode(
         item: item,
         addon: channel.addon,
