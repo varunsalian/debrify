@@ -386,7 +386,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             contentPadding: EdgeInsets.zero,
                             title: const Text('Random Episodes'),
                             subtitle: const Text(
-                              'Pick a new random episode each time you open a series channel',
+                              'Pick a different episode every time instead of following the scheduled time slot',
                             ),
                             value: _randomEpisodes,
                             onChanged: _setRandomEpisodes,
