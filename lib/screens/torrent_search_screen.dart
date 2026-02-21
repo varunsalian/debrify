@@ -39,6 +39,7 @@ import '../widgets/shimmer.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/channel_picker_dialog.dart';
 import '../services/debrify_tv_repository.dart';
+import '../models/debrify_tv_channel_record.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
 import '../widgets/torrent_filters_sheet.dart';
@@ -4101,97 +4102,148 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  Widget _buildBulkOptionTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    String? subtitle,
+    bool enabled = true,
+    VoidCallback? onTap,
+  }) {
+    final double opacity = enabled ? 1.0 : 0.45;
+    return Opacity(
+      opacity: opacity,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(12),
+          splashColor: color.withValues(alpha: 0.1),
+          highlightColor: color.withValues(alpha: 0.05),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: enabled
+                    ? color.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.06),
+              ),
+              color: enabled
+                  ? color.withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.02),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: enabled ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.45),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (enabled)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.25),
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Show bulk add provider selection dialog
   Future<void> _showBulkAddDialog() async {
-    final List<Widget> options = [];
+    final selectedCount = _isSelectionMode
+        ? _selectedInfohashes.length
+        : _torrents.length;
 
-    // Add Torbox option
-    if (_torboxIntegrationEnabled && _torboxApiKey != null) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
-          title: const Text('TorBox', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Limit: 60 adds per hour', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          onTap: () => Navigator.of(context).pop('torbox'),
-        ),
-      );
-    } else {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
-          title: const Text('TorBox', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          enabled: false,
-          onTap: null,
-        ),
-      );
-    }
-
-    // Add Real-Debrid option
-    if (_realDebridIntegrationEnabled && _apiKey != null) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
-          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Uncached torrents auto-removed', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          onTap: () => Navigator.of(context).pop('realdebrid'),
-        ),
-      );
-    } else {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
-          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          enabled: false,
-          onTap: null,
-        ),
-      );
-    }
-
-    // Add PikPak option (enabled if configured)
-    if (_pikpakEnabled) {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
-          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
-          onTap: () => Navigator.of(context).pop('pikpak'),
-        ),
-      );
-    } else {
-      options.add(
-        ListTile(
-          leading: const Icon(Icons.folder_rounded, color: Color(0xFF0088CC)),
-          title: const Text('PikPak', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          enabled: false,
-          onTap: null,
-        ),
-      );
-    }
+    final torboxEnabled = _torboxIntegrationEnabled && _torboxApiKey != null;
+    final rdEnabled = _realDebridIntegrationEnabled && _apiKey != null;
 
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF6366F1).withValues(alpha: 0.25),
+                    const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.playlist_add, color: Color(0xFF6366F1), size: 20),
+              child: const Icon(Icons.playlist_add_rounded, color: Color(0xFF818CF8), size: 22),
             ),
-            const SizedBox(width: 12),
-            const Text(
-              'Bulk Add Torrents',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$selectedCount torrents',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'selected',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -4199,17 +4251,66 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _isSelectionMode
-                  ? 'Add ${_selectedInfohashes.length} selected torrents to:'
-                  : 'Add all ${_torrents.length} torrents to:',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
+            // Cloud section header
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'ADD TO CLOUD',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
               ),
             ),
+            _buildBulkOptionTile(
+              icon: Icons.flash_on_rounded,
+              color: const Color(0xFF7C3AED),
+              title: 'TorBox',
+              subtitle: torboxEnabled ? 'Limit: 60 adds per hour' : 'Not configured',
+              enabled: torboxEnabled,
+              onTap: () => Navigator.of(context).pop('torbox'),
+            ),
+            const SizedBox(height: 8),
+            _buildBulkOptionTile(
+              icon: Icons.cloud_rounded,
+              color: const Color(0xFFE50914),
+              title: 'Real-Debrid',
+              subtitle: rdEnabled ? 'Uncached torrents auto-removed' : 'Not configured',
+              enabled: rdEnabled,
+              onTap: () => Navigator.of(context).pop('realdebrid'),
+            ),
+            const SizedBox(height: 8),
+            _buildBulkOptionTile(
+              icon: Icons.folder_rounded,
+              color: const Color(0xFF0088CC),
+              title: 'PikPak',
+              subtitle: _pikpakEnabled ? null : 'Not configured',
+              enabled: _pikpakEnabled,
+              onTap: () => Navigator.of(context).pop('pikpak'),
+            ),
             const SizedBox(height: 16),
-            ...options,
+            // Channel section header
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'CREATE CHANNEL',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            _buildBulkOptionTile(
+              icon: Icons.live_tv_rounded,
+              color: const Color(0xFF14B8A6),
+              title: 'Debrify TV Channel',
+              subtitle: 'Save as a local channel',
+              onTap: () => Navigator.of(context).pop('create_channel'),
+            ),
           ],
         ),
       ),
@@ -4221,6 +4322,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _bulkAddToTorbox();
     } else if (result == 'realdebrid') {
       _bulkAddToRealDebrid();
+    } else if (result == 'create_channel') {
+      _createChannelFromSelection();
     }
   }
 
@@ -5269,6 +5372,195 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         if (_isSelectionMode) {
           _exitSelectionMode();
         }
+      }
+    }
+  }
+
+  /// Create a Debrify TV channel from selected torrents
+  Future<void> _createChannelFromSelection() async {
+    // Gather selected torrents (only real torrents, not direct/external streams)
+    final torrentsToAdd = (_isSelectionMode
+            ? _torrents.where((t) => _selectedInfohashes.contains(t.infohash))
+            : _torrents)
+        .where((t) => !t.isDirectStream && !t.isExternalStream)
+        .toList();
+
+    if (torrentsToAdd.isEmpty || !mounted) return;
+
+    // Show name input dialog
+    final nameController = TextEditingController();
+    final channelName = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF14B8A6).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.live_tv_rounded, color: Color(0xFF14B8A6), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Create Channel',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${torrentsToAdd.length} torrents will be added to this channel.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Channel name',
+                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.08),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty) {
+                        Navigator.of(context).pop(value.trim());
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+                ),
+                TextButton(
+                  onPressed: nameController.text.trim().isEmpty
+                      ? null
+                      : () => Navigator.of(context).pop(nameController.text.trim()),
+                  child: Text(
+                    'Create',
+                    style: TextStyle(
+                      color: nameController.text.trim().isEmpty
+                          ? Colors.white.withValues(alpha: 0.3)
+                          : const Color(0xFF14B8A6),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+
+    if (channelName == null || channelName.isEmpty || !mounted) return;
+
+    try {
+      // Convert Torrent → CachedTorrent
+      final keywordLower = channelName.toLowerCase();
+      final cachedTorrents = torrentsToAdd
+          .map((t) => CachedTorrent.fromTorrent(
+                t,
+                keywords: [keywordLower],
+                sources: [t.source],
+              ))
+          .toList();
+
+      // Create channel record
+      final now = DateTime.now();
+      final channelId = now.microsecondsSinceEpoch.toString();
+
+      final record = DebrifyTvChannelRecord(
+        channelId: channelId,
+        name: channelName,
+        keywords: [channelName],
+        avoidNsfw: true,
+        channelNumber: 0,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await DebrifyTvRepository.instance.upsertChannel(record);
+
+      // Save torrent cache — if this fails, clean up the orphan channel
+      try {
+        final entry = DebrifyTvChannelCacheEntry(
+          version: 1,
+          channelId: channelId,
+          normalizedKeywords: [keywordLower],
+          fetchedAt: now.millisecondsSinceEpoch,
+          status: DebrifyTvCacheStatus.ready,
+          errorMessage: null,
+          torrents: cachedTorrents,
+          keywordStats: {
+            keywordLower: KeywordStat(
+              totalFetched: cachedTorrents.length,
+              lastSearchedAt: now.millisecondsSinceEpoch,
+              pagesPulled: 0,
+              pirateBayHits: 0,
+            ),
+          },
+        );
+        await DebrifyTvCacheService.saveEntry(entry);
+      } catch (e) {
+        await DebrifyTvRepository.instance.deleteChannel(channelId);
+        rethrow;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Channel "$channelName" created with ${cachedTorrents.length} torrents'),
+            backgroundColor: const Color(0xFF14B8A6),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create channel: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
       }
     }
   }
@@ -12320,7 +12612,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
         ),
         // Bulk Add Button or Selection Mode Bar
-        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && (_pikpakEnabled || (_torboxIntegrationEnabled && _torboxApiKey != null) || (_realDebridIntegrationEnabled && _apiKey != null)))
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
           _isSelectionMode
               ? _buildSelectionModeBar()
               : Positioned(
@@ -12329,15 +12621,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   child: GestureDetector(
                     onTap: _enterSelectionMode,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: const Color(0xFF0088CC).withValues(alpha: 0.5),
-                          width: 1,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
                             blurRadius: 8,
@@ -12345,21 +12642,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.playlist_add_rounded,
-                            color: const Color(0xFF0088CC),
+                            Icons.checklist_rounded,
+                            color: Colors.white,
                             size: 18,
                           ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'Bulk',
+                          SizedBox(width: 8),
+                          Text(
+                            'Select',
                             style: TextStyle(
-                              color: Color(0xFF0088CC),
+                              color: Colors.white,
                               fontWeight: FontWeight.w600,
-                              fontSize: 12,
+                              fontSize: 13,
                             ),
                           ),
                         ],
