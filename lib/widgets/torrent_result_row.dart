@@ -23,6 +23,8 @@ class TorrentResultRow extends StatefulWidget {
     required this.qualityTier,
     this.isCached = false,
     this.cacheService,
+    this.isSelectionMode = false,
+    this.isSelected = false,
     required this.onTap,
     this.onLongPress,
     this.onNavigateUp,
@@ -36,6 +38,8 @@ class TorrentResultRow extends StatefulWidget {
   final QualityTier qualityTier;
   final bool isCached;
   final String? cacheService; // 'torbox', 'realdebrid', or null
+  final bool isSelectionMode;
+  final bool isSelected;
 
   /// Called when row is tapped - should show service picker
   final VoidCallback onTap;
@@ -186,11 +190,37 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
   // Dark theme colors
   static const _cardBg = Color(0xFF1E293B); // Slate 800
   static const _cardBgHover = Color(0xFF334155); // Slate 700
+  static const _selectedBg = Color(0xFF1A2744); // Slightly blue tint
   static const _textPrimary = Colors.white;
   static const _textSecondary = Color(0xFF94A3B8); // Slate 400
+  static const _selectionColor = Color(0xFF0088CC);
 
   @override
   Widget build(BuildContext context) {
+    final isSelected = widget.isSelectionMode && widget.isSelected;
+
+    Color bgColor;
+    if (isSelected) {
+      bgColor = _selectedBg;
+    } else if (_isFocused) {
+      bgColor = _cardBgHover;
+    } else {
+      bgColor = _cardBg;
+    }
+
+    Color borderColor;
+    double borderWidth;
+    if (isSelected) {
+      borderColor = _selectionColor;
+      borderWidth = 1.5;
+    } else if (_isFocused) {
+      borderColor = _qualityColor;
+      borderWidth = 2;
+    } else {
+      borderColor = Colors.transparent;
+      borderWidth = 1;
+    }
+
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: _handleKeyEvent,
@@ -201,11 +231,11 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
           duration: const Duration(milliseconds: 200),
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: _isFocused ? _cardBgHover : _cardBg,
+            color: bgColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _isFocused ? _qualityColor : Colors.transparent,
-              width: _isFocused ? 2 : 1,
+              color: borderColor,
+              width: borderWidth,
             ),
             boxShadow: _isFocused
                 ? [
@@ -272,14 +302,28 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
             ),
           ),
 
-          // Chevron to indicate tappable
+          // Chevron or checkbox
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              color: _isFocused ? _qualityColor : _textSecondary,
-              size: 20,
-            ),
+            child: widget.isSelectionMode
+                ? AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      widget.isSelected
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      key: ValueKey(widget.isSelected),
+                      color: widget.isSelected
+                          ? _selectionColor
+                          : _textSecondary,
+                      size: 22,
+                    ),
+                  )
+                : Icon(
+                    Icons.chevron_right_rounded,
+                    color: _isFocused ? _qualityColor : _textSecondary,
+                    size: 20,
+                  ),
           ),
         ],
       ),

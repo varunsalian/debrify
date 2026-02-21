@@ -225,6 +225,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _showingTorboxCachedOnly = false;
   bool _isTelevision = false;
   bool _isBulkAdding = false;
+  bool _isSelectionMode = false;
+  Set<String> _selectedInfohashes = {};
   double? _pendingScrollOffset; // Scroll offset to restore after list is built
   double _lastKnownScrollOffset = 0.0; // Track scroll position continuously
   final List<FocusNode> _cardFocusNodes = [];
@@ -1284,6 +1286,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _hasSearched = false;
       _torrents = [];
       _allTorrents = [];
+      _isSelectionMode = false;
+      _selectedInfohashes.clear();
     });
   }
 
@@ -1300,6 +1304,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _allTorrents = [];
       _engineCounts = {};
       _engineErrors = {};
+      _isSelectionMode = false;
+      _selectedInfohashes.clear();
 
       // Clear selection state
       _selectedImdbTitle = null;
@@ -3223,6 +3229,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _allTorrents = sortedTorrents;
       _torrentMetadata = metadata;
       _torrents = filtered;
+      _isSelectionMode = false;
+      _selectedInfohashes.clear();
       _ensureFocusNodes();
     });
 
@@ -3320,6 +3328,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final filtered = _applyFiltersToList(_allTorrents, metadataMap: _torrentMetadata);
     setState(() {
       _torrents = filtered;
+      if (_isSelectionMode) {
+        final visible = filtered.map((t) => t.infohash).toSet();
+        _selectedInfohashes.retainWhere(visible.contains);
+      }
       _ensureFocusNodes();
     });
   }
@@ -3329,6 +3341,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final filtered = _applyFiltersToList(_allTorrents, metadataMap: _torrentMetadata);
     setState(() {
       _torrents = filtered;
+      if (_isSelectionMode) {
+        final visible = filtered.map((t) => t.infohash).toSet();
+        _selectedInfohashes.retainWhere(visible.contains);
+      }
       _ensureFocusNodes();
     });
   }
@@ -3570,6 +3586,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         filtersOverride: result,
         metadataMap: _torrentMetadata,
       );
+      if (_isSelectionMode) {
+        final visible = _torrents.map((t) => t.infohash).toSet();
+        _selectedInfohashes.retainWhere(visible.contains);
+      }
       _ensureFocusNodes();
     });
   }
@@ -3579,6 +3599,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _filters = const TorrentFilterState.empty();
       _torrents = List<Torrent>.from(_allTorrents);
+      if (_isSelectionMode) {
+        final visible = _torrents.map((t) => t.infohash).toSet();
+        _selectedInfohashes.retainWhere(visible.contains);
+      }
       _ensureFocusNodes();
     });
   }
@@ -3914,6 +3938,162 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  void _enterSelectionMode() {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedInfohashes.clear();
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedInfohashes.clear();
+    });
+  }
+
+  void _toggleTorrentSelection(Torrent torrent) {
+    setState(() {
+      if (_selectedInfohashes.contains(torrent.infohash)) {
+        _selectedInfohashes.remove(torrent.infohash);
+      } else {
+        _selectedInfohashes.add(torrent.infohash);
+      }
+    });
+  }
+
+  void _selectAllTorrents() {
+    setState(() {
+      _selectedInfohashes
+        ..clear()
+        ..addAll(
+          _torrents
+              .where((t) => !t.isDirectStream && !t.isExternalStream)
+              .map((t) => t.infohash),
+        );
+    });
+  }
+
+  void _deselectAllTorrents() {
+    setState(() {
+      _selectedInfohashes.clear();
+    });
+  }
+
+  Widget _buildSelectionModeBar() {
+    final count = _selectedInfohashes.length;
+    final selectableCount = _torrents
+        .where((t) => !t.isDirectStream && !t.isExternalStream)
+        .length;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: 12 + bottomPadding,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF0088CC).withValues(alpha: 0.4),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Close button
+            GestureDetector(
+              onTap: _exitSelectionMode,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Selected count
+            Text(
+              '$count selected',
+              style: TextStyle(
+                color: count > 0 ? const Color(0xFF0088CC) : Colors.white54,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            const Spacer(),
+            // Select All / None
+            GestureDetector(
+              onTap: count == selectableCount ? _deselectAllTorrents : _selectAllTorrents,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  count == selectableCount ? 'None' : 'All',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Add button
+            GestureDetector(
+              onTap: count > 0 ? _showBulkAddDialog : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: count > 0
+                      ? const Color(0xFF0088CC)
+                      : const Color(0xFF0088CC).withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.playlist_add_rounded,
+                      color: count > 0 ? Colors.white : Colors.white38,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Add',
+                      style: TextStyle(
+                        color: count > 0 ? Colors.white : Colors.white38,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Show bulk add provider selection dialog
   Future<void> _showBulkAddDialog() async {
     final List<Widget> options = [];
@@ -3991,7 +4171,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add all ${_torrents.length} torrents to:',
+              _isSelectionMode
+                  ? 'Add ${_selectedInfohashes.length} selected torrents to:'
+                  : 'Add all ${_torrents.length} torrents to:',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.7),
                 fontSize: 14,
@@ -4009,16 +4191,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
-  /// Bulk add all torrents to PikPak with batching and progress tracking
+  /// Bulk add torrents to PikPak with batching and progress tracking
   Future<void> _bulkAddToPikPak() async {
-    if (_torrents.isEmpty) return;
+    final torrentsToAdd = _isSelectionMode
+        ? _torrents.where((t) => _selectedInfohashes.contains(t.infohash)).toList()
+        : List<Torrent>.from(_torrents);
+
+    if (torrentsToAdd.isEmpty) return;
 
     setState(() {
       _isBulkAdding = true;
     });
 
     final pikpak = PikPakApiService.instance;
-    final totalTorrents = _torrents.length;
+    final totalTorrents = torrentsToAdd.length;
     int successCount = 0;
     int failureCount = 0;
     int currentIndex = 0;
@@ -4026,7 +4212,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Track status of each torrent
     final Map<String, String> torrentStatus = {};
-    for (final torrent in _torrents) {
+    for (final torrent in torrentsToAdd) {
       torrentStatus[torrent.infohash] = 'pending';
     }
 
@@ -4171,9 +4357,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         child: ListView.builder(
                           // shrinkWrap removed - parent has maxHeight constraint
                           padding: EdgeInsets.zero,
-                          itemCount: _torrents.length,
+                          itemCount: torrentsToAdd.length,
                           itemBuilder: (context, index) {
-                            final torrent = _torrents[index];
+                            final torrent = torrentsToAdd[index];
                             final status = torrentStatus[torrent.infohash] ?? 'pending';
 
                             IconData icon;
@@ -4237,9 +4423,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Process torrents in batches of 3 concurrent requests
       const batchSize = 3;
 
-      for (int i = 0; i < _torrents.length && !cancelled; i += batchSize) {
-        final batchEnd = (i + batchSize).clamp(0, _torrents.length);
-        final batch = _torrents.sublist(i, batchEnd);
+      for (int i = 0; i < torrentsToAdd.length && !cancelled; i += batchSize) {
+        final batchEnd = (i + batchSize).clamp(0, torrentsToAdd.length);
+        final batch = torrentsToAdd.sublist(i, batchEnd);
 
         // Process batch concurrently
         await Future.wait(
@@ -4286,7 +4472,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
 
         // Small delay between batches to avoid overwhelming the API
-        if (i + batchSize < _torrents.length && !cancelled) {
+        if (i + batchSize < torrentsToAdd.length && !cancelled) {
           await Future.delayed(const Duration(milliseconds: 500));
         }
       }
@@ -4329,6 +4515,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         setState(() {
           _isBulkAdding = false;
         });
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
       }
     }
   }
@@ -11379,52 +11568,54 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
         ),
-        // Bulk Add Button (only show if PikPak is logged in and enabled)
+        // Bulk Add Button or Selection Mode Bar
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && _pikpakEnabled)
-          Positioned(
-            left: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
-            child: GestureDetector(
-              onTap: _showBulkAddDialog,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF0088CC).withValues(alpha: 0.5),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.playlist_add_rounded,
-                      color: const Color(0xFF0088CC),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Bulk',
-                      style: TextStyle(
-                        color: Color(0xFF0088CC),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
+          _isSelectionMode
+              ? _buildSelectionModeBar()
+              : Positioned(
+                  left: 16,
+                  bottom: 16 + MediaQuery.of(context).padding.bottom,
+                  child: GestureDetector(
+                    onTap: _enterSelectionMode,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF0088CC).withValues(alpha: 0.5),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.playlist_add_rounded,
+                            color: const Color(0xFF0088CC),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Bulk',
+                            style: TextStyle(
+                              color: Color(0xFF0088CC),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
       ],
       ),
     );
@@ -11619,7 +11810,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         : FocusNode();
 
     return TorrentResultRow(
-      key: ValueKey(torrent.infohash),
+      key: ValueKey('${torrent.infohash}_${_isSelectionMode}_${_selectedInfohashes.contains(torrent.infohash)}'),
       torrent: torrent,
       index: index,
       focusNode: focusNode,
@@ -11628,15 +11819,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       isCached: _torboxResultIsCached(torrent.infohash),
       // Only show cache badge if we actually checked cache status (not just assuming cached)
       cacheService: (_torboxCacheCheckEnabled && _torboxCacheStatus != null && _torboxResultIsCached(torrent.infohash)) ? 'torbox' : null,
+      isSelectionMode: _isSelectionMode,
+      isSelected: _selectedInfohashes.contains(torrent.infohash),
       onTap: () {
+        if (_isSelectionMode) {
+          _toggleTorrentSelection(torrent);
+          return;
+        }
         debugPrint('[TorrentResultRow $index] onTap triggered');
         if (DialogTapGuard.shouldIgnoreTap()) return;
         _handleTorrentCardActivated(torrent, index);
       },
-      // Long press shows provider selection dialog (useful when default is set)
-      onLongPress: _multipleServicesEnabled
-          ? () => _showServiceSelectionDialog(torrent, index)
-          : null,
+      // In selection mode, long press also toggles selection
+      onLongPress: _isSelectionMode
+          ? () => _toggleTorrentSelection(torrent)
+          : _multipleServicesEnabled
+              ? () => _showServiceSelectionDialog(torrent, index)
+              : null,
       onNavigateUp: index == 0
           ? () {
               // Navigate to first header control: back button > direct dropdown > torrent dropdown > sort dropdown
