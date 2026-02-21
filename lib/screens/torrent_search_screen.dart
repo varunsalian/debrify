@@ -3987,9 +3987,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         .length;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
+    // Right inset to avoid overlap with MobileFloatingNav FAB on mobile
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final rightInset = isNarrow ? 108.0 : 12.0;
+
     return Positioned(
       left: 12,
-      right: 12,
+      right: rightInset,
       bottom: 12 + bottomPadding,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -4027,15 +4031,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             const SizedBox(width: 10),
             // Selected count
-            Text(
-              '$count selected',
-              style: TextStyle(
-                color: count > 0 ? const Color(0xFF0088CC) : Colors.white54,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            Flexible(
+              child: Text(
+                '$count selected',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: count > 0 ? const Color(0xFF0088CC) : Colors.white54,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             // Select All / None
             GestureDetector(
               onTap: count == selectableCount ? _deselectAllTorrents : _selectAllTorrents,
@@ -4098,16 +4105,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _showBulkAddDialog() async {
     final List<Widget> options = [];
 
-    // Add Torbox option (greyed out/disabled)
-    options.add(
-      ListTile(
-        leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
-        title: const Text('TorBox', style: TextStyle(color: Colors.white)),
-        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
-        enabled: false,
-        onTap: null,
-      ),
-    );
+    // Add Torbox option
+    if (_torboxIntegrationEnabled && _torboxApiKey != null) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+          title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Limit: 60 adds per hour', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          onTap: () => Navigator.of(context).pop('torbox'),
+        ),
+      );
+    } else {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.flash_on_rounded, color: Color(0xFF7C3AED)),
+          title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          enabled: false,
+          onTap: null,
+        ),
+      );
+    }
 
     // Add Real-Debrid option (greyed out/disabled)
     options.add(
@@ -4188,6 +4206,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     if (result == 'pikpak') {
       _bulkAddToPikPak();
+    } else if (result == 'torbox') {
+      _bulkAddToTorbox();
     }
   }
 
@@ -4509,6 +4529,371 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
 
         _showPikPakSnack('Bulk add failed: ${e.toString()}', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
+      }
+    }
+  }
+
+  /// Bulk add torrents to TorBox with cache check
+  Future<void> _bulkAddToTorbox() async {
+    final torrentsToAdd = _isSelectionMode
+        ? _torrents.where((t) => _selectedInfohashes.contains(t.infohash)).toList()
+        : List<Torrent>.from(_torrents);
+
+    if (torrentsToAdd.isEmpty) return;
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    int successCount = 0;
+    int failureCount = 0;
+    int skippedCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    // Track status of each torrent
+    final Map<String, String> torrentStatus = {};
+    for (final torrent in torrentsToAdd) {
+      torrentStatus[torrent.infohash] = 'pending';
+    }
+
+    try {
+      // Phase 1: Cache check
+      final allHashes = torrentsToAdd.map((t) => t.infohash).toList();
+      final cachedHashes = await TorboxService.checkCachedTorrents(
+        apiKey: _torboxApiKey!,
+        infoHashes: allHashes,
+      );
+
+      final cachedTorrents = torrentsToAdd.where((t) => cachedHashes.contains(t.infohash.toLowerCase())).toList();
+      final uncachedTorrents = torrentsToAdd.where((t) => !cachedHashes.contains(t.infohash.toLowerCase())).toList();
+
+      // Pre-mark uncached torrents
+      for (final torrent in uncachedTorrents) {
+        torrentStatus[torrent.infohash] = 'not_cached';
+      }
+      skippedCount = uncachedTorrents.length;
+
+      if (!mounted) return;
+
+      final totalCached = cachedTorrents.length;
+
+      // Capture the dialog state setter for use in async operations
+      StateSetter? dialogSetState;
+
+      // Phase 2: Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              dialogSetState = setDialogState;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.cloud_upload, color: Color(0xFF7C3AED), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to TorBox',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalCached > 0 ? currentIndex / totalCached : 1.0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF7C3AED)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalCached',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Success: $successCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.error, color: Color(0xFFEF4444), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Failed: $failureCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.block, color: Color(0xFFF59E0B), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Skipped: $skippedCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFF59E0B),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: torrentsToAdd.length,
+                          itemBuilder: (context, index) {
+                            final torrent = torrentsToAdd[index];
+                            final status = torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+                            String? subtitle;
+
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'not_cached') {
+                              icon = Icons.cancel;
+                              iconColor = const Color(0xFFEF4444);
+                              subtitle = 'Not cached';
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFF7C3AED);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          torrent.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.7),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (subtitle != null)
+                                          Text(
+                                            subtitle,
+                                            style: TextStyle(
+                                              color: iconColor.withValues(alpha: 0.7),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Process cached torrents one at a time to avoid rate limits (60/hr)
+      bool rateLimited = false;
+
+      for (final torrent in cachedTorrents) {
+        if (cancelled || rateLimited) break;
+
+        try {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'processing';
+              currentIndex++;
+            });
+          }
+
+          final magnet = 'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+
+          await TorboxService.createTorrent(
+            apiKey: _torboxApiKey!,
+            magnet: magnet,
+            addOnlyIfCached: true,
+          );
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'success';
+              successCount++;
+            });
+          }
+
+          print('TorBox Bulk: Successfully added ${torrent.name}');
+        } catch (e) {
+          final isRateLimit = e.toString().toLowerCase().contains('rate limit');
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'error';
+              failureCount++;
+            });
+          }
+
+          if (isRateLimit) {
+            rateLimited = true;
+            // Mark remaining unprocessed torrents as error
+            if (mounted) {
+              dialogSetState?.call(() {
+                for (final t in cachedTorrents) {
+                  if (torrentStatus[t.infohash] == 'pending') {
+                    torrentStatus[t.infohash] = 'error';
+                    failureCount++;
+                    currentIndex++;
+                  }
+                }
+              });
+            }
+          }
+
+          print('TorBox Bulk: Failed to add ${torrent.name}: $e');
+        }
+
+        // Small delay between requests
+        if (!cancelled && !rateLimited) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show summary
+      if (!cancelled && mounted) {
+        final parts = <String>[];
+        if (successCount > 0) parts.add('Added $successCount');
+        if (skippedCount > 0) parts.add('$skippedCount not cached');
+        if (failureCount > 0) parts.add('$failureCount failed');
+        if (rateLimited) parts.add('Rate limited (60/hr)');
+        final message = parts.join(', ');
+
+        if (failureCount > 0 || (successCount == 0 && skippedCount > 0)) {
+          _showTorboxSnack(message.isEmpty ? 'No torrents added to TorBox' : message, isError: true);
+        } else {
+          _showTorboxSnack(message.isEmpty ? 'No torrents to add' : message);
+        }
+      }
+    } catch (e) {
+      print('Error in bulk add to TorBox: $e');
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showTorboxSnack('Bulk add failed: ${e.toString()}', isError: true);
       }
     } finally {
       if (mounted) {
@@ -11569,7 +11954,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
         ),
         // Bulk Add Button or Selection Mode Bar
-        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && _pikpakEnabled)
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && (_pikpakEnabled || (_torboxIntegrationEnabled && _torboxApiKey != null)))
           _isSelectionMode
               ? _buildSelectionModeBar()
               : Positioned(
