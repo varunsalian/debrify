@@ -40,6 +40,7 @@ import '../widgets/search_loading_animation.dart';
 import '../widgets/channel_picker_dialog.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/debrify_tv_channel_record.dart';
+import '../services/community/magnet_yaml_service.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
 import '../widgets/torrent_filters_sheet.dart';
@@ -5534,15 +5535,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         rethrow;
       }
 
+      // Generate debrify link and copy to clipboard
+      final yamlBuffer = StringBuffer();
+      yamlBuffer.writeln('channel_name: "${channelName.replaceAll('"', '\\"')}"');
+      yamlBuffer.writeln('avoid_nsfw: true');
+      yamlBuffer.writeln('');
+      yamlBuffer.writeln('keywords:');
+      yamlBuffer.writeln('  $channelName:');
+      if (cachedTorrents.isEmpty) {
+        yamlBuffer.writeln('    torrents: []');
+      } else {
+        yamlBuffer.writeln('    torrents:');
+        for (final t in cachedTorrents) {
+          yamlBuffer.writeln('      - infohash: ${t.infohash}');
+          yamlBuffer.writeln('        name: "${t.name.replaceAll('"', '\\"').replaceAll('\n', ' ')}"');
+          yamlBuffer.writeln('        size_bytes: ${t.sizeBytes}');
+          yamlBuffer.writeln('        created_unix: ${t.createdUnix}');
+          yamlBuffer.writeln('        seeders: ${t.seeders}');
+          yamlBuffer.writeln('        leechers: ${t.leechers}');
+          yamlBuffer.writeln('        completed: ${t.completed}');
+          yamlBuffer.writeln('        scraped_date: ${t.scrapedDate}');
+          if (t.sources.isNotEmpty) {
+            yamlBuffer.writeln('        sources: [${t.sources.map((s) => '"$s"').join(', ')}]');
+          }
+        }
+      }
+
+      try {
+        final debrifyLink = MagnetYamlService.encode(
+          yamlContent: yamlBuffer.toString(),
+          channelName: channelName,
+        );
+        await Clipboard.setData(ClipboardData(text: debrifyLink));
+      } catch (_) {
+        // Clipboard copy is best-effort — channel is already saved
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Channel "$channelName" created with ${cachedTorrents.length} torrents'),
+            content: Text('Channel "$channelName" created with ${cachedTorrents.length} torrents. Debrify link copied to clipboard.'),
             backgroundColor: const Color(0xFF14B8A6),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
           ),
         );
 
