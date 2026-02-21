@@ -4127,16 +4127,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
 
-    // Add Real-Debrid option (greyed out/disabled)
-    options.add(
-      ListTile(
-        leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
-        title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
-        subtitle: const Text('Coming soon', style: TextStyle(color: Colors.white54, fontSize: 12)),
-        enabled: false,
-        onTap: null,
-      ),
-    );
+    // Add Real-Debrid option
+    if (_realDebridIntegrationEnabled && _apiKey != null) {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Uncached torrents auto-removed', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          onTap: () => Navigator.of(context).pop('realdebrid'),
+        ),
+      );
+    } else {
+      options.add(
+        ListTile(
+          leading: const Icon(Icons.cloud_rounded, color: Color(0xFFE50914)),
+          title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Not configured', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          enabled: false,
+          onTap: null,
+        ),
+      );
+    }
 
     // Add PikPak option (enabled if configured)
     if (_pikpakEnabled) {
@@ -4208,6 +4219,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _bulkAddToPikPak();
     } else if (result == 'torbox') {
       _bulkAddToTorbox();
+    } else if (result == 'realdebrid') {
+      _bulkAddToRealDebrid();
     }
   }
 
@@ -4834,7 +4847,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
           print('TorBox Bulk: Successfully added ${torrent.name}');
         } catch (e) {
-          final isRateLimit = e.toString().toLowerCase().contains('rate limit');
+          final errLower = e.toString().toLowerCase();
+          final isRateLimit = errLower.contains('rate limit') || errLower.contains('too many requests');
 
           if (mounted) {
             dialogSetState?.call(() {
@@ -4868,8 +4882,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
 
-      // Close progress dialog
-      if (mounted) {
+      // Close progress dialog (guard against double-pop if user cancelled)
+      if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
 
@@ -4891,9 +4905,361 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } catch (e) {
       print('Error in bulk add to TorBox: $e');
 
-      if (mounted) {
+      if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
         _showTorboxSnack('Bulk add failed: ${e.toString()}', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
+      }
+    }
+  }
+
+  /// Bulk add torrents to Real-Debrid with smart mode (uncached auto-deleted)
+  Future<void> _bulkAddToRealDebrid() async {
+    final torrentsToAdd = _isSelectionMode
+        ? _torrents.where((t) => _selectedInfohashes.contains(t.infohash)).toList()
+        : List<Torrent>.from(_torrents);
+
+    if (torrentsToAdd.isEmpty) return;
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    final totalTorrents = torrentsToAdd.length;
+    int successCount = 0;
+    int failureCount = 0;
+    int skippedCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    // Track status of each torrent
+    final Map<String, String> torrentStatus = {};
+    for (final torrent in torrentsToAdd) {
+      torrentStatus[torrent.infohash] = 'pending';
+    }
+
+    try {
+      if (!mounted) return;
+
+      StateSetter? dialogSetState;
+
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              dialogSetState = setDialogState;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE50914).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.cloud_upload, color: Color(0xFFE50914), size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to Real-Debrid',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalTorrents > 0 ? currentIndex / totalTorrents : 0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE50914)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalTorrents',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Success: $successCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.error, color: Color(0xFFEF4444), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Failed: $failureCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.block, color: Color(0xFFF59E0B), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Not cached: $skippedCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFF59E0B),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: torrentsToAdd.length,
+                          itemBuilder: (context, index) {
+                            final torrent = torrentsToAdd[index];
+                            final status = torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+                            String? subtitle;
+
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'not_cached') {
+                              icon = Icons.cancel;
+                              iconColor = const Color(0xFFF59E0B);
+                              subtitle = 'Not cached — removed';
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFFE50914);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          torrent.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.7),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (subtitle != null)
+                                          Text(
+                                            subtitle,
+                                            style: TextStyle(
+                                              color: iconColor.withValues(alpha: 0.7),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Process torrents one at a time (RD has no cache check API)
+      for (final torrent in torrentsToAdd) {
+        if (cancelled) break;
+
+        try {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'processing';
+              currentIndex++;
+            });
+          }
+
+          final magnetLink = 'magnet:?xt=urn:btih:${torrent.infohash}';
+
+          await DebridService.addTorrentToDebrid(_apiKey!, magnetLink);
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'success';
+              successCount++;
+            });
+          }
+
+          print('RD Bulk: Successfully added ${torrent.name}');
+        } on TorrentNotCachedException catch (e) {
+          // Not cached — delete the torrent from RD
+          try {
+            await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+          } catch (_) {}
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'not_cached';
+              skippedCount++;
+            });
+          }
+
+          print('RD Bulk: Not cached, removed ${torrent.name}');
+        } catch (e) {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'error';
+              failureCount++;
+            });
+          }
+
+          print('RD Bulk: Failed to add ${torrent.name}: $e');
+        }
+
+        // Small delay between requests
+        if (!cancelled) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
+
+      // Close progress dialog (guard against double-pop if user cancelled)
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      // Show summary
+      if (!cancelled && mounted) {
+        final parts = <String>[];
+        if (successCount > 0) parts.add('Added $successCount');
+        if (skippedCount > 0) parts.add('$skippedCount not cached');
+        if (failureCount > 0) parts.add('$failureCount failed');
+        final message = parts.join(', ');
+        final isError = failureCount > 0 || (successCount == 0 && skippedCount > 0);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message.isEmpty ? 'No torrents added' : message),
+              backgroundColor: isError ? const Color(0xFFEF4444) : const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error in bulk add to Real-Debrid: $e');
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bulk add failed: ${_formatRealDebridError(e)}'),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -11954,7 +12320,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
         ),
         // Bulk Add Button or Selection Mode Bar
-        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && (_pikpakEnabled || (_torboxIntegrationEnabled && _torboxApiKey != null)))
+        if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision && (_pikpakEnabled || (_torboxIntegrationEnabled && _torboxApiKey != null) || (_realDebridIntegrationEnabled && _apiKey != null)))
           _isSelectionMode
               ? _buildSelectionModeBar()
               : Positioned(
