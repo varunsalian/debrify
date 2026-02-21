@@ -36,6 +36,8 @@ class Controls extends StatelessWidget {
   final bool hideOptions;
   final bool hideBackButton;
   final VoidCallback onRandom;
+  final bool hasIptvChannels;
+  final VoidCallback? onShowIptvChannels;
 
   const Controls({
     Key? key,
@@ -72,6 +74,8 @@ class Controls extends StatelessWidget {
     required this.hideOptions,
     required this.hideBackButton,
     required this.onRandom,
+    this.hasIptvChannels = false,
+    this.onShowIptvChannels,
   }) : super(key: key);
 
   String _getAspectRatioName() {
@@ -358,6 +362,15 @@ class Controls extends StatelessWidget {
                                 icon: Icons.grid_view_rounded,
                                 label: 'Guide',
                                 onPressed: onShowGuide!,
+                                isCompact: true,
+                              ),
+
+                            // IPTV Channels button
+                            if (hasIptvChannels && onShowIptvChannels != null)
+                              NetflixControlButton(
+                                icon: Icons.live_tv_rounded,
+                                label: 'Channels',
+                                onPressed: onShowIptvChannels!,
                                 isCompact: true,
                               ),
 

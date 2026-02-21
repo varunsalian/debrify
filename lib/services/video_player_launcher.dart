@@ -8,6 +8,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/iptv_playlist.dart';
 import '../models/movie_collection.dart';
 import '../services/external_player_service.dart';
 import '../utils/deovr_utils.dart' as deovr;
@@ -174,6 +175,9 @@ class VideoPlayerLaunchArgs {
   final String? contentType; // 'movie' or 'series'
   final int? contentSeason;
   final int? contentEpisode;
+  // IPTV channel list for in-player channel switching
+  final List<IptvChannel>? iptvChannels;
+  final int? iptvStartIndex;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -203,6 +207,8 @@ class VideoPlayerLaunchArgs {
     this.contentType,
     this.contentSeason,
     this.contentEpisode,
+    this.iptvChannels,
+    this.iptvStartIndex,
   });
 
   VideoPlayerScreen toWidget() {
@@ -233,6 +239,8 @@ class VideoPlayerLaunchArgs {
       contentType: contentType,
       contentSeason: contentSeason,
       contentEpisode: contentEpisode,
+      iptvChannels: iptvChannels,
+      iptvStartIndex: iptvStartIndex,
     );
   }
 }
@@ -723,6 +731,11 @@ class VideoPlayerLauncher {
   }
 
   static Future<bool> _launchOnAndroidTv(VideoPlayerLaunchArgs args) async {
+    // Route IPTV playlists to dedicated IPTV launcher
+    if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
+      return _launchIptvOnAndroidTv(args);
+    }
+
     try {
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
@@ -793,6 +806,49 @@ class VideoPlayerLauncher {
       return true;
     } catch (e) {
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
+      return false;
+    }
+  }
+
+  /// Launch IPTV playlist on Android TV using existing launchTorrentPlayback bridge
+  static Future<bool> _launchIptvOnAndroidTv(VideoPlayerLaunchArgs args) async {
+    try {
+      final channels = args.iptvChannels!;
+      final startIndex = args.iptvStartIndex ?? 0;
+
+      // Build unique categories from channel groups
+      final categorySet = <String>{};
+      for (final c in channels) {
+        if (c.group != null && c.group!.isNotEmpty) {
+          categorySet.add(c.group!);
+        }
+      }
+      final categories = categorySet.toList()..sort();
+
+      final payload = <String, dynamic>{
+        'mode': 'iptv',
+        'initialUrl': args.videoUrl,
+        'title': args.title,
+        'subtitle': args.subtitle ?? 'IPTV',
+        'startIndex': startIndex,
+        'channels': channels.map((c) => c.toJson()).toList(),
+        'categories': categories,
+      };
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
+
+      final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
+        payload: payload,
+        onProgress: (_) async {},
+        onFinished: () async {
+          debugPrint('VideoPlayerLauncher: IPTV Android TV playback finished');
+        },
+      );
+
+      return launched;
+    } catch (e) {
+      debugPrint('VideoPlayerLauncher: IPTV Android TV launch failed: $e');
       return false;
     }
   }

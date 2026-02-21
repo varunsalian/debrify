@@ -226,6 +226,9 @@
         </LinearLayout>
     </FrameLayout>
 
+    <!-- IPTV Channel Guide Overlay -->
+    <include layout="@layout/view_iptv_channel_guide" />
+
     <!-- Loading/Tuning Stream Overlay -->
     <FrameLayout
         android:id="@+id/android_tv_next_overlay"

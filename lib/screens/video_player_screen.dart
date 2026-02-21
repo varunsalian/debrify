@@ -17,6 +17,7 @@ import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
+import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
@@ -52,6 +53,7 @@ import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
+import 'video_player/widgets/iptv_channel_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
@@ -120,6 +122,9 @@ class VideoPlayerScreen extends StatefulWidget {
   final String? contentType; // 'movie' or 'series'
   final int? contentSeason;
   final int? contentEpisode;
+  // IPTV channel list for in-player channel switching
+  final List<IptvChannel>? iptvChannels;
+  final int? iptvStartIndex;
 
   const VideoPlayerScreen({
     Key? key,
@@ -152,6 +157,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentType,
     this.contentSeason,
     this.contentEpisode,
+    this.iptvChannels,
+    this.iptvStartIndex,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -286,6 +293,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showChannelGuide = false;
   List<ChannelEntry> _channelEntries = [];
 
+  // IPTV channel sheet state
+  bool _showIptvChannelSheet = false;
+  int _currentIptvIndex = 0;
+
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
 
@@ -409,6 +420,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _currentChannelName = widget.channelName;
     }
     _currentChannelNumber = widget.channelNumber;
+    _currentIptvIndex = widget.iptvStartIndex ?? 0;
     _parseChannelDirectory();
     _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
@@ -1298,6 +1310,71 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _hideChannelGuideOverlay() {
     setState(() {
       _showChannelGuide = false;
+    });
+  }
+
+  /// Show IPTV channel sheet overlay
+  void _showIptvChannelSheetOverlay() {
+    final channels = widget.iptvChannels;
+    if (channels == null || channels.isEmpty) return;
+    setState(() {
+      _showIptvChannelSheet = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  /// Hide IPTV channel sheet overlay
+  void _hideIptvChannelSheet() {
+    setState(() {
+      _showIptvChannelSheet = false;
+    });
+  }
+
+  /// Switch to IPTV channel at given index
+  Future<void> _switchToIptvChannel(int index) async {
+    final channels = widget.iptvChannels;
+    if (channels == null || index < 0 || index >= channels.length) return;
+
+    _hideIptvChannelSheet();
+
+    final channel = channels[index];
+    _clearBufferingIndicator();
+    setState(() {
+      _isTransitioning = true;
+      _currentIptvIndex = index;
+    });
+    _startTransitionOverlay();
+
+    try {
+      await _player.pause();
+    } catch (_) {}
+
+    try {
+      await _player.open(mk.Media(channel.url), play: true);
+    } catch (e) {
+      debugPrint('Player: IPTV channel switch failed: $e');
+    }
+
+    if (!mounted) return;
+
+    // Directly trigger transition overlay cleanup sequence.
+    // Unlike debrid channel switching (where _playSub listener handles
+    // the transition phases after 'playing' fires), IPTV URLs are already
+    // resolved so we skip phase 1 and go straight to the reveal phase.
+    // This prevents the overlay from getting stuck if the playing event
+    // doesn't fire reliably for HLS/live streams.
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _transitionPhase = 2;
+    _transitionPhase2Started = DateTime.now();
+    setState(() {
+      _isTransitioning = false;
+    });
+    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
+      _rainbowController.stop();
+      _transitionRunning = false;
+      _rainbowActive = false;
+      if (mounted) setState(() {});
     });
   }
 
@@ -3209,6 +3286,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.ignored;
             }
 
+            // IPTV channel sheet is open - handle its keys first
+            if (_showIptvChannelSheet) {
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _hideIptvChannelSheet();
+                return KeyEventResult.handled;
+              }
+              // Let IPTV channel sheet handle other keys
+              return KeyEventResult.ignored;
+            }
+
             // A -> Aspect ratio
             if (key == LogicalKeyboardKey.keyA) {
               _cycleAspectMode();
@@ -3219,6 +3307,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (key == LogicalKeyboardKey.keyG) {
               if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
                 _showChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
+            }
+
+            // C -> IPTV channel sheet
+            if (key == LogicalKeyboardKey.keyC) {
+              if (widget.iptvChannels != null && widget.iptvChannels!.isNotEmpty) {
+                _showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -3586,6 +3682,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           hideOptions: widget.hideOptions,
                           hideBackButton: widget.hideBackButton,
                           onRandom: _playRandom,
+                          hasIptvChannels: widget.iptvChannels != null &&
+                              widget.iptvChannels!.isNotEmpty,
+                          onShowIptvChannels: widget.iptvChannels != null &&
+                                  widget.iptvChannels!.isNotEmpty
+                              ? _showIptvChannelSheetOverlay
+                              : null,
                         ),
                       ),
                     );
@@ -3637,6 +3739,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     currentChannelNumber: _currentChannelNumber,
                     onChannelSelected: _goToChannelById,
                     onClose: _hideChannelGuideOverlay,
+                  ),
+                ),
+              // IPTV channel sheet overlay
+              if (_showIptvChannelSheet &&
+                  widget.iptvChannels != null &&
+                  widget.iptvChannels!.isNotEmpty)
+                Positioned.fill(
+                  child: IptvChannelSheet(
+                    channels: widget.iptvChannels!,
+                    currentIndex: _currentIptvIndex,
+                    onChannelSelected: _switchToIptvChannel,
+                    onClose: _hideIptvChannelSheet,
                   ),
                 ),
             ],

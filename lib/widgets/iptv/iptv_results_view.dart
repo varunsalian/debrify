@@ -275,6 +275,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
   }
 
   Future<void> _playChannel(IptvChannel channel) async {
+    final channelIndex = _allChannels.indexOf(channel);
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -282,6 +283,8 @@ class IptvResultsViewState extends State<IptvResultsView> {
         title: channel.name,
         subtitle: channel.group ?? 'IPTV',
         viewMode: PlaylistViewMode.sorted,
+        iptvChannels: _allChannels,
+        iptvStartIndex: channelIndex >= 0 ? channelIndex : 0,
       ),
     );
   }

@@ -90,6 +90,15 @@ class IptvChannel {
   /// Get tvg-name attribute if present
   String? get tvgName => attributes['tvg-name'];
 
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'url': url,
+    if (logoUrl != null) 'logoUrl': logoUrl,
+    if (group != null) 'group': group,
+    if (duration != null) 'duration': duration,
+    if (contentType != null) 'contentType': contentType,
+  };
+
   @override
   String toString() => 'IptvChannel(name: $name, group: $group, url: $url)';
 }
