@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../models/iptv_playlist.dart';
 
 /// Premium IPTV channel sheet overlay for the video player.
-/// Full-height right panel with frosted glass, category grid, search, and channel list.
+/// Full-height right panel with frosted glass, search, and channel list.
 class IptvChannelSheet extends StatefulWidget {
   final List<IptvChannel> channels;
   final int currentIndex;
@@ -25,7 +25,7 @@ class IptvChannelSheet extends StatefulWidget {
   State<IptvChannelSheet> createState() => _IptvChannelSheetState();
 }
 
-enum _FocusZone { search, categories, channels }
+enum _FocusZone { search, channels }
 
 class _IptvChannelSheetState extends State<IptvChannelSheet>
     with TickerProviderStateMixin {
@@ -33,8 +33,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _keyboardFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  final ScrollController _categoryScrollController = ScrollController();
-
   late AnimationController _animController;
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
@@ -43,13 +41,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   late Animation<double> _pulseAnim;
 
   List<IptvChannel> _filteredChannels = [];
-  List<String> _categories = [];
-  Map<String, int> _categoryCounts = {};
-  String? _selectedCategory;
   int _focusedIndex = 0;
-  int _focusedCategoryIndex = 0;
   _FocusZone _focusZone = _FocusZone.channels;
-  bool _categoryExpanded = false;
 
   // Design tokens
   static const _accent = Color(0xFF00E5FF);
@@ -59,16 +52,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   @override
   void initState() {
     super.initState();
-
-    // Build categories with counts
-    final catMap = <String, int>{};
-    for (final c in widget.channels) {
-      if (c.group != null && c.group!.isNotEmpty) {
-        catMap[c.group!] = (catMap[c.group!] ?? 0) + 1;
-      }
-    }
-    _categories = catMap.keys.toList()..sort();
-    _categoryCounts = catMap;
 
     _filteredChannels = List.from(widget.channels);
 
@@ -120,7 +103,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _searchFocusNode.dispose();
     _keyboardFocusNode.dispose();
     _scrollController.dispose();
-    _categoryScrollController.dispose();
     _animController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -132,12 +114,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredChannels = widget.channels.where((c) {
-        final matchCat =
-            _selectedCategory == null || c.group == _selectedCategory;
-        final matchQ = query.isEmpty ||
+        return query.isEmpty ||
             c.name.toLowerCase().contains(query) ||
             (c.group != null && c.group!.toLowerCase().contains(query));
-        return matchCat && matchQ;
       }).toList();
 
       final cur = (widget.currentIndex >= 0 &&
@@ -156,23 +135,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     });
   }
 
-  void _selectCategory(int chipIndex) {
-    setState(() {
-      _focusedCategoryIndex = chipIndex;
-      _selectedCategory = chipIndex == 0 ? null : _categories[chipIndex - 1];
-    });
-    _applyFilters();
-    _scrollCategoryIntoView(chipIndex);
-  }
-
-  List<String> get _filteredCategories {
-    final query = _searchController.text.toLowerCase();
-    if (query.isEmpty) return _categories;
-    return _categories
-        .where((c) => c.toLowerCase().contains(query))
-        .toList();
-  }
-
   // ─── Scrolling ───────────────────────────────────────────────────────
 
   void _scrollToFocused() {
@@ -185,22 +147,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       _scrollController.animateTo(
         (target - vp / 2 + h / 2)
             .clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
-  void _scrollCategoryIntoView(int index) {
-    if (!_categoryScrollController.hasClients) return;
-    const chipWidth = 120.0;
-    final target = index * chipWidth;
-    final vp = _categoryScrollController.position.viewportDimension;
-    final cur = _categoryScrollController.offset;
-    if (target < cur || target > cur + vp - chipWidth) {
-      _categoryScrollController.animateTo(
-        (target - vp / 2 + chipWidth / 2)
-            .clamp(0.0, _categoryScrollController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
       );
@@ -222,9 +168,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       case _FocusZone.search:
         _handleSearchKeys(event);
         break;
-      case _FocusZone.categories:
-        _handleCategoryKeys(event);
-        break;
       case _FocusZone.channels:
         _handleChannelKeys(event);
         break;
@@ -234,34 +177,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
-      setState(() {
-        _focusZone =
-            _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.channels;
-      });
-    }
-  }
-
-  void _handleCategoryKeys(KeyEvent event) {
-    final activeCats = (_categoryExpanded && _searchController.text.isNotEmpty)
-        ? _filteredCategories
-        : _categories;
-    final totalChips = activeCats.length + 1;
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_focusedCategoryIndex > 0) {
-        _selectCategory(_focusedCategoryIndex - 1);
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_focusedCategoryIndex < totalChips - 1) {
-        _selectCategory(_focusedCategoryIndex + 1);
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _searchFocusNode.requestFocus();
-      setState(() => _focusZone = _FocusZone.search);
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       setState(() => _focusZone = _FocusZone.channels);
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
-      _selectCategory(_focusedCategoryIndex);
     }
   }
 
@@ -271,10 +187,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         setState(() => _focusedIndex--);
         _scrollToFocused();
       } else {
-        setState(() {
-          _focusZone =
-              _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.search;
-        });
+        _searchFocusNode.requestFocus();
+        setState(() => _focusZone = _FocusZone.search);
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (_focusedIndex < _filteredChannels.length - 1) {
@@ -352,7 +266,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                         _buildHeader(),
                         _buildNowPlaying(),
                         _buildSearchBar(),
-                        _buildCategorySection(),
                         Expanded(child: _buildChannelList()),
                         const SizedBox(height: 8),
                       ],
@@ -416,9 +329,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  _selectedCategory != null
-                      ? '${_filteredChannels.length} in $_selectedCategory'
-                      : '${_filteredChannels.length} of ${widget.channels.length} channels',
+                  '${_filteredChannels.length} of ${widget.channels.length} channels',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.35),
                     fontSize: 12,
@@ -664,318 +575,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           ),
           onChanged: (_) {
             _applyFilters();
-            setState(() {}); // Refresh category highlights
           },
           textInputAction: TextInputAction.search,
-        ),
-      ),
-    );
-  }
-
-  // ─── Category Section ──────────────────────────────────────────────
-
-  Widget _buildCategorySection() {
-    if (_categories.isEmpty) return const SizedBox.shrink();
-
-    final isActive = _focusZone == _FocusZone.categories;
-    final query = _searchController.text.toLowerCase();
-    final totalChips = _categories.length + 1; // +1 for "All"
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Category header with toggle
-        GestureDetector(
-          onTap: () => setState(() => _categoryExpanded = !_categoryExpanded),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 2, 20, 6),
-            child: Row(
-              children: [
-                Icon(Icons.category_rounded,
-                    color: Colors.white.withOpacity(0.2), size: 13),
-                const SizedBox(width: 6),
-                Text(
-                  'CATEGORIES',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.3),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${_categories.length}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.25),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                AnimatedRotation(
-                  turns: _categoryExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.expand_more_rounded,
-                    color: Colors.white.withOpacity(0.2),
-                    size: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Category chips
-        AnimatedCrossFade(
-          duration: const Duration(milliseconds: 250),
-          crossFadeState: _categoryExpanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          firstChild: _buildCategoryRail(isActive, totalChips, query),
-          secondChild: _buildCategoryGrid(isActive, query),
-        ),
-        // Divider
-        Container(
-          margin: const EdgeInsets.only(top: 6),
-          height: 1,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.transparent,
-                Colors.white.withOpacity(0.06),
-                Colors.transparent,
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCategoryRail(bool isActive, int totalChips, String query) {
-    return SizedBox(
-      height: 40,
-      child: ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.transparent,
-              Colors.white,
-              Colors.white,
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.04, 0.96, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
-        child: ListView.builder(
-          controller: _categoryScrollController,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: totalChips,
-          itemBuilder: (context, index) {
-            final isAll = index == 0;
-            final label = isAll ? 'All' : _categories[index - 1];
-            final count = isAll
-                ? widget.channels.length
-                : (_categoryCounts[label] ?? 0);
-            final isSelected =
-                isAll ? _selectedCategory == null : _selectedCategory == label;
-            final isFocused = isActive && index == _focusedCategoryIndex;
-            final matchesQuery = query.isNotEmpty &&
-                !isAll &&
-                label.toLowerCase().contains(query);
-
-            return Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: GestureDetector(
-                onTap: () => _selectCategory(index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: isSelected
-                        ? LinearGradient(colors: [
-                            _accent.withOpacity(0.2),
-                            _accentAlt.withOpacity(0.1),
-                          ])
-                        : null,
-                    color: isSelected
-                        ? null
-                        : isFocused
-                            ? Colors.white.withOpacity(0.1)
-                            : matchesQuery
-                                ? _accent.withOpacity(0.06)
-                                : Colors.white.withOpacity(0.03),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isFocused
-                          ? _accent.withOpacity(0.6)
-                          : isSelected
-                              ? _accent.withOpacity(0.25)
-                              : matchesQuery
-                                  ? _accent.withOpacity(0.15)
-                                  : Colors.white.withOpacity(0.04),
-                      width: isFocused ? 1.5 : 1,
-                    ),
-                    boxShadow: isFocused
-                        ? [
-                            BoxShadow(
-                                color: _accent.withOpacity(0.12),
-                                blurRadius: 10)
-                          ]
-                        : [],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: isSelected
-                              ? _accent
-                              : isFocused
-                                  ? Colors.white.withOpacity(0.9)
-                                  : matchesQuery
-                                      ? _accent.withOpacity(0.7)
-                                      : Colors.white.withOpacity(0.45),
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '$count',
-                        style: TextStyle(
-                          color: isSelected
-                              ? _accent.withOpacity(0.5)
-                              : Colors.white.withOpacity(0.18),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryGrid(bool isActive, String query) {
-    final cats = query.isNotEmpty ? _filteredCategories : _categories;
-
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: SingleChildScrollView(
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            // All chip
-            _buildGridChip(
-              label: 'All',
-              count: widget.channels.length,
-              isSelected: _selectedCategory == null,
-              isFocused: isActive && _focusedCategoryIndex == 0,
-              onTap: () => _selectCategory(0),
-            ),
-            ...cats.asMap().entries.map((entry) {
-              final cat = entry.value;
-              final catIndex = _categories.indexOf(cat) + 1;
-              return _buildGridChip(
-                label: cat,
-                count: _categoryCounts[cat] ?? 0,
-                isSelected: _selectedCategory == cat,
-                isFocused: isActive && _focusedCategoryIndex == catIndex,
-                onTap: () => _selectCategory(catIndex),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridChip({
-    required String label,
-    required int count,
-    required bool isSelected,
-    required bool isFocused,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(colors: [
-                  _accent.withOpacity(0.2),
-                  _accentAlt.withOpacity(0.1),
-                ])
-              : null,
-          color: isSelected
-              ? null
-              : isFocused
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isFocused
-                ? _accent.withOpacity(0.6)
-                : isSelected
-                    ? _accent.withOpacity(0.25)
-                    : Colors.white.withOpacity(0.04),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: isSelected
-                      ? _accent
-                      : Colors.white.withOpacity(0.5),
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              '$count',
-              style: TextStyle(
-                color: isSelected
-                    ? _accent.withOpacity(0.5)
-                    : Colors.white.withOpacity(0.18),
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1010,7 +611,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
             ),
             const SizedBox(height: 6),
             Text(
-              'Try a different search or category',
+              'Try a different search term',
               style: TextStyle(
                   color: Colors.white.withOpacity(0.2), fontSize: 12),
             ),
