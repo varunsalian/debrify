@@ -885,6 +885,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
     }
 
+    // IPTV: use current channel name
+    final iptvChannels = widget.iptvChannels;
+    if (iptvChannels != null &&
+        _currentIptvIndex >= 0 &&
+        _currentIptvIndex < iptvChannels.length) {
+      return iptvChannels[_currentIptvIndex].name;
+    }
+
     // Final fallback
     return widget.title;
   }
@@ -911,6 +919,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
         } catch (e) {}
       }
+    }
+
+    // IPTV: use current channel group as subtitle
+    final iptvChannels = widget.iptvChannels;
+    if (iptvChannels != null &&
+        _currentIptvIndex >= 0 &&
+        _currentIptvIndex < iptvChannels.length) {
+      return iptvChannels[_currentIptvIndex].group ?? 'IPTV';
     }
 
     // Fallback to the current subtitle or widget subtitle

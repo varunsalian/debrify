@@ -1,11 +1,12 @@
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/iptv_playlist.dart';
 
-/// Apple TV-inspired IPTV channel sheet overlay for the video player.
-/// Full-height right panel with frosted glass, category rail, search, and channel grid.
+/// Premium IPTV channel sheet overlay for the video player.
+/// Full-height right panel with frosted glass, category grid, search, and channel list.
 class IptvChannelSheet extends StatefulWidget {
   final List<IptvChannel> channels;
   final int currentIndex;
@@ -27,7 +28,7 @@ class IptvChannelSheet extends StatefulWidget {
 enum _FocusZone { search, categories, channels }
 
 class _IptvChannelSheetState extends State<IptvChannelSheet>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _keyboardFocusNode = FocusNode();
@@ -36,46 +37,70 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   late AnimationController _animController;
   late Animation<Offset> _slideAnim;
-  late Animation<double> _scrimAnim;
+  late Animation<double> _fadeAnim;
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
 
   List<IptvChannel> _filteredChannels = [];
   List<String> _categories = [];
+  Map<String, int> _categoryCounts = {};
   String? _selectedCategory;
   int _focusedIndex = 0;
   int _focusedCategoryIndex = 0;
   _FocusZone _focusZone = _FocusZone.channels;
+  bool _categoryExpanded = false;
 
+  // Design tokens
   static const _accent = Color(0xFF00E5FF);
-  static const _accentDim = Color(0xFF0097A7);
+  static const _accentAlt = Color(0xFF00B8D4);
+  static const _surfaceDark = Color(0xFF101016);
 
   @override
   void initState() {
     super.initState();
 
-    final catSet = <String>{};
+    // Build categories with counts
+    final catMap = <String, int>{};
     for (final c in widget.channels) {
-      if (c.group != null && c.group!.isNotEmpty) catSet.add(c.group!);
+      if (c.group != null && c.group!.isNotEmpty) {
+        catMap[c.group!] = (catMap[c.group!] ?? 0) + 1;
+      }
     }
-    _categories = catSet.toList()..sort();
+    _categories = catMap.keys.toList()..sort();
+    _categoryCounts = catMap;
 
     _filteredChannels = List.from(widget.channels);
 
-    if (widget.currentIndex >= 0 && widget.currentIndex < widget.channels.length) {
+    if (widget.currentIndex >= 0 &&
+        widget.currentIndex < widget.channels.length) {
       final cur = widget.channels[widget.currentIndex];
-      final idx = _filteredChannels.indexWhere((c) => c.url == cur.url && c.name == cur.name);
+      final idx = _filteredChannels
+          .indexWhere((c) => c.url == cur.url && c.name == cur.name);
       if (idx >= 0) _focusedIndex = idx;
     }
 
+    // Slide + fade in
     _animController = AnimationController(
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 350),
       vsync: this,
     );
     _slideAnim = Tween<Offset>(
       begin: const Offset(1.0, 0.0),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic));
-    _scrimAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+    ).animate(CurvedAnimation(
+        parent: _animController, curve: Curves.easeOutCubic));
+    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    );
+
+    // Pulsing glow for now-playing
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     _animController.forward();
@@ -97,6 +122,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _scrollController.dispose();
     _categoryScrollController.dispose();
     _animController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -106,20 +132,22 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredChannels = widget.channels.where((c) {
-        final matchCat = _selectedCategory == null || c.group == _selectedCategory;
+        final matchCat =
+            _selectedCategory == null || c.group == _selectedCategory;
         final matchQ = query.isEmpty ||
             c.name.toLowerCase().contains(query) ||
             (c.group != null && c.group!.toLowerCase().contains(query));
         return matchCat && matchQ;
       }).toList();
 
-      // Preserve focus on current channel
-      final cur = (widget.currentIndex >= 0 && widget.currentIndex < widget.channels.length)
+      final cur = (widget.currentIndex >= 0 &&
+              widget.currentIndex < widget.channels.length)
           ? widget.channels[widget.currentIndex]
           : null;
       final idx = cur == null
           ? -1
-          : _filteredChannels.indexWhere((c) => c.url == cur.url && c.name == cur.name);
+          : _filteredChannels
+              .indexWhere((c) => c.url == cur.url && c.name == cur.name);
       _focusedIndex = idx >= 0
           ? idx
           : _filteredChannels.isNotEmpty
@@ -137,26 +165,35 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     _scrollCategoryIntoView(chipIndex);
   }
 
+  List<String> get _filteredCategories {
+    final query = _searchController.text.toLowerCase();
+    if (query.isEmpty) return _categories;
+    return _categories
+        .where((c) => c.toLowerCase().contains(query))
+        .toList();
+  }
+
   // ─── Scrolling ───────────────────────────────────────────────────────
 
   void _scrollToFocused() {
     if (_filteredChannels.isEmpty || !_scrollController.hasClients) return;
-    const h = 76.0;
+    const h = 72.0;
     final target = _focusedIndex * h;
     final vp = _scrollController.position.viewportDimension;
     final cur = _scrollController.offset;
     if (target < cur || target > cur + vp - h) {
       _scrollController.animateTo(
-        (target - vp / 2 + h / 2).clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
+        (target - vp / 2 + h / 2)
+            .clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
       );
     }
   }
 
   void _scrollCategoryIntoView(int index) {
     if (!_categoryScrollController.hasClients) return;
-    const chipWidth = 100.0;
+    const chipWidth = 120.0;
     final target = index * chipWidth;
     final vp = _categoryScrollController.position.viewportDimension;
     final cur = _categoryScrollController.offset;
@@ -164,8 +201,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
       _categoryScrollController.animateTo(
         (target - vp / 2 + chipWidth / 2)
             .clamp(0.0, _categoryScrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -198,13 +235,17 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
       setState(() {
-        _focusZone = _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.channels;
+        _focusZone =
+            _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.channels;
       });
     }
   }
 
   void _handleCategoryKeys(KeyEvent event) {
-    final totalChips = _categories.length + 1;
+    final activeCats = (_categoryExpanded && _searchController.text.isNotEmpty)
+        ? _filteredCategories
+        : _categories;
+    final totalChips = activeCats.length + 1;
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (_focusedCategoryIndex > 0) {
         _selectCategory(_focusedCategoryIndex - 1);
@@ -231,7 +272,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         _scrollToFocused();
       } else {
         setState(() {
-          _focusZone = _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.search;
+          _focusZone =
+              _categories.isNotEmpty ? _FocusZone.categories : _FocusZone.search;
         });
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -243,14 +285,16 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         event.logicalKey == LogicalKeyboardKey.select) {
       if (_filteredChannels.isNotEmpty) {
         final ch = _filteredChannels[_focusedIndex];
-        final oi = widget.channels.indexWhere((c) => c.url == ch.url && c.name == ch.name);
+        final oi = widget.channels
+            .indexWhere((c) => c.url == ch.url && c.name == ch.name);
         if (oi >= 0) widget.onChannelSelected(oi);
       }
     }
   }
 
   int _getOriginalIndex(IptvChannel channel) {
-    return widget.channels.indexWhere((c) => c.url == channel.url && c.name == channel.name);
+    return widget.channels
+        .indexWhere((c) => c.url == channel.url && c.name == channel.name);
   }
 
   // ─── Build ──────────────────────────────────────────────────────────
@@ -259,7 +303,8 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final isLandscape = mq.orientation == Orientation.landscape;
-    final panelWidth = isLandscape ? mq.size.width * 0.42 : mq.size.width * 0.92;
+    final panelWidth =
+        isLandscape ? mq.size.width * 0.42 : mq.size.width * 0.92;
 
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
@@ -271,7 +316,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           GestureDetector(
             onTap: widget.onClose,
             child: FadeTransition(
-              opacity: _scrimAnim,
+              opacity: _fadeAnim,
               child: Container(color: Colors.black54),
             ),
           ),
@@ -285,32 +330,31 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
               position: _slideAnim,
               child: ClipRRect(
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  bottomLeft: Radius.circular(24),
+                  topLeft: Radius.circular(28),
+                  bottomLeft: Radius.circular(28),
                 ),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+                  filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xE00A0A12),
+                      color: _surfaceDark.withOpacity(0.97),
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        bottomLeft: Radius.circular(24),
+                        topLeft: Radius.circular(28),
+                        bottomLeft: Radius.circular(28),
                       ),
                       border: Border(
-                        left: BorderSide(color: Colors.white.withOpacity(0.06)),
-                        top: BorderSide(color: Colors.white.withOpacity(0.04)),
-                        bottom: BorderSide(color: Colors.white.withOpacity(0.02)),
+                        left: BorderSide(
+                            color: Colors.white.withOpacity(0.06), width: 0.5),
                       ),
                     ),
                     child: Column(
                       children: [
                         _buildHeader(),
+                        _buildNowPlaying(),
                         _buildSearchBar(),
-                        if (_categories.isNotEmpty) _buildCategoryRail(),
-                        const SizedBox(height: 4),
+                        _buildCategorySection(),
                         Expanded(child: _buildChannelList()),
-                        _buildFooter(),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -326,124 +370,227 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   // ─── Header ─────────────────────────────────────────────────────────
 
   Widget _buildHeader() {
-    final cur = (widget.currentIndex >= 0 && widget.currentIndex < widget.channels.length)
-        ? widget.channels[widget.currentIndex]
-        : null;
-
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.06))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(24, 18, 16, 14),
+      child: Row(
         children: [
-          Row(
-            children: [
-              // Glowing icon
-              Container(
+          // Icon with gradient glow
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_accent, _accentAlt],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                    color: _accent.withOpacity(0.25),
+                    blurRadius: 16,
+                    spreadRadius: 2),
+                BoxShadow(
+                    color: _accentAlt.withOpacity(0.15),
+                    blurRadius: 24,
+                    spreadRadius: 4),
+              ],
+            ),
+            child: const Icon(Icons.live_tv_rounded,
+                color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Live Channels',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _selectedCategory != null
+                      ? '${_filteredChannels.length} in $_selectedCategory'
+                      : '${_filteredChannels.length} of ${widget.channels.length} channels',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.35),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Close button
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: widget.onClose,
+              child: Container(
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [_accent, Color(0xFF0097A7)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(color: _accent.withOpacity(0.3), blurRadius: 12, spreadRadius: 1),
-                  ],
+                  color: Colors.white.withOpacity(0.06),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.06)),
                 ),
-                child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 20),
+                child: Icon(Icons.close_rounded,
+                    color: Colors.white.withOpacity(0.5), size: 18),
               ),
-              const SizedBox(width: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Now Playing ───────────────────────────────────────────────────
+
+  Widget _buildNowPlaying() {
+    final cur = (widget.currentIndex >= 0 &&
+            widget.currentIndex < widget.channels.length)
+        ? widget.channels[widget.currentIndex]
+        : null;
+    if (cur == null) return const SizedBox.shrink();
+
+    return AnimatedBuilder(
+      animation: _pulseAnim,
+      builder: (context, child) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _accent.withOpacity(0.08),
+                _accentAlt.withOpacity(0.04),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _accent.withOpacity(0.12 + _pulseAnim.value * 0.08),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withOpacity(0.05),
+                blurRadius: 20,
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Animated equalizer bars
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: _EqualizerBars(color: _accent),
+              ),
+              const SizedBox(width: 12),
+              // Channel logo mini
+              _buildMiniLogo(cur),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Live Channels',
-                      style: TextStyle(
+                    Text(
+                      cur.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: -0.3,
+                        letterSpacing: -0.2,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_filteredChannels.length} of ${widget.channels.length} channels',
-                      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
-                    ),
+                    if (cur.group != null && cur.group!.isNotEmpty)
+                      Text(
+                        cur.group!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.3),
+                          fontSize: 10,
+                        ),
+                      ),
                   ],
                 ),
               ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: widget.onClose,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.close_rounded, color: Colors.white.withOpacity(0.6), size: 18),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'PLAYING',
+                  style: TextStyle(
+                    color: _accent.withOpacity(0.9),
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ),
             ],
           ),
-          if (cur != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: _accent.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _accent.withOpacity(0.15)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _accent,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: _accent.withOpacity(0.5), blurRadius: 6)],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      cur.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _accent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'NOW PLAYING',
-                    style: TextStyle(
-                      color: _accent.withOpacity(0.6),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
+        );
+      },
+    );
+  }
+
+  /// Generate a vibrant avatar color — avoids muddy yellows/olives
+  static Color _avatarColor(String name) {
+    // Use a curated palette of vibrant hues that look great on dark backgrounds
+    const hues = [0.0, 15.0, 160.0, 190.0, 210.0, 240.0, 270.0, 300.0, 330.0];
+    final index = name.hashCode.abs() % hues.length;
+    return HSLColor.fromAHSL(1.0, hues[index], 0.6, 0.6).toColor();
+  }
+
+  Widget _buildMiniLogo(IptvChannel channel) {
+    final hasLogo = channel.logoUrl != null && channel.logoUrl!.isNotEmpty;
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(7),
+        color: Colors.white.withOpacity(0.06),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasLogo
+          ? CachedNetworkImage(
+              imageUrl: channel.logoUrl!,
+              fit: BoxFit.contain,
+              placeholder: (_, __) => _letterAvatar(channel, 12),
+              errorWidget: (_, __, ___) => _letterAvatar(channel, 12),
+            )
+          : _letterAvatar(channel, 12),
+    );
+  }
+
+  Widget _letterAvatar(IptvChannel channel, double fontSize) {
+    final letter =
+        channel.name.isNotEmpty ? channel.name[0].toUpperCase() : '?';
+    final color = _avatarColor(channel.name);
+    return Container(
+      color: color.withOpacity(0.15),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: TextStyle(
+            color: color, fontSize: fontSize, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -452,123 +599,384 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   Widget _buildSearchBar() {
     final hasFocus = _focusZone == _FocusZone.search;
+    final hasQuery = _searchController.text.isNotEmpty;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
+          color: hasFocus
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.04),
           border: Border.all(
-            color: hasFocus ? _accent.withOpacity(0.5) : Colors.transparent,
+            color: hasFocus ? _accent.withOpacity(0.4) : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: hasFocus
-              ? [BoxShadow(color: _accent.withOpacity(0.1), blurRadius: 8)]
+              ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
               : [],
         ),
         child: TextField(
           controller: _searchController,
           focusNode: _searchFocusNode,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: const TextStyle(
+              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400),
           decoration: InputDecoration(
-            hintText: 'Search channels...',
-            hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-            prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withOpacity(0.4), size: 20),
-            suffixIcon: _searchController.text.isNotEmpty
+            hintText: 'Search channels or categories...',
+            hintStyle: TextStyle(
+                color: Colors.white.withOpacity(0.25),
+                fontSize: 13,
+                fontWeight: FontWeight.w400),
+            prefixIcon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                hasQuery ? Icons.filter_list_rounded : Icons.search_rounded,
+                key: ValueKey(hasQuery),
+                color: hasFocus
+                    ? _accent.withOpacity(0.7)
+                    : Colors.white.withOpacity(0.3),
+                size: 20,
+              ),
+            ),
+            suffixIcon: hasQuery
                 ? IconButton(
-                    icon: Icon(Icons.clear_rounded, color: Colors.white.withOpacity(0.4), size: 18),
+                    icon: Icon(Icons.clear_rounded,
+                        color: Colors.white.withOpacity(0.4), size: 18),
                     onPressed: () {
                       _searchController.clear();
                       _applyFilters();
                     },
                   )
                 : null,
-            filled: true,
-            fillColor: Colors.white.withOpacity(0.06),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: false,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
             ),
           ),
-          onChanged: (_) => _applyFilters(),
+          onChanged: (_) {
+            _applyFilters();
+            setState(() {}); // Refresh category highlights
+          },
           textInputAction: TextInputAction.search,
         ),
       ),
     );
   }
 
-  // ─── Category Rail ──────────────────────────────────────────────────
+  // ─── Category Section ──────────────────────────────────────────────
 
-  Widget _buildCategoryRail() {
+  Widget _buildCategorySection() {
+    if (_categories.isEmpty) return const SizedBox.shrink();
+
     final isActive = _focusZone == _FocusZone.categories;
-    final totalChips = _categories.length + 1;
+    final query = _searchController.text.toLowerCase();
+    final totalChips = _categories.length + 1; // +1 for "All"
 
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.only(top: 4, bottom: 4),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(0.04)),
-        ),
-      ),
-      child: ListView.builder(
-        controller: _categoryScrollController,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: totalChips,
-        itemBuilder: (context, index) {
-          final isAll = index == 0;
-          final label = isAll ? 'All' : _categories[index - 1];
-          final isSelected = isAll
-              ? _selectedCategory == null
-              : _selectedCategory == label;
-          final isFocused = isActive && index == _focusedCategoryIndex;
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => _selectCategory(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? _accent.withOpacity(0.15)
-                      : isFocused
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.white.withOpacity(0.04),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isFocused
-                        ? _accent.withOpacity(0.7)
-                        : isSelected
-                            ? _accent.withOpacity(0.3)
-                            : Colors.white.withOpacity(0.06),
-                    width: isFocused ? 1.5 : 1,
-                  ),
-                  boxShadow: isFocused
-                      ? [BoxShadow(color: _accent.withOpacity(0.15), blurRadius: 8)]
-                      : [],
-                ),
-                child: Text(
-                  label,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Category header with toggle
+        GestureDetector(
+          onTap: () => setState(() => _categoryExpanded = !_categoryExpanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 2, 20, 6),
+            child: Row(
+              children: [
+                Icon(Icons.category_rounded,
+                    color: Colors.white.withOpacity(0.2), size: 13),
+                const SizedBox(width: 6),
+                Text(
+                  'CATEGORIES',
                   style: TextStyle(
-                    color: isSelected || isFocused
-                        ? _accent
-                        : Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    color: Colors.white.withOpacity(0.3),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${_categories.length}',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.25),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                AnimatedRotation(
+                  turns: _categoryExpanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.expand_more_rounded,
+                    color: Colors.white.withOpacity(0.2),
+                    size: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Category chips
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 250),
+          crossFadeState: _categoryExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          firstChild: _buildCategoryRail(isActive, totalChips, query),
+          secondChild: _buildCategoryGrid(isActive, query),
+        ),
+        // Divider
+        Container(
+          margin: const EdgeInsets.only(top: 6),
+          height: 1,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.transparent,
+                Colors.white.withOpacity(0.06),
+                Colors.transparent,
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryRail(bool isActive, int totalChips, String query) {
+    return SizedBox(
+      height: 40,
+      child: ShaderMask(
+        shaderCallback: (Rect bounds) {
+          return LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.04, 0.96, 1.0],
+          ).createShader(bounds);
+        },
+        blendMode: BlendMode.dstIn,
+        child: ListView.builder(
+          controller: _categoryScrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: totalChips,
+          itemBuilder: (context, index) {
+            final isAll = index == 0;
+            final label = isAll ? 'All' : _categories[index - 1];
+            final count = isAll
+                ? widget.channels.length
+                : (_categoryCounts[label] ?? 0);
+            final isSelected =
+                isAll ? _selectedCategory == null : _selectedCategory == label;
+            final isFocused = isActive && index == _focusedCategoryIndex;
+            final matchesQuery = query.isNotEmpty &&
+                !isAll &&
+                label.toLowerCase().contains(query);
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: GestureDetector(
+                onTap: () => _selectCategory(index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: isSelected
+                        ? LinearGradient(colors: [
+                            _accent.withOpacity(0.2),
+                            _accentAlt.withOpacity(0.1),
+                          ])
+                        : null,
+                    color: isSelected
+                        ? null
+                        : isFocused
+                            ? Colors.white.withOpacity(0.1)
+                            : matchesQuery
+                                ? _accent.withOpacity(0.06)
+                                : Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isFocused
+                          ? _accent.withOpacity(0.6)
+                          : isSelected
+                              ? _accent.withOpacity(0.25)
+                              : matchesQuery
+                                  ? _accent.withOpacity(0.15)
+                                  : Colors.white.withOpacity(0.04),
+                      width: isFocused ? 1.5 : 1,
+                    ),
+                    boxShadow: isFocused
+                        ? [
+                            BoxShadow(
+                                color: _accent.withOpacity(0.12),
+                                blurRadius: 10)
+                          ]
+                        : [],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: isSelected
+                              ? _accent
+                              : isFocused
+                                  ? Colors.white.withOpacity(0.9)
+                                  : matchesQuery
+                                      ? _accent.withOpacity(0.7)
+                                      : Colors.white.withOpacity(0.45),
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          color: isSelected
+                              ? _accent.withOpacity(0.5)
+                              : Colors.white.withOpacity(0.18),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryGrid(bool isActive, String query) {
+    final cats = query.isNotEmpty ? _filteredCategories : _categories;
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: SingleChildScrollView(
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            // All chip
+            _buildGridChip(
+              label: 'All',
+              count: widget.channels.length,
+              isSelected: _selectedCategory == null,
+              isFocused: isActive && _focusedCategoryIndex == 0,
+              onTap: () => _selectCategory(0),
             ),
-          );
-        },
+            ...cats.asMap().entries.map((entry) {
+              final cat = entry.value;
+              final catIndex = _categories.indexOf(cat) + 1;
+              return _buildGridChip(
+                label: cat,
+                count: _categoryCounts[cat] ?? 0,
+                isSelected: _selectedCategory == cat,
+                isFocused: isActive && _focusedCategoryIndex == catIndex,
+                onTap: () => _selectCategory(catIndex),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridChip({
+    required String label,
+    required int count,
+    required bool isSelected,
+    required bool isFocused,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? LinearGradient(colors: [
+                  _accent.withOpacity(0.2),
+                  _accentAlt.withOpacity(0.1),
+                ])
+              : null,
+          color: isSelected
+              ? null
+              : isFocused
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isFocused
+                ? _accent.withOpacity(0.6)
+                : isSelected
+                    ? _accent.withOpacity(0.25)
+                    : Colors.white.withOpacity(0.04),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isSelected
+                      ? _accent
+                      : Colors.white.withOpacity(0.5),
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$count',
+              style: TextStyle(
+                color: isSelected
+                    ? _accent.withOpacity(0.5)
+                    : Colors.white.withOpacity(0.18),
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -581,16 +989,30 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.satellite_alt_rounded, color: Colors.white.withOpacity(0.15), size: 56),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.satellite_alt_rounded,
+                  color: Colors.white.withOpacity(0.1), size: 32),
+            ),
             const SizedBox(height: 16),
             Text(
               'No channels found',
-              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 15, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.4),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               'Try a different search or category',
-              style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 12),
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.2), fontSize: 12),
             ),
           ],
         ),
@@ -601,9 +1023,9 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       itemCount: _filteredChannels.length,
-      itemExtent: 76,
+      itemExtent: 72,
       itemBuilder: (context, index) {
         final channel = _filteredChannels[index];
         final origIdx = _getOriginalIndex(channel);
@@ -615,6 +1037,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           isFocused: isFocused,
           isCurrent: isCurrent,
           channelNumber: origIdx + 1,
+          pulseAnim: _pulseAnim,
           onTap: () {
             if (origIdx >= 0) widget.onChannelSelected(origIdx);
           },
@@ -623,40 +1046,6 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
     );
   }
 
-  // ─── Footer ─────────────────────────────────────────────────────────
-
-  Widget _buildFooter() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _footerHint(Icons.swap_vert_rounded, 'Navigate'),
-          const SizedBox(width: 20),
-          _footerHint(Icons.check_circle_outline_rounded, 'Select'),
-          const SizedBox(width: 20),
-          _footerHint(Icons.arrow_back_rounded, 'Close'),
-        ],
-      ),
-    );
-  }
-
-  Widget _footerHint(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: Colors.white.withOpacity(0.25), size: 14),
-        const SizedBox(width: 5),
-        Text(
-          text,
-          style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 11),
-        ),
-      ],
-    );
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -668,15 +1057,25 @@ class _ChannelTile extends StatelessWidget {
   final bool isFocused;
   final bool isCurrent;
   final int channelNumber;
+  final Animation<double> pulseAnim;
   final VoidCallback onTap;
 
   static const _accent = Color(0xFF00E5FF);
+  static const _accentAlt = Color(0xFF00B8D4);
+  static const _liveDot = Color(0xFFFF3D71);
+
+  static Color _avatarColor(String name) {
+    const hues = [0.0, 15.0, 160.0, 190.0, 210.0, 240.0, 270.0, 300.0, 330.0];
+    final index = name.hashCode.abs() % hues.length;
+    return HSLColor.fromAHSL(1.0, hues[index], 0.6, 0.6).toColor();
+  }
 
   const _ChannelTile({
     required this.channel,
     required this.isFocused,
     required this.isCurrent,
     required this.channelNumber,
+    required this.pulseAnim,
     required this.onTap,
   });
 
@@ -685,56 +1084,73 @@ class _ChannelTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isFocused
-              ? Colors.white.withOpacity(0.12)
+          gradient: isFocused
+              ? LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.white.withOpacity(0.12),
+                    Colors.white.withOpacity(0.06),
+                  ],
+                )
               : isCurrent
-                  ? _accent.withOpacity(0.06)
-                  : Colors.white.withOpacity(0.02),
+                  ? LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        _accent.withOpacity(0.08),
+                        _accent.withOpacity(0.02),
+                      ],
+                    )
+                  : null,
+          color: (!isFocused && !isCurrent) ? Colors.transparent : null,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isFocused
-                ? _accent.withOpacity(0.6)
+                ? _accent.withOpacity(0.5)
                 : isCurrent
-                    ? _accent.withOpacity(0.2)
+                    ? _accent.withOpacity(0.12)
                     : Colors.transparent,
             width: isFocused ? 1.5 : 1,
           ),
           boxShadow: isFocused
               ? [
-                  BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 12, spreadRadius: 1),
-                  BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
+                  BoxShadow(
+                      color: _accent.withOpacity(0.1),
+                      blurRadius: 16,
+                      spreadRadius: 2),
                 ]
               : [],
         ),
-        transform: isFocused ? (Matrix4.identity()..scale(1.015)) : Matrix4.identity(),
-        transformAlignment: Alignment.center,
         child: Row(
           children: [
             // Channel number
             SizedBox(
-              width: 28,
+              width: 30,
               child: Text(
-                channelNumber.toString(),
+                channelNumber.toString().padLeft(2, ' '),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isCurrent
-                      ? _accent.withOpacity(0.9)
-                      : Colors.white.withOpacity(0.25),
-                  fontSize: 12,
+                      ? _accent.withOpacity(0.8)
+                      : isFocused
+                          ? Colors.white.withOpacity(0.5)
+                          : Colors.white.withOpacity(0.18),
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             // Logo
             _buildLogo(),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             // Info
             Expanded(
               child: Column(
@@ -746,25 +1162,30 @@ class _ChannelTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isCurrent ? _accent : Colors.white.withOpacity(0.92),
-                      fontSize: 14,
-                      fontWeight: isFocused ? FontWeight.w600 : FontWeight.w500,
-                      letterSpacing: -0.1,
+                      color: isCurrent
+                          ? _accent
+                          : isFocused
+                              ? Colors.white
+                              : Colors.white.withOpacity(0.85),
+                      fontSize: 13.5,
+                      fontWeight:
+                          isFocused || isCurrent ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: -0.2,
                     ),
                   ),
                   if (channel.group != null && channel.group!.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 3),
+                      padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         channel.group!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isFocused
-                              ? Colors.white.withOpacity(0.45)
-                              : Colors.white.withOpacity(0.3),
-                          fontSize: 11,
-                          letterSpacing: 0.2,
+                              ? Colors.white.withOpacity(0.4)
+                              : Colors.white.withOpacity(0.22),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ),
@@ -772,9 +1193,11 @@ class _ChannelTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Badges
-            if (channel.isLive && !isCurrent) _buildLiveBadge(),
-            if (isCurrent) _buildNowBadge(),
+            // Status badge
+            if (isCurrent)
+              _buildNowBadge()
+            else if (channel.isLive)
+              _buildLiveBadge(),
           ],
         ),
       ),
@@ -785,16 +1208,21 @@ class _ChannelTile extends StatelessWidget {
     final hasLogo = channel.logoUrl != null && channel.logoUrl!.isNotEmpty;
 
     return Container(
-      width: 44,
-      height: 44,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.05),
         border: Border.all(
-          color: isFocused
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.04),
+          color: isCurrent
+              ? _accent.withOpacity(0.15)
+              : isFocused
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.white.withOpacity(0.03),
         ),
+        boxShadow: isCurrent
+            ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 8)]
+            : [],
       ),
       clipBehavior: Clip.antiAlias,
       child: hasLogo
@@ -809,9 +1237,9 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildLetterAvatar() {
-    final letter = channel.name.isNotEmpty ? channel.name[0].toUpperCase() : '?';
-    final hue = (channel.name.hashCode.abs() % 360).toDouble();
-    final color = HSLColor.fromAHSL(1.0, hue, 0.5, 0.6).toColor();
+    final letter =
+        channel.name.isNotEmpty ? channel.name[0].toUpperCase() : '?';
+    final color = _avatarColor(channel.name);
 
     return Container(
       decoration: BoxDecoration(
@@ -819,8 +1247,8 @@ class _ChannelTile extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            color.withOpacity(0.3),
-            color.withOpacity(0.15),
+            color.withOpacity(0.25),
+            color.withOpacity(0.1),
           ],
         ),
       ),
@@ -828,8 +1256,8 @@ class _ChannelTile extends StatelessWidget {
       child: Text(
         letter,
         style: TextStyle(
-          color: color.withOpacity(0.9),
-          fontSize: 18,
+          color: color.withOpacity(0.85),
+          fontSize: 17,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -838,11 +1266,10 @@ class _ChannelTile extends StatelessWidget {
 
   Widget _buildLiveBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFFF1744).withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFFF1744).withOpacity(0.2)),
+        color: _liveDot.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -851,24 +1278,24 @@ class _ChannelTile extends StatelessWidget {
             width: 5,
             height: 5,
             decoration: BoxDecoration(
-              color: const Color(0xFFFF1744),
+              color: _liveDot.withOpacity(0.8),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF1744).withOpacity(0.6),
+                  color: _liveDot.withOpacity(0.4),
                   blurRadius: 4,
                 ),
               ],
             ),
           ),
           const SizedBox(width: 4),
-          const Text(
+          Text(
             'LIVE',
             style: TextStyle(
-              color: Color(0xFFFF1744),
+              color: _liveDot.withOpacity(0.7),
               fontSize: 8,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
+              letterSpacing: 0.5,
             ),
           ),
         ],
@@ -877,26 +1304,103 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildNowBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_accent, Color(0xFF0097A7)],
-        ),
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(color: _accent.withOpacity(0.3), blurRadius: 8),
-        ],
-      ),
-      child: const Text(
-        'NOW',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: pulseAnim,
+      builder: (context, child) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                _accent.withOpacity(0.8 + pulseAnim.value * 0.2),
+                _accentAlt.withOpacity(0.6 + pulseAnim.value * 0.2),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: [
+              BoxShadow(
+                  color: _accent.withOpacity(0.2 + pulseAnim.value * 0.1),
+                  blurRadius: 10),
+            ],
+          ),
+          child: const Text(
+            'NOW',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Equalizer Bars (animated "playing" indicator)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _EqualizerBars extends StatefulWidget {
+  final Color color;
+  const _EqualizerBars({required this.color});
+
+  @override
+  State<_EqualizerBars> createState() => _EqualizerBarsState();
+}
+
+class _EqualizerBarsState extends State<_EqualizerBars>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+  late List<Animation<double>> _animations;
+
+  @override
+  void initState() {
+    super.initState();
+    final rng = math.Random();
+    _controllers = List.generate(3, (i) {
+      return AnimationController(
+        duration: Duration(milliseconds: 400 + rng.nextInt(300)),
+        vsync: this,
+      )..repeat(reverse: true);
+    });
+    _animations = _controllers.map((c) {
+      return Tween<double>(begin: 0.2, end: 1.0).animate(
+        CurvedAnimation(parent: c, curve: Curves.easeInOut),
+      );
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(3, (i) {
+        return AnimatedBuilder(
+          animation: _animations[i],
+          builder: (context, child) {
+            return Container(
+              width: 3,
+              height: 14 * _animations[i].value,
+              margin: EdgeInsets.only(right: i < 2 ? 2 : 0),
+              decoration: BoxDecoration(
+                color: widget.color.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(1.5),
+              ),
+            );
+          },
+        );
+      }),
     );
   }
 }
