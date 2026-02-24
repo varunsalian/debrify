@@ -21,6 +21,7 @@ import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
 import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
+import 'widgets/psych_loading_overlay.dart';
 import 'widgets/stremio_tv_local_catalogs_dialog.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
@@ -490,29 +491,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     int? episode;
     if (item.type.toLowerCase() == 'series') {
       if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  'Picking a random episode of ${item.name}...',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      showPsychLoading(context, 'Spinning the wheel of fate for ${item.name}...');
 
       final episodeSeed = _randomEpisodes
           ? '${channel.id}:${DateTime.now().millisecondsSinceEpoch}'
@@ -548,30 +527,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // Show loading dialog
     if (!mounted) return;
     bool streamDialogShown = false;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                season != null
-                    ? 'Searching streams for ${item.name} S${season}E$episode...'
-                    : 'Searching streams for ${item.name}...',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
+    showPsychLoading(
+      context,
+      season != null
+          ? 'Summoning ${item.name} S${season}E$episode from the void...'
+          : 'Warping into the ${item.name} dimension...',
     );
     streamDialogShown = true;
 
@@ -784,23 +744,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     try {
       // Show progress
       if (!mounted) return false;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(child: Text('Resolving via Real Debrid...')),
-            ],
-          ),
-        ),
-      );
+      showPsychLoading(context, 'Hacking into the Real Debrid mainframe...');
       dialogShown = true;
 
       final magnet =
@@ -884,23 +828,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     bool dialogShown = false;
     try {
       if (!mounted) return false;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(child: Text('Resolving via Torbox...')),
-            ],
-          ),
-        ),
-      );
+      showPsychLoading(context, 'Opening a portal through Torbox...');
       dialogShown = true;
 
       final tbKey = await StorageService.getTorboxApiKey();
@@ -1001,23 +929,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     bool dialogShown = false;
     try {
       if (!mounted) return false;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(child: Text('Resolving via PikPak...')),
-            ],
-          ),
-        ),
-      );
+      showPsychLoading(context, 'Beaming data through PikPak hyperspace...');
       dialogShown = true;
 
       // Use PikPakTvService for caching detection, progress polling, folder handling
