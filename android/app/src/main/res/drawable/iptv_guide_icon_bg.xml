@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gradient icon background for header -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#FF00E5FF"
+        android:endColor="#FF00B8D4"
+        android:angle="135" />
+    <corners android:radius="10dp" />
+</shape>

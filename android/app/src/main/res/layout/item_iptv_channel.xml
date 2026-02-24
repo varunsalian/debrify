@@ -1,41 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- IPTV Channel list item (72dp height) -->
+<!-- IPTV Channel list item (68dp height) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="72dp"
+    android:layout_height="68dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
     android:background="@drawable/iptv_channel_item_bg"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true">
 
+    <!-- Channel Number -->
+    <TextView
+        android:id="@+id/iptv_channel_number"
+        android:layout_width="30dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="#2EFFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-medium"
+        tools:text="42" />
+
     <!-- Channel Logo -->
     <FrameLayout
-        android:layout_width="48dp"
-        android:layout_height="48dp">
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/iptv_channel_logo_bg">
 
         <ImageView
             android:id="@+id/iptv_channel_logo"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:scaleType="centerCrop"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:scaleType="centerInside"
             android:visibility="gone"
             tools:visibility="visible" />
 
         <!-- Letter avatar fallback -->
         <TextView
             android:id="@+id/iptv_channel_letter"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:gravity="center"
-            android:textColor="#00BCD4"
-            android:textSize="20sp"
+            android:textColor="#FF00E5FF"
+            android:textSize="17sp"
             android:textStyle="bold"
-            android:background="#1A00BCD4"
+            android:background="#1500E5FF"
             tools:text="A" />
     </FrameLayout>
 
@@ -45,32 +62,30 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="14dp">
+        android:layout_marginStart="12dp">
 
         <TextView
             android:id="@+id/iptv_channel_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#F2FFFFFF"
-            android:textSize="16sp"
-            android:fontFamily="sans-serif-medium"
+            android:textColor="#D9FFFFFF"
+            android:textSize="13.5sp"
+            android:fontFamily="sans-serif"
             android:maxLines="1"
             android:ellipsize="end"
-            tools:text="BBC One HD" />
+            tools:text="Star Sports 1 HD" />
 
         <TextView
             android:id="@+id/iptv_channel_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:textColor="#59FFFFFF"
-            android:textSize="12sp"
-            android:textAllCaps="true"
-            android:letterSpacing="0.04"
+            android:textColor="#38FFFFFF"
+            android:textSize="10.5sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:visibility="gone"
-            tools:text="ENTERTAINMENT"
+            tools:text="Sports"
             tools:visibility="visible" />
     </LinearLayout>
 
@@ -86,24 +101,24 @@
         android:paddingTop="3dp"
         android:paddingBottom="3dp"
         android:layout_marginStart="8dp"
-        android:background="#33FF0000"
+        android:background="#14FF3D71"
         android:visibility="gone"
         tools:visibility="visible">
 
         <View
-            android:layout_width="6dp"
-            android:layout_height="6dp"
-            android:background="#FFFF0000" />
+            android:layout_width="5dp"
+            android:layout_height="5dp"
+            android:background="@drawable/iptv_live_dot" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
             android:text="LIVE"
-            android:textColor="#FFFF0000"
-            android:textSize="9sp"
+            android:textColor="#B3FF3D71"
+            android:textSize="8sp"
             android:textStyle="bold"
-            android:letterSpacing="0.05" />
+            android:letterSpacing="0.04" />
     </LinearLayout>
 
     <!-- NOW Badge (current channel) -->
@@ -111,17 +126,17 @@
         android:id="@+id/iptv_channel_now_badge"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
         android:layout_marginStart="8dp"
         android:text="NOW"
         android:textColor="#FFFFFFFF"
-        android:textSize="10sp"
+        android:textSize="8sp"
         android:textStyle="bold"
-        android:letterSpacing="0.05"
-        android:background="#FF00BCD4"
+        android:letterSpacing="0.08"
+        android:background="@drawable/iptv_now_badge_bg"
         android:visibility="gone"
         tools:visibility="visible" />
 

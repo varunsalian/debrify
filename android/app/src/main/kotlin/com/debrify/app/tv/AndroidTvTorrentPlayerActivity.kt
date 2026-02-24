@@ -152,16 +152,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var isIptvMode = false
     private var iptvChannels = mutableListOf<IptvChannelEntry>()
     private var iptvCategories = mutableListOf<String>()
+    private var iptvCategoryCounts = mutableMapOf<String, Int>()
     private var currentIptvIndex = 0
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
     private var iptvGuideSearch: android.widget.EditText? = null
     private var iptvGuideCategoryContainer: android.widget.LinearLayout? = null
+    private var iptvGuideCategoryScroll: android.widget.HorizontalScrollView? = null
     private var iptvGuideCountText: TextView? = null
+    private var iptvGuideCategoryCountText: TextView? = null
     private var iptvGuideCurrentName: TextView? = null
+    private var iptvGuideCurrentGroup: TextView? = null
+    private var iptvGuideNowPlaying: View? = null
+    private var iptvGuideNowLogo: android.widget.ImageView? = null
+    private var iptvGuideNowLetter: TextView? = null
     private var iptvChannelAdapter: IptvChannelAdapter? = null
     private var iptvGuideVisible = false
     private var iptvSelectedCategory: String? = null
+    private var iptvSuppressFilter = false
 
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
@@ -2209,9 +2217,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         hideIptvGuide()
                         return true
                     }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        // Only block left when focus is in the channel list
+                        // to prevent escaping the guide. Allow left in search
+                        // (cursor movement) and categories (tab navigation).
+                        if (isFocusInIptvChannelList()) {
+                            return true
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        // Long-press up in channel list: jump to search bar
+                        if (isFocusInIptvChannelList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
+                            iptvGuideSearch?.requestFocus()
+                            return true
+                        }
+                    }
                 }
             }
-            // Let DPAD navigation work normally within the guide
+            // Let DPAD up/down/right/center work normally within the guide
             return super.dispatchKeyEvent(event)
         }
 
@@ -2343,6 +2366,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         var current = currentFocus
         while (current != null) {
             if (current == overlay) return true
+            val parent = current.parent
+            current = if (parent is View) parent else null
+        }
+        return false
+    }
+
+    private fun isFocusInIptvChannelList(): Boolean {
+        val list = iptvGuideList ?: return false
+        var current = currentFocus
+        while (current != null) {
+            if (current == list) return true
             val parent = current.parent
             current = if (parent is View) parent else null
         }
@@ -3209,8 +3243,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvGuideList = findViewById(R.id.iptv_guide_list)
         iptvGuideSearch = findViewById(R.id.iptv_guide_search)
         iptvGuideCategoryContainer = findViewById(R.id.iptv_guide_category_container)
+        iptvGuideCategoryScroll = findViewById(R.id.iptv_guide_category_scroll)
         iptvGuideCountText = findViewById(R.id.iptv_guide_count)
+        iptvGuideCategoryCountText = findViewById(R.id.iptv_guide_category_count)
         iptvGuideCurrentName = findViewById(R.id.iptv_guide_current_name)
+        iptvGuideCurrentGroup = findViewById(R.id.iptv_guide_current_group)
+        iptvGuideNowPlaying = findViewById(R.id.iptv_guide_now_playing)
+        iptvGuideNowLogo = findViewById(R.id.iptv_guide_now_logo)
+        iptvGuideNowLetter = findViewById(R.id.iptv_guide_now_letter)
 
         setupIptvOverlay()
 
@@ -3229,6 +3269,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setupIptvOverlay() {
         val guideList = iptvGuideList ?: return
+
+        // Build category counts
+        iptvCategoryCounts.clear()
+        for (ch in iptvChannels) {
+            val g = ch.group
+            if (g != null && g.isNotEmpty()) {
+                iptvCategoryCounts[g] = (iptvCategoryCounts[g] ?: 0) + 1
+            }
+        }
 
         // Setup RecyclerView
         guideList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
@@ -3254,7 +3303,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         })
 
         // Update header
-        iptvGuideCountText?.text = iptvChannels.size.toString()
+        iptvGuideCountText?.text = "${iptvChannels.size} of ${iptvChannels.size} channels"
+        iptvGuideCategoryCountText?.text = iptvCategories.size.toString()
         updateIptvGuideCurrentName()
     }
 
@@ -3262,65 +3312,118 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val container = iptvGuideCategoryContainer ?: return
         container.removeAllViews()
 
-        val allCategories = mutableListOf("ALL")
+        val dp = { value: Float -> TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).toInt() }
+
+        val allCategories = mutableListOf("All")
         allCategories.addAll(iptvCategories)
 
         for ((index, category) in allCategories.withIndex()) {
+            val isAll = index == 0
+            val count = if (isAll) iptvChannels.size else (iptvCategoryCounts[category] ?: 0)
+            val displayText = "$category  $count"
+
             val tab = TextView(this).apply {
-                text = category
-                setTextColor(if (index == 0) Color.WHITE else Color.argb(128, 255, 255, 255))
-                textSize = 13f
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setPadding(
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 14f, resources.displayMetrics).toInt(),
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics).toInt(),
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 14f, resources.displayMetrics).toInt(),
-                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics).toInt(),
-                )
-                val dp8 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f, resources.displayMetrics).toInt()
+                text = displayText
+                textSize = 12f
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                setPadding(dp(12f), dp(7f), dp(12f), dp(7f))
+
                 val params = android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                     android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
                 )
-                params.marginEnd = dp8
+                params.marginEnd = dp(6f)
                 layoutParams = params
 
                 isFocusable = true
                 isFocusableInTouchMode = true
 
-                // Background styling
-                if (index == 0) {
-                    setBackgroundColor(Color.parseColor("#E600BCD4"))
+                // Default styling
+                if (isAll) {
+                    setBackgroundResource(R.drawable.iptv_category_tab_selected_bg)
+                    setTextColor(Color.parseColor("#FF00E5FF"))
                 } else {
-                    setBackgroundColor(Color.argb(15, 255, 255, 255))
+                    setBackgroundResource(R.drawable.iptv_category_tab_bg)
+                    setTextColor(Color.argb(115, 255, 255, 255))
+                }
+
+                // Focus listener for DPAD navigation
+                onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                    val tv = v as? TextView ?: return@OnFocusChangeListener
+                    val catName = if (isAll) null else category
+                    val isSelected = iptvSelectedCategory == catName
+                    if (hasFocus) {
+                        tv.setBackgroundResource(R.drawable.iptv_category_tab_focused_bg)
+                        tv.setTextColor(Color.parseColor("#E600E5FF"))
+                        // Scroll category into view
+                        scrollCategoryIntoView(v)
+                    } else {
+                        if (isSelected) {
+                            tv.setBackgroundResource(R.drawable.iptv_category_tab_selected_bg)
+                            tv.setTextColor(Color.parseColor("#FF00E5FF"))
+                        } else {
+                            tv.setBackgroundResource(R.drawable.iptv_category_tab_bg)
+                            tv.setTextColor(Color.argb(115, 255, 255, 255))
+                        }
+                    }
                 }
 
                 setOnClickListener {
-                    val selectedCategory = if (category == "ALL") null else category
+                    val selectedCategory = if (isAll) null else category
                     selectIptvCategory(selectedCategory)
+                }
+
+                // Handle DPAD center/enter on focused category
+                setOnKeyListener { _, keyCode, event ->
+                    if (event.action == android.view.KeyEvent.ACTION_DOWN &&
+                        (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER)) {
+                        val selectedCategory = if (isAll) null else category
+                        selectIptvCategory(selectedCategory)
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
             container.addView(tab)
         }
     }
 
+    private fun scrollCategoryIntoView(tabView: View) {
+        val scrollView = iptvGuideCategoryScroll ?: return
+        val scrollX = tabView.left - (scrollView.width / 2) + (tabView.width / 2) + scrollView.paddingStart
+        scrollView.smoothScrollTo(scrollX.coerceAtLeast(0), 0)
+    }
+
     private fun selectIptvCategory(category: String?) {
         iptvSelectedCategory = category
         // Update tab styling
         val container = iptvGuideCategoryContainer ?: return
+        val allCategories = mutableListOf<String?>(null) // null = "All"
+        allCategories.addAll(iptvCategories)
+
         for (i in 0 until container.childCount) {
             val tab = container.getChildAt(i) as? TextView ?: continue
-            val isSelected = (category == null && i == 0) || (category != null && tab.text == category)
-            tab.setTextColor(if (isSelected) Color.WHITE else Color.argb(128, 255, 255, 255))
-            tab.setBackgroundColor(
-                if (isSelected) Color.parseColor("#E600BCD4")
-                else Color.argb(15, 255, 255, 255)
-            )
+            val catName = if (i == 0) null else iptvCategories.getOrNull(i - 1)
+            val isSelected = category == catName
+            val hasFocus = tab.isFocused
+
+            if (hasFocus) {
+                tab.setBackgroundResource(R.drawable.iptv_category_tab_focused_bg)
+                tab.setTextColor(Color.parseColor("#E600E5FF"))
+            } else if (isSelected) {
+                tab.setBackgroundResource(R.drawable.iptv_category_tab_selected_bg)
+                tab.setTextColor(Color.parseColor("#FF00E5FF"))
+            } else {
+                tab.setBackgroundResource(R.drawable.iptv_category_tab_bg)
+                tab.setTextColor(Color.argb(115, 255, 255, 255))
+            }
         }
         filterIptvChannels()
     }
 
     private fun filterIptvChannels() {
+        if (iptvSuppressFilter) return
         val query = iptvGuideSearch?.text?.toString()?.lowercase() ?: ""
         val filtered = iptvChannels.filter { ch ->
             val matchesCategory = iptvSelectedCategory == null || ch.group == iptvSelectedCategory
@@ -3330,35 +3433,48 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             matchesCategory && matchesSearch
         }
         iptvChannelAdapter?.updateChannels(filtered)
-        iptvGuideCountText?.text = filtered.size.toString()
+
+        // Update count text
+        if (iptvSelectedCategory != null) {
+            iptvGuideCountText?.text = "${filtered.size} in $iptvSelectedCategory"
+        } else {
+            iptvGuideCountText?.text = "${filtered.size} of ${iptvChannels.size} channels"
+        }
     }
 
     private fun showIptvGuide() {
         iptvGuideVisible = true
+        iptvGuideOverlay?.animate()?.cancel() // cancel any pending hide animation
         iptvGuideOverlay?.visibility = View.VISIBLE
+        iptvGuideOverlay?.alpha = 0f
+        iptvGuideOverlay?.animate()?.alpha(1f)?.setDuration(200)?.start()
 
-        // Reset filters to show all channels (ensures current channel is visible)
+        // Reset filters — suppress TextWatcher to avoid double filterIptvChannels()
+        iptvSuppressFilter = true
         iptvSelectedCategory = null
         iptvGuideSearch?.setText("")
-        selectIptvCategory(null)
+        iptvSuppressFilter = false
+        selectIptvCategory(null) // single call to filterIptvChannels
 
         updateIptvGuideCurrentName()
 
-        // Focus the list
+        // Focus the list and scroll to current channel
         iptvGuideList?.post {
-            // Scroll to current channel
             val currentPos = iptvChannelAdapter?.getCurrentChannelPosition() ?: 0
             iptvGuideList?.scrollToPosition(currentPos)
             iptvGuideList?.postDelayed({
                 val holder = iptvGuideList?.findViewHolderForAdapterPosition(currentPos)
                 holder?.itemView?.requestFocus()
-            }, 100)
+            }, 150)
         }
     }
 
     private fun hideIptvGuide() {
         iptvGuideVisible = false
-        iptvGuideOverlay?.visibility = View.GONE
+        iptvGuideOverlay?.animate()?.cancel() // cancel any pending show animation
+        iptvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
+            iptvGuideOverlay?.visibility = View.GONE
+        }?.start()
         iptvGuideSearch?.setText("")
         iptvSelectedCategory = null
     }
@@ -3369,7 +3485,54 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun updateIptvGuideCurrentName() {
         if (currentIptvIndex in iptvChannels.indices) {
-            iptvGuideCurrentName?.text = iptvChannels[currentIptvIndex].name
+            val ch = iptvChannels[currentIptvIndex]
+            iptvGuideCurrentName?.text = ch.name
+            iptvGuideNowPlaying?.visibility = View.VISIBLE
+
+            // Group
+            if (ch.group != null && ch.group.isNotEmpty()) {
+                iptvGuideCurrentGroup?.text = ch.group
+                iptvGuideCurrentGroup?.visibility = View.VISIBLE
+            } else {
+                iptvGuideCurrentGroup?.visibility = View.GONE
+            }
+
+            // Now playing logo
+            val firstLetter = if (ch.name.isNotEmpty()) ch.name[0].uppercase() else "?"
+            if (!ch.logoUrl.isNullOrEmpty()) {
+                iptvGuideNowLetter?.visibility = View.GONE
+                iptvGuideNowLogo?.visibility = View.VISIBLE
+                com.bumptech.glide.Glide.with(this)
+                    .load(ch.logoUrl)
+                    .centerInside()
+                    .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                        override fun onLoadFailed(
+                            e: com.bumptech.glide.load.engine.GlideException?,
+                            model: Any?,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                            isFirstResource: Boolean
+                        ): Boolean {
+                            iptvGuideNowLogo?.visibility = View.GONE
+                            iptvGuideNowLetter?.text = firstLetter
+                            iptvGuideNowLetter?.visibility = View.VISIBLE
+                            return true
+                        }
+                        override fun onResourceReady(
+                            resource: android.graphics.drawable.Drawable,
+                            model: Any,
+                            target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                            dataSource: com.bumptech.glide.load.DataSource,
+                            isFirstResource: Boolean
+                        ): Boolean = false
+                    })
+                    .into(iptvGuideNowLogo!!)
+            } else {
+                iptvGuideNowLogo?.visibility = View.GONE
+                iptvGuideNowLetter?.text = firstLetter
+                iptvGuideNowLetter?.visibility = View.VISIBLE
+            }
+        } else {
+            iptvGuideNowPlaying?.visibility = View.GONE
         }
     }
 
@@ -5318,7 +5481,13 @@ private class IptvChannelAdapter(
     private val onItemClick: (IptvChannelEntry) -> Unit,
 ) : RecyclerView.Adapter<IptvChannelAdapter.ViewHolder>() {
 
+    companion object {
+        private val ACCENT = Color.parseColor("#00E5FF")
+        private val ACCENT_DIM = Color.parseColor("#CC00E5FF")
+    }
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val number: TextView = view.findViewById(R.id.iptv_channel_number)
         val logo: android.widget.ImageView = view.findViewById(R.id.iptv_channel_logo)
         val letter: TextView = view.findViewById(R.id.iptv_channel_letter)
         val name: TextView = view.findViewById(R.id.iptv_channel_name)
@@ -5336,12 +5505,25 @@ private class IptvChannelAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val entry = channels[position]
 
-        holder.name.text = entry.name
-        holder.name.setTextColor(
-            if (entry.isCurrent) Color.parseColor("#00BCD4")
-            else Color.argb(242, 255, 255, 255)
+        // Cancel any in-flight scale animation from recycled view
+        holder.itemView.animate().cancel()
+        holder.itemView.scaleX = 1.0f
+        holder.itemView.scaleY = 1.0f
+
+        // Channel number
+        holder.number.text = (entry.index + 1).toString()
+        holder.number.setTextColor(
+            if (entry.isCurrent) Color.argb(204, 0, 229, 255) // accent 80%
+            else Color.argb(46, 255, 255, 255) // 18%
         )
 
+        // Name
+        holder.name.text = entry.name
+        holder.name.setTextColor(
+            if (entry.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+        )
+
+        // Group
         if (entry.group != null) {
             holder.group.text = entry.group
             holder.group.visibility = View.VISIBLE
@@ -5349,11 +5531,14 @@ private class IptvChannelAdapter(
             holder.group.visibility = View.GONE
         }
 
-        // LIVE badge
-        holder.liveBadge.visibility = if (entry.isLive) View.VISIBLE else View.GONE
-
-        // NOW badge
-        holder.nowBadge.visibility = if (entry.isCurrent) View.VISIBLE else View.GONE
+        // Badges — show NOW for current, LIVE for non-current live
+        if (entry.isCurrent) {
+            holder.nowBadge.visibility = View.VISIBLE
+            holder.liveBadge.visibility = View.GONE
+        } else {
+            holder.nowBadge.visibility = View.GONE
+            holder.liveBadge.visibility = if (entry.isLive) View.VISIBLE else View.GONE
+        }
 
         // Logo — clear previous Glide load to prevent stale images on recycled views
         com.bumptech.glide.Glide.with(holder.itemView.context).clear(holder.logo)
