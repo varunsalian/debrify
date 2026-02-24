@@ -2301,12 +2301,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
-        // Up button - from dock go to progress bar, otherwise show playlist
+        // Up button - from dock go to progress bar, otherwise show playlist/guide
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             // If focus is in controls dock, UP goes to progress bar
             if (focusInControls && controlsMenuVisible && !cinemaSeekMode) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                     cinemaProgressContainer?.requestFocus()
+                }
+                return true
+            }
+            // IPTV mode: UP opens the channel guide
+            if (isIptvMode) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    showIptvGuide()
                 }
                 return true
             }
@@ -3240,6 +3247,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Override playlist button to show IPTV guide instead
         val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
+        playlistButton?.text = "Guide"
         playlistButton?.setOnClickListener {
             hideControlsMenu()
             toggleIptvGuide()
