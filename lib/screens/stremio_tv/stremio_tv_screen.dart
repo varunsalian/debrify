@@ -566,13 +566,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // Dismiss loading dialog
-      streamDialogShown = false;
 
       final torrents = results['torrents'] as List<Torrent>? ?? [];
 
       if (torrents.isEmpty) {
         if (mounted) {
+          Navigator.of(context).pop();
+          streamDialogShown = false;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('No streams found for ${item.name}'),
@@ -589,6 +589,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (playableSources.isEmpty) {
         if (mounted) {
+          Navigator.of(context).pop();
+          streamDialogShown = false;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No playable streams found for ${item.name}')),
           );
@@ -685,6 +687,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
         if (mounted) {
+          Navigator.of(context).pop();
+          streamDialogShown = false;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No playable streams found for ${item.name}')),
           );
@@ -693,6 +697,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (!mounted) return;
+
+      // Dismiss loading dialog right before player launch
+      Navigator.of(context).pop();
+      streamDialogShown = false;
 
       // Launch player with all sources for in-player switching
       await VideoPlayerLauncher.push(
