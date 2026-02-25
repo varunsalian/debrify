@@ -16,6 +16,7 @@ import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../utils/file_utils.dart';
+import '../../utils/formatters.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
@@ -643,7 +644,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final directStreams = _sortStreamsByQuality(
         playableSources.where((t) => t.isDirectStream).toList(),
       );
-      for (final stream in directStreams) {
+      final maxDirectAttempts = directStreams.length.clamp(0, 20);
+      for (int d = 0; d < maxDirectAttempts; d++) {
+        final stream = directStreams[d];
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
         if (!mounted) return;
         final valid = await _isValidStreamUrl(stream.directUrl!);
@@ -656,7 +659,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           break;
         }
         debugPrint(
-          'StremioTV: Skipping small stream (< 200MB): ${stream.source}',
+          'StremioTV: Skipping invalid direct stream: ${stream.source}',
         );
       }
 
@@ -667,7 +670,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
         );
 
-        final maxTorrentAttempts = torrentStreams.length.clamp(0, 15);
+        final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
         for (int i = 0; i < maxTorrentAttempts; i++) {
           if (!mounted) return;
           final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
@@ -690,9 +693,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         if (mounted) {
           Navigator.of(context).pop();
           streamDialogShown = false;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No playable streams found for ${item.name}')),
+          // Show source picker so user can manually select
+          final result = await _showManualSourcePicker(
+            playableSources, item,
           );
+          if (result != null && mounted) {
+            await VideoPlayerLauncher.push(
+              context,
+              VideoPlayerLaunchArgs(
+                videoUrl: result.$1,
+                title: _currentPlayTitle ?? item.name,
+                startAtPercent: _currentSlotProgress,
+                contentImdbId: item.effectiveImdbId,
+                contentType: item.type,
+                stremioSources: playableSources,
+                stremioCurrentSourceIndex: result.$2,
+                resolveStremioSource: _createSourceResolver(item),
+              ),
+            );
+          }
         }
         return;
       }
@@ -1072,6 +1091,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       debugPrint('StremioTV: PikPak error: $e');
       return false;
     }
+  }
+
+  /// Show a bottom sheet with all available sources so the user can pick one manually.
+  /// Returns (resolvedUrl, sourceIndex) or null if dismissed.
+  Future<(String, int)?> _showManualSourcePicker(
+    List<Torrent> sources,
+    StremioMeta item,
+  ) async {
+    final resolver = _createSourceResolver(item);
+    return showModalBottomSheet<(String, int)?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ManualSourcePickerSheet(
+        sources: sources,
+        resolver: resolver,
+        validateDirectUrl: _isValidStreamUrl,
+      ),
+    );
   }
 
   /// Compute the start progress for a channel based on the max start percent setting.
@@ -1710,6 +1748,468 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+// ─── Manual Source Picker (shown when auto-play fails) ────────────────────
+
+class _ManualSourcePickerSheet extends StatefulWidget {
+  final List<Torrent> sources;
+  final Future<String?> Function(Torrent) resolver;
+  final Future<bool> Function(String url) validateDirectUrl;
+
+  const _ManualSourcePickerSheet({
+    required this.sources,
+    required this.resolver,
+    required this.validateDirectUrl,
+  });
+
+  @override
+  State<_ManualSourcePickerSheet> createState() =>
+      _ManualSourcePickerSheetState();
+}
+
+class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
+  int? _resolvingIndex; // index in widget.sources (original)
+  int? _failedIndex; // index of last failed source
+  final _firstItemFocusNode = FocusNode();
+  int _activeTab = 0; // 0 = All, 1 = Direct, 2 = Torrent
+
+  late List<Torrent> _directSources;
+  late List<Torrent> _torrentSources;
+
+  @override
+  void initState() {
+    super.initState();
+    _directSources = widget.sources.where((t) => t.isDirectStream).toList();
+    _torrentSources = widget.sources.where((t) => t.streamType == StreamType.torrent).toList();
+    // Auto-focus first item after build (for DPAD)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _firstItemFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _firstItemFocusNode.dispose();
+    super.dispose();
+  }
+
+  List<Torrent> get _filteredSources {
+    switch (_activeTab) {
+      case 1:
+        return _directSources;
+      case 2:
+        return _torrentSources;
+      default:
+        return widget.sources;
+    }
+  }
+
+  String _parseQuality(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('2160p') || lower.contains('4k') || lower.contains('uhd')) return '4K';
+    if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
+    if (lower.contains('720p')) return '720p';
+    if (lower.contains('480p') || lower.contains('sd')) return '480p';
+    return 'HD';
+  }
+
+  Color _qualityColor(String quality) {
+    switch (quality) {
+      case '4K':
+        return const Color(0xFFFFD600);
+      case '1080p':
+        return const Color(0xFF536DFE);
+      case '720p':
+        return const Color(0xFF00BFA5);
+      case '480p':
+        return const Color(0xFF78909C);
+      default:
+        return const Color(0xFF90A4AE);
+    }
+  }
+
+  Future<void> _onSourceTap(Torrent source) async {
+    if (_resolvingIndex != null) return;
+    final originalIndex = widget.sources.indexOf(source);
+    setState(() {
+      _resolvingIndex = originalIndex;
+      _failedIndex = null;
+    });
+
+    try {
+      final url = await widget.resolver(source);
+      if (!mounted) return;
+      if (url != null && url.isNotEmpty) {
+        // Validate direct URLs with HEAD check (size >= 50MB)
+        if (source.isDirectStream) {
+          final valid = await widget.validateDirectUrl(url);
+          if (!mounted) return;
+          if (!valid) {
+            setState(() {
+              _resolvingIndex = null;
+              _failedIndex = originalIndex;
+            });
+            return;
+          }
+        }
+        Navigator.of(context).pop((url, originalIndex));
+      } else {
+        setState(() {
+          _resolvingIndex = null;
+          _failedIndex = originalIndex;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resolvingIndex = null;
+        _failedIndex = originalIndex;
+      });
+    }
+  }
+
+  Widget _buildTab(String label, int count, int tabIndex) {
+    final isActive = _activeTab == tabIndex;
+    return _SourcePickerTab(
+      label: '$label ($count)',
+      isActive: isActive,
+      onTap: () => setState(() => _activeTab = tabIndex),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filteredSources;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF101016),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFFFB74D), size: 22),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Auto-play failed — select a source',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Tabs
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: Row(
+              children: [
+                _buildTab('All', widget.sources.length, 0),
+                const SizedBox(width: 8),
+                if (_directSources.isNotEmpty) ...[
+                  _buildTab('Direct', _directSources.length, 1),
+                  const SizedBox(width: 8),
+                ],
+                if (_torrentSources.isNotEmpty)
+                  _buildTab('Torrent', _torrentSources.length, 2),
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          // Source list
+          Flexible(
+            child: filtered.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text(
+                        'No sources in this category',
+                        style: TextStyle(color: Colors.white38, fontSize: 14),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: filtered.length,
+                    itemBuilder: (ctx, i) {
+                      final source = filtered[i];
+                      final quality = _parseQuality(source.displayTitle);
+                      final qColor = _qualityColor(quality);
+                      final originalIndex = widget.sources.indexOf(source);
+                      final isResolving = _resolvingIndex == originalIndex;
+                      final size = source.sizeBytes > 0
+                          ? Formatters.formatFileSize(source.sizeBytes)
+                          : null;
+                      final isDirect = source.isDirectStream;
+
+                      final isFailed = _failedIndex == originalIndex;
+
+                      return _SourcePickerItem(
+                        focusNode: i == 0 ? _firstItemFocusNode : null,
+                        quality: quality,
+                        qualityColor: qColor,
+                        title: source.displayTitle,
+                        meta: [
+                          if (isDirect) 'Direct' else 'Torrent',
+                          if (size != null) size,
+                          if (!isDirect && source.seeders > 0)
+                            '${source.seeders} seeders',
+                          if (source.source.isNotEmpty) source.source,
+                        ].join(' · '),
+                        isResolving: isResolving,
+                        isFailed: isFailed,
+                        onTap: isResolving ? null : () => _onSourceTap(source),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tab button with DPAD focus support.
+class _SourcePickerTab extends StatefulWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _SourcePickerTab({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  State<_SourcePickerTab> createState() => _SourcePickerTabState();
+}
+
+class _SourcePickerTabState extends State<_SourcePickerTab> {
+  bool _focused = false;
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: _handleKey,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: widget.isActive
+                ? const Color(0xFF536DFE)
+                : _focused
+                    ? const Color(0xFF536DFE).withValues(alpha: 0.15)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _focused
+                  ? const Color(0xFF536DFE).withValues(alpha: 0.7)
+                  : widget.isActive
+                      ? Colors.transparent
+                      : Colors.white12,
+              width: _focused ? 1.5 : 1,
+            ),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              color: widget.isActive ? Colors.white : Colors.white54,
+              fontSize: 13,
+              fontWeight: widget.isActive ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Individual source item with DPAD focus support.
+class _SourcePickerItem extends StatefulWidget {
+  final FocusNode? focusNode;
+  final String quality;
+  final Color qualityColor;
+  final String title;
+  final String meta;
+  final bool isResolving;
+  final bool isFailed;
+  final VoidCallback? onTap;
+
+  const _SourcePickerItem({
+    this.focusNode,
+    required this.quality,
+    required this.qualityColor,
+    required this.title,
+    required this.meta,
+    required this.isResolving,
+    this.isFailed = false,
+    this.onTap,
+  });
+
+  @override
+  State<_SourcePickerItem> createState() => _SourcePickerItemState();
+}
+
+class _SourcePickerItemState extends State<_SourcePickerItem> {
+  late final FocusNode _focusNode;
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode();
+  }
+
+  @override
+  void dispose() {
+    if (widget.focusNode == null) _focusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      widget.onTap?.call();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final qColor = widget.qualityColor;
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: _handleKey,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _focused ? const Color(0xFF1A1A2E) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _focused
+                  ? const Color(0xFF536DFE).withValues(alpha: 0.7)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Quality badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: qColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: qColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  widget.quality,
+                  style: TextStyle(
+                    color: qColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Title + meta
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _focused ? Colors.white : Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.meta,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Loading, failed, or play icon
+              if (widget.isResolving)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF536DFE),
+                  ),
+                )
+              else if (widget.isFailed)
+                const Icon(Icons.error_outline,
+                    color: Color(0xFFEF5350), size: 22)
+              else
+                Icon(Icons.play_circle_outline,
+                    color: _focused ? Colors.white54 : Colors.white24,
+                    size: 22),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
