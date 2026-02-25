@@ -128,7 +128,15 @@ class Torrent {
     // Check for newline first (release_name\nfilename format)
     final newlineIndex = name.indexOf('\n');
     if (newlineIndex > 0) {
-      return name.substring(0, newlineIndex).trim();
+      final firstLine = name.substring(0, newlineIndex).trim();
+      final rest = name.substring(newlineIndex + 1).trim();
+      // If first line is just the addon/source name, use the rest instead
+      if (rest.isNotEmpty &&
+          (firstLine.toLowerCase() == (source ?? '').toLowerCase() ||
+              (firstLine.length < 20 && rest.length > firstLine.length))) {
+        return rest.split('\n').first.trim();
+      }
+      return firstLine;
     }
     // Then check for slash (release_name/filename format)
     final slashIndex = name.indexOf('/');

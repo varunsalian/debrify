@@ -598,14 +598,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
-      // For PikPak videos from playlist OR Debrify TV, use retry logic
+      // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
       final currentEntry = widget.playlist?[_currentIndex];
       final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
-      // For Debrify TV (no playlist), check if the URL appears to be PikPak (dl-*.mypikpak.com)
-      final isPikPakDebrifyTV = widget.playlist == null && widget.requestMagicNext != null && initialUrl.contains('mypikpak.com');
+      // For non-playlist flows (Debrify TV, Stremio TV, etc.), detect PikPak by URL
+      final isPikPakUrl = widget.playlist == null && initialUrl.contains('mypikpak.com');
+      final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
-      if ((isPikPak && widget.playlist != null) || isPikPakDebrifyTV) {
-        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isPikPakDebrifyTV).then((_) async {
+      if ((isPikPak && widget.playlist != null) || isPikPakUrl) {
+        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((_) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
           // Random start takes precedence over resume, then startAtPercent
@@ -2119,7 +2120,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         overridePikPakFileId != null ||
         currentEntry?.provider?.toLowerCase() == 'pikpak' ||
         currentEntry?.pikpakFileId != null ||
-        isDebrifyTV; // Debrify TV PikPak videos are also PikPak
+        isDebrifyTV ||
+        videoUrl.contains('mypikpak.com'); // Detect PikPak by URL (Stremio TV, etc.)
 
     print('PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV');
 

@@ -1520,8 +1520,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun startPlayback(item: PlaybackItem) {
         // Check if this is a PikPak provider - use retry logic for cold storage handling
-        val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true)
-        android.util.Log.d("AndroidTvPlayer", "startPlayback - provider: ${item.provider}, isPikPak: $isPikPak")
+        val isPikPak = PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
+            item.url.contains("mypikpak.com")
+        android.util.Log.d("AndroidTvPlayer", "startPlayback - provider: ${item.provider}, isPikPak: $isPikPak, url contains mypikpak: ${item.url.contains("mypikpak.com")}")
 
         if (isPikPak) {
             android.util.Log.d("AndroidTvPlayer", "startPlayback - using PikPak retry logic")
@@ -4492,6 +4493,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun onStremioSourceSelected(source: StremioSource) {
         android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}")
 
+        // Cancel any ongoing PikPak retry from previous source
+        cancelPikPakRetry()
+
         // Increment token to invalidate any in-flight resolution
         stremioResolutionToken++
 
@@ -4595,6 +4599,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Hide panel
         hideStremioSourcesPanel()
 
+        // Cancel any ongoing PikPak retry before switching
+        cancelPikPakRetry()
+
         // Switch ExoPlayer source, preserving position
         val mediaItem = MediaItem.fromUri(url)
         player?.setMediaItem(mediaItem)
@@ -4614,6 +4621,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             titleContainer.alpha = 1f
             titleHandler.removeCallbacks(hideTitleRunnable)
             titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
+        }
+
+        // For PikPak URLs, start cold storage retry monitoring
+        if (url.contains("mypikpak.com")) {
+            android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: PikPak URL detected, starting retry logic")
+            pikPakRetryId++
+            val myRetryId = pikPakRetryId
+            pikPakRetryCount = 0
+            isPikPakRetrying = false
+            hidePikPakRetryOverlay()
+            // Build a temporary PlaybackItem for the retry loop
+            val tempItem = PlaybackItem(
+                id = "stremio_source_$sourceIndex",
+                title = currentSource?.displayTitle ?: "",
+                url = url,
+                index = sourceIndex,
+                season = null,
+                episode = null,
+                artwork = null,
+                description = null,
+                resumePositionMs = currentPos,
+                durationMs = 0L,
+                updatedAt = 0L,
+                resumeId = null,
+                sizeBytes = currentSource?.sizeBytes,
+                rating = null,
+                provider = PROVIDER_PIKPAK,
+            )
+            attemptPikPakPlaybackLoop(tempItem, 0, myRetryId)
         }
     }
 
@@ -4959,7 +4995,13 @@ private data class StremioSource(
 
     val displayTitle: String get() {
         val newlineIdx = name.indexOf('\n')
-        return if (newlineIdx > 0) name.substring(0, newlineIdx).trim() else name
+        if (newlineIdx <= 0) return name
+        val firstLine = name.substring(0, newlineIdx).trim()
+        val rest = name.substring(newlineIdx + 1).trim()
+        // If first line is just the addon/source name, use the rest instead
+        return if (rest.isNotEmpty() && (firstLine.equals(source, ignoreCase = true) ||
+                firstLine.length < 20 && rest.length > firstLine.length)) rest.split('\n').first().trim()
+            else firstLine
     }
 
     val formattedSize: String? get() {
