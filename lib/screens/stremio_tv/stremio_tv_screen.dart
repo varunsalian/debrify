@@ -582,10 +582,43 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return;
       }
 
-      // Build playable sources list (exclude external URLs)
-      final playableSources = torrents
+      // Build playable sources list (exclude external URLs and tiny junk files)
+      // Direct streams under 5MB are placeholder/tracking files (e.g. mytrakt sync)
+      var playableSources = torrents
           .where((t) => !t.isExternalStream)
+          .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
           .toList();
+
+      // For TorBox, filter torrent sources to only cached ones
+      if (_debridProvider == 'torbox') {
+        final tbKey = await StorageService.getTorboxApiKey();
+        if (tbKey != null && tbKey.isNotEmpty) {
+          final torrentHashes = playableSources
+              .where((t) => t.streamType == StreamType.torrent)
+              .map((t) => t.infohash.trim().toLowerCase())
+              .where((h) => h.isNotEmpty)
+              .toList();
+          if (torrentHashes.isNotEmpty) {
+            if (!mounted) return;
+            final cachedHashes = await TorboxService.checkCachedTorrents(
+              apiKey: tbKey,
+              infoHashes: torrentHashes,
+            );
+            final cachedSet = cachedHashes
+                .map((h) => h.trim().toLowerCase())
+                .toSet();
+            debugPrint(
+              'StremioTV: TorBox cache check: ${cachedSet.length} cached '
+              'out of ${torrentHashes.length} torrents',
+            );
+            // Keep direct streams + only cached torrents
+            playableSources = playableSources
+                .where((t) => t.streamType != StreamType.torrent ||
+                    cachedSet.contains(t.infohash.trim().toLowerCase()))
+                .toList();
+          }
+        }
+      }
 
       if (playableSources.isEmpty) {
         if (mounted) {
@@ -629,42 +662,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // If no direct stream worked, try torrents via debrid
       if (firstPlayableUrl == null) {
-        var torrentStreams = _sortStreamsByQuality(
+        // TorBox torrents are already filtered to cached-only in playableSources
+        final torrentStreams = _sortStreamsByQuality(
           playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
         );
-
-        // For TorBox (explicitly selected), batch-check cache and only attempt cached torrents
-        if (torrentStreams.isNotEmpty && _debridProvider == 'torbox') {
-          final tbKey = await StorageService.getTorboxApiKey();
-          if (tbKey != null && tbKey.isNotEmpty) {
-            final hashes = torrentStreams
-                .map((t) => t.infohash.trim().toLowerCase())
-                .where((h) => h.isNotEmpty)
-                .toList();
-            if (hashes.isNotEmpty) {
-              final cachedHashes = await TorboxService.checkCachedTorrents(
-                apiKey: tbKey,
-                infoHashes: hashes,
-              );
-              if (cachedHashes.isNotEmpty) {
-                final cachedNormalized = cachedHashes
-                    .map((h) => h.trim().toLowerCase())
-                    .toSet();
-                torrentStreams = torrentStreams
-                    .where((t) => cachedNormalized
-                        .contains(t.infohash.trim().toLowerCase()))
-                    .toList();
-                debugPrint(
-                  'StremioTV: TorBox cache check: ${cachedHashes.length} cached '
-                  'out of ${hashes.length} torrents',
-                );
-              } else {
-                debugPrint('StremioTV: TorBox cache check: none cached');
-                torrentStreams = [];
-              }
-            }
-          }
-        }
 
         final maxTorrentAttempts = torrentStreams.length.clamp(0, 15);
         for (int i = 0; i < maxTorrentAttempts; i++) {
