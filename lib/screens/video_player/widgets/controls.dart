@@ -38,6 +38,8 @@ class Controls extends StatelessWidget {
   final VoidCallback onRandom;
   final bool hasIptvChannels;
   final VoidCallback? onShowIptvChannels;
+  final bool hasStremioSources;
+  final VoidCallback? onShowStremioSources;
 
   const Controls({
     Key? key,
@@ -76,6 +78,8 @@ class Controls extends StatelessWidget {
     required this.onRandom,
     this.hasIptvChannels = false,
     this.onShowIptvChannels,
+    this.hasStremioSources = false,
+    this.onShowStremioSources,
   }) : super(key: key);
 
   String _getAspectRatioName() {
@@ -371,6 +375,15 @@ class Controls extends StatelessWidget {
                                 icon: Icons.live_tv_rounded,
                                 label: 'Channels',
                                 onPressed: onShowIptvChannels!,
+                                isCompact: true,
+                              ),
+
+                            // Stremio Sources button
+                            if (hasStremioSources && onShowStremioSources != null)
+                              NetflixControlButton(
+                                icon: Icons.swap_horiz_rounded,
+                                label: 'Sources',
+                                onPressed: onShowStremioSources!,
                                 isCompact: true,
                               ),
 

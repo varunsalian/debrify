@@ -161,6 +161,49 @@
 
     </FrameLayout>
 
+    <!-- Stremio Source Quality Badge (top right, appears with controls) -->
+    <FrameLayout
+        android:id="@+id/stremio_source_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="24dp"
+        android:visibility="gone"
+        android:elevation="20dp"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:background="@drawable/stremio_source_badge_bg"
+        android:paddingStart="14dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/stremio_source_badge_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#EEFFFFFF"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.02" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="&#x25B8;"
+                android:textColor="#80FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </FrameLayout>
+
     <!-- Channel Badge (bottom right) -->
     <TextView
         android:id="@+id/android_tv_channel_badge"
@@ -228,6 +271,9 @@
 
     <!-- IPTV Channel Guide Overlay -->
     <include layout="@layout/view_iptv_channel_guide" />
+
+    <!-- Stremio Sources Panel Overlay -->
+    <include layout="@layout/view_stremio_sources_panel" />
 
     <!-- Loading/Tuning Stream Overlay -->
     <FrameLayout

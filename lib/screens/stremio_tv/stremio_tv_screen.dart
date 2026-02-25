@@ -582,13 +582,31 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return;
       }
 
-      // Try to find the best stream to play
+      // Build playable sources list (exclude external URLs)
+      final playableSources = torrents
+          .where((t) => !t.isExternalStream)
+          .toList();
+
+      if (playableSources.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No playable streams found for ${item.name}')),
+          );
+        }
+        return;
+      }
+
+      // Try to find the best stream to auto-play
       // Priority: direct URL streams first (validated, sorted by quality), then torrents via debrid
       if (_preferredQuality != 'auto') {
         debugPrint('StremioTV: Preferred quality: $_preferredQuality');
       }
+
+      String? firstPlayableUrl;
+      int firstPlayableIndex = 0;
+
       final directStreams = _sortStreamsByQuality(
-        torrents.where((t) => t.isDirectStream).toList(),
+        playableSources.where((t) => t.isDirectStream).toList(),
       );
       for (final stream in directStreams) {
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
@@ -596,69 +614,100 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         final valid = await _isValidStreamUrl(stream.directUrl!);
         if (!mounted) return;
         if (valid) {
-          await _playDirectStream(stream, item);
-          return;
+          firstPlayableUrl = stream.directUrl!;
+          firstPlayableIndex = playableSources.indexWhere((t) =>
+              t.directUrl == stream.directUrl && t.name == stream.name);
+          if (firstPlayableIndex < 0) firstPlayableIndex = 0;
+          break;
         }
         debugPrint(
           'StremioTV: Skipping small stream (< 200MB): ${stream.source}',
         );
       }
 
-      // For torrent streams, try to resolve via debrid (up to 5 attempts)
-      var torrentStreams = _sortStreamsByQuality(
-        torrents.where((t) => t.streamType == StreamType.torrent).toList(),
-      );
+      // If no direct stream worked, try torrents via debrid
+      if (firstPlayableUrl == null) {
+        var torrentStreams = _sortStreamsByQuality(
+          playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
+        );
 
-      // For TorBox (explicitly selected), batch-check cache and only attempt cached torrents
-      if (torrentStreams.isNotEmpty && _debridProvider == 'torbox') {
-        final tbKey = await StorageService.getTorboxApiKey();
-        if (tbKey != null && tbKey.isNotEmpty) {
-          final hashes = torrentStreams
-              .map((t) => t.infohash.trim().toLowerCase())
-              .where((h) => h.isNotEmpty)
-              .toList();
-          if (hashes.isNotEmpty) {
-            final cachedHashes = await TorboxService.checkCachedTorrents(
-              apiKey: tbKey,
-              infoHashes: hashes,
-            );
-            if (cachedHashes.isNotEmpty) {
-              final cachedNormalized = cachedHashes
-                  .map((h) => h.trim().toLowerCase())
-                  .toSet();
-              torrentStreams = torrentStreams
-                  .where((t) => cachedNormalized
-                      .contains(t.infohash.trim().toLowerCase()))
-                  .toList();
-              debugPrint(
-                'StremioTV: TorBox cache check: ${cachedHashes.length} cached '
-                'out of ${hashes.length} torrents',
+        // For TorBox (explicitly selected), batch-check cache and only attempt cached torrents
+        if (torrentStreams.isNotEmpty && _debridProvider == 'torbox') {
+          final tbKey = await StorageService.getTorboxApiKey();
+          if (tbKey != null && tbKey.isNotEmpty) {
+            final hashes = torrentStreams
+                .map((t) => t.infohash.trim().toLowerCase())
+                .where((h) => h.isNotEmpty)
+                .toList();
+            if (hashes.isNotEmpty) {
+              final cachedHashes = await TorboxService.checkCachedTorrents(
+                apiKey: tbKey,
+                infoHashes: hashes,
               );
-            } else {
-              debugPrint('StremioTV: TorBox cache check: none cached');
-              torrentStreams = [];
+              if (cachedHashes.isNotEmpty) {
+                final cachedNormalized = cachedHashes
+                    .map((h) => h.trim().toLowerCase())
+                    .toSet();
+                torrentStreams = torrentStreams
+                    .where((t) => cachedNormalized
+                        .contains(t.infohash.trim().toLowerCase()))
+                    .toList();
+                debugPrint(
+                  'StremioTV: TorBox cache check: ${cachedHashes.length} cached '
+                  'out of ${hashes.length} torrents',
+                );
+              } else {
+                debugPrint('StremioTV: TorBox cache check: none cached');
+                torrentStreams = [];
+              }
             }
           }
         }
+
+        final maxTorrentAttempts = torrentStreams.length.clamp(0, 15);
+        for (int i = 0; i < maxTorrentAttempts; i++) {
+          if (!mounted) return;
+          final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
+          if (url != null && url.isNotEmpty) {
+            firstPlayableUrl = url;
+            firstPlayableIndex = playableSources.indexWhere((t) =>
+                t.infohash == torrentStreams[i].infohash &&
+                t.name == torrentStreams[i].name);
+            if (firstPlayableIndex < 0) firstPlayableIndex = 0;
+            break;
+          }
+          debugPrint(
+            'StremioTV: Torrent ${i + 1}/$maxTorrentAttempts failed, '
+            '${i + 1 < maxTorrentAttempts ? "trying next..." : "giving up."}',
+          );
+        }
       }
 
-      final maxTorrentAttempts = torrentStreams.length.clamp(0, 15);
-      for (int i = 0; i < maxTorrentAttempts; i++) {
-        if (!mounted) return;
-        final success =
-            await _playTorrentViaDebrid(torrentStreams[i], item);
-        if (success) return;
-        debugPrint(
-          'StremioTV: Torrent ${i + 1}/$maxTorrentAttempts failed, '
-          '${i + 1 < maxTorrentAttempts ? "trying next..." : "giving up."}',
-        );
+      if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No playable streams found for ${item.name}')),
+          );
+        }
+        return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No playable streams found for ${item.name}')),
-        );
-      }
+      if (!mounted) return;
+
+      // Launch player with all sources for in-player switching
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: firstPlayableUrl,
+          title: _currentPlayTitle ?? item.name,
+          startAtPercent: _currentSlotProgress,
+          contentImdbId: item.effectiveImdbId,
+          contentType: item.type,
+          stremioSources: playableSources,
+          stremioCurrentSourceIndex: firstPlayableIndex,
+          resolveStremioSource: _createSourceResolver(item),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       if (streamDialogShown) Navigator.of(context).pop();
@@ -1027,6 +1076,215 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // Deterministic random within [0, cap] based on channel ID
     final hash = channelId.hashCode.abs();
     return (hash % 1000) / 1000.0 * cap;
+  }
+
+  // ─── Source Resolution (no dialogs, returns URL) ────────────────────
+
+  /// Creates a resolver closure that snapshots current state at creation time.
+  Future<String?> Function(Torrent) _createSourceResolver(StremioMeta item) {
+    final debridProvider = _debridProvider;
+    return (Torrent torrent) async {
+      if (torrent.isDirectStream) {
+        return torrent.directUrl;
+      }
+      if (torrent.streamType == StreamType.torrent) {
+        return _resolveTorrentUrl(torrent, item, debridProvider);
+      }
+      return null;
+    };
+  }
+
+  /// Resolve a torrent to a playable URL via the given debrid provider.
+  Future<String?> _resolveTorrentUrl(Torrent torrent, StremioMeta item, String debridProvider) async {
+    // Try the selected provider first
+    if (debridProvider == 'realdebrid') {
+      final rdKey = await StorageService.getApiKey();
+      if (rdKey != null && rdKey.isNotEmpty) {
+        return _resolveViaRealDebrid(torrent, item, rdKey);
+      }
+    } else if (debridProvider == 'torbox') {
+      final tbKey = await StorageService.getTorboxApiKey();
+      if (tbKey != null && tbKey.isNotEmpty) {
+        return _resolveViaTorbox(torrent, tbKey);
+      }
+    } else if (debridProvider == 'pikpak') {
+      final pikpakEnabled = await StorageService.getPikPakEnabled();
+      if (pikpakEnabled) {
+        return _resolveViaPikPak(torrent, item);
+      }
+    }
+
+    // Auto fallback
+    final rdKey = await StorageService.getApiKey();
+    if (rdKey != null && rdKey.isNotEmpty) {
+      return _resolveViaRealDebrid(torrent, item, rdKey);
+    }
+    final tbKey = await StorageService.getTorboxApiKey();
+    if (tbKey != null && tbKey.isNotEmpty) {
+      return _resolveViaTorbox(torrent, tbKey);
+    }
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    if (pikpakEnabled) {
+      return _resolveViaPikPak(torrent, item);
+    }
+
+    return null;
+  }
+
+  Future<String?> _resolveViaRealDebrid(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey,
+  ) async {
+    try {
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final result = await DebridService.addTorrentToDebridPreferVideos(
+        apiKey,
+        magnet,
+      );
+
+      final links = result['links'] as List<dynamic>? ?? [];
+      final updatedInfo =
+          result['updatedInfo'] as Map<String, dynamic>? ?? {};
+      final files =
+          updatedInfo['files'] as List<dynamic>? ?? [];
+
+      if (links.isEmpty) return null;
+
+      String linkToUnrestrict = links.first.toString();
+      if (item.type.toLowerCase() == 'movie' && links.length > 1) {
+        final selectedFiles = files
+            .where((f) => f is Map && f['selected'] == 1)
+            .toList();
+        if (selectedFiles.length == links.length) {
+          int largestIndex = 0;
+          int largestSize = 0;
+          for (int i = 0; i < selectedFiles.length; i++) {
+            final size = (selectedFiles[i]['bytes'] as int?) ?? 0;
+            if (size > largestSize) {
+              largestSize = size;
+              largestIndex = i;
+            }
+          }
+          linkToUnrestrict = links[largestIndex].toString();
+        }
+      }
+
+      final unrestrictResult = await DebridService.unrestrictLink(
+        apiKey,
+        linkToUnrestrict,
+      );
+      return unrestrictResult['download'] as String?;
+    } catch (e) {
+      debugPrint('StremioTV: RD resolve error: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _resolveViaTorbox(
+    Torrent torrent,
+    String apiKey,
+  ) async {
+    try {
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final result = await TorboxService.createTorrent(
+        apiKey: apiKey,
+        magnet: magnet,
+      );
+      final data = result['data'];
+      final torrentId = data is Map
+          ? (data['torrent_id'] ?? data['id'])
+          : (result['torrent_id'] ?? result['id']);
+
+      if (torrentId == null) return null;
+
+      await Future.delayed(const Duration(seconds: 3));
+
+      final torrentInfo = await TorboxService.getTorrentById(
+        apiKey,
+        torrentId is int ? torrentId : int.parse(torrentId.toString()),
+      );
+
+      if (torrentInfo == null) return null;
+
+      final allFiles = torrentInfo.files;
+      final videoFiles = allFiles
+          .where((f) => FileUtils.isVideoFile(f.name))
+          .toList();
+      final files = videoFiles.isNotEmpty ? videoFiles : allFiles;
+      if (files.isEmpty) return null;
+
+      var targetFile = files.first;
+      if (files.length > 1) {
+        for (final f in files) {
+          if (f.size > targetFile.size) {
+            targetFile = f;
+          }
+        }
+      }
+
+      return await TorboxService.requestFileDownloadLink(
+        apiKey: apiKey,
+        torrentId: torrentId is int ? torrentId : int.parse(torrentId.toString()),
+        fileId: targetFile.id,
+      );
+    } catch (e) {
+      debugPrint('StremioTV: Torbox resolve error: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _resolveViaPikPak(
+    Torrent torrent,
+    StremioMeta item,
+  ) async {
+    try {
+      final prepared = await PikPakTvService.instance.prepareTorrent(
+        infohash: torrent.infohash.trim().toLowerCase(),
+        torrentName: torrent.name,
+      );
+
+      if (prepared == null) return null;
+
+      String? streamUrl = prepared['url'] as String?;
+
+      final allVideoFiles =
+          prepared['allVideoFiles'] as List<dynamic>?;
+      if (allVideoFiles != null &&
+          allVideoFiles.isNotEmpty &&
+          item.type.toLowerCase() == 'movie') {
+        Map<String, dynamic>? largestFile;
+        int largestSize = 0;
+        for (final file in allVideoFiles) {
+          if (file is Map<String, dynamic>) {
+            final size = (file['size'] as int?) ?? 0;
+            if (size > largestSize) {
+              largestSize = size;
+              largestFile = file;
+            }
+          }
+        }
+
+        if (largestFile != null) {
+          final largestFileId = largestFile['id'] as String?;
+          if (largestFileId != null && largestFileId.isNotEmpty) {
+            final api = PikPakApiService.instance;
+            final fileData = await api.getFileDetails(largestFileId);
+            final url = api.getStreamingUrl(fileData);
+            if (url != null && url.isNotEmpty) {
+              streamUrl = url;
+            }
+          }
+        }
+      }
+
+      return streamUrl;
+    } catch (e) {
+      debugPrint('StremioTV: PikPak resolve error: $e');
+      return null;
+    }
   }
 
   void _playChannelById(String channelId) {

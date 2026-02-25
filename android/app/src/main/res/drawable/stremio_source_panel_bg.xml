@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stremio sources — Dark premium panel background (mirrors iptv_guide_panel_bg) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F8101016" />
+    <corners
+        android:topLeftRadius="24dp"
+        android:bottomLeftRadius="24dp"
+        android:topRightRadius="0dp"
+        android:bottomRightRadius="0dp" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#0FFFFFFF" />
+</shape>

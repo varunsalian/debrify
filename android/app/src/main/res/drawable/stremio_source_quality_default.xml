@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quality badge: default/unknown — gray -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#33808080" />
+    <corners android:radius="6dp" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#66808080" />
+</shape>

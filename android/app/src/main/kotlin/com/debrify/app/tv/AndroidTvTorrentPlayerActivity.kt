@@ -164,6 +164,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvChannelAdapter: IptvChannelAdapter? = null
     private var iptvGuideVisible = false
 
+    // Stremio Sources state
+    private var stremioSources = mutableListOf<StremioSource>()
+    private var currentStremioSourceIndex = 0
+    private var stremioSourcesVisible = false
+    private var stremioSourcesOverlay: View? = null
+    private var stremioSourcesList: RecyclerView? = null
+    private var stremioSourcesSearch: android.widget.EditText? = null
+    private var stremioSourcesCountText: TextView? = null
+    private var stremioSourcesNowPlaying: View? = null
+    private var stremioSourcesNowQuality: TextView? = null
+    private var stremioSourcesNowName: TextView? = null
+    private var stremioSourcesNowMeta: TextView? = null
+    private var stremioSourcesTabDirect: TextView? = null
+    private var stremioSourcesTabTorrent: TextView? = null
+    private var stremioSourceAdapter: StremioSourceAdapter? = null
+    private var stremioSourceBadge: View? = null
+    private var stremioSourceBadgeText: TextView? = null
+    private var stremioActiveTab: String = "all" // "all", "direct", "torrent"
+    private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
+
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
     private var subtitleSettingsVisible = false
@@ -402,6 +422,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupSeekbar()
         setupPlaylist()
         setupControls()
+        setupStremioSources()
 
         // Initialize seek feedback manager
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
@@ -612,6 +633,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
+
+        // Stremio sources views
+        stremioSourceBadge = findViewById(R.id.stremio_source_badge)
+        stremioSourceBadgeText = findViewById(R.id.stremio_source_badge_text)
+        stremioSourcesOverlay = findViewById(R.id.stremio_sources_overlay)
+        stremioSourcesList = findViewById(R.id.stremio_sources_list)
+        stremioSourcesSearch = findViewById(R.id.stremio_sources_search)
+        stremioSourcesCountText = findViewById(R.id.stremio_sources_count)
+        stremioSourcesNowPlaying = findViewById(R.id.stremio_sources_now_playing)
+        stremioSourcesNowQuality = findViewById(R.id.stremio_sources_now_quality)
+        stremioSourcesNowName = findViewById(R.id.stremio_sources_now_name)
+        stremioSourcesNowMeta = findViewById(R.id.stremio_sources_now_meta)
+        stremioSourcesTabDirect = findViewById(R.id.stremio_sources_tab_direct)
+        stremioSourcesTabTorrent = findViewById(R.id.stremio_sources_tab_torrent)
     }
 
     private fun setupPlayer() {
@@ -2231,6 +2266,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
+        // Handle Stremio sources panel overlay
+        if (stremioSourcesVisible) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_BACK -> {
+                        hideStremioSourcesPanel()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        // Block left when focus is in the source list to prevent escaping panel
+                        if (isFocusInStremioSourcesList()) {
+                            return true
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        // Long-press up in source list: jump to search bar
+                        if (isFocusInStremioSourcesList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
+                            stremioSourcesSearch?.requestFocus()
+                            return true
+                        }
+                    }
+                }
+            }
+            // Let DPAD up/down/right/center work normally within the panel
+            return super.dispatchKeyEvent(event)
+        }
+
         // Handle seekbar
         if (seekbarVisible) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -2274,8 +2336,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val focusInControls = isFocusInControlsOverlay()
 
-        // Center button - play/pause
+        // Center button - play/pause (or badge click)
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            // If focus is on stremio source badge, let click handler fire
+            if (currentFocus == stremioSourceBadge) {
+                return super.dispatchKeyEvent(event)
+            }
             if (focusInControls) {
                 return super.dispatchKeyEvent(event)
             }
@@ -2285,8 +2351,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return true
         }
 
-        // Down button - show controls menu
+        // Down button - show controls menu, or from badge go to progress bar
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            // If focus is on Stremio badge, DOWN goes back to progress bar
+            if (currentFocus == stremioSourceBadge && controlsMenuVisible) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    cinemaProgressContainer?.requestFocus()
+                }
+                return true
+            }
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 if (!controlsMenuVisible) {
                     showControlsMenu()
@@ -2301,8 +2374,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
-        // Up button - from dock go to progress bar, otherwise show playlist/guide
+        // Up button - from dock go to progress bar, from progress bar go to badge, otherwise show playlist/guide
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            // If focus is on progress bar and Stremio badge is available, UP goes to badge
+            if (currentFocus == cinemaProgressContainer && controlsMenuVisible && stremioSources.isNotEmpty()) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    stremioSourceBadge?.requestFocus()
+                }
+                return true
+            }
             // If focus is in controls dock, UP goes to progress bar
             if (focusInControls && controlsMenuVisible && !cinemaSeekMode) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
@@ -2432,6 +2512,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             titleContainer.alpha = 1f
         }
 
+        // Show Stremio source quality badge
+        showStremioSourceBadge()
+
         overlay.animate().cancel()
 
         if (!controlsMenuVisible) {
@@ -2491,6 +2574,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 titleOttContainer.visibility = View.GONE
             }
             .start()
+
+        // Hide Stremio source quality badge
+        hideStremioSourceBadge()
 
         overlay.animate()
             .alpha(0f)
@@ -4206,6 +4292,359 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Stremio Source Switcher
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private fun setupStremioSources() {
+        if (stremioSources.isEmpty()) return
+
+        android.util.Log.d("AndroidTvPlayer", "setupStremioSources: ${stremioSources.size} sources, current=$currentStremioSourceIndex")
+
+        // Setup quality badge
+        updateStremioQualityBadge()
+
+        // Setup badge click → open sources panel
+        stremioSourceBadge?.setOnClickListener { toggleStremioSourcesPanel() }
+
+        // Setup tabs
+        val directCount = stremioSources.count { it.isDirectStream }
+        val torrentCount = stremioSources.count { !it.isDirectStream }
+
+        stremioSourcesTabDirect?.text = "Direct ($directCount)"
+        stremioSourcesTabTorrent?.text = "Torrent ($torrentCount)"
+
+        // Auto-select tab with sources
+        stremioActiveTab = when {
+            directCount > 0 && torrentCount > 0 -> "all"
+            directCount > 0 -> "direct"
+            torrentCount > 0 -> "torrent"
+            else -> "all"
+        }
+        // Start with the tab that has the current source
+        val currentSource = stremioSources.getOrNull(currentStremioSourceIndex)
+        if (currentSource != null) {
+            stremioActiveTab = if (currentSource.isDirectStream) "direct" else "torrent"
+        }
+        updateStremioTabAppearance()
+
+        stremioSourcesTabDirect?.setOnClickListener {
+            if (directCount > 0) {
+                stremioActiveTab = "direct"
+                updateStremioTabAppearance()
+                filterStremioSources()
+            }
+        }
+        stremioSourcesTabTorrent?.setOnClickListener {
+            if (torrentCount > 0) {
+                stremioActiveTab = "torrent"
+                updateStremioTabAppearance()
+                filterStremioSources()
+            }
+        }
+
+        // Gray out empty tab
+        if (directCount == 0) {
+            stremioSourcesTabDirect?.alpha = 0.3f
+            stremioSourcesTabDirect?.isFocusable = false
+        }
+        if (torrentCount == 0) {
+            stremioSourcesTabTorrent?.alpha = 0.3f
+            stremioSourcesTabTorrent?.isFocusable = false
+        }
+
+        // Setup search
+        stremioSourcesSearch?.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) { filterStremioSources() }
+        })
+
+        // Setup RecyclerView
+        stremioSourceAdapter = StremioSourceAdapter(getFilteredStremioSources()) { source ->
+            onStremioSourceSelected(source)
+        }
+        stremioSourceAdapter?.updateActiveSource(currentStremioSourceIndex)
+
+        stremioSourcesList?.layoutManager = LinearLayoutManager(this)
+        stremioSourcesList?.adapter = stremioSourceAdapter
+
+        // Update header
+        stremioSourcesCountText?.text = "${stremioSources.size} sources available"
+        updateStremioNowPlaying()
+    }
+
+    private fun updateStremioTabAppearance() {
+        when (stremioActiveTab) {
+            "direct" -> {
+                stremioSourcesTabDirect?.setBackgroundResource(R.drawable.stremio_source_tab_active)
+                stremioSourcesTabDirect?.setTextColor(Color.WHITE)
+                stremioSourcesTabTorrent?.setBackgroundResource(R.drawable.stremio_source_tab_inactive)
+                stremioSourcesTabTorrent?.setTextColor(Color.parseColor("#80FFFFFF"))
+            }
+            "torrent" -> {
+                stremioSourcesTabTorrent?.setBackgroundResource(R.drawable.stremio_source_tab_active)
+                stremioSourcesTabTorrent?.setTextColor(Color.WHITE)
+                stremioSourcesTabDirect?.setBackgroundResource(R.drawable.stremio_source_tab_inactive)
+                stremioSourcesTabDirect?.setTextColor(Color.parseColor("#80FFFFFF"))
+            }
+            else -> {
+                // Both active (show all) - highlight both
+                stremioSourcesTabDirect?.setBackgroundResource(R.drawable.stremio_source_tab_active)
+                stremioSourcesTabDirect?.setTextColor(Color.WHITE)
+                stremioSourcesTabTorrent?.setBackgroundResource(R.drawable.stremio_source_tab_active)
+                stremioSourcesTabTorrent?.setTextColor(Color.WHITE)
+            }
+        }
+    }
+
+    private fun getFilteredStremioSources(): List<StremioSource> {
+        val query = stremioSourcesSearch?.text?.toString()?.lowercase() ?: ""
+        return stremioSources.filter { source ->
+            val matchesTab = when (stremioActiveTab) {
+                "direct" -> source.isDirectStream
+                "torrent" -> !source.isDirectStream
+                else -> true
+            }
+            val matchesQuery = query.isEmpty() ||
+                source.name.lowercase().contains(query) ||
+                (source.source?.lowercase()?.contains(query) == true)
+            matchesTab && matchesQuery
+        }
+    }
+
+    private fun filterStremioSources() {
+        val filtered = getFilteredStremioSources()
+        stremioSourceAdapter?.updateSources(filtered)
+        stremioSourcesCountText?.text = "${filtered.size} of ${stremioSources.size} sources"
+    }
+
+    private fun updateStremioQualityBadge() {
+        val current = stremioSources.getOrNull(currentStremioSourceIndex) ?: return
+        stremioSourceBadgeText?.text = current.quality
+    }
+
+    private fun updateStremioNowPlaying() {
+        val current = stremioSources.getOrNull(currentStremioSourceIndex)
+        if (current != null) {
+            stremioSourcesNowPlaying?.visibility = View.VISIBLE
+            stremioSourcesNowQuality?.text = current.quality
+            stremioSourcesNowName?.text = current.displayTitle
+            val meta = current.formattedSize
+            if (meta != null) {
+                stremioSourcesNowMeta?.text = meta
+                stremioSourcesNowMeta?.visibility = View.VISIBLE
+            } else {
+                stremioSourcesNowMeta?.visibility = View.GONE
+            }
+        } else {
+            stremioSourcesNowPlaying?.visibility = View.GONE
+        }
+    }
+
+    private fun showStremioSourcesPanel() {
+        if (stremioSources.isEmpty()) return
+        stremioSourcesVisible = true
+
+        // Hide controls if visible
+        hideControlsMenu()
+
+        stremioSourcesOverlay?.animate()?.cancel()
+        stremioSourcesOverlay?.visibility = View.VISIBLE
+        stremioSourcesOverlay?.alpha = 0f
+        stremioSourcesOverlay?.animate()?.alpha(1f)?.setDuration(200)?.start()
+
+        // Reset search
+        stremioSourcesSearch?.setText("")
+        filterStremioSources()
+        updateStremioNowPlaying()
+
+        // Focus the list and scroll to current source
+        stremioSourcesList?.post {
+            val currentPos = stremioSourceAdapter?.getCurrentActivePosition() ?: 0
+            stremioSourcesList?.scrollToPosition(currentPos.coerceAtLeast(0))
+            stremioSourcesList?.postDelayed({
+                val holder = stremioSourcesList?.findViewHolderForAdapterPosition(currentPos.coerceAtLeast(0))
+                holder?.itemView?.requestFocus()
+            }, 150)
+        }
+    }
+
+    private fun hideStremioSourcesPanel() {
+        stremioSourcesVisible = false
+        stremioSourcesOverlay?.animate()?.cancel()
+        stremioSourcesOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
+            stremioSourcesOverlay?.visibility = View.GONE
+        }?.start()
+        stremioSourcesSearch?.setText("")
+    }
+
+    private fun toggleStremioSourcesPanel() {
+        if (stremioSourcesVisible) hideStremioSourcesPanel() else showStremioSourcesPanel()
+    }
+
+    private fun isFocusInStremioSourcesList(): Boolean {
+        val list = stremioSourcesList ?: return false
+        val focused = currentFocus ?: return false
+        return list == focused || list.findContainingItemView(focused) != null
+    }
+
+    private fun onStremioSourceSelected(source: StremioSource) {
+        android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}")
+
+        // Increment token to invalidate any in-flight resolution
+        stremioResolutionToken++
+
+        // Mark as loading
+        stremioSourceAdapter?.setLoading(source.index)
+
+        if (source.isDirectStream && !source.directUrl.isNullOrEmpty()) {
+            // Direct URL — use immediately
+            switchToStremioSource(source.directUrl, source.index)
+        } else {
+            // Torrent — resolve via Flutter bridge
+            resolveStremioSourceViaFlutter(source, stremioResolutionToken)
+        }
+    }
+
+    private fun resolveStremioSourceViaFlutter(source: StremioSource, token: Int) {
+        try {
+            val args = hashMapOf<String, Any?>("sourceIndex" to source.index)
+            android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - sending to Flutter: index=${source.index}, token=$token")
+
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "requestStremioSourceResolve",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        if (token != stremioResolutionToken) {
+                            android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - stale token $token (current: $stremioResolutionToken), discarding")
+                            return
+                        }
+                        android.util.Log.d("AndroidTvPlayer", "resolveStremioSource - Flutter returned: $result")
+                        val map = result as? Map<*, *>
+                        val url = map?.get("url") as? String
+                        if (!url.isNullOrEmpty()) {
+                            runOnUiThread { switchToStremioSource(url, source.index) }
+                        } else {
+                            android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - null URL returned")
+                            runOnUiThread {
+                                stremioSourceAdapter?.clearLoading()
+                                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Failed to resolve source", Toast.LENGTH_SHORT).show()
+                                // Restore focus to the failed source item
+                                restoreFocusToStremioSource(source.index)
+                            }
+                        }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        if (token != stremioResolutionToken) return
+                        android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - error: $errorCode - $errorMessage")
+                        runOnUiThread {
+                            stremioSourceAdapter?.clearLoading()
+                            Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Source resolution failed", Toast.LENGTH_SHORT).show()
+                            restoreFocusToStremioSource(source.index)
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        if (token != stremioResolutionToken) return
+                        android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - not implemented")
+                        runOnUiThread {
+                            stremioSourceAdapter?.clearLoading()
+                            restoreFocusToStremioSource(source.index)
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - exception: ${e.message}", e)
+            stremioSourceAdapter?.clearLoading()
+            restoreFocusToStremioSource(source.index)
+        }
+    }
+
+    private fun restoreFocusToStremioSource(sourceIndex: Int) {
+        val list = stremioSourcesList ?: return
+        val adapter = stremioSourceAdapter ?: return
+        // Find the adapter position for this source index
+        val adapterPos = adapter.getAdapterPositionForSource(sourceIndex)
+        if (adapterPos >= 0) {
+            list.post {
+                val vh = list.findViewHolderForAdapterPosition(adapterPos)
+                vh?.itemView?.requestFocus()
+                    ?: list.requestFocus() // fallback to list itself
+            }
+        } else {
+            list.requestFocus()
+        }
+    }
+
+    private fun switchToStremioSource(url: String, sourceIndex: Int) {
+        android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
+
+        // Capture current position for resume
+        val currentPos = player?.currentPosition ?: 0L
+
+        // Update state
+        currentStremioSourceIndex = sourceIndex
+        updateStremioQualityBadge()
+        updateStremioNowPlaying()
+        stremioSourceAdapter?.updateActiveSource(sourceIndex)
+
+        // Hide panel
+        hideStremioSourcesPanel()
+
+        // Switch ExoPlayer source, preserving position
+        val mediaItem = MediaItem.fromUri(url)
+        player?.setMediaItem(mediaItem)
+        player?.prepare()
+        if (currentPos > 0) {
+            player?.seekTo(currentPos)
+        }
+        player?.play()
+
+        // Flash title to indicate source switch
+        val currentSource = stremioSources.getOrNull(sourceIndex)
+        if (currentSource != null) {
+            titleView.text = currentSource.displayTitle
+            titleView.visibility = View.VISIBLE
+            titleOttContainer.visibility = View.GONE
+            titleContainer.visibility = View.VISIBLE
+            titleContainer.alpha = 1f
+            titleHandler.removeCallbacks(hideTitleRunnable)
+            titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
+        }
+    }
+
+    private fun showStremioSourceBadge() {
+        if (stremioSources.isEmpty()) return
+        stremioSourceBadge?.animate()?.cancel()
+        stremioSourceBadge?.visibility = View.VISIBLE
+        stremioSourceBadge?.alpha = 0f
+        stremioSourceBadge?.translationX = 30f
+        stremioSourceBadge?.animate()
+            ?.alpha(1f)
+            ?.translationX(0f)
+            ?.setDuration(250)
+            ?.setInterpolator(DecelerateInterpolator(1.5f))
+            ?.start()
+    }
+
+    private fun hideStremioSourceBadge() {
+        stremioSourceBadge?.animate()?.cancel()
+        stremioSourceBadge?.animate()
+            ?.alpha(0f)
+            ?.translationX(20f)
+            ?.setDuration(200)
+            ?.setInterpolator(android.view.animation.AccelerateInterpolator(1.2f))
+            ?.withEndAction {
+                stremioSourceBadge?.visibility = View.GONE
+                stremioSourceBadge?.translationX = 0f
+            }
+            ?.start()
+    }
+
     private fun parsePayload(raw: String): PlaybackPayload? {
         return try {
             val obj = JSONObject(raw)
@@ -4254,6 +4693,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (it.isNaN() || it.isInfinite()) 0.0 else it
             }
 
+            // Parse Stremio sources for source switching
+            val stremioSourcesJson = obj.optJSONArray("stremioSources")
+            if (stremioSourcesJson != null && stremioSourcesJson.length() > 0) {
+                stremioSources.clear()
+                for (i in 0 until stremioSourcesJson.length()) {
+                    stremioSources.add(StremioSource.fromJson(stremioSourcesJson.getJSONObject(i), i))
+                }
+                currentStremioSourceIndex = obj.optInt("stremioCurrentSourceIndex", 0)
+                    .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
+                android.util.Log.d("AndroidTvPlayer", "parsePayload - stremioSources: ${stremioSources.size}, currentIndex: $currentStremioSourceIndex")
+            }
+
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
             PlaybackPayload(
@@ -4291,6 +4742,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // If IPTV guide is visible, hide it first
                 if (iptvGuideVisible) {
                     hideIptvGuide()
+                    return
+                }
+
+                // If Stremio sources panel is visible, hide it first
+                if (stremioSourcesVisible) {
+                    hideStremioSourcesPanel()
                     return
                 }
 
@@ -4411,6 +4868,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seriesPlaylistAdapter = null
         moviePlaylistAdapter = null
 
+        // Clean up Stremio sources
+        focusRecoveryHandler.removeCallbacksAndMessages(null)
+        focusRecoveryRunnable = null
+        stremioSourcesList?.adapter = null
+        stremioSourceAdapter = null
+        stremioSources.clear()
+
         // Clear tab references
         seasonTabs.clear()
         movieTabs.clear()
@@ -4474,6 +4938,182 @@ private interface PlaylistOverlayAdapter {
     fun setActiveIndex(index: Int)
     fun updateCurrentProgress()
     fun getActiveItemPosition(): Int
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Stremio Source Switcher — Data model and adapter
+// ═══════════════════════════════════════════════════════════════════════
+
+private data class StremioSource(
+    val index: Int,
+    val name: String,
+    val infohash: String,
+    val directUrl: String?,
+    val streamType: String,  // "torrent", "directUrl"
+    val sizeBytes: Long,
+    val seeders: Int,
+    val source: String?,
+    val quality: String,     // parsed: "4K", "1080p", "720p", "480p", "HD"
+) {
+    val isDirectStream: Boolean get() = streamType == "directUrl"
+
+    val displayTitle: String get() {
+        val newlineIdx = name.indexOf('\n')
+        return if (newlineIdx > 0) name.substring(0, newlineIdx).trim() else name
+    }
+
+    val formattedSize: String? get() {
+        if (sizeBytes <= 0) return null
+        val gb = sizeBytes / (1024.0 * 1024.0 * 1024.0)
+        val mb = sizeBytes / (1024.0 * 1024.0)
+        return if (gb >= 1.0) String.format("%.1f GB", gb) else String.format("%.0f MB", mb)
+    }
+
+    companion object {
+        fun fromJson(obj: JSONObject, index: Int): StremioSource {
+            val name = obj.optString("name", "")
+            return StremioSource(
+                index = index,
+                name = name,
+                infohash = obj.optString("infohash", ""),
+                directUrl = obj.optString("direct_url").takeIf { it.isNotEmpty() },
+                streamType = obj.optString("stream_type", "torrent"),
+                sizeBytes = obj.optLong("size_bytes", 0),
+                seeders = obj.optInt("seeders", 0),
+                source = obj.optString("source").takeIf { it.isNotEmpty() },
+                quality = parseQuality(name),
+            )
+        }
+
+        fun parseQuality(name: String): String {
+            val lower = name.lowercase()
+            return when {
+                lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") -> "4K"
+                lower.contains("1080p") || lower.contains("1080i") -> "1080p"
+                lower.contains("720p") -> "720p"
+                lower.contains("480p") || lower.contains("sd") -> "480p"
+                else -> "HD"
+            }
+        }
+    }
+}
+
+private class StremioSourceAdapter(
+    private var sources: List<StremioSource>,
+    private val onItemClick: (StremioSource) -> Unit
+) : RecyclerView.Adapter<StremioSourceAdapter.ViewHolder>() {
+
+    private var activeSourceIndex = -1
+    private var loadingSourceIndex = -1
+
+    inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val quality: TextView = view.findViewById(R.id.stremio_source_quality)
+        val title: TextView = view.findViewById(R.id.stremio_source_title)
+        val size: TextView = view.findViewById(R.id.stremio_source_size)
+        val seeders: TextView = view.findViewById(R.id.stremio_source_seeders)
+        val provider: TextView = view.findViewById(R.id.stremio_source_provider)
+        val playing: TextView = view.findViewById(R.id.stremio_source_playing)
+        val loading: View = view.findViewById(R.id.stremio_source_loading)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = android.view.LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_stremio_source, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val source = sources[position]
+
+        // Quality badge
+        holder.quality.text = source.quality
+        val qualityBg = when (source.quality) {
+            "4K" -> R.drawable.stremio_source_quality_4k
+            "1080p" -> R.drawable.stremio_source_quality_1080p
+            "720p" -> R.drawable.stremio_source_quality_720p
+            else -> R.drawable.stremio_source_quality_default
+        }
+        holder.quality.setBackgroundResource(qualityBg)
+        val qualityColor = when (source.quality) {
+            "4K" -> Color.parseColor("#FFB300")
+            "1080p" -> Color.parseColor("#2196F3")
+            "720p" -> Color.parseColor("#4CAF50")
+            else -> Color.parseColor("#808080")
+        }
+        holder.quality.setTextColor(qualityColor)
+
+        // Title
+        holder.title.text = source.displayTitle
+
+        // Size chip
+        val formattedSize = source.formattedSize
+        if (formattedSize != null) {
+            holder.size.text = formattedSize
+            holder.size.visibility = View.VISIBLE
+        } else {
+            holder.size.visibility = View.GONE
+        }
+
+        // Seeders chip (torrent only)
+        if (!source.isDirectStream && source.seeders > 0) {
+            holder.seeders.text = "${source.seeders} seeds"
+            holder.seeders.visibility = View.VISIBLE
+        } else {
+            holder.seeders.visibility = View.GONE
+        }
+
+        // Source/provider chip
+        if (!source.source.isNullOrEmpty()) {
+            holder.provider.text = source.source
+            holder.provider.visibility = View.VISIBLE
+        } else {
+            holder.provider.visibility = View.GONE
+        }
+
+        // Playing/loading state
+        val isActive = source.index == activeSourceIndex
+        val isLoading = source.index == loadingSourceIndex
+        holder.playing.visibility = if (isActive && !isLoading) View.VISIBLE else View.GONE
+        holder.loading.visibility = if (isLoading) View.VISIBLE else View.GONE
+
+        // Click handler
+        holder.itemView.setOnClickListener {
+            if (!isActive && !isLoading) {
+                onItemClick(source)
+            }
+        }
+    }
+
+    override fun getItemCount(): Int = sources.size
+
+    fun updateSources(newSources: List<StremioSource>) {
+        sources = newSources
+        notifyDataSetChanged()
+    }
+
+    fun updateActiveSource(index: Int) {
+        activeSourceIndex = index
+        loadingSourceIndex = -1
+        notifyDataSetChanged()
+    }
+
+    fun setLoading(index: Int) {
+        loadingSourceIndex = index
+        notifyDataSetChanged()
+    }
+
+    fun clearLoading() {
+        loadingSourceIndex = -1
+        notifyDataSetChanged()
+    }
+
+    fun getCurrentActivePosition(): Int {
+        return sources.indexOfFirst { it.index == activeSourceIndex }
+    }
+
+    fun getAdapterPositionForSource(sourceIndex: Int): Int {
+        return sources.indexOfFirst { it.index == sourceIndex }
+    }
 }
 
 private data class PlaybackPayload(

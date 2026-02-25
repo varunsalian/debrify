@@ -54,9 +54,11 @@ import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
+import 'video_player/widgets/source_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
+import '../models/torrent.dart';
 import '../services/stremio_subtitle_service.dart';
 import 'package:http/http.dart' as http;
 
@@ -125,6 +127,10 @@ class VideoPlayerScreen extends StatefulWidget {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+  // Stremio sources for in-player source switching
+  final List<Torrent>? stremioSources;
+  final int? stremioCurrentSourceIndex;
+  final Future<String?> Function(Torrent)? resolveStremioSource;
 
   const VideoPlayerScreen({
     Key? key,
@@ -159,6 +165,9 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentEpisode,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.stremioSources,
+    this.stremioCurrentSourceIndex,
+    this.resolveStremioSource,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -297,6 +306,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showIptvChannelSheet = false;
   int _currentIptvIndex = 0;
 
+  // Stremio source sheet state
+  bool _showSourceSheet = false;
+  int _currentSourceIndex = 0;
+
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
 
@@ -421,6 +434,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _currentChannelNumber = widget.channelNumber;
     _currentIptvIndex = widget.iptvStartIndex ?? 0;
+    _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
     _parseChannelDirectory();
     _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
@@ -1379,6 +1393,72 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // resolved so we skip phase 1 and go straight to the reveal phase.
     // This prevents the overlay from getting stuck if the playing event
     // doesn't fire reliably for HLS/live streams.
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _transitionPhase = 2;
+    _transitionPhase2Started = DateTime.now();
+    setState(() {
+      _isTransitioning = false;
+    });
+    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
+      _rainbowController.stop();
+      _transitionRunning = false;
+      _rainbowActive = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  // ─── Stremio Source Sheet ───────────────────────────────────────────
+
+  void _showSourceSheetOverlay() {
+    final sources = widget.stremioSources;
+    if (sources == null || sources.isEmpty) return;
+    setState(() {
+      _showSourceSheet = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  void _hideSourceSheet() {
+    setState(() {
+      _showSourceSheet = false;
+    });
+  }
+
+  Future<void> _switchToStremioSource(int index, String url) async {
+    _hideSourceSheet();
+
+    // Capture current position before switching so playback continues seamlessly
+    final resumePosition = _position;
+
+    _clearBufferingIndicator();
+    setState(() {
+      _isTransitioning = true;
+      _currentSourceIndex = index;
+    });
+    _startTransitionOverlay();
+
+    try {
+      await _player.pause();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    try {
+      await _player.open(mk.Media(url), play: true);
+      // Wait for the new media to load before seeking
+      await _waitForVideoReady();
+      if (!mounted) return;
+      // Seek to the position from the previous source
+      if (resumePosition > Duration.zero) {
+        await _player.seek(resumePosition);
+      }
+    } catch (e) {
+      debugPrint('Player: Stremio source switch failed: $e');
+    }
+
+    if (!mounted) return;
+
     _transitionStopTimer?.cancel();
     _transitionPhaseTimer?.cancel();
     _transitionPhase = 2;
@@ -3313,6 +3393,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.ignored;
             }
 
+            // Source sheet is open - handle its keys first
+            if (_showSourceSheet) {
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _hideSourceSheet();
+                return KeyEventResult.handled;
+              }
+              // Let source sheet handle other keys
+              return KeyEventResult.ignored;
+            }
+
             // A -> Aspect ratio
             if (key == LogicalKeyboardKey.keyA) {
               _cycleAspectMode();
@@ -3331,6 +3422,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (key == LogicalKeyboardKey.keyC) {
               if (widget.iptvChannels != null && widget.iptvChannels!.isNotEmpty) {
                 _showIptvChannelSheetOverlay();
+                return KeyEventResult.handled;
+              }
+            }
+
+            // S -> Stremio source sheet
+            if (key == LogicalKeyboardKey.keyS) {
+              if (widget.stremioSources != null && widget.stremioSources!.isNotEmpty) {
+                _showSourceSheetOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -3704,6 +3803,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   widget.iptvChannels!.isNotEmpty
                               ? _showIptvChannelSheetOverlay
                               : null,
+                          hasStremioSources: widget.stremioSources != null &&
+                              widget.stremioSources!.isNotEmpty,
+                          onShowStremioSources: widget.stremioSources != null &&
+                                  widget.stremioSources!.isNotEmpty
+                              ? _showSourceSheetOverlay
+                              : null,
                         ),
                       ),
                     );
@@ -3767,6 +3872,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     currentIndex: _currentIptvIndex,
                     onChannelSelected: _switchToIptvChannel,
                     onClose: _hideIptvChannelSheet,
+                  ),
+                ),
+              // Stremio source sheet overlay
+              if (_showSourceSheet &&
+                  widget.stremioSources != null &&
+                  widget.stremioSources!.isNotEmpty &&
+                  widget.resolveStremioSource != null)
+                Positioned.fill(
+                  child: SourceSheet(
+                    sources: widget.stremioSources!,
+                    currentSourceIndex: _currentSourceIndex,
+                    resolveSource: widget.resolveStremioSource!,
+                    onSourceSelected: _switchToStremioSource,
+                    onClose: _hideSourceSheet,
                   ),
                 ),
             ],

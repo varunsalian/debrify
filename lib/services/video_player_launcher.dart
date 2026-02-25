@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
 import '../models/movie_collection.dart';
+import '../models/torrent.dart';
 import '../services/external_player_service.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../models/playlist_view_mode.dart';
@@ -178,6 +179,10 @@ class VideoPlayerLaunchArgs {
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
+  // Stremio sources for in-player source switching
+  final List<Torrent>? stremioSources;
+  final int? stremioCurrentSourceIndex;
+  final Future<String?> Function(Torrent)? resolveStremioSource;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -209,6 +214,9 @@ class VideoPlayerLaunchArgs {
     this.contentEpisode,
     this.iptvChannels,
     this.iptvStartIndex,
+    this.stremioSources,
+    this.stremioCurrentSourceIndex,
+    this.resolveStremioSource,
   });
 
   VideoPlayerScreen toWidget() {
@@ -241,6 +249,9 @@ class VideoPlayerLaunchArgs {
       contentEpisode: contentEpisode,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
+      stremioSources: stremioSources,
+      stremioCurrentSourceIndex: stremioCurrentSourceIndex,
+      resolveStremioSource: resolveStremioSource,
     );
   }
 }
@@ -757,6 +768,22 @@ class VideoPlayerLauncher {
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
 
+      // Build stremio source resolver for Android TV (if stremio sources are available)
+      final stremioSources = args.stremioSources;
+      final stremioResolver = args.resolveStremioSource;
+      Future<String?> Function(int)? stremioSourceResolverForTv;
+      if (stremioSources != null && stremioSources.isNotEmpty && stremioResolver != null) {
+        stremioSourceResolverForTv = (int sourceIndex) async {
+          if (sourceIndex < 0 || sourceIndex >= stremioSources.length) {
+            debugPrint('VideoPlayerLauncher: stremio source index out of range: $sourceIndex');
+            return null;
+          }
+          final torrent = stremioSources[sourceIndex];
+          debugPrint('VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}');
+          return stremioResolver(torrent);
+        };
+      }
+
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: result.payload.toMap(),
         onProgress: (progress) => _handleProgressUpdate(result.payload, progress),
@@ -781,6 +808,7 @@ class VideoPlayerLauncher {
                 return metadata?.imdbId;
               }
             : null,
+        onResolveStremioSource: stremioSourceResolverForTv,
       );
 
       if (!launched) {
@@ -1349,6 +1377,8 @@ class _AndroidTvPlaybackPayload {
   final String? imdbId;
 
   final double? startAtPercent;
+  final List<Map<String, dynamic>>? stremioSources;
+  final int? stremioCurrentSourceIndex;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -1363,6 +1393,8 @@ class _AndroidTvPlaybackPayload {
     this.collectionGroups,
     this.imdbId,
     this.startAtPercent,
+    this.stremioSources,
+    this.stremioCurrentSourceIndex,
   });
 
   Map<String, dynamic> toMap() {
@@ -1381,6 +1413,10 @@ class _AndroidTvPlaybackPayload {
       'imdbId': imdbId,
       if (startAtPercent != null && startAtPercent! > 0)
         'startAtPercent': startAtPercent,
+      if (stremioSources != null && stremioSources!.isNotEmpty)
+        'stremioSources': stremioSources,
+      if (stremioCurrentSourceIndex != null)
+        'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
     };
   }
 }
@@ -1728,6 +1764,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       collectionGroups: collectionGroups,
       imdbId: effectiveImdbId,
       startAtPercent: args.startAtPercent,
+      stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
+      stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
     );
 
     return _AndroidTvPlaybackPayloadResult(

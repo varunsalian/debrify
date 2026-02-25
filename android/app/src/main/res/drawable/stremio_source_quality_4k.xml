@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quality badge: 4K — amber -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#33FFB300" />
+    <corners android:radius="6dp" />
+    <stroke
+        android:width="0.5dp"
+        android:color="#66FFB300" />
+</shape>

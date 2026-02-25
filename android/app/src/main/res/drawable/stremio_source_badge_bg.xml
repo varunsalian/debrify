@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stremio source quality badge background — top-right glass pill -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#E6101016" />
+            <corners android:radius="20dp" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#99536DFE" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#CC101016" />
+            <corners android:radius="20dp" />
+            <stroke
+                android:width="0.5dp"
+                android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+</selector>

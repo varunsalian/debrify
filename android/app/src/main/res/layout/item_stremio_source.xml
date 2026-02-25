@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stremio source list item — quality badge + title + metadata + status -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
+    android:background="@drawable/stremio_source_item_bg"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <!-- Quality Badge -->
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="28dp"
+        android:layout_marginEnd="12dp">
+
+        <TextView
+            android:id="@+id/stremio_source_quality"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:textColor="#FFFFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.03"
+            android:background="@drawable/stremio_source_quality_default"
+            tools:text="1080p" />
+    </FrameLayout>
+
+    <!-- Center: Title + Metadata -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/stremio_source_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#EEFFFFFF"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:lineSpacingMultiplier="1.15"
+            tools:text="Movie.Name.2024.1080p.WEB-DL.DDP5.1.H264-GROUP" />
+
+        <!-- Metadata chips row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <!-- Size chip -->
+            <TextView
+                android:id="@+id/stremio_source_size"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:textColor="#802196F3"
+                android:textSize="10sp"
+                android:background="#1A2196F3"
+                android:visibility="gone"
+                tools:text="2.4 GB" />
+
+            <!-- Seeders chip (torrent only) -->
+            <TextView
+                android:id="@+id/stremio_source_seeders"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:textColor="#804CAF50"
+                android:textSize="10sp"
+                android:background="#1A4CAF50"
+                android:visibility="gone"
+                tools:text="42 seeds" />
+
+            <!-- Source chip -->
+            <TextView
+                android:id="@+id/stremio_source_provider"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:textColor="#80AB47BC"
+                android:textSize="10sp"
+                android:background="#1AAB47BC"
+                android:visibility="gone"
+                tools:text="Torrentio" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Right: Status (PLAYING badge / Loading spinner) -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp">
+
+        <TextView
+            android:id="@+id/stremio_source_playing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:text="PLAYING"
+            android:textColor="#CC536DFE"
+            android:textSize="8sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:background="#26536DFE"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/stremio_source_loading"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:indeterminateTint="#FF536DFE"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</LinearLayout>

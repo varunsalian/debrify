@@ -40,6 +40,7 @@ class AndroidTvPlayerBridge {
   static PlaybackFinishedCallback? _torrentFinishedCallback;
   static TorrentStreamProvider? _torrentStreamProvider;
   static MovieMetadataProvider? _movieMetadataProvider;
+  static Future<String?> Function(int)? _stremioSourceResolver;
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
@@ -161,12 +162,40 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'requestStremioSourceResolve':
+          debugPrint('AndroidTvPlayerBridge: requestStremioSourceResolve received - args: ${call.arguments}');
+          final stremioResolver = _stremioSourceResolver;
+          if (stremioResolver == null) {
+            debugPrint('AndroidTvPlayerBridge: ERROR - no stremio source resolver registered!');
+            return null;
+          }
+          final stremioArgs = call.arguments;
+          if (stremioArgs is Map) {
+            final sourceIndex = stremioArgs['sourceIndex'] as int?;
+            if (sourceIndex == null) {
+              debugPrint('AndroidTvPlayerBridge: missing sourceIndex');
+              return null;
+            }
+            try {
+              final url = await stremioResolver(sourceIndex);
+              debugPrint('AndroidTvPlayerBridge: stremio source resolver returned: ${url != null ? "success" : "null"}');
+              return url != null ? {'url': url} : null;
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: stremio source resolver error $e\n$stack');
+              throw PlatformException(
+                code: 'stremio_source_resolve_failed',
+                message: e.toString(),
+              );
+            }
+          }
+          return null;
         case 'torrentPlaybackFinished':
           final finishedTorrent = _torrentFinishedCallback;
           _torrentProgressCallback = null;
           _torrentFinishedCallback = null;
           _torrentStreamProvider = null;
           _movieMetadataProvider = null;
+          _stremioSourceResolver = null;
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
@@ -484,6 +513,7 @@ class AndroidTvPlayerBridge {
     PlaybackFinishedCallback? onFinished,
     TorrentStreamProvider? onRequestStream,
     MovieMetadataProvider? onRequestMovieMetadata,
+    Future<String?> Function(int)? onResolveStremioSource,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -497,6 +527,7 @@ class AndroidTvPlayerBridge {
     _torrentFinishedCallback = onFinished;
     _torrentStreamProvider = onRequestStream;
     _movieMetadataProvider = onRequestMovieMetadata;
+    _stremioSourceResolver = onResolveStremioSource;
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
@@ -532,6 +563,7 @@ class AndroidTvPlayerBridge {
     _torrentFinishedCallback = null;
     _torrentStreamProvider = null;
     _movieMetadataProvider = null;
+    _stremioSourceResolver = null;
     return false;
   }
 

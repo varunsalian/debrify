@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gradient icon background for sources header — indigo accent -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="#FF536DFE"
+        android:endColor="#FF3D5AFE"
+        android:angle="135" />
+    <corners android:radius="10dp" />
+</shape>
