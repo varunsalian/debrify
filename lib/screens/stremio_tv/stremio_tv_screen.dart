@@ -66,6 +66,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   // Header menu button
   final FocusNode _menuFocusNode = FocusNode(debugLabel: 'menuBtn');
+  final FocusNode _submenuFocusNode = FocusNode(debugLabel: 'localCatalogs');
   final MenuController _menuController = MenuController();
 
   // Search
@@ -129,6 +130,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _menuFocusNode.dispose();
+    _submenuFocusNode.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     for (final node in _rowFocusNodes) {
@@ -229,6 +231,43 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // If items need to rotate, reload channels where the slot changed
     // This is lightweight — just recalculates getNowPlaying()
     setState(() {}); // The getNowPlaying call in build() handles this
+  }
+
+  /// Wraps a MenuItemButton inside a submenu with DPAD navigation:
+  /// - Left/Right arrow: close submenu, return to parent SubmenuButton
+  /// - Escape/Back: close entire menu, return to 3-dot button
+  Widget _submenuItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool autofocus = false,
+  }) {
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+            event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          // Close just the submenu — focus parent SubmenuButton
+          _submenuFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.goBack) {
+          // Close entire menu
+          _menuController.close();
+          _menuFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MenuItemButton(
+        autofocus: autofocus,
+        leadingIcon: Icon(icon),
+        onPressed: onPressed,
+        child: Text(label),
+      ),
+    );
   }
 
   Future<void> _openChannelFilter() async {
@@ -1415,38 +1454,37 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     final text = _searchController.text;
     final selection = _searchController.selection;
-    final isAtEnd = !selection.isValid ||
-        (selection.baseOffset == text.length &&
-            selection.extentOffset == text.length);
     final isAtStart = !selection.isValid ||
         (selection.baseOffset == 0 && selection.extentOffset == 0);
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (text.isEmpty || isAtEnd) {
-        // Focus first channel row
-        final filtered = _filteredChannels;
-        if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
-          final firstIdx = _channels.indexOf(filtered.first);
-          if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-            _rowFocusNodes[firstIdx].requestFocus();
-          }
+      // Focus first channel row
+      final filtered = _filteredChannels;
+      if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
+        final firstIdx = _channels.indexOf(filtered.first);
+        if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+          _rowFocusNodes[firstIdx].requestFocus();
         }
-        return KeyEventResult.handled;
       }
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (text.isEmpty || isAtStart) {
-        _menuFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
+      _menuFocusNode.requestFocus();
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (text.isEmpty || isAtStart) {
         MainPageBridge.focusTvSidebar?.call();
-        return KeyEventResult.handled;
       }
+      // Always consume — either sidebar focus or cursor movement
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      // Always consume — let TextField handle cursor movement internally
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
@@ -1514,8 +1552,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             focusNode: _menuFocusNode,
                             onKeyEvent: (node, event) {
                               if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                              // When menu is open, let menu handle its own key events
-                              if (_menuController.isOpen) return KeyEventResult.ignored;
+                              // When menu is open, handle back to close; let menu overlay handle the rest
+                              if (_menuController.isOpen) {
+                                if (event.logicalKey == LogicalKeyboardKey.escape ||
+                                    event.logicalKey == LogicalKeyboardKey.goBack) {
+                                  _menuController.close();
+                                  _menuFocusNode.requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                // Menu items live in a separate FocusScope overlay —
+                                // return ignored so they can handle their own DPAD events
+                                return KeyEventResult.ignored;
+                              }
                               if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
                                   event.logicalKey == LogicalKeyboardKey.arrowRight) {
                                 return KeyEventResult.handled;
@@ -1554,6 +1602,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   controller: _menuController,
                                   menuChildren: [
                                     MenuItemButton(
+                                      autofocus: true,
                                       leadingIcon: const Icon(Icons.shuffle_rounded),
                                       onPressed: () {
                                         setState(() => _mixSalt = (_mixSalt + 1) % 10);
@@ -1571,32 +1620,34 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                       child: const Text('Filter channels'),
                                     ),
                                     SubmenuButton(
+                                      focusNode: _submenuFocusNode,
                                       leadingIcon: const Icon(Icons.playlist_add_rounded),
                                       menuChildren: [
-                                        MenuItemButton(
-                                          leadingIcon: const Icon(Icons.list_rounded),
+                                        _submenuItem(
+                                          autofocus: true,
+                                          icon: Icons.list_rounded,
+                                          label: 'Manage',
                                           onPressed: _openLocalCatalogs,
-                                          child: const Text('Manage'),
                                         ),
-                                        MenuItemButton(
-                                          leadingIcon: const Icon(Icons.file_upload_outlined),
+                                        _submenuItem(
+                                          icon: Icons.file_upload_outlined,
+                                          label: 'From File',
                                           onPressed: _importFromFile,
-                                          child: const Text('From File'),
                                         ),
-                                        MenuItemButton(
-                                          leadingIcon: const Icon(Icons.link_rounded),
+                                        _submenuItem(
+                                          icon: Icons.link_rounded,
+                                          label: 'From URL',
                                           onPressed: _importFromUrl,
-                                          child: const Text('From URL'),
                                         ),
-                                        MenuItemButton(
-                                          leadingIcon: const Icon(Icons.data_object_rounded),
+                                        _submenuItem(
+                                          icon: Icons.data_object_rounded,
+                                          label: 'Paste JSON',
                                           onPressed: _importFromJson,
-                                          child: const Text('Paste JSON'),
                                         ),
-                                        MenuItemButton(
-                                          leadingIcon: const Icon(Icons.source_rounded),
+                                        _submenuItem(
+                                          icon: Icons.source_rounded,
+                                          label: 'From Repository',
                                           onPressed: _importFromRepo,
-                                          child: const Text('From Repository'),
                                         ),
                                       ],
                                       child: const Text('Local Catalogs'),
@@ -1774,6 +1825,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
   int? _resolvingIndex; // index in widget.sources (original)
   int? _failedIndex; // index of last failed source
   final _firstItemFocusNode = FocusNode();
+  final _firstTabFocusNode = FocusNode();
   int _activeTab = 0; // 0 = All, 1 = Direct, 2 = Torrent
 
   late List<Torrent> _directSources;
@@ -1793,6 +1845,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
   @override
   void dispose() {
     _firstItemFocusNode.dispose();
+    _firstTabFocusNode.dispose();
     super.dispose();
   }
 
@@ -1871,12 +1924,20 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
     }
   }
 
-  Widget _buildTab(String label, int count, int tabIndex) {
+  Widget _buildTab(String label, int count, int tabIndex, {FocusNode? focusNode}) {
     final isActive = _activeTab == tabIndex;
     return _SourcePickerTab(
+      focusNode: focusNode,
       label: '$label ($count)',
       isActive: isActive,
-      onTap: () => setState(() => _activeTab = tabIndex),
+      onTap: () {
+        setState(() => _activeTab = tabIndex);
+        // Re-focus first item in the new tab's list
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _firstItemFocusNode.requestFocus();
+        });
+      },
+      onDownPress: () => _firstItemFocusNode.requestFocus(),
     );
   }
 
@@ -1931,7 +1992,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
             child: Row(
               children: [
-                _buildTab('All', widget.sources.length, 0),
+                _buildTab('All', widget.sources.length, 0, focusNode: _firstTabFocusNode),
                 const SizedBox(width: 8),
                 if (_directSources.isNotEmpty) ...[
                   _buildTab('Direct', _directSources.length, 1),
@@ -1973,6 +2034,8 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
 
                       return _SourcePickerItem(
                         focusNode: i == 0 ? _firstItemFocusNode : null,
+                        isFirst: i == 0,
+                        onUpToTabs: () => _firstTabFocusNode.requestFocus(),
                         quality: quality,
                         qualityColor: qColor,
                         title: source.displayTitle,
@@ -1998,14 +2061,18 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
 
 /// Tab button with DPAD focus support.
 class _SourcePickerTab extends StatefulWidget {
+  final FocusNode? focusNode;
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final VoidCallback? onDownPress;
 
   const _SourcePickerTab({
+    this.focusNode,
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.onDownPress,
   });
 
   @override
@@ -2023,12 +2090,20 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
       widget.onTap();
       return KeyEventResult.handled;
     }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      widget.onDownPress?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled; // consume — nothing above tabs
+    }
     return KeyEventResult.ignored;
   }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
+      focusNode: widget.focusNode,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: _handleKey,
       child: GestureDetector(
@@ -2076,6 +2151,8 @@ class _SourcePickerItem extends StatefulWidget {
   final bool isResolving;
   final bool isFailed;
   final VoidCallback? onTap;
+  final bool isFirst; // first item in list — up arrow goes to tabs
+  final VoidCallback? onUpToTabs;
 
   const _SourcePickerItem({
     this.focusNode,
@@ -2086,6 +2163,8 @@ class _SourcePickerItem extends StatefulWidget {
     required this.isResolving,
     this.isFailed = false,
     this.onTap,
+    this.isFirst = false,
+    this.onUpToTabs,
   });
 
   @override
@@ -2114,6 +2193,15 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
         event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.gameButtonA) {
       widget.onTap?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp && widget.isFirst) {
+      widget.onUpToTabs?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      Navigator.of(context).pop();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
