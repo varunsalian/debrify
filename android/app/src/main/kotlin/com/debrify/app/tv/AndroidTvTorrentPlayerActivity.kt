@@ -185,6 +185,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
 
+    // Stremio TV Guide state
+    private var isStremioTvMode = false
+    private var stremioTvChannels = mutableListOf<StremioTvGuideChannel>()
+    private var stremioTvGuideOverlay: View? = null
+    private var stremioTvGuideList: RecyclerView? = null
+    private var stremioTvGuideSearch: android.widget.EditText? = null
+    private var stremioTvGuideCountText: TextView? = null
+    private var stremioTvGuideNowPlaying: View? = null
+    private var stremioTvGuideNowPoster: android.widget.ImageView? = null
+    private var stremioTvGuideNowLetter: TextView? = null
+    private var stremioTvGuideCurrentName: TextView? = null
+    private var stremioTvGuideCurrentTitle: TextView? = null
+    private var stremioTvChannelAdapter: StremioTvGuideAdapter? = null
+    private var stremioTvGuideVisible = false
+    private var stremioTvChannelSwitchInProgress = false
+    private var stremioTvSwitchToken = 0
+
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
     private var subtitleSettingsVisible = false
@@ -424,6 +441,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         setupPlaylist()
         setupControls()
         setupStremioSources()
+
+        // Check for Stremio TV guide data in payload
+        try {
+            val payloadJson = JSONObject(rawPayload)
+            val guideJson = payloadJson.optJSONObject("stremioTvGuide")
+            if (guideJson != null) {
+                initStremioTvGuide(guideJson)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Stremio TV guide init failed", e)
+        }
 
         // Initialize seek feedback manager
         seekFeedbackManager = SeekFeedbackManager(findViewById(android.R.id.content))
@@ -2273,6 +2301,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
+        // Handle Stremio TV guide overlay
+        if (stremioTvGuideVisible) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_BACK -> {
+                        hideStremioTvGuide()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (isFocusInStremioTvGuideList()) {
+                            return true
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (isFocusInStremioTvGuideList() && event.repeatCount >= SEEK_LONG_PRESS_THRESHOLD) {
+                            stremioTvGuideSearch?.requestFocus()
+                            return true
+                        }
+                    }
+                }
+            }
+            return super.dispatchKeyEvent(event)
+        }
+
         // Handle Stremio sources panel overlay
         if (stremioSourcesVisible) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -2401,6 +2453,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (isIptvMode) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                     showIptvGuide()
+                }
+                return true
+            }
+            // Stremio TV mode: UP opens the channel guide
+            if (isStremioTvMode && stremioTvChannels.isNotEmpty()) {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    showStremioTvGuide()
                 }
                 return true
             }
@@ -5098,6 +5157,488 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+
+    // ═══════════════════════════════════════════════════════════════
+    // STREMIO TV CHANNEL GUIDE
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun initStremioTvGuide(guideJson: JSONObject) {
+        isStremioTvMode = true
+        android.util.Log.d("AndroidTvPlayer", "initStremioTvGuide: Initializing Stremio TV guide")
+
+        val channelsArray = guideJson.optJSONArray("channels") ?: return
+        val currentChannelId = guideJson.optString("currentChannelId")
+
+        for (i in 0 until channelsArray.length()) {
+            val ch = channelsArray.getJSONObject(i)
+            val id = ch.optString("id")
+
+            // Parse inline now playing data (if channel had items at launch time)
+            val npJson = ch.optJSONObject("nowPlaying")
+            val nextJson = ch.optJSONObject("nextUp")
+
+            stremioTvChannels.add(
+                StremioTvGuideChannel(
+                    id = id,
+                    name = ch.optString("name"),
+                    number = ch.optInt("number", i + 1),
+                    type = ch.optString("type", "movie"),
+                    isFavorite = ch.optBoolean("isFavorite", false),
+                    isCurrent = id == currentChannelId,
+                    nowPlayingTitle = npJson?.optString("title"),
+                    nowPlayingPoster = npJson?.optString("poster")?.takeIf { it.isNotEmpty() },
+                    nowPlayingYear = npJson?.optString("year")?.takeIf { it.isNotEmpty() },
+                    nowPlayingRating = npJson?.optDouble("rating")?.takeIf { !it.isNaN() },
+                    nowPlayingSlotEndMs = npJson?.optLong("slotEndMs", 0) ?: 0,
+                    nowPlayingProgress = npJson?.optDouble("progress", 0.0)?.toFloat() ?: 0f,
+                    nextUpTitle = nextJson?.optString("title"),
+                    nextUpPoster = nextJson?.optString("poster")?.takeIf { it.isNotEmpty() },
+                    nextUpYear = nextJson?.optString("year")?.takeIf { it.isNotEmpty() },
+                    nextUpRating = nextJson?.optDouble("rating")?.takeIf { !it.isNaN() },
+                    hasGuideData = npJson != null,
+                    isLoadingGuideData = false,
+                )
+            )
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "initStremioTvGuide: ${stremioTvChannels.size} channels, current=$currentChannelId")
+        setupStremioTvGuide()
+    }
+
+    private fun setupStremioTvGuide() {
+        stremioTvGuideOverlay = findViewById(R.id.stremio_tv_guide_overlay)
+        stremioTvGuideList = findViewById(R.id.stremio_tv_guide_list)
+        stremioTvGuideSearch = findViewById(R.id.stremio_tv_guide_search)
+        stremioTvGuideCountText = findViewById(R.id.stremio_tv_guide_count)
+        stremioTvGuideNowPlaying = findViewById(R.id.stremio_tv_guide_now_playing)
+        stremioTvGuideNowPoster = findViewById(R.id.stremio_tv_guide_now_poster)
+        stremioTvGuideNowLetter = findViewById(R.id.stremio_tv_guide_now_letter)
+        stremioTvGuideCurrentName = findViewById(R.id.stremio_tv_guide_current_name)
+        stremioTvGuideCurrentTitle = findViewById(R.id.stremio_tv_guide_current_title)
+
+        val guideList = stremioTvGuideList ?: return
+
+        guideList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+        stremioTvChannelAdapter = StremioTvGuideAdapter(
+            channels = stremioTvChannels.toMutableList(),
+            onItemClick = { channel ->
+                if (!channel.isCurrent && !stremioTvChannelSwitchInProgress) {
+                    hideStremioTvGuide()
+                    switchToStremioTvChannel(channel)
+                }
+            }
+        )
+        guideList.adapter = stremioTvChannelAdapter
+
+        // Search
+        stremioTvGuideSearch?.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                filterStremioTvChannels()
+            }
+        })
+
+        stremioTvGuideCountText?.text = "${stremioTvChannels.size} channels"
+
+        // Lazy-load guide data when scrolling stops
+        guideList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    requestGuideDataForVisibleChannels()
+                }
+            }
+        })
+
+        // Repurpose playlist button as "Guide" if in Stremio TV mode
+        val playlistButton: AppCompatButton? = playerView.findViewById(R.id.debrify_playlist_button)
+        if (playlistMode == PlaylistMode.NONE) {
+            playlistButton?.text = "Guide"
+            playlistButton?.setOnClickListener {
+                hideControlsMenu()
+                toggleStremioTvGuide()
+            }
+        }
+    }
+
+    private fun showStremioTvGuide() {
+        stremioTvGuideVisible = true
+        stremioTvGuideOverlay?.animate()?.cancel()
+        stremioTvGuideOverlay?.visibility = View.VISIBLE
+        stremioTvGuideOverlay?.alpha = 0f
+        stremioTvGuideOverlay?.animate()?.alpha(1f)?.setDuration(200)?.start()
+
+        // Reset search
+        stremioTvGuideSearch?.setText("")
+        filterStremioTvChannels()
+
+        updateStremioTvGuideHeader()
+
+        // Focus the list and scroll to current channel, then lazy-load visible guide data
+        stremioTvGuideList?.post {
+            val currentPos = stremioTvChannelAdapter?.getCurrentChannelPosition() ?: 0
+            stremioTvGuideList?.scrollToPosition(currentPos)
+            stremioTvGuideList?.postDelayed({
+                val holder = stremioTvGuideList?.findViewHolderForAdapterPosition(currentPos)
+                holder?.itemView?.requestFocus()
+                requestGuideDataForVisibleChannels()
+            }, 150)
+        }
+    }
+
+    private fun hideStremioTvGuide() {
+        stremioTvGuideVisible = false
+        stremioTvGuideOverlay?.animate()?.cancel()
+        stremioTvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
+            stremioTvGuideOverlay?.visibility = View.GONE
+        }?.start()
+        stremioTvGuideSearch?.setText("")
+    }
+
+    private fun toggleStremioTvGuide() {
+        if (stremioTvGuideVisible) hideStremioTvGuide() else showStremioTvGuide()
+    }
+
+    private fun filterStremioTvChannels() {
+        val query = stremioTvGuideSearch?.text?.toString()?.lowercase() ?: ""
+        val filtered = stremioTvChannels.filter { ch ->
+            query.isEmpty() ||
+                ch.name.lowercase().contains(query) ||
+                ch.type.lowercase().contains(query) ||
+                (ch.nowPlayingTitle?.lowercase()?.contains(query) == true)
+        }
+        stremioTvChannelAdapter?.updateChannels(filtered)
+        stremioTvGuideCountText?.text = "${filtered.size} of ${stremioTvChannels.size} channels"
+        // Load guide data for newly-visible channels after filter change
+        stremioTvGuideList?.post { requestGuideDataForVisibleChannels() }
+    }
+
+    private fun updateStremioTvGuideHeader() {
+        val current = stremioTvChannels.firstOrNull { it.isCurrent } ?: return
+        stremioTvGuideNowPlaying?.visibility = View.VISIBLE
+        stremioTvGuideCurrentName?.text = current.name
+        stremioTvGuideCurrentTitle?.text = buildNowPlayingText(current)
+
+        val firstLetter = if (current.name.isNotEmpty()) current.name[0].uppercase() else "?"
+        val poster = current.nowPlayingPoster
+        if (!poster.isNullOrEmpty()) {
+            stremioTvGuideNowLetter?.visibility = View.GONE
+            stremioTvGuideNowPoster?.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this)
+                .load(poster)
+                .centerCrop()
+                .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                    override fun onLoadFailed(
+                        e: com.bumptech.glide.load.engine.GlideException?,
+                        model: Any?,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        stremioTvGuideNowPoster?.visibility = View.GONE
+                        stremioTvGuideNowLetter?.text = firstLetter
+                        stremioTvGuideNowLetter?.visibility = View.VISIBLE
+                        return true
+                    }
+                    override fun onResourceReady(
+                        resource: android.graphics.drawable.Drawable,
+                        model: Any,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                        dataSource: com.bumptech.glide.load.DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean = false
+                })
+                .into(stremioTvGuideNowPoster!!)
+        } else {
+            stremioTvGuideNowPoster?.visibility = View.GONE
+            stremioTvGuideNowLetter?.text = firstLetter
+            stremioTvGuideNowLetter?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun buildNowPlayingText(channel: StremioTvGuideChannel): String {
+        val title = channel.nowPlayingTitle ?: return "Loading..."
+        val parts = mutableListOf(title)
+        if (!channel.nowPlayingYear.isNullOrEmpty()) parts.add("(${channel.nowPlayingYear})")
+        if (channel.nowPlayingRating != null && channel.nowPlayingRating!! > 0) {
+            parts.add("★ ${String.format(Locale.US, "%.1f", channel.nowPlayingRating)}")
+        }
+        return parts.joinToString(" ")
+    }
+
+    private fun isFocusInStremioTvGuideList(): Boolean {
+        val list = stremioTvGuideList ?: return false
+        var current = currentFocus
+        while (current != null) {
+            if (current == list) return true
+            val parent = current.parent
+            current = if (parent is View) parent else null
+        }
+        return false
+    }
+
+    private fun requestGuideDataForVisibleChannels() {
+        val layoutManager = stremioTvGuideList?.layoutManager as? LinearLayoutManager ?: return
+        val adapter = stremioTvChannelAdapter ?: return
+        val first = layoutManager.findFirstVisibleItemPosition()
+        val last = layoutManager.findLastVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
+
+        // Expand range by ±3 for prefetch
+        val prefetchFirst = (first - 3).coerceAtLeast(0)
+        val prefetchLast = (last + 3).coerceAtMost(adapter.itemCount - 1)
+
+        val visibleChannels = (prefetchFirst..prefetchLast).mapNotNull { pos ->
+            adapter.getChannelAt(pos)
+        }
+
+        val idsToLoad = visibleChannels
+            .filter { !it.hasGuideData && !it.isLoadingGuideData }
+            .map { it.id }
+
+        if (idsToLoad.isEmpty()) return
+
+        android.util.Log.d("AndroidTvPlayer", "requestGuideDataForVisibleChannels: requesting ${idsToLoad.size} channels (visible $first-$last, prefetch $prefetchFirst-$prefetchLast)")
+
+        // Mark as loading
+        for (id in idsToLoad) {
+            visibleChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true
+        }
+        stremioTvChannelAdapter?.notifyDataSetChanged()
+
+        try {
+            val args = hashMapOf<String, Any?>("channelIds" to idsToLoad)
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "requestStremioTvGuideData",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        val data = result as? Map<*, *>
+                        runOnUiThread {
+                            if (data != null) {
+                                for ((key, value) in data) {
+                                    val id = key as? String ?: continue
+                                    val chData = value as? Map<*, *> ?: continue
+                                    val ch = stremioTvChannels.firstOrNull { it.id == id } ?: continue
+
+                                    val np = chData["nowPlaying"] as? Map<*, *>
+                                    val next = chData["nextUp"] as? Map<*, *>
+
+                                    if (np != null) {
+                                        ch.nowPlayingTitle = np["title"] as? String
+                                        ch.nowPlayingPoster = (np["poster"] as? String)?.takeIf { it.isNotEmpty() }
+                                        ch.nowPlayingYear = (np["year"] as? String)?.takeIf { it.isNotEmpty() }
+                                        ch.nowPlayingRating = (np["rating"] as? Number)?.toDouble()
+                                        ch.nowPlayingSlotEndMs = (np["slotEndMs"] as? Number)?.toLong() ?: 0
+                                        ch.nowPlayingProgress = (np["progress"] as? Number)?.toFloat() ?: 0f
+                                    }
+                                    if (next != null) {
+                                        ch.nextUpTitle = next["title"] as? String
+                                        ch.nextUpPoster = (next["poster"] as? String)?.takeIf { it.isNotEmpty() }
+                                        ch.nextUpYear = (next["year"] as? String)?.takeIf { it.isNotEmpty() }
+                                        ch.nextUpRating = (next["rating"] as? Number)?.toDouble()
+                                    }
+                                    ch.hasGuideData = true
+                                    ch.isLoadingGuideData = false
+                                }
+                            } else {
+                                for (id in idsToLoad) {
+                                    stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
+                                }
+                            }
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                            updateStremioTvGuideHeader()
+                        }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("AndroidTvPlayer", "requestGuideDataForVisibleChannels error: $errorCode - $errorMessage")
+                        runOnUiThread {
+                            for (id in idsToLoad) {
+                                stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
+                            }
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        runOnUiThread {
+                            for (id in idsToLoad) {
+                                stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
+                            }
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestGuideDataForVisibleChannels exception", e)
+            runOnUiThread {
+                for (id in idsToLoad) {
+                    stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
+                }
+                stremioTvChannelAdapter?.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private fun switchToStremioTvChannel(channel: StremioTvGuideChannel) {
+        if (stremioTvChannelSwitchInProgress) return
+        stremioTvChannelSwitchInProgress = true
+        stremioTvSwitchToken++
+        val token = stremioTvSwitchToken
+
+        android.util.Log.d("AndroidTvPlayer", "switchToStremioTvChannel: ${channel.name} (id=${channel.id})")
+
+        // Show tuning overlay
+        nextText.text = "📺 TUNING..."
+        nextSubtext.text = channel.name
+        nextSubtext.visibility = View.VISIBLE
+        nextOverlay.visibility = View.VISIBLE
+
+        // Update current markers
+        val previousCurrent = stremioTvChannels.firstOrNull { it.isCurrent }
+        stremioTvChannels.forEach { it.isCurrent = false }
+        channel.isCurrent = true
+        stremioTvChannelAdapter?.notifyDataSetChanged()
+
+        try {
+            val args = hashMapOf<String, Any?>("channelId" to channel.id)
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "requestStremioTvChannelSwitch",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        if (token != stremioTvSwitchToken) {
+                            android.util.Log.d("AndroidTvPlayer", "stale channel switch token $token (current: $stremioTvSwitchToken)")
+                            return
+                        }
+                        runOnUiThread {
+                            stremioTvChannelSwitchInProgress = false
+                            val map = result as? Map<*, *>
+                            val url = map?.get("url") as? String
+                            if (url.isNullOrEmpty()) {
+                                android.util.Log.e("AndroidTvPlayer", "channel switch returned null URL")
+                                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Channel switch failed", Toast.LENGTH_SHORT).show()
+                                // Revert current marker
+                                channel.isCurrent = false
+                                previousCurrent?.isCurrent = true
+                                stremioTvChannelAdapter?.notifyDataSetChanged()
+                                nextOverlay.visibility = View.GONE
+                                return@runOnUiThread
+                            }
+
+                            val title = map["title"] as? String ?: channel.name
+                            val contentImdbId = map["contentImdbId"] as? String
+                            val contentType = map["contentType"] as? String
+                            val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble()
+
+                            // Update ExoPlayer
+                            val metadata = MediaMetadata.Builder()
+                                .setTitle(title)
+                                .build()
+                            val mediaItem = MediaItem.Builder()
+                                .setUri(url)
+                                .setMediaMetadata(metadata)
+                                .build()
+
+                            player?.apply {
+                                setMediaItem(mediaItem)
+                                prepare()
+                                if (startAtPercent != null && startAtPercent > 0) {
+                                    // Apply start position after duration is known
+                                    addListener(object : Player.Listener {
+                                        override fun onPlaybackStateChanged(state: Int) {
+                                            if (state == Player.STATE_READY) {
+                                                val dur = duration
+                                                if (dur > 0) {
+                                                    val seekMs = (dur * startAtPercent).toLong()
+                                                    seekTo(seekMs)
+                                                }
+                                                removeListener(this)
+                                            }
+                                        }
+                                    })
+                                }
+                                playWhenReady = true
+                                play()
+                            }
+
+                            // Update title
+                            titleView.text = title
+                            titleOttContainer.visibility = View.GONE
+                            titleContainer.visibility = View.VISIBLE
+
+                            // Update stremio sources for in-player source switching
+                            val newSources = map["stremioSources"] as? List<*>
+                            val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0
+                            if (newSources != null) {
+                                stremioSources.clear()
+                                for ((idx, src) in newSources.withIndex()) {
+                                    val srcMap = src as? Map<*, *> ?: continue
+                                    stremioSources.add(StremioSource.fromMap(srcMap, idx))
+                                }
+                                currentStremioSourceIndex = newSourceIndex
+                                stremioSourceAdapter?.updateSources(stremioSources.toMutableList())
+                                updateStremioQualityBadge()
+                            }
+
+                            // Update guide header
+                            updateStremioTvGuideHeader()
+
+                            // Update quality badge for stremio sources
+                            if (stremioSources.isNotEmpty()) {
+                                stremioSourceBadge?.visibility = View.VISIBLE
+                            }
+
+                            // Clear subtitle state for new channel
+                            stremioSubtitles.clear()
+                            currentStremioSubtitleIndex = -1
+
+                            // Hide tuning overlay after delay
+                            progressHandler.removeCallbacksAndMessages("stremio_tv_overlay")
+                            progressHandler.postDelayed({ nextOverlay.visibility = View.GONE }, 1500)
+                        }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        if (token != stremioTvSwitchToken) return
+                        android.util.Log.e("AndroidTvPlayer", "channel switch error: $errorCode - $errorMessage")
+                        runOnUiThread {
+                            stremioTvChannelSwitchInProgress = false
+                            Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Channel switch failed: $errorMessage", Toast.LENGTH_SHORT).show()
+                            channel.isCurrent = false
+                            previousCurrent?.isCurrent = true
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                            nextOverlay.visibility = View.GONE
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        if (token != stremioTvSwitchToken) return
+                        runOnUiThread {
+                            stremioTvChannelSwitchInProgress = false
+                            channel.isCurrent = false
+                            previousCurrent?.isCurrent = true
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                            nextOverlay.visibility = View.GONE
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "switchToStremioTvChannel exception", e)
+            stremioTvChannelSwitchInProgress = false
+            channel.isCurrent = false
+            previousCurrent?.isCurrent = true
+            stremioTvChannelAdapter?.notifyDataSetChanged()
+            nextOverlay.visibility = View.GONE
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // COMPANION OBJECT
+    // ═══════════════════════════════════════════════════════════════
+
     companion object {
         const val PAYLOAD_KEY = "payload"
         private const val PROGRESS_INTERVAL_MS = 5_000L
@@ -5199,6 +5740,21 @@ private data class StremioSource(
                 sizeBytes = obj.optLong("size_bytes", 0),
                 seeders = obj.optInt("seeders", 0),
                 source = obj.optString("source").takeIf { it.isNotEmpty() },
+                quality = parseQuality(name),
+            )
+        }
+
+        fun fromMap(map: Map<*, *>, index: Int): StremioSource {
+            val name = (map["name"] as? String) ?: ""
+            return StremioSource(
+                index = index,
+                name = name,
+                infohash = (map["infohash"] as? String) ?: "",
+                directUrl = (map["direct_url"] as? String)?.takeIf { it.isNotEmpty() },
+                streamType = (map["stream_type"] as? String) ?: "torrent",
+                sizeBytes = (map["size_bytes"] as? Number)?.toLong() ?: 0,
+                seeders = (map["seeders"] as? Number)?.toInt() ?: 0,
+                source = (map["source"] as? String)?.takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
             )
         }
@@ -6171,7 +6727,6 @@ private class MoviePlaylistAdapter(
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
 // IPTV Channel Data + Adapter
 // ═══════════════════════════════════════════════════════════════
 
@@ -6312,5 +6867,268 @@ private class IptvChannelAdapter(
 
     fun getCurrentChannelPosition(): Int {
         return channels.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Stremio TV Guide Data + Adapter
+// ═══════════════════════════════════════════════════════════════
+
+private data class StremioTvGuideChannel(
+    val id: String,
+    val name: String,
+    val number: Int,
+    val type: String,
+    val isFavorite: Boolean,
+    var isCurrent: Boolean,
+    var nowPlayingTitle: String?,
+    var nowPlayingPoster: String?,
+    var nowPlayingYear: String?,
+    var nowPlayingRating: Double?,
+    var nowPlayingSlotEndMs: Long,
+    var nowPlayingProgress: Float,
+    var nextUpTitle: String?,
+    var nextUpPoster: String?,
+    var nextUpYear: String?,
+    var nextUpRating: Double?,
+    var hasGuideData: Boolean,
+    var isLoadingGuideData: Boolean,
+)
+
+@androidx.annotation.OptIn(UnstableApi::class)
+private class StremioTvGuideAdapter(
+    private var channels: MutableList<StremioTvGuideChannel>,
+    private val onItemClick: (StremioTvGuideChannel) -> Unit,
+) : RecyclerView.Adapter<StremioTvGuideAdapter.ViewHolder>() {
+
+    companion object {
+        private val ACCENT = Color.parseColor("#00E5FF")
+    }
+
+    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val accentBar: View = view.findViewById(R.id.stremio_tv_guide_accent_bar)
+        val number: TextView = view.findViewById(R.id.stremio_tv_guide_channel_number)
+        val poster: android.widget.ImageView = view.findViewById(R.id.stremio_tv_guide_poster)
+        val posterLetter: TextView = view.findViewById(R.id.stremio_tv_guide_poster_letter)
+        val channelName: TextView = view.findViewById(R.id.stremio_tv_guide_channel_name)
+        val typeBadge: TextView = view.findViewById(R.id.stremio_tv_guide_type_badge)
+        val nowTitle: TextView = view.findViewById(R.id.stremio_tv_guide_now_title)
+        val nextTitle: TextView = view.findViewById(R.id.stremio_tv_guide_next_title)
+        val progressContainer: View = view.findViewById(R.id.stremio_tv_guide_progress_container)
+        val progressFill: View = view.findViewById(R.id.stremio_tv_guide_progress_fill)
+        val endTime: TextView = view.findViewById(R.id.stremio_tv_guide_end_time)
+        val nowBadge: TextView = view.findViewById(R.id.stremio_tv_guide_now_badge)
+        val loading: View = view.findViewById(R.id.stremio_tv_guide_loading)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = android.view.LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_stremio_tv_guide_channel, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val channel = channels[position]
+        val goldStar = Color.parseColor("#FFD700")
+
+        // Cancel recycled view animation
+        holder.itemView.animate().cancel()
+        holder.itemView.scaleX = 1.0f
+        holder.itemView.scaleY = 1.0f
+
+        // Left accent bar — visible for current channel
+        if (channel.isCurrent) {
+            val gradient = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#00BCD4"))
+            )
+            gradient.cornerRadius = 2f
+            holder.accentBar.background = gradient
+            holder.accentBar.visibility = View.VISIBLE
+        } else {
+            holder.accentBar.visibility = View.GONE
+        }
+
+        // Channel number
+        holder.number.text = channel.number.toString()
+        holder.number.setTextColor(
+            if (channel.isCurrent) Color.argb(204, 0, 229, 255) else Color.argb(46, 255, 255, 255)
+        )
+
+        // Channel name
+        holder.channelName.text = channel.name
+        holder.channelName.setTextColor(
+            if (channel.isCurrent) ACCENT else Color.argb(217, 255, 255, 255)
+        )
+
+        // Type badge
+        holder.typeBadge.text = channel.type.uppercase()
+        holder.typeBadge.setTextColor(
+            if (channel.isCurrent) ACCENT else Color.argb(89, 255, 255, 255)
+        )
+
+        // Poster
+        com.bumptech.glide.Glide.with(holder.itemView.context).clear(holder.poster)
+        val firstLetter = if (channel.name.isNotEmpty()) channel.name[0].uppercase() else "?"
+        val posterUrl = channel.nowPlayingPoster
+        if (!posterUrl.isNullOrEmpty()) {
+            holder.poster.visibility = View.VISIBLE
+            holder.posterLetter.visibility = View.GONE
+            com.bumptech.glide.Glide.with(holder.itemView.context)
+                .load(posterUrl)
+                .centerCrop()
+                .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
+                    override fun onLoadFailed(
+                        e: com.bumptech.glide.load.engine.GlideException?,
+                        model: Any?,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        holder.poster.visibility = View.GONE
+                        holder.posterLetter.text = firstLetter
+                        holder.posterLetter.visibility = View.VISIBLE
+                        return true
+                    }
+                    override fun onResourceReady(
+                        resource: android.graphics.drawable.Drawable,
+                        model: Any,
+                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
+                        dataSource: com.bumptech.glide.load.DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean = false
+                })
+                .into(holder.poster)
+        } else {
+            holder.poster.visibility = View.GONE
+            holder.posterLetter.text = firstLetter
+            holder.posterLetter.visibility = View.VISIBLE
+        }
+
+        // Now playing text with gold star
+        if (channel.hasGuideData && channel.nowPlayingTitle != null) {
+            val textParts = mutableListOf<String>()
+            textParts.add(channel.nowPlayingTitle!!)
+            if (!channel.nowPlayingYear.isNullOrEmpty()) textParts.add("(${channel.nowPlayingYear})")
+
+            val hasRating = channel.nowPlayingRating != null && channel.nowPlayingRating!! > 0
+            if (hasRating) {
+                val baseText = textParts.joinToString(" ")
+                val starText = " ★ ${String.format(java.util.Locale.US, "%.1f", channel.nowPlayingRating)}"
+                val spannable = android.text.SpannableString(baseText + starText)
+                spannable.setSpan(
+                    android.text.style.ForegroundColorSpan(goldStar),
+                    baseText.length,
+                    baseText.length + starText.length,
+                    android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                holder.nowTitle.text = spannable
+            } else {
+                holder.nowTitle.text = textParts.joinToString(" ")
+            }
+            holder.nowTitle.setTextColor(
+                if (channel.isCurrent) Color.argb(230, 0, 229, 255) else Color.argb(179, 255, 255, 255)
+            )
+        } else if (channel.isLoadingGuideData) {
+            holder.nowTitle.text = "Loading..."
+            holder.nowTitle.setTextColor(Color.argb(89, 255, 255, 255))
+        } else {
+            holder.nowTitle.text = ""
+        }
+
+        // Next up
+        if (channel.hasGuideData && channel.nextUpTitle != null) {
+            val nextParts = mutableListOf("Next: ${channel.nextUpTitle}")
+            if (!channel.nextUpYear.isNullOrEmpty()) nextParts.add("(${channel.nextUpYear})")
+            holder.nextTitle.text = nextParts.joinToString(" ")
+            holder.nextTitle.visibility = View.VISIBLE
+        } else {
+            holder.nextTitle.visibility = View.GONE
+        }
+
+        // Progress bar
+        if (channel.hasGuideData && channel.nowPlayingSlotEndMs > 0) {
+            holder.progressContainer.visibility = View.VISIBLE
+            val progress = channel.nowPlayingProgress.coerceIn(0f, 1f)
+            holder.progressFill.post {
+                val parent = holder.progressFill.parent as? View ?: return@post
+                val width = (parent.width * progress).toInt()
+                val lp = holder.progressFill.layoutParams
+                lp.width = width
+                holder.progressFill.layoutParams = lp
+            }
+            // Format end time
+            val endMs = channel.nowPlayingSlotEndMs
+            if (endMs > System.currentTimeMillis()) {
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = endMs
+                val h = cal.get(java.util.Calendar.HOUR)
+                val m = cal.get(java.util.Calendar.MINUTE)
+                val ampm = if (cal.get(java.util.Calendar.AM_PM) == 0) "AM" else "PM"
+                val h12 = if (h == 0) 12 else h
+                holder.endTime.text = "${h12}:${String.format("%02d", m)} $ampm"
+                holder.endTime.visibility = View.VISIBLE
+            } else {
+                holder.endTime.visibility = View.GONE
+            }
+        } else {
+            holder.progressContainer.visibility = View.GONE
+        }
+
+        // Badges
+        if (channel.isCurrent) {
+            holder.nowBadge.visibility = View.VISIBLE
+            holder.loading.visibility = View.GONE
+        } else if (channel.isLoadingGuideData) {
+            holder.nowBadge.visibility = View.GONE
+            holder.loading.visibility = View.VISIBLE
+        } else {
+            holder.nowBadge.visibility = View.GONE
+            holder.loading.visibility = View.GONE
+        }
+
+        // Focus animation with accent bar toggle
+        holder.itemView.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            if (hasFocus) {
+                v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(150)
+                    .setInterpolator(DecelerateInterpolator()).start()
+                // Show accent bar on focus
+                if (!channel.isCurrent) {
+                    val gradient = android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                        intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#00BCD4"))
+                    )
+                    gradient.cornerRadius = 2f
+                    holder.accentBar.background = gradient
+                    holder.accentBar.visibility = View.VISIBLE
+                }
+            } else {
+                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150)
+                    .setInterpolator(DecelerateInterpolator()).start()
+                // Hide accent bar when not current
+                if (!channel.isCurrent) {
+                    holder.accentBar.visibility = View.GONE
+                }
+            }
+        }
+
+        holder.itemView.setOnClickListener {
+            onItemClick(channel)
+        }
+    }
+
+    override fun getItemCount(): Int = channels.size
+
+    fun updateChannels(filtered: List<StremioTvGuideChannel>) {
+        channels.clear()
+        channels.addAll(filtered)
+        notifyDataSetChanged()
+    }
+
+    fun getCurrentChannelPosition(): Int {
+        return channels.indexOfFirst { it.isCurrent }.coerceAtLeast(0)
+    }
+
+    fun getChannelAt(position: Int): StremioTvGuideChannel? {
+        return channels.getOrNull(position)
     }
 }

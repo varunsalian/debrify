@@ -272,6 +272,9 @@
     <!-- IPTV Channel Guide Overlay -->
     <include layout="@layout/view_iptv_channel_guide" />
 
+    <!-- Stremio TV Channel Guide Overlay -->
+    <include layout="@layout/view_stremio_tv_guide" />
+
     <!-- Stremio Sources Panel Overlay -->
     <include layout="@layout/view_stremio_sources_panel" />
 

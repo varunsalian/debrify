@@ -55,6 +55,7 @@ import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
 import 'video_player/widgets/source_sheet.dart';
+import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
@@ -133,6 +134,11 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  // Stremio TV channel guide data
+  final List<Map<String, dynamic>>? stremioTvChannels;
+  final String? stremioTvCurrentChannelId;
+  final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
+  final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
 
   const VideoPlayerScreen({
     Key? key,
@@ -171,6 +177,10 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.stremioTvChannels,
+    this.stremioTvCurrentChannelId,
+    this.stremioTvGuideDataProvider,
+    this.stremioTvChannelSwitchProvider,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -314,6 +324,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _showSourceSheet = false;
   int _currentSourceIndex = 0;
   List<PlaylistEntry>? _pendingSourcePlaylist;
+  // Overrides for sources after Stremio TV channel switch
+  List<Torrent>? _stremioSourcesOverride;
+  Future<String?> Function(Torrent)? _resolveStremioSourceOverride;
+
+  // Stremio TV guide state
+  bool _showStremioTvGuide = false;
+  String? _currentStremioTvChannelId;
+
+  /// Effective sources: override from channel switch, or initial widget sources.
+  List<Torrent>? get _effectiveSources => _stremioSourcesOverride ?? widget.stremioSources;
+
+  /// Effective source resolver: override from channel switch, or initial widget resolver.
+  Future<String?> Function(Torrent)? get _effectiveResolver =>
+      _resolveStremioSourceOverride ?? widget.resolveStremioSource;
 
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
@@ -441,6 +465,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentChannelNumber = widget.channelNumber;
     _currentIptvIndex = widget.iptvStartIndex ?? 0;
     _currentSourceIndex = widget.stremioCurrentSourceIndex ?? 0;
+    _currentStremioTvChannelId = _findInitialStremioTvChannelId();
     _parseChannelDirectory();
     _loadSubtitleSettings();
     mk.MediaKit.ensureInitialized();
@@ -891,6 +916,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Silently fail
         }
       }
+    }
+
+    // Stremio TV: use dynamic title when a channel switch has occurred
+    if (_hasStremioTvGuide && _dynamicTitle.isNotEmpty) {
+      return _dynamicTitle;
     }
 
     // Fallback to the current playlist entry title
@@ -1418,7 +1448,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // ─── Stremio Source Sheet ───────────────────────────────────────────
 
   void _showSourceSheetOverlay() {
-    final sources = widget.stremioSources;
+    final sources = _effectiveSources;
     if (sources == null || sources.isEmpty) return;
     setState(() {
       _showSourceSheet = true;
@@ -1442,7 +1472,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return firstUrl.isNotEmpty ? firstUrl : null;
       };
     }
-    return widget.resolveStremioSource!;
+    return _effectiveResolver!;
   }
 
   Future<void> _handleSourceSelected(int index, String url) async {
@@ -1524,6 +1554,99 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (!mounted) return;
 
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _transitionPhase = 2;
+    _transitionPhase2Started = DateTime.now();
+    setState(() {
+      _isTransitioning = false;
+    });
+    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
+      _rainbowController.stop();
+      _transitionRunning = false;
+      _rainbowActive = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  // ─── Stremio TV Guide ─────────────────────────────────────────────
+
+  String? _findInitialStremioTvChannelId() {
+    // Use explicitly provided current channel ID
+    if (widget.stremioTvCurrentChannelId != null) {
+      return widget.stremioTvCurrentChannelId;
+    }
+    return null;
+  }
+
+  bool get _hasStremioTvGuide =>
+      widget.stremioTvChannels != null &&
+      widget.stremioTvChannels!.isNotEmpty &&
+      widget.stremioTvChannelSwitchProvider != null;
+
+  void _showStremioTvGuideOverlay() {
+    if (!_hasStremioTvGuide) return;
+    setState(() {
+      _showStremioTvGuide = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  void _hideStremioTvGuide() {
+    setState(() {
+      _showStremioTvGuide = false;
+    });
+  }
+
+  Future<void> _switchToStremioTvChannel(
+    String channelId,
+    String url,
+    String title, {
+    String? contentImdbId,
+    String? contentType,
+    double? startAtPercent,
+    List<Torrent>? newSources,
+    int? newSourceIndex,
+    Future<String?> Function(Torrent)? sourceResolver,
+  }) async {
+    _hideStremioTvGuide();
+    _clearBufferingIndicator();
+    setState(() {
+      _isTransitioning = true;
+      _currentStremioTvChannelId = channelId;
+      _dynamicTitle = title;
+      if (newSources != null) {
+        _stremioSourcesOverride = newSources;
+        _currentSourceIndex = newSourceIndex ?? 0;
+      }
+      if (sourceResolver != null) {
+        _resolveStremioSourceOverride = sourceResolver;
+      }
+    });
+    _startTransitionOverlay();
+
+    try {
+      await _player.pause();
+    } catch (_) {}
+
+    try {
+      await _player.open(mk.Media(url), play: true);
+      if (startAtPercent != null && startAtPercent > 0) {
+        // Apply start position once duration is known
+        _player.stream.duration.firstWhere((d) => d > Duration.zero).then((d) {
+          if (mounted) {
+            final seekTo = Duration(milliseconds: (d.inMilliseconds * startAtPercent).round());
+            _player.seek(seekTo);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Player: Stremio TV channel switch failed: $e');
+    }
+
+    if (!mounted) return;
+
+    // End transition
     _transitionStopTimer?.cancel();
     _transitionPhaseTimer?.cancel();
     _transitionPhase = 2;
@@ -3470,16 +3593,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.ignored;
             }
 
+            // Stremio TV guide is open - handle its keys first
+            if (_showStremioTvGuide) {
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _hideStremioTvGuide();
+                return KeyEventResult.handled;
+              }
+              // Let guide sheet handle other keys
+              return KeyEventResult.ignored;
+            }
+
             // A -> Aspect ratio
             if (key == LogicalKeyboardKey.keyA) {
               _cycleAspectMode();
               return KeyEventResult.handled;
             }
 
-            // G -> Channel guide
+            // G -> Channel guide (Debrify TV or Stremio TV)
             if (key == LogicalKeyboardKey.keyG) {
               if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
                 _showChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
+              if (_hasStremioTvGuide) {
+                _showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
             }
@@ -3494,8 +3632,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // S -> Stremio source sheet
             if (key == LogicalKeyboardKey.keyS) {
-              if (widget.stremioSources != null && widget.stremioSources!.isNotEmpty &&
-                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null)) {
+              if (_effectiveSources != null && _effectiveSources!.isNotEmpty &&
+                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null)) {
                 _showSourceSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -3512,6 +3650,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // If channels are available, show channel guide
               if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
                 _showChannelGuideOverlay();
+                return KeyEventResult.handled;
+              }
+              // Stremio TV guide
+              if (_hasStremioTvGuide) {
+                _showStremioTvGuideOverlay();
                 return KeyEventResult.handled;
               }
 
@@ -3855,10 +3998,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               _hasNextEpisode() ||
                               widget.requestMagicNext != null,
                           hasNextChannel: widget.requestNextChannel != null,
-                          hasGuide: _channelEntries.isNotEmpty && widget.requestChannelById != null,
+                          hasGuide: (_channelEntries.isNotEmpty && widget.requestChannelById != null) || _hasStremioTvGuide,
                           onShowGuide: _channelEntries.isNotEmpty && widget.requestChannelById != null
                               ? _showChannelGuideOverlay
-                              : null,
+                              : _hasStremioTvGuide
+                                  ? _showStremioTvGuideOverlay
+                                  : null,
                           hasPrevious: _hasPreviousEpisode(),
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
@@ -3870,12 +4015,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   widget.iptvChannels!.isNotEmpty
                               ? _showIptvChannelSheetOverlay
                               : null,
-                          hasStremioSources: widget.stremioSources != null &&
-                              widget.stremioSources!.isNotEmpty &&
-                              (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null),
-                          onShowStremioSources: widget.stremioSources != null &&
-                                  widget.stremioSources!.isNotEmpty &&
-                                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null)
+                          hasStremioSources: _effectiveSources != null &&
+                              _effectiveSources!.isNotEmpty &&
+                              (_effectiveResolver != null || widget.resolveSourceToPlaylist != null),
+                          onShowStremioSources: _effectiveSources != null &&
+                                  _effectiveSources!.isNotEmpty &&
+                                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null)
                               ? _showSourceSheetOverlay
                               : null,
                         ),
@@ -3945,16 +4090,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               // Stremio source sheet overlay
               if (_showSourceSheet &&
-                  widget.stremioSources != null &&
-                  widget.stremioSources!.isNotEmpty &&
-                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null))
+                  _effectiveSources != null &&
+                  _effectiveSources!.isNotEmpty &&
+                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null))
                 Positioned.fill(
                   child: SourceSheet(
-                    sources: widget.stremioSources!,
+                    sources: _effectiveSources!,
                     currentSourceIndex: _currentSourceIndex,
                     resolveSource: _buildSourceSheetResolver(),
                     onSourceSelected: _handleSourceSelected,
                     onClose: _hideSourceSheet,
+                  ),
+                ),
+              // Stremio TV guide sheet overlay
+              if (_showStremioTvGuide && _hasStremioTvGuide)
+                Positioned.fill(
+                  child: StremioTvGuideSheet(
+                    channels: widget.stremioTvChannels!,
+                    currentChannelId: _currentStremioTvChannelId,
+                    guideDataProvider: widget.stremioTvGuideDataProvider,
+                    channelSwitchProvider: widget.stremioTvChannelSwitchProvider!,
+                    onChannelSwitched: _switchToStremioTvChannel,
+                    onClose: _hideStremioTvGuide,
                   ),
                 ),
             ],

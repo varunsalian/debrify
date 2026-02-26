@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -748,6 +749,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 stremioSources: playableSources,
                 stremioCurrentSourceIndex: result.$2,
                 resolveStremioSource: _createSourceResolver(item),
+                stremioTvChannels: _buildGuideChannelMetadata(),
+                stremioTvCurrentChannelId: channel.id,
+                stremioTvRotationMinutes: _rotationMinutes,
+                stremioTvSeriesRotationMinutes: _seriesRotationMinutes,
+                stremioTvMixSalt: _mixSalt,
+                stremioTvGuideDataProvider: _createGuideDataProvider(),
+                stremioTvChannelSwitchProvider: _createChannelSwitchProvider(),
               ),
             );
           }
@@ -773,6 +781,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           stremioSources: playableSources,
           stremioCurrentSourceIndex: firstPlayableIndex,
           resolveStremioSource: _createSourceResolver(item),
+          stremioTvChannels: _buildGuideChannelMetadata(),
+          stremioTvCurrentChannelId: channel.id,
+          stremioTvRotationMinutes: _rotationMinutes,
+          stremioTvSeriesRotationMinutes: _seriesRotationMinutes,
+          stremioTvMixSalt: _mixSalt,
+          stremioTvGuideDataProvider: _createGuideDataProvider(),
+          stremioTvChannelSwitchProvider: _createChannelSwitchProvider(),
         ),
       );
     } catch (e) {
@@ -782,6 +797,164 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         SnackBar(content: Text('Error searching streams: $e')),
       );
     }
+  }
+
+  /// Resolves a channel to a playable URL without any UI interactions.
+  /// Used by the in-player channel guide for background channel switching.
+  Future<_ChannelPlaybackResult?> _resolveChannelPlayback(StremioTvChannel channel) async {
+    // Ensure items are loaded
+    if (!channel.hasItems) {
+      await _ensureChannelItemsLoaded(channel);
+    }
+
+    final nowPlaying = _service.getNowPlaying(
+      channel,
+      rotationMinutes: _rotationFor(channel),
+      salt: _mixSalt,
+    );
+    if (nowPlaying == null) return null;
+
+    final item = nowPlaying.item;
+    final slotProgress = _computeStartProgress(channel.id, nowPlaying.progress);
+
+    if (!item.hasValidId) return null;
+
+    // For series, resolve a random episode
+    int? season;
+    int? episode;
+    if (item.type.toLowerCase() == 'series') {
+      final episodeSeed = _randomEpisodes
+          ? '${channel.id}:${DateTime.now().millisecondsSinceEpoch}'
+          : '${channel.id}:${nowPlaying.slotStart.millisecondsSinceEpoch}';
+      final resolved = await _service.resolveRandomEpisode(
+        item: item,
+        addon: channel.addon,
+        seed: episodeSeed,
+      );
+      if (resolved == null) return null;
+      season = resolved.season;
+      episode = resolved.episode;
+    }
+
+    final playTitle = season != null
+        ? '${item.name} (S${season}E$episode)'
+        : item.name;
+
+    // Search streams
+    var results = await _service.searchStreams(
+      type: item.type,
+      imdbId: item.effectiveImdbId ?? item.id,
+      season: season,
+      episode: episode,
+    );
+
+    // E1 fallback for series
+    if (item.type.toLowerCase() == 'series' && episode != null && episode != 1) {
+      final torrents = results['torrents'] as List<Torrent>? ?? [];
+      if (torrents.isEmpty) {
+        debugPrint('StremioTV guide: No streams for S${season}E$episode, retrying E1');
+        final retryResults = await _service.searchStreams(
+          type: item.type,
+          imdbId: item.effectiveImdbId ?? item.id,
+          season: season,
+          episode: 1,
+        );
+        if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
+          results = retryResults;
+          episode = 1;
+        }
+      }
+    }
+
+    final torrents = results['torrents'] as List<Torrent>? ?? [];
+    if (torrents.isEmpty) return null;
+
+    // Filter sources
+    var playableSources = torrents
+        .where((t) => !t.isExternalStream)
+        .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
+        .toList();
+
+    // TorBox cache filter
+    if (_debridProvider == 'torbox') {
+      final tbKey = await StorageService.getTorboxApiKey();
+      if (tbKey != null && tbKey.isNotEmpty) {
+        final torrentHashes = playableSources
+            .where((t) => t.streamType == StreamType.torrent)
+            .map((t) => t.infohash.trim().toLowerCase())
+            .where((h) => h.isNotEmpty)
+            .toList();
+        if (torrentHashes.isNotEmpty) {
+          final cachedHashes = await TorboxService.checkCachedTorrents(
+            apiKey: tbKey,
+            infoHashes: torrentHashes,
+          );
+          final cachedSet = cachedHashes.map((h) => h.trim().toLowerCase()).toSet();
+          playableSources = playableSources
+              .where((t) => t.streamType != StreamType.torrent ||
+                  cachedSet.contains(t.infohash.trim().toLowerCase()))
+              .toList();
+        }
+      }
+    }
+
+    if (playableSources.isEmpty) return null;
+
+    // Auto-play best stream
+    String? firstPlayableUrl;
+    int firstPlayableIndex = 0;
+
+    // Try direct streams
+    final directStreams = _sortStreamsByQuality(
+      playableSources.where((t) => t.isDirectStream).toList(),
+    );
+    for (int d = 0; d < directStreams.length.clamp(0, 20); d++) {
+      final stream = directStreams[d];
+      if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
+      final valid = await _isValidStreamUrl(stream.directUrl!);
+      if (valid) {
+        firstPlayableUrl = stream.directUrl!;
+        firstPlayableIndex = playableSources.indexWhere((t) =>
+            t.directUrl == stream.directUrl && t.name == stream.name);
+        if (firstPlayableIndex < 0) firstPlayableIndex = 0;
+        break;
+      }
+    }
+
+    // Try torrents via debrid
+    if (firstPlayableUrl == null) {
+      final torrentStreams = _sortStreamsByQuality(
+        playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
+      );
+      for (int i = 0; i < torrentStreams.length.clamp(0, 20); i++) {
+        final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
+        if (url != null && url.isNotEmpty) {
+          firstPlayableUrl = url;
+          firstPlayableIndex = playableSources.indexWhere((t) =>
+              t.infohash == torrentStreams[i].infohash &&
+              t.name == torrentStreams[i].name);
+          if (firstPlayableIndex < 0) firstPlayableIndex = 0;
+          break;
+        }
+      }
+    }
+
+    if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) return null;
+
+    final title = season != null
+        ? '${item.name} (S${season}E$episode)'
+        : playTitle;
+
+    return _ChannelPlaybackResult(
+      url: firstPlayableUrl,
+      title: title,
+      contentType: item.type,
+      contentImdbId: item.effectiveImdbId,
+      startAtPercent: slotProgress,
+      playableSources: playableSources,
+      sourceIndex: firstPlayableIndex,
+      sourceResolver: _createSourceResolver(item),
+    );
   }
 
   Future<void> _playDirectStream(Torrent torrent, StremioMeta item) async {
@@ -1177,6 +1350,103 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return _resolveTorrentUrl(torrent, item, debridProvider);
       }
       return null;
+    };
+  }
+
+  // ─── Stremio TV In-Player Guide ─────────────────────────────────────
+
+  /// Build channel metadata list for the in-player guide.
+  /// Includes inline now/next data for channels that already have items loaded.
+  List<Map<String, dynamic>> _buildGuideChannelMetadata() {
+    return _channels.map((ch) {
+      final data = <String, dynamic>{
+        'id': ch.id,
+        'name': ch.displayName,
+        'number': ch.channelNumber,
+        'type': ch.type,
+        'isFavorite': ch.isFavorite,
+      };
+      if (ch.hasItems) {
+        final rotation = _rotationFor(ch);
+        final np = _service.getNowPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        final next = _service.getNextPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        if (np != null) {
+          data['nowPlaying'] = {
+            'title': np.item.name,
+            'poster': np.item.poster,
+            'year': np.item.year,
+            'rating': np.item.imdbRating,
+            'type': np.item.type,
+            'slotEndMs': np.slotEnd.millisecondsSinceEpoch,
+            'progress': np.progress,
+          };
+        }
+        if (next != null) {
+          data['nextUp'] = {
+            'title': next.item.name,
+            'poster': next.item.poster,
+            'year': next.item.year,
+            'rating': next.item.imdbRating,
+            'type': next.item.type,
+          };
+        }
+      }
+      return data;
+    }).toList();
+  }
+
+  /// Creates a guide data provider closure for lazy-loading channel data.
+  Future<Map<String, dynamic>?> Function(List<String>) _createGuideDataProvider() {
+    return (List<String> channelIds) async {
+      final result = <String, dynamic>{};
+      for (final id in channelIds) {
+        final ch = _channels.firstWhereOrNull((c) => c.id == id);
+        if (ch == null) continue;
+        if (!ch.hasItems) await _service.loadChannelItems(ch);
+        if (!ch.hasItems) continue;
+        final rotation = _rotationFor(ch);
+        final np = _service.getNowPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        final next = _service.getNextPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        result[id] = {
+          if (np != null) 'nowPlaying': {
+            'title': np.item.name,
+            'poster': np.item.poster,
+            'year': np.item.year,
+            'rating': np.item.imdbRating,
+            'type': np.item.type,
+            'slotEndMs': np.slotEnd.millisecondsSinceEpoch,
+            'progress': np.progress,
+          },
+          if (next != null) 'nextUp': {
+            'title': next.item.name,
+            'poster': next.item.poster,
+            'year': next.item.year,
+            'rating': next.item.imdbRating,
+            'type': next.item.type,
+          },
+        };
+      }
+      return result;
+    };
+  }
+
+  /// Creates a channel switch provider closure for the in-player guide.
+  Future<Map<String, dynamic>?> Function(String) _createChannelSwitchProvider() {
+    return (String channelId) async {
+      final ch = _channels.firstWhereOrNull((c) => c.id == channelId);
+      if (ch == null) return null;
+      final result = await _resolveChannelPlayback(ch);
+      if (result == null) return null;
+      return {
+        'url': result.url,
+        'title': result.title,
+        'contentType': result.contentType,
+        'contentImdbId': result.contentImdbId,
+        'startAtPercent': result.startAtPercent,
+        'stremioSources': result.playableSources.map((t) => t.toJson()).toList(),
+        'stremioCurrentSourceIndex': result.sourceIndex,
+        'sourceResolver': result.sourceResolver,
+      };
     };
   }
 
@@ -2300,4 +2570,27 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
       ),
     );
   }
+}
+
+/// Result from resolving a channel to a playable stream (no UI).
+class _ChannelPlaybackResult {
+  final String url;
+  final String title;
+  final String contentType;
+  final String? contentImdbId;
+  final double? startAtPercent;
+  final List<Torrent> playableSources;
+  final int sourceIndex;
+  final Future<String?> Function(Torrent) sourceResolver;
+
+  const _ChannelPlaybackResult({
+    required this.url,
+    required this.title,
+    required this.contentType,
+    this.contentImdbId,
+    this.startAtPercent,
+    required this.playableSources,
+    required this.sourceIndex,
+    required this.sourceResolver,
+  });
 }

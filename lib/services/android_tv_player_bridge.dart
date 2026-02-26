@@ -42,6 +42,8 @@ class AndroidTvPlayerBridge {
   static MovieMetadataProvider? _movieMetadataProvider;
   static Future<String?> Function(int)? _stremioSourceResolver;
   static Future<List<Map<String, dynamic>>?> Function(int)? _sourcePlaylistResolver;
+  static Future<Map<String, dynamic>?> Function(List<String>)? _stremioTvGuideDataProvider;
+  static Future<Map<String, dynamic>?> Function(String)? _stremioTvChannelSwitchProvider;
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
@@ -190,6 +192,55 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'requestStremioTvGuideData':
+          debugPrint('AndroidTvPlayerBridge: requestStremioTvGuideData received');
+          final guideProvider = _stremioTvGuideDataProvider;
+          if (guideProvider == null) {
+            debugPrint('AndroidTvPlayerBridge: no guide data provider registered');
+            return null;
+          }
+          final guideArgs = call.arguments;
+          if (guideArgs is Map) {
+            final channelIds = (guideArgs['channelIds'] as List?)
+                ?.map((e) => e.toString())
+                .toList();
+            if (channelIds == null || channelIds.isEmpty) return null;
+            try {
+              final data = await guideProvider(channelIds);
+              return data;
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: guide data provider error $e\n$stack');
+              throw PlatformException(
+                code: 'stremio_tv_guide_data_failed',
+                message: e.toString(),
+              );
+            }
+          }
+          return null;
+        case 'requestStremioTvChannelSwitch':
+          debugPrint('AndroidTvPlayerBridge: requestStremioTvChannelSwitch received');
+          final switchProvider = _stremioTvChannelSwitchProvider;
+          if (switchProvider == null) {
+            debugPrint('AndroidTvPlayerBridge: no channel switch provider registered');
+            return null;
+          }
+          final switchArgs = call.arguments;
+          if (switchArgs is Map) {
+            final channelId = switchArgs['channelId'] as String?;
+            if (channelId == null || channelId.isEmpty) return null;
+            try {
+              final result = await switchProvider(channelId);
+              debugPrint('AndroidTvPlayerBridge: channel switch returned: ${result != null ? "success" : "null"}');
+              return result;
+            } catch (e, stack) {
+              debugPrint('AndroidTvPlayerBridge: channel switch error $e\n$stack');
+              throw PlatformException(
+                code: 'stremio_tv_channel_switch_failed',
+                message: e.toString(),
+              );
+            }
+          }
+          return null;
         case 'requestSourcePlaylistResolve':
           debugPrint('AndroidTvPlayerBridge: requestSourcePlaylistResolve received - args: ${call.arguments}');
           final playlistResolver = _sourcePlaylistResolver;
@@ -228,6 +279,8 @@ class AndroidTvPlayerBridge {
           _movieMetadataProvider = null;
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
+          _stremioTvGuideDataProvider = null;
+          _stremioTvChannelSwitchProvider = null;
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
@@ -547,6 +600,8 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
+    Future<Map<String, dynamic>?> Function(List<String>)? onRequestStremioTvGuideData,
+    Future<Map<String, dynamic>?> Function(String)? onRequestStremioTvChannelSwitch,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -562,6 +617,8 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = onRequestMovieMetadata;
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
+    _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
+    _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
@@ -599,6 +656,8 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = null;
     _stremioSourceResolver = null;
     _sourcePlaylistResolver = null;
+    _stremioTvGuideDataProvider = null;
+    _stremioTvChannelSwitchProvider = null;
     return false;
   }
 

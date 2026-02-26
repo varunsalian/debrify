@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stremio TV guide channel row (104dp height, premium redesign) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="104dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingEnd="12dp"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
+    android:background="@drawable/stremio_tv_guide_item_bg"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true">
+
+    <!-- Left Accent Bar (cyan→teal gradient) -->
+    <View
+        android:id="@+id/stremio_tv_guide_accent_bar"
+        android:layout_width="3dp"
+        android:layout_height="match_parent"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone" />
+
+    <!-- Channel Number -->
+    <TextView
+        android:id="@+id/stremio_tv_guide_channel_number"
+        android:layout_width="30dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="9dp"
+        android:gravity="center"
+        android:textColor="#2EFFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-medium"
+        tools:text="7" />
+
+    <!-- Now-Playing Poster (56×84dp) -->
+    <FrameLayout
+        android:layout_width="56dp"
+        android:layout_height="84dp"
+        android:layout_marginStart="8dp">
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="84dp"
+            android:background="@drawable/stremio_tv_guide_poster_bg"
+            android:elevation="2dp">
+
+            <ImageView
+                android:id="@+id/stremio_tv_guide_poster"
+                android:layout_width="56dp"
+                android:layout_height="84dp"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
+            <!-- Letter avatar fallback -->
+            <TextView
+                android:id="@+id/stremio_tv_guide_poster_letter"
+                android:layout_width="56dp"
+                android:layout_height="84dp"
+                android:gravity="center"
+                android:textColor="#FF00E5FF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:background="#1500E5FF"
+                tools:text="T" />
+
+            <!-- Bottom gradient overlay for text readability -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="24dp"
+                android:layout_gravity="bottom"
+                android:background="@android:color/transparent" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <!-- Info Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="10dp">
+
+        <!-- Channel Name + Type Badge Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Channel Name -->
+            <TextView
+                android:id="@+id/stremio_tv_guide_channel_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#D9FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:ellipsize="end"
+                tools:text="Cinemeta: Popular Movies" />
+
+            <!-- Type Badge (MOVIE / SERIES) -->
+            <TextView
+                android:id="@+id/stremio_tv_guide_type_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:textColor="#59FFFFFF"
+                android:textSize="8sp"
+                android:textAllCaps="true"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.04"
+                android:background="@drawable/stremio_tv_guide_type_badge_bg"
+                tools:text="MOVIE" />
+        </LinearLayout>
+
+        <!-- Now Playing Title -->
+        <TextView
+            android:id="@+id/stremio_tv_guide_now_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#B3FFFFFF"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            tools:text="The Dark Knight (2008) ★ 9.0" />
+
+        <!-- Next Up -->
+        <TextView
+            android:id="@+id/stremio_tv_guide_next_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textColor="#59FFFFFF"
+            android:textSize="10sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone"
+            tools:text="Next: Inception (2010)" />
+
+        <!-- Progress Bar + End Time -->
+        <LinearLayout
+            android:id="@+id/stremio_tv_guide_progress_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="3dp"
+                android:layout_weight="1">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:background="@drawable/stremio_tv_guide_progress_track" />
+
+                <View
+                    android:id="@+id/stremio_tv_guide_progress_fill"
+                    android:layout_width="0dp"
+                    android:layout_height="3dp"
+                    android:background="@drawable/stremio_tv_guide_progress_fill" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/stremio_tv_guide_end_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textColor="#40FFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif"
+                tools:text="2:30 PM" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Status Column (NOW badge / Loading spinner) -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp">
+
+        <!-- NOW Badge (current channel) -->
+        <TextView
+            android:id="@+id/stremio_tv_guide_now_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:text="NOW"
+            android:textColor="#FFFFFFFF"
+            android:textSize="8sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:background="@drawable/iptv_now_badge_bg"
+            android:visibility="gone" />
+
+        <!-- Loading spinner -->
+        <ProgressBar
+            android:id="@+id/stremio_tv_guide_loading"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:indeterminateTint="#80FFFFFF"
+            android:visibility="gone" />
+    </FrameLayout>
+
+</LinearLayout>

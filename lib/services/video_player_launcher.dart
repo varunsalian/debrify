@@ -185,6 +185,14 @@ class VideoPlayerLaunchArgs {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  // Stremio TV in-player channel guide
+  final List<Map<String, dynamic>>? stremioTvChannels;
+  final String? stremioTvCurrentChannelId;
+  final int? stremioTvRotationMinutes;
+  final int? stremioTvSeriesRotationMinutes;
+  final int? stremioTvMixSalt;
+  final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
+  final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -220,6 +228,13 @@ class VideoPlayerLaunchArgs {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.stremioTvChannels,
+    this.stremioTvCurrentChannelId,
+    this.stremioTvRotationMinutes,
+    this.stremioTvSeriesRotationMinutes,
+    this.stremioTvMixSalt,
+    this.stremioTvGuideDataProvider,
+    this.stremioTvChannelSwitchProvider,
   });
 
   VideoPlayerScreen toWidget() {
@@ -256,6 +271,10 @@ class VideoPlayerLaunchArgs {
       stremioCurrentSourceIndex: stremioCurrentSourceIndex,
       resolveStremioSource: resolveStremioSource,
       resolveSourceToPlaylist: resolveSourceToPlaylist,
+      stremioTvChannels: stremioTvChannels,
+      stremioTvCurrentChannelId: stremioTvCurrentChannelId,
+      stremioTvGuideDataProvider: stremioTvGuideDataProvider,
+      stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
     );
   }
 }
@@ -773,31 +792,32 @@ class VideoPlayerLauncher {
       MainPageBridge.notifyPlayerLaunching();
 
       // Build stremio source resolver for Android TV (if stremio sources are available)
-      final stremioSources = args.stremioSources;
-      final stremioResolver = args.resolveStremioSource;
+      // Uses a mutable sources holder so channel switches can update the source list
+      var currentStremioSources = List<Torrent>.from(args.stremioSources ?? []);
+      var currentStremioResolver = args.resolveStremioSource;
       Future<String?> Function(int)? stremioSourceResolverForTv;
-      if (stremioSources != null && stremioSources.isNotEmpty && stremioResolver != null) {
+      if (currentStremioSources.isNotEmpty && currentStremioResolver != null) {
         stremioSourceResolverForTv = (int sourceIndex) async {
-          if (sourceIndex < 0 || sourceIndex >= stremioSources.length) {
+          if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             debugPrint('VideoPlayerLauncher: stremio source index out of range: $sourceIndex');
             return null;
           }
-          final torrent = stremioSources[sourceIndex];
+          final torrent = currentStremioSources[sourceIndex];
           debugPrint('VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}');
-          return stremioResolver(torrent);
+          return currentStremioResolver!(torrent);
         };
       }
 
       // Build playlist resolver for Android TV (if resolveSourceToPlaylist is available)
       final resolveSourceToPlaylist = args.resolveSourceToPlaylist;
       Future<List<Map<String, dynamic>>?> Function(int)? sourcePlaylistResolverForTv;
-      if (stremioSources != null && stremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
+      if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
         sourcePlaylistResolverForTv = (int sourceIndex) async {
-          if (sourceIndex < 0 || sourceIndex >= stremioSources.length) {
+          if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             debugPrint('VideoPlayerLauncher: source playlist index out of range: $sourceIndex');
             return null;
           }
-          final torrent = stremioSources[sourceIndex];
+          final torrent = currentStremioSources[sourceIndex];
           debugPrint('VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}');
           final playlistEntries = await resolveSourceToPlaylist(torrent);
           if (playlistEntries == null || playlistEntries.isEmpty) return null;
@@ -860,8 +880,47 @@ class VideoPlayerLauncher {
         };
       }
 
+      // Build Stremio TV channel switch wrapper that updates mutable sources holder
+      final channelSwitchProvider = args.stremioTvChannelSwitchProvider;
+      Future<Map<String, dynamic>?> Function(String)? channelSwitchForTv;
+      if (channelSwitchProvider != null) {
+        channelSwitchForTv = (String channelId) async {
+          final switchResult = await channelSwitchProvider(channelId);
+          if (switchResult == null) return null;
+
+          // Update mutable sources holder with new channel's sources
+          final newSourcesList = switchResult['stremioSources'] as List?;
+          final newResolver = switchResult['sourceResolver'] as Future<String?> Function(Torrent)?;
+          if (newSourcesList != null) {
+            currentStremioSources = newSourcesList
+                .map((s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)))
+                .toList();
+          }
+          if (newResolver != null) {
+            currentStremioResolver = newResolver;
+          }
+
+          // Remove the sourceResolver from the result (it's a function, not serializable)
+          final resultMap = Map<String, dynamic>.from(switchResult);
+          resultMap.remove('sourceResolver');
+          return resultMap;
+        };
+      }
+
+      // Build payload with Stremio TV guide data
+      final payloadMap = result.payload.toMap();
+      if (args.stremioTvChannels != null && args.stremioTvChannels!.isNotEmpty) {
+        payloadMap['stremioTvGuide'] = {
+          'channels': args.stremioTvChannels,
+          'currentChannelId': args.stremioTvCurrentChannelId,
+          'rotationMinutes': args.stremioTvRotationMinutes,
+          'seriesRotationMinutes': args.stremioTvSeriesRotationMinutes,
+          'mixSalt': args.stremioTvMixSalt,
+        };
+      }
+
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
-        payload: result.payload.toMap(),
+        payload: payloadMap,
         onProgress: (progress) => _handleProgressUpdate(result.payload, progress),
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
@@ -886,6 +945,8 @@ class VideoPlayerLauncher {
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
+        onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
+        onRequestStremioTvChannelSwitch: channelSwitchForTv,
       );
 
       if (!launched) {
