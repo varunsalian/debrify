@@ -339,6 +339,40 @@
     <!-- Subtitle Settings Panel -->
     <include layout="@layout/view_subtitle_settings_panel" />
 
+    <!-- PikPak Reactivation Indicator (non-blocking, bottom-center pill) -->
+    <LinearLayout
+        android:id="@+id/android_tv_pikpak_reactivation_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="100dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/pikpak_pill_backdrop"
+        android:paddingStart="20dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone"
+        android:alpha="0"
+        android:elevation="30dp">
+
+        <ProgressBar
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@android:color/white" />
+
+        <TextView
+            android:id="@+id/android_tv_pikpak_reactivation_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="Reactivating video..."
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <!-- Buffering Indicator (OTT-style centered spinner) -->
     <FrameLayout
         android:id="@+id/android_tv_buffering_indicator"

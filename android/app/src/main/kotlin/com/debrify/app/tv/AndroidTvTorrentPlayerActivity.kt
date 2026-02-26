@@ -272,6 +272,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Buffering indicator
     private lateinit var bufferingIndicator: View
+    private lateinit var pikPakReactivationIndicator: View
+    private lateinit var pikPakReactivationText: TextView
     private var hasEverBeenReady = false
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
@@ -662,6 +664,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
+        pikPakReactivationIndicator = findViewById(R.id.android_tv_pikpak_reactivation_indicator)
+        pikPakReactivationText = findViewById(R.id.android_tv_pikpak_reactivation_text)
 
         // Stremio sources views
         stremioSourceBadge = findViewById(R.id.stremio_source_badge)
@@ -2104,15 +2108,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun showPikPakRetryOverlay(message: String) {
         runOnUiThread {
-            nextText.text = message
-            nextSubtext.visibility = View.GONE
-            nextOverlay.visibility = View.VISIBLE
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            pikPakReactivationText.text = message
+            pikPakReactivationIndicator.animate().cancel()
+            pikPakReactivationIndicator.visibility = View.VISIBLE
+            pikPakReactivationIndicator.animate().alpha(1f).setDuration(250).start()
         }
     }
 
     private fun hidePikPakRetryOverlay() {
         runOnUiThread {
-            nextOverlay.visibility = View.GONE
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            pikPakReactivationIndicator.animate().cancel()
+            pikPakReactivationIndicator.alpha = 0f
+            pikPakReactivationIndicator.visibility = View.GONE
         }
     }
 
@@ -5177,7 +5186,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         bufferingDebounceRunnable?.let { bufferingHandler.removeCallbacks(it) }
         val runnable = Runnable {
             val state = player?.playbackState ?: return@Runnable
-            if (state == Player.STATE_BUFFERING && hasEverBeenReady && nextOverlay.visibility != View.VISIBLE) {
+            if (state == Player.STATE_BUFFERING && hasEverBeenReady && nextOverlay.visibility != View.VISIBLE && pikPakReactivationIndicator.visibility != View.VISIBLE) {
                 bufferingIndicator.visibility = View.VISIBLE
                 bufferingIndicator.animate().alpha(1f).setDuration(250).start()
             }
@@ -5206,7 +5215,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelPikPakRetry()
         pikPakRetryHandler.removeCallbacksAndMessages(null)
 
-        // Clean up buffering indicator
+        // Clean up indicators
+        pikPakReactivationIndicator.animate().cancel()
+        pikPakReactivationIndicator.visibility = View.GONE
         bufferingIndicator.animate().cancel()
         bufferingHandler.removeCallbacksAndMessages(null)
 

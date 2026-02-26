@@ -7148,6 +7148,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       if (!mounted) return;
       final addAnyway = await _showNotCachedDialog('debrid');
+      _restoreFocusToCard(index);
       if (addAnyway) {
         // Keep torrent in RD — it will download and appear in the RD page
         if (!mounted) return;
@@ -7700,6 +7701,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       if (!mounted) return;
       final addAnyway = await _showNotCachedDialog('debrid');
+      _restoreFocusToCard(index);
       if (addAnyway) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -7905,6 +7907,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Ask user if they want to add it anyway
           if (!mounted) return;
           final addAnyway = await _showNotCachedDialog('torbox');
+          if (!mounted) return;
+          final torboxCardIndex = _torrents.indexWhere((t) => t.infohash.toLowerCase() == infohash.toLowerCase());
+          _restoreFocusToCard(torboxCardIndex);
           if (addAnyway) {
             // Re-add without cache-only restriction
             if (!mounted) return;
@@ -13388,6 +13393,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           if (event.logicalKey == LogicalKeyboardKey.select ||
               event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.space) {
+            DialogTapGuard.markKeyAction();
             _handleTorrentCardActivated(torrent, index);
             return KeyEventResult.handled;
           }
