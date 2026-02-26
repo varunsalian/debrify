@@ -183,6 +183,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioActiveTab: String = "all" // "all", "direct", "torrent"
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
+    private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
 
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
@@ -828,6 +829,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         playlistOverlay.visibility = View.GONE
 
+        rebuildPlaylistContent()
+    }
+
+    /** Rebuilds playlist adapters, tabs, and mode from current payload items. Safe to call multiple times. */
+    private fun rebuildPlaylistContent() {
         val model = payload ?: return
         val items = model.items
         movieTabs.clear()
@@ -4491,7 +4497,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun onStremioSourceSelected(source: StremioSource) {
-        android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}")
+        android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}, hasPlaylistResolver=$hasPlaylistResolver")
 
         // Cancel any ongoing PikPak retry from previous source
         cancelPikPakRetry()
@@ -4502,11 +4508,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Mark as loading
         stremioSourceAdapter?.setLoading(source.index)
 
-        if (source.isDirectStream && !source.directUrl.isNullOrEmpty()) {
+        if (hasPlaylistResolver) {
+            // Torrent search mode — resolve to full playlist via Flutter
+            resolveSourceToPlaylistViaFlutter(source, stremioResolutionToken)
+        } else if (source.isDirectStream && !source.directUrl.isNullOrEmpty()) {
             // Direct URL — use immediately
             switchToStremioSource(source.directUrl, source.index)
         } else {
-            // Torrent — resolve via Flutter bridge
+            // Torrent — resolve single URL via Flutter bridge
             resolveStremioSourceViaFlutter(source, stremioResolutionToken)
         }
     }
@@ -4566,6 +4575,170 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             stremioSourceAdapter?.clearLoading()
             restoreFocusToStremioSource(source.index)
         }
+    }
+
+    private fun resolveSourceToPlaylistViaFlutter(source: StremioSource, token: Int) {
+        try {
+            val args = hashMapOf<String, Any?>("sourceIndex" to source.index)
+            android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - sending to Flutter: index=${source.index}, token=$token")
+
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "requestSourcePlaylistResolve",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        if (token != stremioResolutionToken) {
+                            android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - stale token $token (current: $stremioResolutionToken), discarding")
+                            return
+                        }
+                        android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - Flutter returned: ${result != null}")
+                        val map = result as? Map<*, *>
+                        val itemsList = map?.get("items") as? List<*>
+                        if (itemsList != null && itemsList.isNotEmpty()) {
+                            runOnUiThread { switchToSourcePlaylist(source.index, itemsList) }
+                        } else {
+                            android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - null or empty items returned")
+                            runOnUiThread {
+                                stremioSourceAdapter?.clearLoading()
+                                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Source unavailable — not cached or not a video", Toast.LENGTH_SHORT).show()
+                                restoreFocusToStremioSource(source.index)
+                            }
+                        }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        if (token != stremioResolutionToken) return
+                        android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - error: $errorCode - $errorMessage")
+                        runOnUiThread {
+                            stremioSourceAdapter?.clearLoading()
+                            Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Failed to resolve source", Toast.LENGTH_SHORT).show()
+                            restoreFocusToStremioSource(source.index)
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        if (token != stremioResolutionToken) return
+                        android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - not implemented")
+                        runOnUiThread {
+                            stremioSourceAdapter?.clearLoading()
+                            restoreFocusToStremioSource(source.index)
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - exception: ${e.message}", e)
+            stremioSourceAdapter?.clearLoading()
+            restoreFocusToStremioSource(source.index)
+        }
+    }
+
+    private fun switchToSourcePlaylist(sourceIndex: Int, rawItems: List<*>) {
+        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}")
+
+        val model = payload ?: return
+
+        // Parse metadata entry (first item with __meta__ flag)
+        var contentType = model.contentType
+        val itemMaps = mutableListOf<Map<*, *>>()
+        for (raw in rawItems) {
+            val map = raw as? Map<*, *> ?: continue
+            if (map["__meta__"] == true) {
+                contentType = (map["contentType"] as? String) ?: contentType
+                continue
+            }
+            itemMaps.add(map)
+        }
+
+        if (itemMaps.isEmpty()) {
+            android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no valid items after parsing")
+            stremioSourceAdapter?.clearLoading()
+            Toast.makeText(this, "Source unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Parse items into PlaybackItem list
+        val newItems = mutableListOf<PlaybackItem>()
+        for (map in itemMaps) {
+            try {
+                // Convert Map<*, *> to JSONObject safely
+                val obj = JSONObject()
+                for ((key, value) in map) {
+                    if (key is String) {
+                        obj.put(key, value ?: JSONObject.NULL)
+                    }
+                }
+                newItems.add(PlaybackItem.fromJson(obj))
+            } catch (e: Exception) {
+                android.util.Log.w("AndroidTvPlayer", "switchToSourcePlaylist - failed to parse item: ${e.message}")
+            }
+        }
+
+        if (newItems.isEmpty()) {
+            android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no items parsed successfully")
+            stremioSourceAdapter?.clearLoading()
+            Toast.makeText(this, "Source unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
+
+        // Update source state
+        currentStremioSourceIndex = sourceIndex
+        updateStremioQualityBadge()
+        updateStremioNowPlaying()
+        stremioSourceAdapter?.updateActiveSource(sourceIndex)
+
+        // Hide panel
+        hideStremioSourcesPanel()
+
+        // Cancel any ongoing PikPak retry
+        cancelPikPakRetry()
+
+        // Replace payload items and content type
+        model.items.clear()
+        model.items.addAll(newItems)
+
+        // Rebuild navigation maps for new items
+        rebuildNavigationMaps(model, contentType)
+
+        // Rebuild playlist UI (without re-adding RecyclerView listeners)
+        rebuildPlaylistContent()
+
+        // Flash title to indicate source switch
+        val currentSource = stremioSources.getOrNull(sourceIndex)
+        if (currentSource != null) {
+            titleView.text = currentSource.displayTitle
+            titleView.visibility = View.VISIBLE
+            titleOttContainer.visibility = View.GONE
+            titleContainer.visibility = View.VISIBLE
+            titleContainer.alpha = 1f
+            titleHandler.removeCallbacks(hideTitleRunnable)
+            titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
+        }
+
+        // Start playing from the first item
+        playItem(0)
+    }
+
+    private fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String) {
+        model.contentType = contentType
+
+        // Build sequential navigation maps for the new items
+        val nextMap = mutableMapOf<Int, Int>()
+        val prevMap = mutableMapOf<Int, Int>()
+        for (i in 0 until model.items.lastIndex) {
+            nextMap[i] = i + 1
+        }
+        for (i in 1..model.items.lastIndex) {
+            prevMap[i] = i - 1
+        }
+        model.nextEpisodeMap = nextMap
+        model.prevEpisodeMap = prevMap
+        model.collectionGroups = null
+        model.perItemImdbIds.clear()
+
+        android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
     }
 
     private fun restoreFocusToStremioSource(sourceIndex: Int) {
@@ -4740,6 +4913,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
                 android.util.Log.d("AndroidTvPlayer", "parsePayload - stremioSources: ${stremioSources.size}, currentIndex: $currentStremioSourceIndex")
             }
+
+            // Parse playlist resolver flag
+            hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -5161,13 +5337,13 @@ private class StremioSourceAdapter(
 private data class PlaybackPayload(
     val title: String,
     val subtitle: String?,
-    val contentType: String,
+    var contentType: String,
     val items: MutableList<PlaybackItem>,
     val startIndex: Int,
     val seriesTitle: String?,
-    val nextEpisodeMap: Map<Int, Int> = emptyMap(),
-    val prevEpisodeMap: Map<Int, Int> = emptyMap(),
-    val collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
+    var nextEpisodeMap: Map<Int, Int> = emptyMap(),
+    var prevEpisodeMap: Map<Int, Int> = emptyMap(),
+    var collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
     var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
     val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
     val startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration

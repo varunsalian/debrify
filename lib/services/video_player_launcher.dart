@@ -788,6 +788,78 @@ class VideoPlayerLauncher {
         };
       }
 
+      // Build playlist resolver for Android TV (if resolveSourceToPlaylist is available)
+      final resolveSourceToPlaylist = args.resolveSourceToPlaylist;
+      Future<List<Map<String, dynamic>>?> Function(int)? sourcePlaylistResolverForTv;
+      if (stremioSources != null && stremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
+        sourcePlaylistResolverForTv = (int sourceIndex) async {
+          if (sourceIndex < 0 || sourceIndex >= stremioSources.length) {
+            debugPrint('VideoPlayerLauncher: source playlist index out of range: $sourceIndex');
+            return null;
+          }
+          final torrent = stremioSources[sourceIndex];
+          debugPrint('VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}');
+          final playlistEntries = await resolveSourceToPlaylist(torrent);
+          if (playlistEntries == null || playlistEntries.isEmpty) return null;
+
+          // Use SeriesPlaylist to detect series and compute season/episode
+          final seriesPlaylist = playlistEntries.length > 1
+              ? SeriesPlaylist.fromPlaylistEntries(playlistEntries)
+              : null;
+          final isSeries = seriesPlaylist?.isSeries ?? false;
+          final episodes = seriesPlaylist?.allEpisodes;
+
+          // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
+          if (isSeries && seriesPlaylist != null) {
+            try {
+              await seriesPlaylist.fetchEpisodeInfo();
+              debugPrint('VideoPlayerLauncher: TVMaze fetch complete for source playlist');
+            } catch (e) {
+              debugPrint('VideoPlayerLauncher: TVMaze fetch failed (non-fatal): $e');
+            }
+          }
+
+          // Convert PlaylistEntry list to Android TV PlaybackItem maps
+          final items = <Map<String, dynamic>>[];
+          for (int i = 0; i < playlistEntries.length; i++) {
+            final entry = playlistEntries[i];
+            // Get series info if available
+            final episode = isSeries && episodes != null && i < episodes.length
+                ? episodes[i]
+                : null;
+            final epInfo = episode?.episodeInfo;
+            items.add({
+              'id': '${entry.title}_$i',
+              'title': episode?.displayTitle ?? entry.title,
+              'url': entry.url,
+              'index': i,
+              if (episode?.seriesInfo.season != null) 'season': episode!.seriesInfo.season,
+              if (episode?.seriesInfo.episode != null) 'episode': episode!.seriesInfo.episode,
+              if (epInfo?.poster != null) 'artwork': epInfo!.poster,
+              if (epInfo?.plot != null) 'description': epInfo!.plot,
+              if (epInfo?.rating != null) 'rating': epInfo!.rating,
+              if (entry.sizeBytes != null) 'sizeBytes': entry.sizeBytes,
+              'resumePositionMs': 0,
+              'durationMs': 0,
+              'updatedAt': 0,
+              if (entry.provider != null) 'provider': entry.provider,
+            });
+          }
+          debugPrint('VideoPlayerLauncher: resolved ${items.length} items for source playlist (isSeries=$isSeries)');
+
+          // Update the stream resolver so lazy loading works for the new playlist
+          resolver.replaceEntries(playlistEntries);
+
+          // Add metadata as the first entry with key '__meta__'
+          // This tells Kotlin what content type to use for the new playlist
+          final meta = <String, dynamic>{
+            '__meta__': true,
+            'contentType': isSeries ? 'series' : 'collection',
+          };
+          return [meta, ...items];
+        };
+      }
+
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: result.payload.toMap(),
         onProgress: (progress) => _handleProgressUpdate(result.payload, progress),
@@ -813,6 +885,7 @@ class VideoPlayerLauncher {
               }
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
+        onResolveSourcePlaylist: sourcePlaylistResolverForTv,
       );
 
       if (!launched) {
@@ -1383,6 +1456,7 @@ class _AndroidTvPlaybackPayload {
   final double? startAtPercent;
   final List<Map<String, dynamic>>? stremioSources;
   final int? stremioCurrentSourceIndex;
+  final bool hasPlaylistResolver;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -1399,6 +1473,7 @@ class _AndroidTvPlaybackPayload {
     this.startAtPercent,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
+    this.hasPlaylistResolver = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -1421,6 +1496,7 @@ class _AndroidTvPlaybackPayload {
         'stremioSources': stremioSources,
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
+      if (hasPlaylistResolver) 'hasPlaylistResolver': true,
     };
   }
 }
@@ -1561,13 +1637,30 @@ class _LauncherEntry {
 }
 
 class _AndroidTvPlaylistResolver {
-  final List<_LauncherEntry> entries;
+  List<_LauncherEntry> entries;
   final Future<String> Function(PlaylistEntry entry) resolveEntry;
 
   _AndroidTvPlaylistResolver({
     required this.entries,
     required this.resolveEntry,
   });
+
+  /// Replace entries with a new playlist (used during source switching)
+  void replaceEntries(List<PlaylistEntry> playlistEntries) {
+    // Clear cached URLs for old entries before replacing
+    _clearResolvedStreams(entries.map((e) => e.resumeId));
+
+    entries = playlistEntries.asMap().entries.map((e) {
+      final i = e.key;
+      final entry = e.value;
+      return _LauncherEntry(
+        entry: entry,
+        index: i,
+        resumeId: '${entry.title}_$i',
+      );
+    }).toList();
+    debugPrint('AndroidTvPlaylistResolver: replaced entries with ${entries.length} new entries');
+  }
 
   Future<Map<String, dynamic>?> handleRequest(
     Map<String, dynamic> request,
@@ -1770,6 +1863,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       startAtPercent: args.startAtPercent,
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
+      hasPlaylistResolver: args.resolveSourceToPlaylist != null,
     );
 
     return _AndroidTvPlaybackPayloadResult(
