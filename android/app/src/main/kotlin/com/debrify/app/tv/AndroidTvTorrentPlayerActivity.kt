@@ -2412,10 +2412,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Down button - show controls menu, or from badge go to progress bar
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            // If focus is on Stremio badge, DOWN goes back to progress bar
+            // If focus is on Stremio badge, DOWN goes back to progress bar (or controls dock if seeking unavailable)
             if (currentFocus == stremioSourceBadge && controlsMenuVisible) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                    cinemaProgressContainer?.requestFocus()
+                    val duration = player?.duration ?: 0
+                    if (duration > 0) {
+                        cinemaProgressContainer?.requestFocus()
+                    } else {
+                        pauseButton?.requestFocus()
+                    }
                 }
                 return true
             }
@@ -2442,10 +2447,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
                 return true
             }
-            // If focus is in controls dock, UP goes to progress bar
+            // If focus is in controls dock, UP goes to progress bar (or badge if seeking unavailable)
             if (focusInControls && controlsMenuVisible && !cinemaSeekMode) {
                 if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                    cinemaProgressContainer?.requestFocus()
+                    val duration = player?.duration ?: 0
+                    if (duration > 0) {
+                        cinemaProgressContainer?.requestFocus()
+                    } else if (stremioSources.isNotEmpty()) {
+                        stremioSourceBadge?.requestFocus()
+                    }
                 }
                 return true
             }
@@ -2806,8 +2816,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         videoDuration = player?.duration ?: 0
 
         if (videoDuration <= 0) {
-            Toast.makeText(this, "Seeking not available", Toast.LENGTH_SHORT).show()
-            pauseButton?.requestFocus()
+            // Don't trap focus — let DPAD navigation skip to Sources badge
+            if (stremioSources.isNotEmpty()) {
+                stremioSourceBadge?.requestFocus()
+            } else {
+                pauseButton?.requestFocus()
+            }
             return
         }
 
@@ -4362,6 +4376,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Stremio Source Switcher
     // ═══════════════════════════════════════════════════════════════════════
 
+    private var stremioSourcesSearchWatcher: android.text.TextWatcher? = null
+
     private fun setupStremioSources() {
         if (stremioSources.isEmpty()) return
 
@@ -4392,6 +4408,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (currentSource != null) {
             stremioActiveTab = if (currentSource.isDirectStream) "direct" else "torrent"
         }
+        // Reset tab alpha/focusable for re-calls
+        stremioSourcesTabDirect?.alpha = 1.0f
+        stremioSourcesTabDirect?.isFocusable = true
+        stremioSourcesTabTorrent?.alpha = 1.0f
+        stremioSourcesTabTorrent?.isFocusable = true
+
+        // Gray out empty tab
+        if (directCount == 0) {
+            stremioSourcesTabDirect?.alpha = 0.3f
+            stremioSourcesTabDirect?.isFocusable = false
+        }
+        if (torrentCount == 0) {
+            stremioSourcesTabTorrent?.alpha = 0.3f
+            stremioSourcesTabTorrent?.isFocusable = false
+        }
+
         updateStremioTabAppearance()
 
         stremioSourcesTabDirect?.setOnClickListener {
@@ -4409,22 +4441,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // Gray out empty tab
-        if (directCount == 0) {
-            stremioSourcesTabDirect?.alpha = 0.3f
-            stremioSourcesTabDirect?.isFocusable = false
-        }
-        if (torrentCount == 0) {
-            stremioSourcesTabTorrent?.alpha = 0.3f
-            stremioSourcesTabTorrent?.isFocusable = false
-        }
-
-        // Setup search
-        stremioSourcesSearch?.addTextChangedListener(object : android.text.TextWatcher {
+        // Setup search (remove old watcher to avoid stacking, clear stale query)
+        stremioSourcesSearchWatcher?.let { stremioSourcesSearch?.removeTextChangedListener(it) }
+        stremioSourcesSearch?.setText("")
+        stremioSourcesSearchWatcher = object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: android.text.Editable?) { filterStremioSources() }
-        })
+        }
+        stremioSourcesSearch?.addTextChangedListener(stremioSourcesSearchWatcher)
 
         // Setup RecyclerView
         stremioSourceAdapter = StremioSourceAdapter(getFilteredStremioSources()) { source ->
@@ -4486,8 +4511,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateStremioQualityBadge() {
-        val current = stremioSources.getOrNull(currentStremioSourceIndex) ?: return
-        stremioSourceBadgeText?.text = current.quality
+        if (stremioSources.isEmpty()) return
+        stremioSourceBadgeText?.text = "Sources"
     }
 
     private fun updateStremioNowPlaying() {
@@ -4538,11 +4563,95 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideStremioSourcesPanel() {
         stremioSourcesVisible = false
+        cancelSourcePanelWait()
         stremioSourcesOverlay?.animate()?.cancel()
         stremioSourcesOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             stremioSourcesOverlay?.visibility = View.GONE
         }?.start()
         stremioSourcesSearch?.setText("")
+    }
+
+    private var sourcePanelReadyListener: Player.Listener? = null
+    private var sourcePanelTimeoutRunnable: Runnable? = null
+
+    private fun hideSourcesPanelWhenReady() {
+        if (!stremioSourcesVisible) return
+
+        // Clean up any previous listener/timeout
+        cancelSourcePanelWait()
+
+        // Timeout fallback — hide after 10s regardless
+        val timeout = Runnable {
+            cancelSourcePanelWait()
+            if (stremioSourcesVisible) hideStremioSourcesPanel()
+        }
+        sourcePanelTimeoutRunnable = timeout
+        progressHandler.postDelayed(timeout, 10_000)
+
+        // Listen for STATE_READY to hide the panel
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    cancelSourcePanelWait()
+                    if (stremioSourcesVisible) hideStremioSourcesPanel()
+                } else if (state == Player.STATE_IDLE) {
+                    // Playback error — keep panel open, clear loading
+                    cancelSourcePanelWait()
+                    stremioSourceAdapter?.clearLoading()
+                }
+            }
+        }
+        sourcePanelReadyListener = listener
+        player?.addListener(listener)
+    }
+
+    private fun cancelSourcePanelWait() {
+        sourcePanelReadyListener?.let { player?.removeListener(it) }
+        sourcePanelReadyListener = null
+        sourcePanelTimeoutRunnable?.let { progressHandler.removeCallbacks(it) }
+        sourcePanelTimeoutRunnable = null
+    }
+
+    private var guidePanelReadyListener: Player.Listener? = null
+    private var guidePanelTimeoutRunnable: Runnable? = null
+
+    private fun hideGuideWhenReady() {
+        if (!stremioTvGuideVisible) return
+
+        // Clean up any previous listener/timeout
+        cancelGuideWait()
+
+        // Timeout fallback — hide after 10s regardless
+        val timeout = Runnable {
+            cancelGuideWait()
+            if (stremioTvGuideVisible) hideStremioTvGuide()
+        }
+        guidePanelTimeoutRunnable = timeout
+        progressHandler.postDelayed(timeout, 10_000)
+
+        // Listen for STATE_READY to hide the guide
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    cancelGuideWait()
+                    if (stremioTvGuideVisible) hideStremioTvGuide()
+                } else if (state == Player.STATE_IDLE) {
+                    // Playback error — keep guide open
+                    cancelGuideWait()
+                    stremioTvChannels.forEach { it.isSwitchingChannel = false }
+                    stremioTvChannelAdapter?.notifyDataSetChanged()
+                }
+            }
+        }
+        guidePanelReadyListener = listener
+        player?.addListener(listener)
+    }
+
+    private fun cancelGuideWait() {
+        guidePanelReadyListener?.let { player?.removeListener(it) }
+        guidePanelReadyListener = null
+        guidePanelTimeoutRunnable?.let { progressHandler.removeCallbacks(it) }
+        guidePanelTimeoutRunnable = null
     }
 
     private fun toggleStremioSourcesPanel() {
@@ -4557,6 +4666,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun onStremioSourceSelected(source: StremioSource) {
         android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}, hasPlaylistResolver=$hasPlaylistResolver")
+
+        // Cancel any pending source panel wait from previous selection
+        cancelSourcePanelWait()
 
         // Cancel any ongoing PikPak retry from previous source
         cancelPikPakRetry()
@@ -4748,9 +4860,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateStremioNowPlaying()
         stremioSourceAdapter?.updateActiveSource(sourceIndex)
 
-        // Hide panel
-        hideStremioSourcesPanel()
-
         // Cancel any ongoing PikPak retry
         cancelPikPakRetry()
 
@@ -4778,6 +4887,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Start playing from the first item
         playItem(0)
+
+        // Hide sources panel once playback is ready (or on timeout)
+        hideSourcesPanelWhenReady()
     }
 
     private fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String) {
@@ -4828,9 +4940,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateStremioNowPlaying()
         stremioSourceAdapter?.updateActiveSource(sourceIndex)
 
-        // Hide panel
-        hideStremioSourcesPanel()
-
         // Cancel any ongoing PikPak retry before switching
         cancelPikPakRetry()
 
@@ -4842,6 +4951,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             player?.seekTo(currentPos)
         }
         player?.play()
+
+        // Hide sources panel once playback is ready (or on timeout)
+        hideSourcesPanelWhenReady()
 
         // Flash title to indicate source switch
         val currentSource = stremioSources.getOrNull(sourceIndex)
@@ -5223,7 +5335,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             channels = stremioTvChannels.toMutableList(),
             onItemClick = { channel ->
                 if (!channel.isCurrent && !stremioTvChannelSwitchInProgress) {
-                    hideStremioTvGuide()
                     switchToStremioTvChannel(channel)
                 }
             }
@@ -5288,6 +5399,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideStremioTvGuide() {
         stremioTvGuideVisible = false
+        cancelGuideWait()
         stremioTvGuideOverlay?.animate()?.cancel()
         stremioTvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
             stremioTvGuideOverlay?.visibility = View.GONE
@@ -5399,11 +5511,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "requestGuideDataForVisibleChannels: requesting ${idsToLoad.size} channels (visible $first-$last, prefetch $prefetchFirst-$prefetchLast)")
 
-        // Mark as loading
+        // Mark as loading (no notify — avoids focus loss, loading state is cosmetic)
         for (id in idsToLoad) {
             visibleChannels.firstOrNull { it.id == id }?.isLoadingGuideData = true
         }
-        stremioTvChannelAdapter?.notifyDataSetChanged()
 
         try {
             val args = hashMapOf<String, Any?>("channelIds" to idsToLoad)
@@ -5439,13 +5550,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                     }
                                     ch.hasGuideData = true
                                     ch.isLoadingGuideData = false
+
+                                    // Targeted partial update — preserves DPAD focus & scale
+                                    val pos = adapter.getPositionById(id)
+                                    if (pos >= 0) adapter.notifyItemChanged(pos, StremioTvGuideAdapter.PAYLOAD_GUIDE_DATA)
                                 }
                             } else {
                                 for (id in idsToLoad) {
                                     stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
                                 }
                             }
-                            stremioTvChannelAdapter?.notifyDataSetChanged()
                             updateStremioTvGuideHeader()
                         }
                     }
@@ -5456,7 +5570,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             for (id in idsToLoad) {
                                 stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
                             }
-                            stremioTvChannelAdapter?.notifyDataSetChanged()
                         }
                     }
 
@@ -5465,7 +5578,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             for (id in idsToLoad) {
                                 stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
                             }
-                            stremioTvChannelAdapter?.notifyDataSetChanged()
                         }
                     }
                 }
@@ -5476,7 +5588,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 for (id in idsToLoad) {
                     stremioTvChannels.firstOrNull { it.id == id }?.isLoadingGuideData = false
                 }
-                stremioTvChannelAdapter?.notifyDataSetChanged()
             }
         }
     }
@@ -5489,16 +5600,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "switchToStremioTvChannel: ${channel.name} (id=${channel.id})")
 
-        // Show tuning overlay
-        nextText.text = "📺 TUNING..."
-        nextSubtext.text = channel.name
-        nextSubtext.visibility = View.VISIBLE
-        nextOverlay.visibility = View.VISIBLE
-
-        // Update current markers
+        // Mark channel as switching (inline loading in guide)
         val previousCurrent = stremioTvChannels.firstOrNull { it.isCurrent }
-        stremioTvChannels.forEach { it.isCurrent = false }
+        stremioTvChannels.forEach { it.isCurrent = false; it.isSwitchingChannel = false }
         channel.isCurrent = true
+        channel.isSwitchingChannel = true
         stremioTvChannelAdapter?.notifyDataSetChanged()
 
         try {
@@ -5520,10 +5626,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                 android.util.Log.e("AndroidTvPlayer", "channel switch returned null URL")
                                 Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Channel switch failed", Toast.LENGTH_SHORT).show()
                                 // Revert current marker
+                                channel.isSwitchingChannel = false
                                 channel.isCurrent = false
                                 previousCurrent?.isCurrent = true
                                 stremioTvChannelAdapter?.notifyDataSetChanged()
-                                nextOverlay.visibility = View.GONE
                                 return@runOnUiThread
                             }
 
@@ -5578,8 +5684,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                     stremioSources.add(StremioSource.fromMap(srcMap, idx))
                                 }
                                 currentStremioSourceIndex = newSourceIndex
-                                stremioSourceAdapter?.updateSources(stremioSources.toMutableList())
-                                updateStremioQualityBadge()
+                                // Re-setup sources panel (tabs, counts, filter, adapter)
+                                setupStremioSources()
                             }
 
                             // Update guide header
@@ -5594,9 +5700,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             stremioSubtitles.clear()
                             currentStremioSubtitleIndex = -1
 
-                            // Hide tuning overlay after delay
-                            progressHandler.removeCallbacksAndMessages("stremio_tv_overlay")
-                            progressHandler.postDelayed({ nextOverlay.visibility = View.GONE }, 1500)
+                            // Clear switching state and hide guide when playback is ready
+                            channel.isSwitchingChannel = false
+                            stremioTvChannelAdapter?.notifyDataSetChanged()
+                            hideGuideWhenReady()
                         }
                     }
 
@@ -5606,10 +5713,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         runOnUiThread {
                             stremioTvChannelSwitchInProgress = false
                             Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Channel switch failed: $errorMessage", Toast.LENGTH_SHORT).show()
+                            channel.isSwitchingChannel = false
                             channel.isCurrent = false
                             previousCurrent?.isCurrent = true
                             stremioTvChannelAdapter?.notifyDataSetChanged()
-                            nextOverlay.visibility = View.GONE
                         }
                     }
 
@@ -5617,10 +5724,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (token != stremioTvSwitchToken) return
                         runOnUiThread {
                             stremioTvChannelSwitchInProgress = false
+                            channel.isSwitchingChannel = false
                             channel.isCurrent = false
                             previousCurrent?.isCurrent = true
                             stremioTvChannelAdapter?.notifyDataSetChanged()
-                            nextOverlay.visibility = View.GONE
                         }
                     }
                 }
@@ -5628,10 +5735,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "switchToStremioTvChannel exception", e)
             stremioTvChannelSwitchInProgress = false
+            channel.isSwitchingChannel = false
             channel.isCurrent = false
             previousCurrent?.isCurrent = true
             stremioTvChannelAdapter?.notifyDataSetChanged()
-            nextOverlay.visibility = View.GONE
         }
     }
 
@@ -6893,6 +7000,7 @@ private data class StremioTvGuideChannel(
     var nextUpRating: Double?,
     var hasGuideData: Boolean,
     var isLoadingGuideData: Boolean,
+    var isSwitchingChannel: Boolean = false,
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -6903,6 +7011,8 @@ private class StremioTvGuideAdapter(
 
     companion object {
         private val ACCENT = Color.parseColor("#00E5FF")
+        const val PAYLOAD_GUIDE_DATA = "guide_data"
+        const val PAYLOAD_SWITCH_STATE = "switch_state"
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -6927,9 +7037,21 @@ private class StremioTvGuideAdapter(
         return ViewHolder(view)
     }
 
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isNotEmpty()) {
+            val payload = payloads[0]
+            if (payload == PAYLOAD_GUIDE_DATA || payload == PAYLOAD_SWITCH_STATE) {
+                // Partial bind — only update guide-data fields, preserve focus & scale
+                val channel = channels[position]
+                bindGuideData(holder, channel)
+                return
+            }
+        }
+        super.onBindViewHolder(holder, position, payloads)
+    }
+
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
-        val goldStar = Color.parseColor("#FFD700")
 
         // Cancel recycled view animation
         holder.itemView.animate().cancel()
@@ -6966,6 +7088,42 @@ private class StremioTvGuideAdapter(
         holder.typeBadge.setTextColor(
             if (channel.isCurrent) ACCENT else Color.argb(89, 255, 255, 255)
         )
+
+        // Guide data fields (poster, now playing, next up, progress, badges)
+        bindGuideData(holder, channel)
+
+        // Focus animation with accent bar toggle
+        holder.itemView.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            if (hasFocus) {
+                v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(150)
+                    .setInterpolator(DecelerateInterpolator()).start()
+                // Show accent bar on focus
+                if (!channel.isCurrent) {
+                    val gradient = android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                        intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#00BCD4"))
+                    )
+                    gradient.cornerRadius = 2f
+                    holder.accentBar.background = gradient
+                    holder.accentBar.visibility = View.VISIBLE
+                }
+            } else {
+                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150)
+                    .setInterpolator(DecelerateInterpolator()).start()
+                // Hide accent bar when not current
+                if (!channel.isCurrent) {
+                    holder.accentBar.visibility = View.GONE
+                }
+            }
+        }
+
+        holder.itemView.setOnClickListener {
+            onItemClick(channel)
+        }
+    }
+
+    private fun bindGuideData(holder: ViewHolder, channel: StremioTvGuideChannel) {
+        val goldStar = Color.parseColor("#FFD700")
 
         // Poster
         com.bumptech.glide.Glide.with(holder.itemView.context).clear(holder.poster)
@@ -7005,7 +7163,10 @@ private class StremioTvGuideAdapter(
         }
 
         // Now playing text with gold star
-        if (channel.hasGuideData && channel.nowPlayingTitle != null) {
+        if (channel.isSwitchingChannel) {
+            holder.nowTitle.text = "Tuning..."
+            holder.nowTitle.setTextColor(Color.argb(204, 0, 229, 255))
+        } else if (channel.hasGuideData && channel.nowPlayingTitle != null) {
             val textParts = mutableListOf<String>()
             textParts.add(channel.nowPlayingTitle!!)
             if (!channel.nowPlayingYear.isNullOrEmpty()) textParts.add("(${channel.nowPlayingYear})")
@@ -7049,7 +7210,13 @@ private class StremioTvGuideAdapter(
         if (channel.hasGuideData && channel.nowPlayingSlotEndMs > 0) {
             holder.progressContainer.visibility = View.VISIBLE
             val progress = channel.nowPlayingProgress.coerceIn(0f, 1f)
+            val channelId = channel.id
             holder.progressFill.post {
+                // Guard against recycled/rebound holder
+                val pos = holder.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@post
+                val currentChannel = channels.getOrNull(pos) ?: return@post
+                if (currentChannel.id != channelId) return@post
                 val parent = holder.progressFill.parent as? View ?: return@post
                 val width = (parent.width * progress).toInt()
                 val lp = holder.progressFill.layoutParams
@@ -7075,7 +7242,10 @@ private class StremioTvGuideAdapter(
         }
 
         // Badges
-        if (channel.isCurrent) {
+        if (channel.isSwitchingChannel) {
+            holder.nowBadge.visibility = View.GONE
+            holder.loading.visibility = View.VISIBLE
+        } else if (channel.isCurrent) {
             holder.nowBadge.visibility = View.VISIBLE
             holder.loading.visibility = View.GONE
         } else if (channel.isLoadingGuideData) {
@@ -7084,35 +7254,6 @@ private class StremioTvGuideAdapter(
         } else {
             holder.nowBadge.visibility = View.GONE
             holder.loading.visibility = View.GONE
-        }
-
-        // Focus animation with accent bar toggle
-        holder.itemView.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-            if (hasFocus) {
-                v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(150)
-                    .setInterpolator(DecelerateInterpolator()).start()
-                // Show accent bar on focus
-                if (!channel.isCurrent) {
-                    val gradient = android.graphics.drawable.GradientDrawable(
-                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                        intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#00BCD4"))
-                    )
-                    gradient.cornerRadius = 2f
-                    holder.accentBar.background = gradient
-                    holder.accentBar.visibility = View.VISIBLE
-                }
-            } else {
-                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150)
-                    .setInterpolator(DecelerateInterpolator()).start()
-                // Hide accent bar when not current
-                if (!channel.isCurrent) {
-                    holder.accentBar.visibility = View.GONE
-                }
-            }
-        }
-
-        holder.itemView.setOnClickListener {
-            onItemClick(channel)
         }
     }
 
@@ -7130,5 +7271,9 @@ private class StremioTvGuideAdapter(
 
     fun getChannelAt(position: Int): StremioTvGuideChannel? {
         return channels.getOrNull(position)
+    }
+
+    fun getPositionById(id: String): Int {
+        return channels.indexOfFirst { it.id == id }
     }
 }

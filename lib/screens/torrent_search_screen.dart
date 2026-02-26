@@ -11060,7 +11060,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final magnet = 'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
 
-      // Route to correct provider (RD → Torbox → PikPak, matches _handleTorrentCardActivated fallback order)
+      // Respect the user's selected provider from Settings → Provider Settings
+      final defaultProvider = await StorageService.getDefaultTorrentProvider();
+
+      if (defaultProvider == 'debrid' && _realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+        return _resolveSourceViaRealDebrid(torrent, magnet);
+      } else if (defaultProvider == 'torbox' && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+        return _resolveSourceViaTorbox(torrent, magnet);
+      } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
+        return _resolveSourceViaPikPak(torrent, magnet);
+      }
+
+      // Fallback: no default set or selected provider unavailable → first available
       if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
         return _resolveSourceViaRealDebrid(torrent, magnet);
       } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {

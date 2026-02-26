@@ -826,11 +826,21 @@ class VideoPlayerLauncher {
           final seriesPlaylist = playlistEntries.length > 1
               ? SeriesPlaylist.fromPlaylistEntries(playlistEntries)
               : null;
-          final isSeries = seriesPlaylist?.isSeries ?? false;
           final episodes = seriesPlaylist?.allEpisodes;
+          // Only treat as series if ALL playlist entries were classified —
+          // when some files are dropped (no S##E## pattern), the index mapping
+          // breaks and season filtering hides the unclassified files.
+          // Compare against non-sample count (fromPlaylistEntries excludes samples).
+          final nonSampleCount = playlistEntries.where(
+            (e) => !SeriesParser.isSampleFile(e.title),
+          ).length;
+          final isSeries = seriesPlaylist != null
+              && seriesPlaylist.isSeries
+              && episodes != null
+              && episodes.length >= nonSampleCount;
 
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
-          if (isSeries && seriesPlaylist != null) {
+          if (isSeries) {
             try {
               await seriesPlaylist.fetchEpisodeInfo();
               debugPrint('VideoPlayerLauncher: TVMaze fetch complete for source playlist');
@@ -839,14 +849,21 @@ class VideoPlayerLauncher {
             }
           }
 
+          // Build originalIndex → episode lookup for correct matching
+          // (allEpisodes is sorted by season/episode, not by original entry order)
+          final episodeByIndex = <int, SeriesEpisode>{};
+          if (isSeries) {
+            for (final ep in episodes) {
+              episodeByIndex[ep.originalIndex] = ep;
+            }
+          }
+
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
           for (int i = 0; i < playlistEntries.length; i++) {
             final entry = playlistEntries[i];
-            // Get series info if available
-            final episode = isSeries && episodes != null && i < episodes.length
-                ? episodes[i]
-                : null;
+            // Match by originalIndex to handle reordering
+            final episode = episodeByIndex[i];
             final epInfo = episode?.episodeInfo;
             items.add({
               'id': '${entry.title}_$i',
