@@ -131,6 +131,8 @@ class VideoPlayerScreen extends StatefulWidget {
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final Future<String?> Function(Torrent)? resolveStremioSource;
+  // Torrent search source switching: resolves a Torrent to a full playlist
+  final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
 
   const VideoPlayerScreen({
     Key? key,
@@ -168,6 +170,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
+    this.resolveSourceToPlaylist,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -181,6 +184,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late mkv.VideoController _videoController;
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
+  List<PlaylistEntry>? _activePlaylist;
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
@@ -200,7 +204,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Need at least one identifier
     if ((widget.rdTorrentId == null || widget.rdTorrentId!.isEmpty) &&
         (widget.pikpakCollectionId == null || widget.pikpakCollectionId!.isEmpty) &&
-        (widget.playlist == null || widget.playlist!.isEmpty)) {
+        (_activePlaylist == null || _activePlaylist!.isEmpty)) {
       return null;
     }
 
@@ -223,7 +227,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   SeriesPlaylist? get _seriesPlaylist {
-    if (widget.playlist == null || widget.playlist!.isEmpty) return null;
+    if (_activePlaylist == null || _activePlaylist!.isEmpty) return null;
     if (_cachedSeriesPlaylist == null) {
       try {
         // Determine forceSeries: prefer viewMode, then use contentType from catalog
@@ -234,7 +238,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
 
         _cachedSeriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
-          widget.playlist!,
+          _activePlaylist!,
           collectionTitle: widget.title, // Pass video title as fallback
           forceSeries: forceSeries,
         );
@@ -309,6 +313,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Stremio source sheet state
   bool _showSourceSheet = false;
   int _currentSourceIndex = 0;
+  List<PlaylistEntry>? _pendingSourcePlaylist;
 
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
@@ -419,12 +424,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _activePlaylist = widget.playlist;
 
     // Log playlist entries to trace relativePath
-    if (widget.playlist != null && widget.playlist!.isNotEmpty) {
-      debugPrint('📺 VideoPlayerScreen.initState: Initialized with ${widget.playlist!.length} playlist entries');
-      for (int i = 0; i < widget.playlist!.length && i < 5; i++) {
-        final entry = widget.playlist![i];
+    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+      debugPrint('📺 VideoPlayerScreen.initState: Initialized with ${_activePlaylist!.length} playlist entries');
+      for (int i = 0; i < _activePlaylist!.length && i < 5; i++) {
+        final entry = _activePlaylist![i];
         debugPrint('  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"');
       }
     }
@@ -474,7 +480,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     String initialUrl = widget.videoUrl;
     int initialIndex = 0;
 
-    if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
       // Initialize playlist
 
       // If auto-resume is disabled, use startIndex directly
@@ -507,13 +513,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
         } else {
         // For non-series playlists, try to restore the last played video
-		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
 			// Try to find the last played video by checking each playlist entry
 			int lastPlayedIndex = -1;
 			Map<String, dynamic>? lastPlayedState;
 
-			for (int i = 0; i < widget.playlist!.length; i++) {
-				final entry = widget.playlist![i];
+			for (int i = 0; i < _activePlaylist!.length; i++) {
+				final entry = _activePlaylist![i];
 				final resumeId = _resumeIdForEntry(entry);
 				debugPrint('Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId');
 				final state = await StorageService.getVideoPlaybackState(
@@ -536,7 +542,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			} else {
 				debugPrint('Resume: no prior playback state found, using default ordering');
 				// Pick the first item from Main group (by year asc then size desc)
-				final indices = _getMainGroupIndices(widget.playlist!);
+				final indices = _getMainGroupIndices(_activePlaylist!);
 				initialIndex = indices.isNotEmpty
 					? indices.first
 					: (widget.startIndex ?? 0);
@@ -550,10 +556,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {}
 
     // Get the initial URL from the determined index
-    if (widget.playlist != null &&
-        widget.playlist!.isNotEmpty &&
-        initialIndex < widget.playlist!.length) {
-      final entry = widget.playlist![initialIndex];
+    if (_activePlaylist != null &&
+        _activePlaylist!.isNotEmpty &&
+        initialIndex < _activePlaylist!.length) {
+      final entry = _activePlaylist![initialIndex];
       if (entry.url.isNotEmpty) {
         initialUrl = entry.url;
       } else {
@@ -599,13 +605,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
       // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
-      final currentEntry = widget.playlist?[_currentIndex];
+      final currentEntry = _activePlaylist?[_currentIndex];
       final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
       // For non-playlist flows (Debrify TV, Stremio TV, etc.), detect PikPak by URL
-      final isPikPakUrl = widget.playlist == null && initialUrl.contains('mypikpak.com');
+      final isPikPakUrl = _activePlaylist == null && initialUrl.contains('mypikpak.com');
       final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
-      if ((isPikPak && widget.playlist != null) || isPikPakUrl) {
+      if ((isPikPak && _activePlaylist != null) || isPikPakUrl) {
         _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((_) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
@@ -655,7 +661,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     } else {
       // If no valid URL, try to load the first playlist entry
-      if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+      if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
         _loadPlaylistIndex(_currentIndex, autoplay: false);
       }
     }
@@ -825,13 +831,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _markCurrentEpisodeAsFinished();
 
     // Debrify TV (no playlist): auto-advance using provider if available
-    if ((widget.playlist == null || widget.playlist!.isEmpty) &&
+    if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
         widget.requestMagicNext != null) {
       await _goToNextEpisode();
       return;
     }
 
-    if (widget.playlist == null || widget.playlist!.isEmpty) return;
+    if (_activePlaylist == null || _activePlaylist!.isEmpty) return;
 
     // Find the next logical episode
     final nextIndex = _findNextEpisodeIndex();
@@ -864,9 +870,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null &&
         seriesPlaylist.isSeries &&
-        widget.playlist != null) {
+        _activePlaylist != null) {
       // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
         try {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
@@ -888,14 +894,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Fallback to the current playlist entry title
-    if (widget.playlist != null &&
+    if (_activePlaylist != null &&
         _currentIndex >= 0 &&
-        _currentIndex < widget.playlist!.length) {
-      return widget.playlist![_currentIndex].title;
+        _currentIndex < _activePlaylist!.length) {
+      return _activePlaylist![_currentIndex].title;
     }
 
     // If Debrify TV (no playlist) is active, use dynamic title when available
-    if ((widget.playlist == null || widget.playlist!.isEmpty) &&
+    if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
         widget.requestMagicNext != null) {
       return _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
     }
@@ -917,9 +923,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null &&
         seriesPlaylist.isSeries &&
-        widget.playlist != null) {
+        _activePlaylist != null) {
       // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
         try {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
@@ -954,9 +960,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (seriesPlaylist != null &&
         seriesPlaylist.isSeries &&
-        widget.playlist != null) {
+        _activePlaylist != null) {
       // Find the current episode info
-      if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
         try {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
@@ -995,16 +1001,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Raw mode OR Sorted mode: sequential navigation through all files
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
       if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
-        if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
-        if (_currentIndex + 1 < widget.playlist!.length) {
+        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
+        if (_currentIndex + 1 < _activePlaylist!.length) {
           return _currentIndex + 1;
         }
         return -1;
       }
 
       // Collection mode (view mode not specified): navigate within Main group only
-      if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(widget.playlist!);
+      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
+      final indices = _getMainGroupIndices(_activePlaylist!);
       if (indices.isEmpty) return -1;
 
       final currentPos = indices.indexOf(_currentIndex);
@@ -1082,7 +1088,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _playRandom() async {
-    final entries = widget.playlist ?? const [];
+    final entries = _activePlaylist ?? const [];
     if (entries.isEmpty) return;
     final rnd = math.Random();
     final nextIndex = rnd.nextInt(entries.length);
@@ -1098,7 +1104,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Raw mode OR Sorted mode: sequential navigation through all files
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
       if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
-        if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
+        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
         if (_currentIndex - 1 >= 0) {
           return _currentIndex - 1;
         }
@@ -1106,8 +1112,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
 
       // Collection mode (view mode not specified): navigate within Main group only
-      if (widget.playlist == null || widget.playlist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(widget.playlist!);
+      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
+      final indices = _getMainGroupIndices(_activePlaylist!);
       if (indices.isEmpty) return -1;
 
       final currentPos = indices.indexOf(_currentIndex);
@@ -1423,6 +1429,64 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _hideSourceSheet() {
     setState(() {
       _showSourceSheet = false;
+    });
+  }
+
+  Future<String?> Function(Torrent) _buildSourceSheetResolver() {
+    if (widget.resolveSourceToPlaylist != null) {
+      return (Torrent torrent) async {
+        final playlist = await widget.resolveSourceToPlaylist!(torrent);
+        if (playlist == null || playlist.isEmpty) return null;
+        _pendingSourcePlaylist = playlist;
+        final firstUrl = playlist.first.url;
+        return firstUrl.isNotEmpty ? firstUrl : null;
+      };
+    }
+    return widget.resolveStremioSource!;
+  }
+
+  Future<void> _handleSourceSelected(int index, String url) async {
+    final pendingPlaylist = _pendingSourcePlaylist;
+    _pendingSourcePlaylist = null;
+    if (pendingPlaylist != null && pendingPlaylist.isNotEmpty) {
+      await _switchToSourcePlaylist(index, pendingPlaylist);
+    } else {
+      await _switchToStremioSource(index, url);
+    }
+  }
+
+  Future<void> _switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist) async {
+    _hideSourceSheet();
+    _clearBufferingIndicator();
+    setState(() {
+      _isTransitioning = true;
+      _currentSourceIndex = sourceIndex;
+    });
+    _startTransitionOverlay();
+    try { await _player.pause(); } catch (_) {}
+    if (!mounted) return;
+
+    // Replace playlist and invalidate series cache
+    setState(() {
+      _activePlaylist = newPlaylist;
+      _cachedSeriesPlaylist = null;
+    });
+
+    // Load first entry of new playlist
+    await _loadPlaylistIndex(0, autoplay: true);
+    if (!mounted) return;
+
+    // End transition (same pattern as _switchToStremioSource)
+    _transitionStopTimer?.cancel();
+    _transitionPhaseTimer?.cancel();
+    _transitionPhase = 2;
+    _transitionPhase2Started = DateTime.now();
+    setState(() { _isTransitioning = false; });
+    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
+      _rainbowController.stop();
+      _transitionRunning = false;
+      _rainbowActive = false;
+      if (mounted) setState(() {});
     });
   }
 
@@ -1779,7 +1843,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         seriesPlaylist.seriesTitle != null) {
       try {
         // Find the current episode info
-        if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
             orElse: () => seriesPlaylist.allEpisodes.first,
@@ -1810,15 +1874,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlaylistIndex(int index, {bool autoplay = false}) async {
-    if (widget.playlist == null ||
+    if (_activePlaylist == null ||
         index < 0 ||
-        index >= widget.playlist!.length)
+        index >= _activePlaylist!.length)
       return;
 
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
 
     await _saveResume();
-    final entry = widget.playlist![index];
+    final entry = _activePlaylist![index];
     _currentIndex = index;
 
     // Clear subtitle cache and selection when changing content
@@ -1882,7 +1946,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentStreamUrl = videoUrl;
 
     // Check if this is a PikPak video
-    final currentEntry = widget.playlist?[index];
+    final currentEntry = _activePlaylist?[index];
     final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
 
     // ALWAYS use retry logic for PikPak videos, regardless of autoplay
@@ -1918,13 +1982,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<String> _resolvePlaylistEntryUrl(int index) async {
-    if (widget.playlist == null ||
+    if (_activePlaylist == null ||
         index < 0 ||
-        index >= widget.playlist!.length) {
+        index >= _activePlaylist!.length) {
       return '';
     }
 
-    final entry = widget.playlist![index];
+    final entry = _activePlaylist![index];
 
     if (entry.url.isNotEmpty) {
       return entry.url;
@@ -2113,8 +2177,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _playPikPakVideoWithRetry(String videoUrl, {String? overrideProvider, String? overridePikPakFileId, bool isDebrifyTV = false}) async {
     // Only apply retry logic for PikPak videos
     // Support both playlist entries and Debrify TV (requestMagicNext) flows
-    final currentEntry = widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length
-        ? widget.playlist![_currentIndex]
+    final currentEntry = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
+        ? _activePlaylist![_currentIndex]
         : null;
     final isPikPak = overrideProvider?.toLowerCase() == 'pikpak' ||
         overridePikPakFileId != null ||
@@ -2613,11 +2677,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _autosaveTimer;
 
 	String get _resumeKey {
-		if (widget.playlist != null &&
-			widget.playlist!.isNotEmpty &&
+		if (_activePlaylist != null &&
+			_activePlaylist!.isNotEmpty &&
 			_currentIndex >= 0 &&
-			_currentIndex < widget.playlist!.length) {
-			final entry = widget.playlist![_currentIndex];
+			_currentIndex < _activePlaylist!.length) {
+			final entry = _activePlaylist![_currentIndex];
 
 			// Check for Torbox-specific key
 			final torboxKey = _torboxResumeKeyForEntry(entry);
@@ -2635,11 +2699,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 		}
 
 		// Use playlist-specific resume ID for other items
-		if (widget.playlist != null &&
-			widget.playlist!.isNotEmpty &&
+		if (_activePlaylist != null &&
+			_activePlaylist!.isNotEmpty &&
 			_currentIndex >= 0 &&
-			_currentIndex < widget.playlist!.length) {
-			final id = _resumeIdForEntry(widget.playlist![_currentIndex]);
+			_currentIndex < _activePlaylist!.length) {
+			final id = _resumeIdForEntry(_activePlaylist![_currentIndex]);
 			debugPrint('ResumeKey: using playlist entry id $id for index $_currentIndex');
 			return id;
 		}
@@ -2773,7 +2837,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final seriesPlaylist = _seriesPlaylist;
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         // For series, get the current episode info
-        if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
             orElse: () => seriesPlaylist.allEpisodes.first,
@@ -2793,10 +2857,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content, check if we have a playlist
-		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
 			PlaylistEntry? currentEntry;
-			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-				currentEntry = widget.playlist![_currentIndex];
+			if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+				currentEntry = _activePlaylist![_currentIndex];
 			}
 
 			if (currentEntry != null) {
@@ -2851,7 +2915,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final seriesPlaylist = _seriesPlaylist;
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         // For series content
-        if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
+        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
           final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
             (episode) => episode.originalIndex == _currentIndex,
             orElse: () => seriesPlaylist.allEpisodes.first,
@@ -2872,10 +2936,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content
-		if (widget.playlist != null && widget.playlist!.isNotEmpty) {
+		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
 			PlaylistEntry? currentEntry;
-			if (_currentIndex >= 0 && _currentIndex < widget.playlist!.length) {
-				currentEntry = widget.playlist![_currentIndex];
+			if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+				currentEntry = _activePlaylist![_currentIndex];
 			}
 
 			if (currentEntry != null) {
@@ -3340,7 +3404,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _showPlaylistSheet(BuildContext context) async {
     await PlaylistSheet.show(
       context,
-      playlist: widget.playlist ?? const [],
+      playlist: _activePlaylist ?? const [],
       currentIndex: _currentIndex,
       seriesPlaylist: _seriesPlaylist,
       playlistItemData: _constructPlaylistItemData(),
@@ -3430,7 +3494,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // S -> Stremio source sheet
             if (key == LogicalKeyboardKey.keyS) {
-              if (widget.stremioSources != null && widget.stremioSources!.isNotEmpty) {
+              if (widget.stremioSources != null && widget.stremioSources!.isNotEmpty &&
+                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null)) {
                 _showSourceSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -3759,8 +3824,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           isLandscape: _landscapeLocked,
                           onRotate: _toggleOrientation,
                           hasPlaylist:
-                              widget.playlist != null &&
-                              widget.playlist!.isNotEmpty,
+                              _activePlaylist != null &&
+                              _activePlaylist!.isNotEmpty,
                           onShowPlaylist: () => _showPlaylistSheet(context),
                           onShowTracks: () => _showTracksSheet(context),
                           onSeekBarChangedStart: () {
@@ -3806,9 +3871,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               ? _showIptvChannelSheetOverlay
                               : null,
                           hasStremioSources: widget.stremioSources != null &&
-                              widget.stremioSources!.isNotEmpty,
+                              widget.stremioSources!.isNotEmpty &&
+                              (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null),
                           onShowStremioSources: widget.stremioSources != null &&
-                                  widget.stremioSources!.isNotEmpty
+                                  widget.stremioSources!.isNotEmpty &&
+                                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null)
                               ? _showSourceSheetOverlay
                               : null,
                         ),
@@ -3880,13 +3947,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               if (_showSourceSheet &&
                   widget.stremioSources != null &&
                   widget.stremioSources!.isNotEmpty &&
-                  widget.resolveStremioSource != null)
+                  (widget.resolveStremioSource != null || widget.resolveSourceToPlaylist != null))
                 Positioned.fill(
                   child: SourceSheet(
                     sources: widget.stremioSources!,
                     currentSourceIndex: _currentSourceIndex,
-                    resolveSource: widget.resolveStremioSource!,
-                    onSourceSelected: _switchToStremioSource,
+                    resolveSource: _buildSourceSheetResolver(),
+                    onSourceSelected: _handleSourceSelected,
                     onClose: _hideSourceSheet,
                   ),
                 ),
@@ -3899,8 +3966,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _showTracksSheet(BuildContext context) async {
     // Dynamically parse season/episode from current video's filename
-    final currentTitle = widget.playlist != null && _currentIndex >= 0 && _currentIndex < widget.playlist!.length
-        ? widget.playlist![_currentIndex].title
+    final currentTitle = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
+        ? _activePlaylist![_currentIndex].title
         : widget.title;
     final seriesInfo = SeriesParser.parseFilename(currentTitle);
     final season = seriesInfo.season ?? widget.contentSeason;

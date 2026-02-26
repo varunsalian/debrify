@@ -183,6 +183,8 @@ class VideoPlayerLaunchArgs {
   final List<Torrent>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final Future<String?> Function(Torrent)? resolveStremioSource;
+  // Torrent search source switching: resolves a Torrent to a full playlist
+  final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -217,6 +219,7 @@ class VideoPlayerLaunchArgs {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
+    this.resolveSourceToPlaylist,
   });
 
   VideoPlayerScreen toWidget() {
@@ -252,6 +255,7 @@ class VideoPlayerLaunchArgs {
       stremioSources: stremioSources,
       stremioCurrentSourceIndex: stremioCurrentSourceIndex,
       resolveStremioSource: resolveStremioSource,
+      resolveSourceToPlaylist: resolveSourceToPlaylist,
     );
   }
 }

@@ -630,6 +630,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: torrent.source,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        stremioSources: _torrents,
+        stremioCurrentSourceIndex: _findTorrentIndex(torrent.infohash),
+        resolveSourceToPlaylist: _createSourcePlaylistResolver(),
       ),
     );
   }
@@ -6317,6 +6320,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               viewMode: PlaylistViewMode.sorted, // Single file - not series
               contentImdbId: _activeAdvancedSelection?.imdbId,
               contentType: _activeAdvancedSelection?.contentType,
+              stremioSources: _torrents,
+              stremioCurrentSourceIndex: 0,
+              resolveSourceToPlaylist: _createSourcePlaylistResolver(),
             ),
           );
         }
@@ -6433,6 +6439,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        stremioSources: _torrents,
+        stremioCurrentSourceIndex: 0,
+        resolveSourceToPlaylist: _createSourcePlaylistResolver(),
       ),
     );
   }
@@ -8965,6 +8974,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             viewMode: PlaylistViewMode.sorted, // Single file - not series
             contentImdbId: _activeAdvancedSelection?.imdbId,
             contentType: _activeAdvancedSelection?.contentType,
+            stremioSources: _torrents,
+            stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
+            resolveSourceToPlaylist: _createSourcePlaylistResolver(),
           ),
         );
       } catch (e) {
@@ -9097,6 +9109,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        stremioSources: _torrents,
+        stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
+        resolveSourceToPlaylist: _createSourcePlaylistResolver(),
       ),
     );
   }
@@ -10248,6 +10263,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             viewMode: PlaylistViewMode.sorted, // Single file - not series
             contentImdbId: _activeAdvancedSelection?.imdbId,
             contentType: _activeAdvancedSelection?.contentType,
+            stremioSources: _torrents,
+            stremioCurrentSourceIndex: 0,
+            resolveSourceToPlaylist: _createSourcePlaylistResolver(),
           ),
         );
       } else {
@@ -10745,6 +10763,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
           contentImdbId: _activeAdvancedSelection?.imdbId,
           contentType: _activeAdvancedSelection?.contentType,
+          stremioSources: _torrents,
+          stremioCurrentSourceIndex: 0,
+          resolveSourceToPlaylist: _createSourcePlaylistResolver(),
         ),
       );
     } catch (e) {
@@ -10783,6 +10804,375 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         );
       }
+    }
+  }
+
+  // ── Extracted playlist builders (no UI) for source switching ──
+
+  /// Build RD playlist entries from links + files (pure logic, no dialogs).
+  /// Returns null on failure (archive, no video files, etc.)
+  Future<List<PlaylistEntry>?> _buildRdPlaylistEntries({
+    required List<dynamic> links,
+    required List<dynamic> files,
+    required String apiKey,
+  }) async {
+    final selectedFiles = files.where((file) => file['selected'] == 1).toList();
+    final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
+
+    final filesToUse = allFilesToUse.where((file) {
+      String? filename = file['name']?.toString() ?? file['filename']?.toString() ?? file['path']?.toString();
+      if (filename != null && filename.startsWith('/')) filename = filename.split('/').last;
+      return filename != null && FileUtils.isVideoFile(filename);
+    }).toList();
+
+    // Archive check
+    if (filesToUse.length > 1 && links.length == 1) return null;
+    if (filesToUse.isEmpty) return null;
+
+    final entries = <PlaylistEntry>[];
+    final filenames = filesToUse.map((file) {
+      String? name = file['name']?.toString() ?? file['filename']?.toString() ?? file['path']?.toString();
+      if (name != null && name.startsWith('/')) name = name.split('/').last;
+      return name ?? 'Unknown File';
+    }).toList();
+
+    final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+    final seriesInfos = isSeries ? SeriesParser.parsePlaylist(filenames) : null;
+
+    // Find first episode index for series
+    int firstIndex = 0;
+    if (isSeries && seriesInfos != null) {
+      int lowestSeason = 999, lowestEpisode = 999;
+      for (int i = 0; i < seriesInfos.length; i++) {
+        final info = seriesInfos[i];
+        if (info.isSeries && info.season != null && info.episode != null) {
+          if (info.season! < lowestSeason || (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+            lowestSeason = info.season!;
+            lowestEpisode = info.episode!;
+            firstIndex = i;
+          }
+        }
+      }
+    }
+
+    for (int i = 0; i < filesToUse.length; i++) {
+      final file = filesToUse[i];
+      String? filename = file['name']?.toString() ?? file['filename']?.toString() ?? file['path']?.toString();
+      String? relativePath = filename;
+      if (relativePath != null && relativePath.startsWith('/')) relativePath = relativePath.substring(1);
+      if (filename != null && filename.startsWith('/')) filename = filename.split('/').last;
+      final finalFilename = filename ?? 'Unknown File';
+      final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
+      if (i >= links.length) continue;
+
+      if (i == firstIndex) {
+        try {
+          final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[i]);
+          final url = unrestrictResult['download']?.toString() ?? '';
+          entries.add(PlaylistEntry(
+            url: url,
+            title: finalFilename,
+            relativePath: relativePath,
+            restrictedLink: url.isEmpty ? links[i] : null,
+            sizeBytes: sizeBytes,
+          ));
+        } catch (_) {
+          entries.add(PlaylistEntry(url: '', title: finalFilename, relativePath: relativePath, restrictedLink: links[i], sizeBytes: sizeBytes));
+        }
+      } else {
+        entries.add(PlaylistEntry(url: '', title: finalFilename, relativePath: relativePath, restrictedLink: links[i], sizeBytes: sizeBytes));
+      }
+    }
+    return entries.isEmpty ? null : entries;
+  }
+
+  /// Build Torbox playlist entries from a TorboxTorrent (pure logic, no dialogs).
+  Future<List<PlaylistEntry>?> _buildTorboxPlaylistEntries({
+    required TorboxTorrent torrent,
+    required String apiKey,
+  }) async {
+    final videoFiles = torrent.files.where((f) => !f.zipped && _torboxFileLooksLikeVideo(f)).toList();
+    if (videoFiles.isEmpty) return null;
+
+    // Single file
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final streamUrl = await _requestTorboxStreamUrl(apiKey: apiKey, torrent: torrent, file: file);
+        return [PlaylistEntry(
+          url: streamUrl,
+          title: _torboxDisplayName(file),
+          provider: 'torbox',
+          torboxTorrentId: torrent.id,
+          torboxFileId: file.id,
+          sizeBytes: file.size,
+          torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
+        )];
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // Multi-file
+    final items = List<_TorboxPlaylistItem>.generate(videoFiles.length, (i) {
+      final displayName = _torboxDisplayName(videoFiles[i]);
+      return _TorboxPlaylistItem(file: videoFiles[i], originalIndex: i, seriesInfo: SeriesParser.parseFilename(displayName), displayName: displayName);
+    });
+    final fnames = items.map((e) => e.displayName).toList();
+    final bool isSeriesCollection = items.length > 1 && SeriesParser.isSeriesPlaylist(fnames);
+
+    final sorted = [...items];
+    if (isSeriesCollection) {
+      sorted.sort((a, b) {
+        final sc = (a.seriesInfo.season ?? 0).compareTo(b.seriesInfo.season ?? 0);
+        if (sc != 0) return sc;
+        final ec = (a.seriesInfo.episode ?? 0).compareTo(b.seriesInfo.episode ?? 0);
+        if (ec != 0) return ec;
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      });
+    } else {
+      sorted.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    }
+
+    final seriesInfos = sorted.map((e) => e.seriesInfo).toList();
+    int startIndex = isSeriesCollection ? _findFirstEpisodeIndex(seriesInfos) : 0;
+    if (startIndex < 0 || startIndex >= sorted.length) startIndex = 0;
+
+    String initialUrl = '';
+    try {
+      initialUrl = await _requestTorboxStreamUrl(apiKey: apiKey, torrent: torrent, file: sorted[startIndex].file);
+    } catch (_) {
+      return null;
+    }
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sorted.length; i++) {
+      final entry = sorted[i];
+      final episodeLabel = _formatTorboxPlaylistTitle(info: entry.seriesInfo, fallback: entry.displayName, isSeriesCollection: isSeriesCollection);
+      final combinedTitle = _combineSeriesAndEpisodeTitle(seriesTitle: entry.seriesInfo.title, episodeLabel: episodeLabel, isSeriesCollection: isSeriesCollection, fallback: entry.displayName);
+      String relativePath = entry.file.name;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) relativePath = relativePath.substring(firstSlash + 1);
+      playlistEntries.add(PlaylistEntry(
+        url: i == startIndex ? initialUrl : '',
+        title: combinedTitle,
+        relativePath: relativePath,
+        provider: 'torbox',
+        torboxTorrentId: torrent.id,
+        torboxFileId: entry.file.id,
+        sizeBytes: entry.file.size,
+        torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
+      ));
+    }
+    return playlistEntries.isEmpty ? null : playlistEntries;
+  }
+
+  /// Build PikPak playlist entries from video files (pure logic, no dialogs).
+  Future<List<PlaylistEntry>?> _buildPikPakPlaylistEntries({
+    required String torrentName,
+    required List<Map<String, dynamic>> videoFiles,
+  }) async {
+    if (videoFiles.isEmpty) return null;
+    final pikpak = PikPakApiService.instance;
+
+    // Single file
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final fullData = await pikpak.getFileDetails(file['id']);
+        final url = pikpak.getStreamingUrl(fullData);
+        if (url == null) return null;
+        final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
+        final title = file['name'] ?? torrentName;
+        return [PlaylistEntry(url: url, title: title, relativePath: file['_fullPath'] as String?, provider: 'pikpak', pikpakFileId: file['id'], sizeBytes: sizeBytes)];
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // Multi-file
+    final items = <_PikPakPlaylistItem>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final displayName = _pikpakDisplayName(file);
+      items.add(_PikPakPlaylistItem(file: file, originalIndex: i, seriesInfo: SeriesParser.parseFilename(displayName), displayName: displayName));
+    }
+    final fnames = items.map((e) => e.displayName).toList();
+    final bool isSeriesCollection = items.length > 1 && SeriesParser.isSeriesPlaylist(fnames);
+
+    final sorted = [...items];
+    if (isSeriesCollection) {
+      sorted.sort((a, b) {
+        final sc = (a.seriesInfo.season ?? 0).compareTo(b.seriesInfo.season ?? 0);
+        if (sc != 0) return sc;
+        final ec = (a.seriesInfo.episode ?? 0).compareTo(b.seriesInfo.episode ?? 0);
+        if (ec != 0) return ec;
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      });
+    } else {
+      sorted.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    }
+
+    final seriesInfos = sorted.map((e) => e.seriesInfo).toList();
+    int startIndex = isSeriesCollection ? _findFirstEpisodeIndex(seriesInfos) : 0;
+    if (startIndex < 0 || startIndex >= sorted.length) startIndex = 0;
+
+    String initialUrl = '';
+    try {
+      final firstFile = sorted[startIndex].file;
+      final fullData = await pikpak.getFileDetails(firstFile['id']);
+      initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+    } catch (_) {
+      return null;
+    }
+    if (initialUrl.isEmpty) return null;
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sorted.length; i++) {
+      final entry = sorted[i];
+      final episodeLabel = _formatPikPakPlaylistTitle(info: entry.seriesInfo, fallback: entry.displayName, isSeriesCollection: isSeriesCollection);
+      final combinedTitle = _combineSeriesAndEpisodeTitle(seriesTitle: entry.seriesInfo.title, episodeLabel: episodeLabel, isSeriesCollection: isSeriesCollection, fallback: entry.displayName);
+      playlistEntries.add(PlaylistEntry(
+        url: i == startIndex ? initialUrl : '',
+        title: combinedTitle,
+        relativePath: entry.file['_fullPath'] as String?,
+        provider: 'pikpak',
+        pikpakFileId: entry.file['id'],
+        sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
+      ));
+    }
+    return playlistEntries.isEmpty ? null : playlistEntries;
+  }
+
+  // ── Source switching resolver ──
+
+  int _findTorrentIndex(String infohash) {
+    return _torrents.indexWhere((t) => t.infohash == infohash);
+  }
+
+  Future<List<PlaylistEntry>?> Function(Torrent) _createSourcePlaylistResolver() {
+    return (Torrent torrent) async {
+      // Direct streams → single-entry playlist
+      if (torrent.isDirectStream && torrent.directUrl != null) {
+        return [PlaylistEntry(url: torrent.directUrl!, title: torrent.displayTitle)];
+      }
+      if (torrent.streamType != StreamType.torrent) return null;
+
+      final magnet = 'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+
+      // Route to correct provider (RD → Torbox → PikPak, matches _handleTorrentCardActivated fallback order)
+      if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+        return _resolveSourceViaRealDebrid(torrent, magnet);
+      } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+        return _resolveSourceViaTorbox(torrent, magnet);
+      } else if (_pikpakEnabled) {
+        return _resolveSourceViaPikPak(torrent, magnet);
+      }
+      return null;
+    };
+  }
+
+  Future<List<PlaylistEntry>?> _resolveSourceViaRealDebrid(Torrent torrent, String magnet) async {
+    try {
+      final apiKey = _apiKey;
+      if (apiKey == null || apiKey.isEmpty) return null;
+      final result = await DebridService.addTorrentToDebrid(apiKey, magnet);
+      final links = result['links'] as List<dynamic>;
+      final files = result['files'] as List<dynamic>?;
+
+      // Single link → unrestrict to get mime type and verify it's a video
+      if (links.length == 1) {
+        final unrestrictResult = await DebridService.unrestrictLink(apiKey, links[0]);
+        final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
+        if (!FileUtils.isVideoMimeType(mimeType)) return null;
+        final videoUrl = unrestrictResult['download']?.toString() ?? '';
+        if (videoUrl.isEmpty) return null;
+        return [PlaylistEntry(url: videoUrl, title: torrent.displayTitle)];
+      }
+
+      // Multi-link → build full playlist
+      if (files == null) return null;
+      return _buildRdPlaylistEntries(links: links, files: files, apiKey: apiKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<PlaylistEntry>?> _resolveSourceViaTorbox(Torrent torrent, String magnet) async {
+    try {
+      final apiKey = _torboxApiKey;
+      if (apiKey == null || apiKey.isEmpty) return null;
+      final response = await TorboxService.createTorrent(apiKey: apiKey, magnet: magnet, seed: true, allowZip: true, addOnlyIfCached: true);
+      final success = response['success'] as bool? ?? false;
+      final error = (response['error'] ?? '').toString();
+      // Accept success OR ALREADY_ADDED (torrent is already on the account)
+      if (!success && !error.contains('ALREADY_ADDED')) return null;
+
+      final data = response['data'];
+      final torrentId = _asIntMapValue(data, 'torrent_id');
+      if (torrentId == null) return null;
+
+      final torboxTorrent = await _fetchTorboxTorrentById(apiKey, torrentId);
+      if (torboxTorrent == null) return null;
+
+      return _buildTorboxPlaylistEntries(torrent: torboxTorrent, apiKey: apiKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<PlaylistEntry>?> _resolveSourceViaPikPak(Torrent torrent, String magnet) async {
+    try {
+      final pikpak = PikPakApiService.instance;
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      String? subFolderId;
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+      } catch (_) {
+        subFolderId = parentFolderId;
+      }
+
+      final addResult = await pikpak.addOfflineDownload(magnet, parentFolderId: subFolderId);
+      String? fileId;
+      if (addResult['file'] != null) {
+        fileId = addResult['file']['id'];
+      } else if (addResult['task'] != null) {
+        fileId = addResult['task']['file_id'];
+      } else if (addResult['id'] != null) {
+        fileId = addResult['id'];
+      }
+      if (fileId == null) return null;
+
+      // Poll briefly for completion (max ~20 seconds)
+      const pollInterval = Duration(seconds: 2);
+      for (int attempt = 0; attempt < 10; attempt++) {
+        await Future.delayed(pollInterval);
+        try {
+          final fileData = await pikpak.getFileDetails(fileId);
+          if (fileData['phase'] == 'PHASE_TYPE_COMPLETE') {
+            List<Map<String, dynamic>> videoFiles = [];
+            if (fileData['kind'] == 'drive#folder') {
+              videoFiles = await _extractAllPikPakVideos(pikpak, fileId);
+            } else {
+              final mimeType = fileData['mime_type'] ?? '';
+              if (mimeType.toString().startsWith('video/')) {
+                videoFiles = [fileData];
+              }
+            }
+            if (videoFiles.isEmpty) return null;
+            return _buildPikPakPlaylistEntries(torrentName: torrent.name, videoFiles: videoFiles);
+          }
+          if (fileData['phase'] == 'PHASE_TYPE_ERROR') return null;
+        } catch (_) {}
+      }
+      return null; // Timed out
+    } catch (_) {
+      return null;
     }
   }
 

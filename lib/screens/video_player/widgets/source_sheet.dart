@@ -51,6 +51,7 @@ class _SourceSheetState extends State<SourceSheet>
 
   // Resolution state
   int? _resolvingIndex; // Original index in widget.sources being resolved
+  String? _errorMessage; // Brief error message shown at bottom
 
   // Design tokens
   static const _accent = Color(0xFF536DFE); // Indigo accent
@@ -235,17 +236,23 @@ class _SourceSheetState extends State<SourceSheet>
       if (url != null && url.isNotEmpty) {
         widget.onSourceSelected(origIdx, url);
       } else {
-        // Resolution failed — flash red on tile
-        setState(() => _resolvingIndex = -1); // sentinel for error flash
-        await Future.delayed(const Duration(milliseconds: 800));
-        if (mounted) setState(() => _resolvingIndex = null);
+        // Resolution failed — flash red on tile + show error message
+        setState(() {
+          _resolvingIndex = -1;
+          _errorMessage = 'Source unavailable — not cached or not a video';
+        });
+        await Future.delayed(const Duration(seconds: 3));
+        if (mounted) setState(() { _resolvingIndex = null; _errorMessage = null; });
       }
     } catch (e) {
       if (!mounted) return;
       debugPrint('SourceSheet: Resolution error: $e');
-      setState(() => _resolvingIndex = -1);
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (mounted) setState(() => _resolvingIndex = null);
+      setState(() {
+        _resolvingIndex = -1;
+        _errorMessage = 'Failed to resolve source';
+      });
+      await Future.delayed(const Duration(seconds: 3));
+      if (mounted) setState(() { _resolvingIndex = null; _errorMessage = null; });
     }
   }
 
@@ -420,6 +427,8 @@ class _SourceSheetState extends State<SourceSheet>
                         _buildTabBar(),
                         _buildSearchBar(),
                         Expanded(child: _buildSourceList()),
+                        if (_errorMessage != null)
+                          _buildErrorBanner(),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -429,6 +438,41 @@ class _SourceSheetState extends State<SourceSheet>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─── Error Banner ──────────────────────────────────────────────────
+
+  Widget _buildErrorBanner() {
+    return AnimatedOpacity(
+      opacity: _errorMessage != null ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 200),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded,
+                color: Colors.red.withOpacity(0.8), size: 16),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _errorMessage ?? '',
+                style: TextStyle(
+                  color: Colors.red.withOpacity(0.9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
