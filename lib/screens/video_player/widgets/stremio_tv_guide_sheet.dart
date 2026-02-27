@@ -111,10 +111,22 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       }
     });
 
+    _scrollController.addListener(_onScroll);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToFocused();
       _loadGuideDataForRange(_focusedIndex);
     });
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    const h = 104.0;
+    final centerIndex =
+        ((_scrollController.offset + _scrollController.position.viewportDimension / 2) / h)
+            .floor()
+            .clamp(0, _filteredChannels.length - 1);
+    _loadGuideDataForRange(centerIndex);
   }
 
   @override
