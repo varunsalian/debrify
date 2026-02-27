@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
@@ -38,6 +37,7 @@ class _SourceSheetState extends State<SourceSheet>
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
 
+  // Pulsing glow for playing badge on source tiles
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -80,7 +80,7 @@ class _SourceSheetState extends State<SourceSheet>
       CurvedAnimation(parent: _animController, curve: Curves.easeOut),
     );
 
-    // Pulsing glow for now-playing
+    // Pulsing glow for playing badge
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
@@ -333,43 +333,6 @@ class _SourceSheetState extends State<SourceSheet>
     }
   }
 
-  // ─── Quality Helpers ───────────────────────────────────────────────
-
-  static String _detectQuality(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('2160p') || lower.contains('4k') || lower.contains('uhd')) return '4K';
-    if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
-    if (lower.contains('720p')) return '720p';
-    if (lower.contains('480p') || lower.contains('sd')) return '480p';
-    return '?';
-  }
-
-  static Color _qualityColor(String quality) {
-    switch (quality) {
-      case '4K':
-        return const Color(0xFFFFB300); // Amber
-      case '1080p':
-        return const Color(0xFF42A5F5); // Blue
-      case '720p':
-        return const Color(0xFF66BB6A); // Green
-      default:
-        return Colors.white.withOpacity(0.4); // Gray
-    }
-  }
-
-  static String _formatSize(int bytes) {
-    if (bytes <= 0) return '';
-    const gb = 1024 * 1024 * 1024;
-    const mb = 1024 * 1024;
-    if (bytes >= gb) {
-      return '${(bytes / gb).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= mb) {
-      return '${(bytes / mb).toStringAsFixed(0)} MB';
-    }
-    return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  }
-
   // ─── Build ─────────────────────────────────────────────────────────
 
   @override
@@ -423,7 +386,6 @@ class _SourceSheetState extends State<SourceSheet>
                     child: Column(
                       children: [
                         _buildHeader(),
-                        _buildNowPlaying(),
                         _buildTabBar(),
                         _buildSearchBar(),
                         Expanded(child: _buildSourceList()),
@@ -556,120 +518,6 @@ class _SourceSheetState extends State<SourceSheet>
           ),
         ],
       ),
-    );
-  }
-
-  // ─── Now Playing ───────────────────────────────────────────────────
-
-  Widget _buildNowPlaying() {
-    if (widget.currentSourceIndex < 0 ||
-        widget.currentSourceIndex >= widget.sources.length) {
-      return const SizedBox.shrink();
-    }
-
-    final cur = widget.sources[widget.currentSourceIndex];
-    final quality = _detectQuality(cur.name);
-
-    return AnimatedBuilder(
-      animation: _pulseAnim,
-      builder: (context, child) {
-        return Container(
-          margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                _accent.withOpacity(0.08),
-                _accentAlt.withOpacity(0.04),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: _accent.withOpacity(0.12 + _pulseAnim.value * 0.08),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _accent.withOpacity(0.05),
-                blurRadius: 20,
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: _EqualizerBars(color: _accent),
-              ),
-              const SizedBox(width: 12),
-              // Quality badge mini
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _qualityColor(quality).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  quality,
-                  style: TextStyle(
-                    color: _qualityColor(quality),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      cur.displayTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    if (cur.source.isNotEmpty)
-                      Text(
-                        cur.source,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.3),
-                          fontSize: 10,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _accent.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'PLAYING',
-                  style: TextStyle(
-                    color: _accent.withOpacity(0.9),
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -1211,69 +1059,3 @@ class _SourceTile extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Equalizer Bars (animated "playing" indicator)
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _EqualizerBars extends StatefulWidget {
-  final Color color;
-  const _EqualizerBars({required this.color});
-
-  @override
-  State<_EqualizerBars> createState() => _EqualizerBarsState();
-}
-
-class _EqualizerBarsState extends State<_EqualizerBars>
-    with TickerProviderStateMixin {
-  late List<AnimationController> _controllers;
-  late List<Animation<double>> _animations;
-
-  @override
-  void initState() {
-    super.initState();
-    final rng = math.Random();
-    _controllers = List.generate(3, (i) {
-      return AnimationController(
-        duration: Duration(milliseconds: 400 + rng.nextInt(300)),
-        vsync: this,
-      )..repeat(reverse: true);
-    });
-    _animations = _controllers.map((c) {
-      return Tween<double>(begin: 0.2, end: 1.0).animate(
-        CurvedAnimation(parent: c, curve: Curves.easeInOut),
-      );
-    }).toList();
-  }
-
-  @override
-  void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: List.generate(3, (i) {
-        return AnimatedBuilder(
-          animation: _animations[i],
-          builder: (context, child) {
-            return Container(
-              width: 3,
-              height: 14 * _animations[i].value,
-              margin: EdgeInsets.only(right: i < 2 ? 2 : 0),
-              decoration: BoxDecoration(
-                color: widget.color.withOpacity(0.8),
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            );
-          },
-        );
-      }),
-    );
-  }
-}
