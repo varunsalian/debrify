@@ -709,10 +709,11 @@ class StremioStream {
       }
     }
 
-    // Get title - try description first (Comet uses this), then name, then title
+    // Get title - try description first (Comet uses this), then title (detailed info
+    // with torrent name/size/seeders), then name (short addon label like "Torrentio")
     String? title = json['description'] as String? ??
-        json['name'] as String? ??
-        json['title'] as String?;
+        json['title'] as String? ??
+        json['name'] as String?;
 
     return StremioStream(
       infoHash: infoHash,
