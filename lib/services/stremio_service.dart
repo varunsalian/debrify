@@ -703,35 +703,35 @@ class StremioService {
         continue;
       }
 
+      // Parse name and size once per stream
+      final parsed = _parseStreamMeta(stream);
+
       // Parse seeders from title - only for actual torrents
       // Direct/external links should have 0 seeders so they sort to bottom
       final seeders = streamType == StreamType.torrent
           ? (stream.seedersFromTitle ?? 0)
           : 0;
 
-      // Parse size - try behaviorHints.videoSize first, then title
-      int sizeBytes = 0;
-      if (stream.behaviorHints != null) {
-        final videoSize = stream.behaviorHints!['videoSize'];
-        if (videoSize is int) {
-          sizeBytes = videoSize;
-        } else if (videoSize is double) {
-          sizeBytes = videoSize.round();
-        }
-      }
-      if (sizeBytes == 0) {
-        final sizeStr = stream.sizeFromTitle;
-        if (sizeStr != null) {
-          sizeBytes = _parseSizeToBytes(sizeStr);
-        }
-      }
-
-      // Get name - prefer filename from behaviorHints, then title
-      String name = stream.title ?? 'Unknown';
-      if (stream.behaviorHints != null) {
-        final filename = stream.behaviorHints!['filename'] as String?;
-        if (filename != null && filename.isNotEmpty) {
-          name = filename;
+      // If torrent also has a direct URL, create a separate direct entry
+      if (streamType == StreamType.torrent &&
+          stream.url != null && stream.url!.isNotEmpty) {
+        final directKey = 'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
+        if (!uniqueTorrents.containsKey(directKey)) {
+          uniqueTorrents[directKey] = Torrent(
+            rowid: 0,
+            infohash: directKey,
+            name: parsed.name,
+            sizeBytes: parsed.sizeBytes,
+            createdUnix: 0,
+            seeders: 0,
+            leechers: 0,
+            completed: 0,
+            scrapedDate: 0,
+            source: 'stremio:${stream.source}',
+            streamType: StreamType.directUrl,
+            directUrl: stream.url,
+          );
+          withDirectUrl++;
         }
       }
 
@@ -739,8 +739,8 @@ class StremioService {
       final torrent = Torrent(
         rowid: 0,
         infohash: stream.infoHash?.toLowerCase() ?? uniqueKey,
-        name: name,
-        sizeBytes: sizeBytes,
+        name: parsed.name,
+        sizeBytes: parsed.sizeBytes,
         createdUnix: 0,
         seeders: seeders,
         leechers: 0,
@@ -788,6 +788,35 @@ class StremioService {
     }
 
     return results;
+  }
+
+  /// Extract name and size from a StremioStream.
+  ({String name, int sizeBytes}) _parseStreamMeta(StremioStream stream) {
+    String name = stream.title ?? 'Unknown';
+    if (stream.behaviorHints != null) {
+      final filename = stream.behaviorHints!['filename'] as String?;
+      if (filename != null && filename.isNotEmpty) {
+        name = filename;
+      }
+    }
+
+    int sizeBytes = 0;
+    if (stream.behaviorHints != null) {
+      final videoSize = stream.behaviorHints!['videoSize'];
+      if (videoSize is int) {
+        sizeBytes = videoSize;
+      } else if (videoSize is double) {
+        sizeBytes = videoSize.round();
+      }
+    }
+    if (sizeBytes == 0) {
+      final sizeStr = stream.sizeFromTitle;
+      if (sizeStr != null) {
+        sizeBytes = _parseSizeToBytes(sizeStr);
+      }
+    }
+
+    return (name: name, sizeBytes: sizeBytes);
   }
 
   /// Parse size string to bytes
