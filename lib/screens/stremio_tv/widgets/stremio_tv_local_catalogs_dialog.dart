@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../services/storage_service.dart';
+import '../../../services/trakt/trakt_item_transformer.dart';
 import 'stremio_tv_repo_browser_dialog.dart';
 
 // ─── Import helper ──────────────────────────────────────────────────────────
@@ -38,73 +39,31 @@ class LocalCatalogImporter {
   /// Transform a Trakt list array into the native catalog format.
   /// Returns the catalog map with 'name', 'type', and 'items'.
   static Map<String, dynamic> transformTrakt(List items, String catalogName) {
+    final metas = TraktItemTransformer.transformList(items);
+
     int movieCount = 0;
     int seriesCount = 0;
     final transformed = <Map<String, dynamic>>[];
 
-    for (final raw in items) {
-      if (raw is! Map<String, dynamic>) continue;
-      final type = raw['type'] as String?;
-      final content = (raw[type] ?? raw['movie'] ?? raw['show'])
-          as Map<String, dynamic>?;
-      if (content == null) continue;
-
-      final ids = content['ids'] as Map<String, dynamic>? ?? {};
-      final imdbId = ids['imdb'] as String?;
-      // Skip items without IMDB ID — they can't be played
-      if (imdbId == null || !imdbId.startsWith('tt')) continue;
-
-      final internalType = type == 'show' ? 'series' : 'movie';
-      if (internalType == 'series') {
+    for (final meta in metas) {
+      if (meta.type == 'series') {
         seriesCount++;
       } else {
         movieCount++;
       }
-
-      // Resolve poster/fanart from images map (relative URLs need https:// prefix)
-      String? poster;
-      String? fanart;
-      final images = content['images'] as Map<String, dynamic>?;
-      if (images != null) {
-        final posterList = images['poster'] as List<dynamic>?;
-        if (posterList != null && posterList.isNotEmpty) {
-          final url = posterList.first as String?;
-          if (url != null) poster = url.startsWith('http') ? url : 'https://$url';
-        }
-        final fanartList = images['fanart'] as List<dynamic>?;
-        if (fanartList != null && fanartList.isNotEmpty) {
-          final url = fanartList.first as String?;
-          if (url != null) fanart = url.startsWith('http') ? url : 'https://$url';
-        }
-      }
-
-      // Resolve genres (Trakt uses lowercase hyphenated, e.g. "science-fiction" → "Science Fiction")
-      final genres = (content['genres'] as List<dynamic>?)
-          ?.cast<String>()
-          .map((g) => g.split('-').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' '))
-          .toList();
-
-      // Round rating to 1 decimal place (Trakt gives raw floats like 6.961415767669678)
-      double? rating;
-      final rawRating = content['rating'];
-      if (rawRating is num) {
-        rating = (rawRating.toDouble() * 10).roundToDouble() / 10;
-      }
-
       transformed.add({
-        'id': imdbId,
-        'name': content['title'] as String? ?? 'Unknown',
-        'type': internalType,
-        if (content['year'] != null) 'year': content['year'],
-        if (content['overview'] != null) 'overview': content['overview'],
-        if (rating != null) 'rating': rating,
-        if (poster != null) 'poster': poster,
-        if (fanart != null) 'fanart': fanart,
-        if (genres != null && genres.isNotEmpty) 'genres': genres,
+        'id': meta.id,
+        'name': meta.name,
+        'type': meta.type,
+        if (meta.year != null) 'year': int.tryParse(meta.year!) ?? meta.year,
+        if (meta.description != null) 'overview': meta.description,
+        if (meta.imdbRating != null) 'rating': meta.imdbRating,
+        if (meta.poster != null) 'poster': meta.poster,
+        if (meta.background != null) 'fanart': meta.background,
+        if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
       });
     }
 
-    // Infer catalog type from majority content
     final catalogType = seriesCount > movieCount ? 'series' : 'movie';
 
     return {

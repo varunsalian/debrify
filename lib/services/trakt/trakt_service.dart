@@ -183,6 +183,102 @@ class TraktService {
     }
   }
 
+  // ============================================================================
+  // List API Methods
+  // ============================================================================
+
+  /// Authenticated GET request with automatic token refresh on 401.
+  Future<http.Response?> _authenticatedGet(String path) async {
+    var accessToken = await StorageService.getTraktAccessToken();
+    if (accessToken == null) return null;
+
+    try {
+      var response = await http.get(
+        Uri.parse('$kTraktApiBaseUrl$path'),
+        headers: _apiHeaders(accessToken: accessToken),
+      ).timeout(const Duration(seconds: 15));
+
+      // If unauthorized, try refreshing the token once
+      if (response.statusCode == 401) {
+        final refreshed = await refreshAccessToken();
+        if (!refreshed) return null;
+
+        accessToken = await StorageService.getTraktAccessToken();
+        if (accessToken == null) return null;
+
+        response = await http.get(
+          Uri.parse('$kTraktApiBaseUrl$path'),
+          headers: _apiHeaders(accessToken: accessToken),
+        ).timeout(const Duration(seconds: 15));
+      }
+
+      return response;
+    } catch (e) {
+      debugPrint('Trakt: GET $path error: $e');
+      return null;
+    }
+  }
+
+  /// Fetch a standard Trakt list (watchlist, collection, ratings, recommendations).
+  /// [listType] is one of: watchlist, collection, ratings, recommendations.
+  /// [contentType] is one of: movies, shows.
+  Future<List<dynamic>> fetchList(String listType, String contentType) async {
+    final String path;
+    if (listType == 'recommendations') {
+      path = '/recommendations/$contentType?extended=full';
+    } else {
+      path = '/sync/$listType/$contentType?extended=full';
+    }
+
+    final response = await _authenticatedGet(path);
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchList failed for $path (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchList parse error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch the user's custom lists.
+  Future<List<Map<String, dynamic>>> fetchCustomLists() async {
+    final response = await _authenticatedGet('/users/me/lists');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchCustomLists failed (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('Trakt: fetchCustomLists parse error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch items from a specific custom list.
+  /// [listId] is the Trakt slug for the list.
+  /// [contentType] is one of: movies, shows.
+  Future<List<dynamic>> fetchCustomListItems(String listId, String contentType) async {
+    final response = await _authenticatedGet('/users/me/lists/$listId/items/$contentType?extended=full');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchCustomListItems failed (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchCustomListItems parse error: $e');
+      return [];
+    }
+  }
+
   /// Fetch the user's Trakt profile settings (username, etc.).
   Future<bool> _fetchAndStoreUsername(String accessToken) async {
     try {

@@ -55,6 +55,7 @@ import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
+import '../widgets/trakt/trakt_results_view.dart';
 import '../widgets/home_focus_controller.dart';
 import '../models/iptv_playlist.dart';
 import '../services/imdb_lookup_service.dart';
@@ -182,6 +183,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // IptvResultsView GlobalKey (for DPAD navigation)
   final GlobalKey<IptvResultsViewState> _iptvResultsKey = GlobalKey<IptvResultsViewState>();
+
+  // TraktResultsView GlobalKey (for DPAD navigation)
+  final GlobalKey<TraktResultsViewState> _traktResultsKey = GlobalKey<TraktResultsViewState>();
 
   // Focus states using ValueNotifier to avoid full screen rebuilds
   final ValueNotifier<bool> _searchFocused = ValueNotifier<bool>(false);
@@ -1248,6 +1252,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       case 'keyword': return SearchSourceType.keyword;
       case 'addon': return SearchSourceType.addon;
       case 'iptv': return SearchSourceType.iptv;
+      case 'trakt': return SearchSourceType.trakt;
       case 'reddit': return SearchSourceType.reddit;
       default: return null;
     }
@@ -1271,6 +1276,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         case SearchSourceType.addon:
           // Addon mode - shows catalog browser for that addon
           _searchMode = SearchMode.browse;
+          break;
+        case SearchSourceType.trakt:
+          // Trakt mode - handles its own display, keep keyword mode for fallback
+          _searchMode = SearchMode.keyword;
           break;
         case SearchSourceType.reddit:
           // Reddit mode - handles its own search, keep keyword mode for fallback
@@ -2069,6 +2078,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    // Trakt mode: Trigger rebuild so TraktResultsView gets updated searchQuery
+    if (_selectedSource.type == SearchSourceType.trakt) {
+      setState(() {});
+      return;
+    }
+
     // In catalog mode, clear the active selection if user manually edits
     if (_searchMode == SearchMode.catalog) {
       final trimmed = value.trim();
@@ -2155,6 +2170,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
         if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
           _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+          return;
+        }
+
+        // Check if Trakt is visible
+        if (_selectedSource.type == SearchSourceType.trakt && _traktResultsKey.currentState != null) {
+          _traktResultsKey.currentState!.focusFirstFilter();
           return;
         }
 
@@ -12204,6 +12225,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 return;
                               }
 
+                              // Trakt mode: Just update state to trigger TraktResultsView filter
+                              if (_selectedSource.type == SearchSourceType.trakt) {
+                                setState(() {});
+                                return;
+                              }
+
                               // Reddit mode: Just update state to trigger RedditResultsView
                               // The view handles its own search via searchQuery prop
                               if (_selectedSource.type == SearchSourceType.reddit) {
@@ -12386,6 +12413,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
 
+                    // Trakt mode - Trakt list results
+                    if (_selectedSource.type == SearchSourceType.trakt)
+                      TraktResultsView(
+                        key: _traktResultsKey,
+                        searchQuery: _searchController.text,
+                        isTelevision: _isTelevision,
+                        onItemSelected: (selection) {
+                          _handleCatalogItemSelected(selection, updateSearchText: true);
+                        },
+                        onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
+                      ),
+
                     // Reddit mode - Reddit video results
                     if (_selectedSource.type == SearchSourceType.reddit)
                       RedditResultsView(
@@ -12403,8 +12442,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
                       ),
 
-                    // Results and other views (not shown in Reddit/IPTV mode - they handle their own content)
-                    if (_selectedSource.type != SearchSourceType.reddit && _selectedSource.type != SearchSourceType.iptv)
+                    // Results and other views (not shown in Reddit/IPTV/Trakt mode - they handle their own content)
+                    if (_selectedSource.type != SearchSourceType.reddit && _selectedSource.type != SearchSourceType.iptv && _selectedSource.type != SearchSourceType.trakt)
                     Builder(
                       builder: (context) {
 

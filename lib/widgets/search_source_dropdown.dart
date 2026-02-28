@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/stremio_addon.dart';
 import '../services/stremio_service.dart';
+import '../services/trakt/trakt_service.dart';
 
 /// Represents a search source type
 enum SearchSourceType {
   all,      // Search across all sources
   keyword,  // Keyword/torrent search
   addon,    // Specific addon catalog
+  trakt,    // Trakt lists (watchlist, collection, etc.)
   reddit,   // Reddit video search
   iptv,     // IPTV M3U playlists
 }
@@ -38,6 +40,13 @@ class SearchSourceOption {
     type: SearchSourceType.keyword,
     label: 'Keyword',
     icon: Icons.search,
+  );
+
+  /// Create "Trakt" option
+  factory SearchSourceOption.trakt() => const SearchSourceOption(
+    type: SearchSourceType.trakt,
+    label: 'Trakt',
+    icon: Icons.movie_filter_rounded,
   );
 
   /// Create "Reddit" option
@@ -511,8 +520,10 @@ class _DropdownMenuState extends State<_DropdownMenu> {
 
             // Check if this is the first addon to show Stremio section header
             final showStremioHeader = firstAddonIndex != null && index == firstAddonIndex;
-            // Check if this is IPTV (first "browse separately" item)
-            final showBrowseSeparatelyHeader = option.type == SearchSourceType.iptv;
+            // Check if this is the first "browse separately" item (Trakt, IPTV, or Reddit)
+            final showBrowseSeparatelyHeader = (option.type == SearchSourceType.trakt ||
+                option.type == SearchSourceType.iptv) &&
+                (index == 0 || widget.options[index - 1].type != SearchSourceType.trakt);
 
             return Column(
               mainAxisSize: MainAxisSize.min,
@@ -627,6 +638,16 @@ class SearchSourceOptionsLoader {
       }
     } catch (e) {
       debugPrint('SearchSourceOptionsLoader: Error loading addons: $e');
+    }
+
+    // Trakt (only if authenticated)
+    try {
+      final isAuthenticated = await TraktService.instance.isAuthenticated();
+      if (isAuthenticated) {
+        options.add(SearchSourceOption.trakt());
+      }
+    } catch (e) {
+      debugPrint('SearchSourceOptionsLoader: Error checking Trakt auth: $e');
     }
 
     // IPTV before Reddit
