@@ -78,6 +78,8 @@ class TraktResultsView extends StatefulWidget {
   final String searchQuery;
   final bool isTelevision;
   final void Function(AdvancedSearchSelection) onItemSelected;
+  final void Function(AdvancedSearchSelection)? onQuickPlay;
+  final bool showQuickPlay;
   final VoidCallback? onUpArrowFromFilters;
 
   const TraktResultsView({
@@ -85,6 +87,8 @@ class TraktResultsView extends StatefulWidget {
     required this.searchQuery,
     this.isTelevision = false,
     required this.onItemSelected,
+    this.onQuickPlay,
+    this.showQuickPlay = true,
     this.onUpArrowFromFilters,
   });
 
@@ -225,16 +229,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
       final inferredType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
       final metas = TraktItemTransformer.transformList(rawItems, inferredType: inferredType);
 
-      // Create focus nodes
-      for (int i = 0; i < metas.length; i++) {
-        _cardFocusNodes.add(FocusNode(debugLabel: 'trakt-card-$i'));
-      }
-
       setState(() {
         _isLoading = false;
         _items = metas;
       });
-      _applySearchFilter();
+      _applySearchFilter(); // Also rebuilds _cardFocusNodes
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -245,17 +244,26 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   void _applySearchFilter() {
-    if (widget.searchQuery.isEmpty) {
-      setState(() => _filteredItems = _items);
-      return;
+    for (final node in _cardFocusNodes) {
+      node.dispose();
     }
-    final query = widget.searchQuery.toLowerCase();
-    setState(() {
-      _filteredItems = _items.where((item) {
+    _cardFocusNodes.clear();
+
+    List<StremioMeta> filtered;
+    if (widget.searchQuery.isEmpty) {
+      filtered = _items;
+    } else {
+      final query = widget.searchQuery.toLowerCase();
+      filtered = _items.where((item) {
         return item.name.toLowerCase().contains(query) ||
             (item.description?.toLowerCase().contains(query) ?? false);
       }).toList();
-    });
+    }
+
+    for (int i = 0; i < filtered.length; i++) {
+      _cardFocusNodes.add(FocusNode(debugLabel: 'trakt-card-$i'));
+    }
+    setState(() => _filteredItems = filtered);
   }
 
   void _onListTypeChanged(TraktListType? type) {
@@ -282,14 +290,31 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   void _onItemTap(StremioMeta item) {
-    widget.onItemSelected(AdvancedSearchSelection(
+    final selection = AdvancedSearchSelection(
       imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
       contentType: item.type,
       posterUrl: item.poster,
-    ));
+    );
+    widget.onItemSelected(selection);
+  }
+
+  void _onQuickPlay(StremioMeta item) {
+    final selection = AdvancedSearchSelection(
+      imdbId: item.effectiveImdbId ?? item.id,
+      isSeries: item.type == 'series',
+      title: item.name,
+      year: item.year,
+      contentType: item.type,
+      posterUrl: item.poster,
+    );
+    if (widget.onQuickPlay != null) {
+      widget.onQuickPlay!(selection);
+    } else {
+      widget.onItemSelected(selection);
+    }
   }
 
   /// Focus the first filter (for DPAD navigation from search input)
@@ -528,8 +553,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
             child: _TraktItemCard(
               item: item,
               focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
-              onTap: () => _onItemTap(item),
-              onKeyEvent: (event) => _handleCardKey(index, event),
+              onSources: () => _onItemTap(item),
+              onQuickPlay: () => _onQuickPlay(item),
+              showQuickPlay: widget.showQuickPlay,
+              onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
             ),
           );
         },
@@ -537,7 +564,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
     );
   }
 
-  KeyEventResult _handleCardKey(int index, KeyEvent event) {
+  KeyEventResult _handleCardKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -676,16 +703,21 @@ class TraktResultsViewState extends State<TraktResultsView> {
 // ─── Item Card ─────────────────────────────────────────────────────────────────
 
 /// Card widget for a single Trakt media item.
+/// Features Browse and Quick Play buttons with DPAD navigation support.
 class _TraktItemCard extends StatefulWidget {
   final StremioMeta item;
   final FocusNode? focusNode;
-  final VoidCallback onTap;
-  final KeyEventResult Function(KeyEvent) onKeyEvent;
+  final VoidCallback onSources;
+  final VoidCallback onQuickPlay;
+  final bool showQuickPlay;
+  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
 
   const _TraktItemCard({
     required this.item,
     this.focusNode,
-    required this.onTap,
+    required this.onSources,
+    required this.onQuickPlay,
+    this.showQuickPlay = true,
     required this.onKeyEvent,
   });
 
@@ -695,17 +727,41 @@ class _TraktItemCard extends StatefulWidget {
 
 class _TraktItemCardState extends State<_TraktItemCard> {
   bool _isFocused = false;
+  // For DPAD: track which button is focused (true = Quick Play, false = Browse)
+  bool _isQuickPlayButtonFocused = false;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
+    // Left/Right arrow navigation between buttons
+    // Order: [Browse] [Quick Play]
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (_isQuickPlayButtonFocused) {
+        setState(() => _isQuickPlayButtonFocused = false);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (!_isQuickPlayButtonFocused && widget.showQuickPlay) {
+        setState(() => _isQuickPlayButtonFocused = true);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // Select/Enter triggers the focused button
     if (event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter) {
-      widget.onTap();
+      if (_isQuickPlayButtonFocused) {
+        widget.onQuickPlay();
+      } else {
+        widget.onSources();
+      }
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event);
+    return widget.onKeyEvent(event, isQuickPlayFocused: _isQuickPlayButtonFocused);
   }
 
   String _stripHtml(String text) {
@@ -720,7 +776,10 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (focused) {
-        setState(() => _isFocused = focused);
+        setState(() {
+          _isFocused = focused;
+          _isQuickPlayButtonFocused = false;
+        });
         if (focused) {
           Scrollable.ensureVisible(
             context,
@@ -731,7 +790,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       },
       onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: widget.onSources,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
@@ -832,8 +891,24 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           ),
         ),
         const SizedBox(width: 8),
-        // Browse button
-        _buildBrowseButton(colorScheme),
+        // Action buttons (side-by-side)
+        _buildActionButton(
+          icon: Icons.list_rounded,
+          label: 'Browse',
+          color: const Color(0xFF6366F1),
+          isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+          onTap: widget.onSources,
+        ),
+        if (widget.showQuickPlay) ...[
+          const SizedBox(width: 6),
+          _buildActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Quick Play',
+            color: const Color(0xFFB91C1C),
+            isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+            onTap: widget.onQuickPlay,
+          ),
+        ],
       ],
     );
   }
@@ -900,7 +975,31 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           ),
         ],
         const SizedBox(height: 8),
-        _buildBrowseButton(colorScheme),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.list_rounded,
+                label: 'Browse',
+                color: const Color(0xFF6366F1),
+                isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+                onTap: widget.onSources,
+              ),
+            ),
+            if (widget.showQuickPlay) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Quick Play',
+                  color: const Color(0xFFB91C1C),
+                  isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                  onTap: widget.onQuickPlay,
+                ),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }
@@ -981,42 +1080,70 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     );
   }
 
-  Widget _buildBrowseButton(ColorScheme colorScheme) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _isFocused
-                ? const Color(0xFF6366F1)
-                : const Color(0xFF6366F1).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isHighlighted,
+    required VoidCallback onTap,
+  }) {
+    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isHighlighted
+                ? [color, darkColor]
+                : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isHighlighted
+                ? Colors.white.withValues(alpha: 0.4)
+                : Colors.white.withValues(alpha: 0.15),
+            width: isHighlighted ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
+              blurRadius: isHighlighted ? 16 : 8,
+              spreadRadius: isHighlighted ? 2 : 0,
+              offset: const Offset(0, 4),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.list_rounded,
-                size: 16,
-                color: _isFocused ? Colors.white : const Color(0xFF6366F1),
+            if (isHighlighted)
+              BoxShadow(
+                color: color.withValues(alpha: 0.3),
+                blurRadius: 24,
+                spreadRadius: 4,
               ),
-              const SizedBox(width: 4),
-              Text(
-                'Browse',
-                style: TextStyle(
-                  color: _isFocused ? Colors.white : const Color(0xFF6366F1),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

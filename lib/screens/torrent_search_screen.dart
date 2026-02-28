@@ -12413,16 +12413,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         ),
                       ),
 
-                    // Trakt mode - Trakt list results
+                    // Trakt mode - Trakt list results (kept alive with Offstage like CatalogBrowser)
                     if (_selectedSource.type == SearchSourceType.trakt)
-                      TraktResultsView(
-                        key: _traktResultsKey,
-                        searchQuery: _searchController.text,
-                        isTelevision: _isTelevision,
-                        onItemSelected: (selection) {
-                          _handleCatalogItemSelected(selection, updateSearchText: true);
-                        },
-                        onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
+                      Offstage(
+                        key: const ValueKey('trakt_offstage'),
+                        offstage: _hasSearched || _isLoading,
+                        child: TraktResultsView(
+                          key: _traktResultsKey,
+                          // Freeze searchQuery while offstage to prevent reload/scroll reset
+                          searchQuery: (_hasSearched || _isLoading) ? _previousSearchQuery : _searchController.text,
+                          isTelevision: _isTelevision,
+                          onItemSelected: (selection) {
+                            _handleCatalogItemSelected(selection, updateSearchText: true);
+                          },
+                          onQuickPlay: (selection) {
+                            _handleQuickPlay(selection);
+                          },
+                          showQuickPlay: _defaultTorrentProvider != 'pikpak',
+                          onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
+                        ),
                       ),
 
                     // Reddit mode - Reddit video results
@@ -12442,8 +12451,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
                       ),
 
-                    // Results and other views (not shown in Reddit/IPTV/Trakt mode - they handle their own content)
-                    if (_selectedSource.type != SearchSourceType.reddit && _selectedSource.type != SearchSourceType.iptv && _selectedSource.type != SearchSourceType.trakt)
+                    // Results and other views (not shown in Reddit/IPTV mode - they handle their own content)
+                    if (_selectedSource.type != SearchSourceType.reddit && _selectedSource.type != SearchSourceType.iptv)
                     Builder(
                       builder: (context) {
 
@@ -12539,6 +12548,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       // Check if a catalog view is visible - if so, don't show history overlay
                       final bool catalogVisible = (
                         _selectedSource.type == SearchSourceType.all ||
+                        _selectedSource.type == SearchSourceType.trakt ||
                         (_selectedSource.type == SearchSourceType.addon &&
                          _selectedSource.addon != null &&
                          _selectedSource.addon!.supportsCatalogs)
