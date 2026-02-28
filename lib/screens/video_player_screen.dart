@@ -294,6 +294,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _hideTimer;
   bool _isSeekingWithSlider = false;
+  Duration? _lastSliderSeekPos;
 
   // Channel badge auto-hide
   bool _showChannelBadge = true;
@@ -545,6 +546,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         TraktService.instance.scrobbleStop(imdbId, progress);
         break;
     }
+  }
+
+  /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
+  void _traktScrobbleSeek(Duration seekTarget) {
+    if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
+    if (!_isPlaying || _duration.inMilliseconds <= 0) return;
+    final imdbId = widget.contentImdbId!;
+    final progress = (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(0.0, 100.0);
+    _traktLastScrobbleAction = 'start';
+    TraktService.instance.scrobbleStart(imdbId, progress);
   }
 
   void _maybeSeekToTraktProgress() {
@@ -3327,6 +3338,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? minPos
         : (target > maxPos ? maxPos : target);
     await _player.seek(clamped);
+    _traktScrobbleSeek(clamped);
     _ripple = DoubleTapRipple(
       center: localPos,
       icon: isLeft ? Icons.replay_10_rounded : Icons.forward_10_rounded,
@@ -3426,7 +3438,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _onPanEnd(DragEndDetails details) {
     if (_panIgnore) return;
     if (_mode == GestureMode.seek && _seekHud.value != null) {
-      _player.seek(_seekHud.value!.target);
+      final target = _seekHud.value!.target;
+      _player.seek(target);
+      _traktScrobbleSeek(target);
     }
     _mode = GestureMode.none;
     Future.delayed(const Duration(milliseconds: 250), () {
@@ -3817,6 +3831,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
               _player.seek(newPos);
+              _traktScrobbleSeek(newPos);
               // Don't show controls or any overlay for keyboard seeking
               return KeyEventResult.handled;
             }
@@ -3827,6 +3842,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
               _player.seek(newPos);
+              _traktScrobbleSeek(newPos);
               // Don't show controls or any overlay for keyboard seeking
               return KeyEventResult.handled;
             }
@@ -4063,10 +4079,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           onSeekBarChanged: (v) {
                             final newPos = duration * v;
                             _player.seek(newPos);
+                            _lastSliderSeekPos = newPos;
                           },
                           onSeekBarChangeEnd: () {
                             _isSeekingWithSlider = false;
                             _scheduleAutoHide();
+                            if (_lastSliderSeekPos != null) {
+                              _traktScrobbleSeek(_lastSliderSeekPos!);
+                              _lastSliderSeekPos = null;
+                            }
                           },
                           onNext:
                               (_hasNextEpisode() ||
