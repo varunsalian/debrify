@@ -1883,7 +1883,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
         _seriesPlaylist!
-            .fetchEpisodeInfo(playlistItem: widget.playlistItem)
+            .fetchEpisodeInfo(
+              playlistItem: widget.playlistItem,
+              imdbId: widget.playlistItem?['imdbId'] as String?,
+            )
             .then((_) {
               if (mounted) {
                 setState(() {
@@ -1967,7 +1970,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         });
 
         _seriesPlaylist!
-            .fetchEpisodeInfo(playlistItem: widget.playlistItem)
+            .fetchEpisodeInfo(
+              playlistItem: widget.playlistItem,
+              imdbId: widget.playlistItem?['imdbId'] as String?,
+            )
             .then((_) {
               if (mounted) {
                 setState(() {
