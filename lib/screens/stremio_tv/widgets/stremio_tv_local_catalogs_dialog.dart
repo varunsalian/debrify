@@ -12,6 +12,7 @@ import 'stremio_tv_repo_browser_dialog.dart';
 // ─── Import helper ──────────────────────────────────────────────────────────
 
 /// Shared validation and save logic for local catalog imports.
+/// Supports both the native format and Trakt list JSON.
 class LocalCatalogImporter {
   LocalCatalogImporter._();
 
@@ -23,6 +24,94 @@ class LocalCatalogImporter {
         .replaceAll(RegExp(r'^_+|_+$'), '');
     final ts = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
     return '${sanitized}_$ts';
+  }
+
+  /// Check if parsed JSON looks like a Trakt list export.
+  /// Trakt lists are top-level arrays where items have nested movie/show objects.
+  static bool isTrakt(dynamic parsed) {
+    if (parsed is! List || parsed.isEmpty) return false;
+    final first = parsed.first;
+    if (first is! Map<String, dynamic>) return false;
+    return first.containsKey('movie') || first.containsKey('show');
+  }
+
+  /// Transform a Trakt list array into the native catalog format.
+  /// Returns the catalog map with 'name', 'type', and 'items'.
+  static Map<String, dynamic> transformTrakt(List items, String catalogName) {
+    int movieCount = 0;
+    int seriesCount = 0;
+    final transformed = <Map<String, dynamic>>[];
+
+    for (final raw in items) {
+      if (raw is! Map<String, dynamic>) continue;
+      final type = raw['type'] as String?;
+      final content = (raw[type] ?? raw['movie'] ?? raw['show'])
+          as Map<String, dynamic>?;
+      if (content == null) continue;
+
+      final ids = content['ids'] as Map<String, dynamic>? ?? {};
+      final imdbId = ids['imdb'] as String?;
+      // Skip items without IMDB ID — they can't be played
+      if (imdbId == null || !imdbId.startsWith('tt')) continue;
+
+      final internalType = type == 'show' ? 'series' : 'movie';
+      if (internalType == 'series') {
+        seriesCount++;
+      } else {
+        movieCount++;
+      }
+
+      // Resolve poster/fanart from images map (relative URLs need https:// prefix)
+      String? poster;
+      String? fanart;
+      final images = content['images'] as Map<String, dynamic>?;
+      if (images != null) {
+        final posterList = images['poster'] as List<dynamic>?;
+        if (posterList != null && posterList.isNotEmpty) {
+          final url = posterList.first as String?;
+          if (url != null) poster = url.startsWith('http') ? url : 'https://$url';
+        }
+        final fanartList = images['fanart'] as List<dynamic>?;
+        if (fanartList != null && fanartList.isNotEmpty) {
+          final url = fanartList.first as String?;
+          if (url != null) fanart = url.startsWith('http') ? url : 'https://$url';
+        }
+      }
+
+      // Resolve genres (Trakt uses lowercase hyphenated, e.g. "science-fiction" → "Science Fiction")
+      final genres = (content['genres'] as List<dynamic>?)
+          ?.cast<String>()
+          .map((g) => g.split('-').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' '))
+          .toList();
+
+      // Round rating to 1 decimal place (Trakt gives raw floats like 6.961415767669678)
+      double? rating;
+      final rawRating = content['rating'];
+      if (rawRating is num) {
+        rating = (rawRating.toDouble() * 10).roundToDouble() / 10;
+      }
+
+      transformed.add({
+        'id': imdbId,
+        'name': content['title'] as String? ?? 'Unknown',
+        'type': internalType,
+        if (content['year'] != null) 'year': content['year'],
+        if (content['overview'] != null) 'overview': content['overview'],
+        if (rating != null) 'rating': rating,
+        if (poster != null) 'poster': poster,
+        if (fanart != null) 'fanart': fanart,
+        if (genres != null && genres.isNotEmpty) 'genres': genres,
+      });
+    }
+
+    // Infer catalog type from majority content
+    final catalogType = seriesCount > movieCount ? 'series' : 'movie';
+
+    return {
+      'name': catalogName,
+      'type': catalogType,
+      'items': transformed,
+    };
   }
 
   /// Validate JSON catalog content. Returns error message or null if valid.
@@ -52,8 +141,56 @@ class LocalCatalogImporter {
   }
 
   /// Validate and save JSON content as a local catalog.
+  /// Pass [catalogName] for Trakt lists (which lack a root name).
   /// Returns error message or null on success.
-  static Future<String?> import(String content) async {
+  static Future<String?> import(String content, {String? catalogName}) async {
+    // Detect and transform Trakt format before validation
+    dynamic raw;
+    try {
+      raw = jsonDecode(content);
+    } catch (e) {
+      return 'Invalid JSON: $e';
+    }
+
+    if (isTrakt(raw)) {
+      final name = catalogName?.trim() ?? '';
+      if (name.isEmpty) {
+        return 'Trakt list detected — please enter a catalog name';
+      }
+      final transformed = transformTrakt(raw as List, name);
+      final allItems = transformed['items'] as List<Map<String, dynamic>>;
+      if (allItems.isEmpty) {
+        return 'No items with IMDB IDs found in Trakt list';
+      }
+
+      // Split mixed lists into separate movie and series catalogs
+      final movies = allItems.where((i) => i['type'] != 'series').toList();
+      final series = allItems.where((i) => i['type'] == 'series').toList();
+      final existing = await StorageService.getStremioTvLocalCatalogs();
+
+      if (movies.isNotEmpty && series.isNotEmpty) {
+        // Mixed list — create two catalogs
+        for (final entry in [
+          (items: movies, type: 'movie', suffix: 'Movies'),
+          (items: series, type: 'series', suffix: 'Series'),
+        ]) {
+          final catName = '$name — ${entry.suffix}';
+          if (existing.any((c) => c['name'] == catName)) continue;
+          await StorageService.addStremioTvLocalCatalog({
+            'id': generateId(catName),
+            'name': catName,
+            'type': entry.type,
+            'addedAt': DateTime.now().toIso8601String(),
+            'items': entry.items,
+          });
+        }
+        return null;
+      }
+
+      // Single-type list — use as-is
+      content = jsonEncode(transformed);
+    }
+
     final err = validate(content);
     if (err != null) return err;
 
@@ -111,7 +248,9 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
       }
 
       final content = utf8.decode(bytes);
-      final err = await LocalCatalogImporter.import(content);
+      // Use filename (without extension) as catalog name for Trakt lists
+      final fileName = result.files.first.name.replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+      final err = await LocalCatalogImporter.import(content, catalogName: fileName);
       if (err != null) {
         if (context.mounted) _showSnackBar(context, err, true);
         return false;
@@ -437,18 +576,20 @@ class _ImportUrlDialog extends StatefulWidget {
 }
 
 class _ImportUrlDialogState extends State<_ImportUrlDialog> {
-  final _controller = TextEditingController();
+  final _urlController = TextEditingController();
+  final _nameController = TextEditingController();
   String? _error;
   bool _loading = false;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _urlController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
   Future<void> _import() async {
-    final url = _controller.text.trim();
+    final url = _urlController.text.trim();
     if (url.isEmpty) {
       setState(() => _error = 'Enter a URL');
       return;
@@ -478,7 +619,10 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
         return;
       }
 
-      final err = await LocalCatalogImporter.import(resp.body);
+      final err = await LocalCatalogImporter.import(
+        resp.body,
+        catalogName: _nameController.text,
+      );
       if (!mounted) return;
 
       if (err != null) {
@@ -509,22 +653,40 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Import from URL'),
-      content: TextField(
-        controller: _controller,
-        decoration: InputDecoration(
-          hintText: 'https://example.com/catalog.json',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              hintText: 'Catalog name (required for Trakt lists)',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
           ),
-          errorText: _error,
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        autofocus: true,
-        onSubmitted: (_) {
-          if (!_loading) _import();
-        },
+          const SizedBox(height: 12),
+          TextField(
+            controller: _urlController,
+            decoration: InputDecoration(
+              hintText: 'https://example.com/catalog.json',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorText: _error,
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            autofocus: true,
+            onSubmitted: (_) {
+              if (!_loading) _import();
+            },
+          ),
+        ],
       ),
       actions: [
         TextButton(
@@ -556,18 +718,20 @@ class _ImportJsonDialog extends StatefulWidget {
 }
 
 class _ImportJsonDialogState extends State<_ImportJsonDialog> {
-  final _controller = TextEditingController();
+  final _jsonController = TextEditingController();
+  final _nameController = TextEditingController();
   String? _error;
   bool _loading = false;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _jsonController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
   Future<void> _import() async {
-    final content = _controller.text.trim();
+    final content = _jsonController.text.trim();
     if (content.isEmpty) {
       setState(() => _error = 'Paste JSON content');
       return;
@@ -578,7 +742,10 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
       _error = null;
     });
 
-    final err = await LocalCatalogImporter.import(content);
+    final err = await LocalCatalogImporter.import(
+      content,
+      catalogName: _nameController.text,
+    );
     if (!mounted) return;
 
     if (err != null) {
@@ -596,19 +763,37 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Paste JSON'),
-      content: TextField(
-        controller: _controller,
-        maxLines: 6,
-        decoration: InputDecoration(
-          hintText: '{"name": "My Catalog", "items": [...]}',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              hintText: 'Catalog name (required for Trakt lists)',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
           ),
-          errorText: _error,
-          contentPadding: const EdgeInsets.all(12),
-        ),
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-        autofocus: true,
+          const SizedBox(height: 12),
+          TextField(
+            controller: _jsonController,
+            maxLines: 6,
+            decoration: InputDecoration(
+              hintText: '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              errorText: _error,
+              contentPadding: const EdgeInsets.all(12),
+            ),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            autofocus: true,
+          ),
+        ],
       ),
       actions: [
         TextButton(
