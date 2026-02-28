@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'remote_constants.dart';
 import 'udp_discovery_service.dart';
 import 'udp_command_service.dart';
 
@@ -250,7 +251,9 @@ class RemoteControlState extends ChangeNotifier {
   }
 
   void _handleCommand(RemoteCommand command) {
-    debugPrint('RemoteControlState: Command received: $command');
+    if (command.command != ConfigCommand.debrifyChannelChunk) {
+      debugPrint('RemoteControlState: Command received: $command');
+    }
     onCommandReceived?.call(command.action, command.command, command.data);
   }
 

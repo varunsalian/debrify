@@ -75,5 +75,21 @@ class ConfigCommand {
   static const String torbox = 'torbox';
   static const String pikpak = 'pikpak';
   static const String searchEngines = 'search_engines';
+  static const String debrifyChannel = 'debrify_channel';
+  static const String debrifyChannelStart = 'debrify_channel_start';
+  static const String debrifyChannelChunk = 'debrify_channel_chunk';
   static const String complete = 'complete'; // Signals all configs sent, TV should restart
 }
+
+/// Chunked transfer constants
+const int kChunkMaxBytes = 1400; // Safe single-fragment UDP payload (MTU 1500 - IP/UDP headers)
+const int kChunkJsonOverhead = 120; // JSON envelope overhead per chunk packet
+const int kChunkDataMaxBytes = kChunkMaxBytes - kChunkJsonOverhead; // 1280 — max raw string in direct path
+// Chunk data is double-JSON-encoded (inner chunkData JSON stringified inside outer RemoteCommand JSON).
+// Inner non-data overhead: transferId (~27), index (~4), field names/braces (~36) = ~67 chars.
+// Quote escaping of inner JSON's 10 double-quotes: +10 chars.
+// Outer envelope: ~80 chars. Total non-data overhead: ~157 chars.
+// Safe base64 budget: 1400 - 157 = 1243 chars → floor(1243 * 3/4) = 932, rounded to 930 (divisible by 3).
+// Verify: 930 bytes → 1240 base64 chars + 157 overhead = 1397 bytes ≤ 1400.
+const int kChunkRawBytesPerChunk = 930;
+const Duration kChunkTransferTimeout = Duration(seconds: 30);

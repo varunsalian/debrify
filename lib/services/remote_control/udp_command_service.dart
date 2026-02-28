@@ -82,7 +82,11 @@ class RemoteCommand {
   }
 
   @override
-  String toString() => 'RemoteCommand($action: $command${data != null ? ', data: $data' : ''})';
+  String toString() {
+    if (data == null) return 'RemoteCommand($action: $command)';
+    final truncated = data!.length > 80 ? '${data!.substring(0, 80)}...[${data!.length}]' : data;
+    return 'RemoteCommand($action: $command, data: $truncated)';
+  }
 }
 
 /// Service for sending/receiving UDP commands
@@ -188,7 +192,9 @@ class UdpCommandService {
         InternetAddress(targetIp),
         kCommandPort,
       );
-      debugPrint('UdpCommandService: Sent command to $targetIp: $command');
+      if (command.command != ConfigCommand.debrifyChannelChunk) {
+        debugPrint('UdpCommandService: Sent command to $targetIp: $command');
+      }
       return true;
     } catch (e) {
       debugPrint('UdpCommandService: Failed to send command to $targetIp: $e');
@@ -264,7 +270,9 @@ class UdpCommandService {
         onHeartbeatReceived?.call();
       } else if (type == RemoteMessageType.command) {
         final command = RemoteCommand.fromJson(json);
-        debugPrint('UdpCommandService: Received command: $command');
+        if (command.command != ConfigCommand.debrifyChannelChunk) {
+          debugPrint('UdpCommandService: Received command: $command');
+        }
         onCommandReceived?.call(command);
       }
     } catch (e) {

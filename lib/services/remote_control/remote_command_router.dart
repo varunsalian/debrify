@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +13,12 @@ import '../../services/torbox_account_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
+import '../../services/community/magnet_yaml_service.dart';
+import '../../services/debrify_tv_zip_importer.dart';
+import '../../services/debrify_tv_repository.dart';
+import '../../services/debrify_tv_cache_service.dart';
+import '../../models/debrify_tv_cache.dart';
+import '../../models/debrify_tv_channel_record.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback = void Function(String action, String command, String? data);
@@ -44,6 +51,9 @@ class RemoteCommandRouter {
 
   // Registered command handlers
   final List<RemoteCommandCallback> _handlers = [];
+
+  // Chunk reassembly buffer for large channel transfers
+  final Map<String, _ChunkBuffer> _chunkBuffers = {};
 
   // Navigator key for back navigation
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -109,7 +119,11 @@ class RemoteCommandRouter {
 
   /// Dispatch a remote command to all registered handlers
   void dispatchCommand(String action, String command, String? data) {
-    debugPrint('RemoteCommandRouter: Dispatching $action:$command${data != null ? ' with data' : ''} to ${_handlers.length} handlers');
+    // Suppress per-chunk logs to avoid flooding
+    final isChunk = command == ConfigCommand.debrifyChannelChunk;
+    if (!isChunk) {
+      debugPrint('RemoteCommandRouter: Dispatching $action:$command${data != null ? ' with data' : ''} to ${_handlers.length} handlers');
+    }
 
     for (final handler in _handlers.toList()) {
       try {
@@ -194,7 +208,9 @@ class RemoteCommandRouter {
 
   /// Handle config commands on TV (credentials/setup from phone)
   Future<void> _handleConfigCommand(String command, String? data) async {
-    debugPrint('RemoteCommandRouter: Handling config command: $command');
+    if (command != ConfigCommand.debrifyChannelChunk) {
+      debugPrint('RemoteCommandRouter: Handling config command: $command');
+    }
 
     // Handle complete signal (doesn't need data)
     if (command == ConfigCommand.complete) {
@@ -219,6 +235,15 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
+        break;
+      case ConfigCommand.debrifyChannel:
+        await _handleDebrifyChannelConfig(data);
+        break;
+      case ConfigCommand.debrifyChannelStart:
+        _handleDebrifyChannelStart(data);
+        break;
+      case ConfigCommand.debrifyChannelChunk:
+        await _handleDebrifyChannelChunk(data);
         break;
       default:
         debugPrint('RemoteCommandRouter: Unknown config command: $command');
@@ -395,6 +420,144 @@ class RemoteCommandRouter {
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure search engines: $e');
       _showSnackBar('Search engines: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle Debrify TV channel import from remote
+  Future<void> _handleDebrifyChannelConfig(String debrifyUri) async {
+    try {
+      debugPrint('RemoteCommandRouter: Importing Debrify TV channel...');
+
+      // 1. Decode the debrify:// URI
+      final decoded = MagnetYamlService.decode(debrifyUri);
+
+      // 2. Parse YAML into channel data
+      final parsed = DebrifyTvZipImporter.parseYaml(
+        sourceName: decoded.channelName,
+        content: decoded.yamlContent,
+      );
+
+      // 3. Reuse existing channelId if a channel with the same name exists
+      final existingChannels = await DebrifyTvRepository.instance.fetchAllChannels();
+      final existingMatch = existingChannels
+          .where((c) => c.name.toLowerCase() == parsed.channelName.toLowerCase())
+          .firstOrNull;
+      final channelId = existingMatch?.channelId ??
+          DateTime.now().microsecondsSinceEpoch.toString();
+      final now = DateTime.now();
+
+      final record = DebrifyTvChannelRecord(
+        channelId: channelId,
+        name: parsed.channelName,
+        keywords: parsed.displayKeywords,
+        avoidNsfw: parsed.avoidNsfw,
+        channelNumber: 0,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final entry = DebrifyTvChannelCacheEntry(
+        version: 1,
+        channelId: channelId,
+        normalizedKeywords: parsed.normalizedKeywords,
+        fetchedAt: now.millisecondsSinceEpoch,
+        status: DebrifyTvCacheStatus.ready,
+        errorMessage: null,
+        torrents: parsed.torrents,
+        keywordStats: parsed.keywordStats,
+      );
+
+      await DebrifyTvRepository.instance.upsertChannel(record);
+      await DebrifyTvCacheService.saveEntry(entry);
+
+      debugPrint('RemoteCommandRouter: Channel imported: ${parsed.channelName}');
+      _showSnackBar('Channel imported: ${parsed.channelName}');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to import channel: $e');
+      _showSnackBar('Failed to import channel', isError: true);
+    }
+  }
+
+  /// Handle start of a chunked channel transfer
+  void _handleDebrifyChannelStart(String jsonData) {
+    try {
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final transferId = data['transferId'] as String;
+      final channelName = data['channelName'] as String;
+      final totalChunks = data['totalChunks'] as int;
+
+      debugPrint(
+        'RemoteCommandRouter: Chunked transfer started: '
+        '$channelName ($totalChunks chunks)',
+      );
+
+      // Clean up any stale buffer with the same ID
+      _chunkBuffers[transferId]?.timeout?.cancel();
+
+      _chunkBuffers[transferId] = _ChunkBuffer(
+        channelName: channelName,
+        totalChunks: totalChunks,
+        chunks: List<String?>.filled(totalChunks, null),
+        timeout: Timer(kChunkTransferTimeout, () {
+          debugPrint(
+            'RemoteCommandRouter: Chunk transfer timed out: $transferId',
+          );
+          _chunkBuffers.remove(transferId);
+          _showSnackBar('Channel transfer timed out: $channelName', isError: true);
+        }),
+      );
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to parse chunk start: $e');
+      _showSnackBar('Failed to receive channel transfer', isError: true);
+    }
+  }
+
+  /// Handle a single chunk of a chunked channel transfer
+  Future<void> _handleDebrifyChannelChunk(String jsonData) async {
+    try {
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final transferId = data['transferId'] as String;
+      final index = data['index'] as int;
+      final chunkData = data['data'] as String;
+
+      final buffer = _chunkBuffers[transferId];
+      if (buffer == null) {
+        debugPrint(
+          'RemoteCommandRouter: No buffer for transfer $transferId '
+          '(timed out or never started)',
+        );
+        return;
+      }
+
+      // Only count if this slot was not already filled (guards against duplicate UDP packets)
+      if (buffer.chunks[index] == null) {
+        buffer.receivedCount++;
+      }
+      buffer.chunks[index] = chunkData;
+
+      // Check if all chunks have arrived
+      if (buffer.receivedCount >= buffer.totalChunks) {
+        buffer.timeout?.cancel();
+        _chunkBuffers.remove(transferId);
+
+        // Reassemble: base64-decode each chunk, concatenate bytes, then UTF-8 decode
+        final byteChunks = <List<int>>[];
+        for (final chunk in buffer.chunks) {
+          byteChunks.add(base64.decode(chunk!));
+        }
+        final allBytes = byteChunks.expand((b) => b).toList();
+        final fullUri = utf8.decode(allBytes);
+
+        debugPrint(
+          'RemoteCommandRouter: All chunks received for ${buffer.channelName}, '
+          'reassembled ${fullUri.length} chars',
+        );
+
+        // Process through the normal handler
+        await _handleDebrifyChannelConfig(fullUri);
+      }
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to handle chunk: $e');
     }
   }
 
@@ -584,4 +747,20 @@ class RemoteCommandRouter {
     }
     return null;
   }
+}
+
+/// Buffer for reassembling chunked channel transfers
+class _ChunkBuffer {
+  final String channelName;
+  final int totalChunks;
+  final List<String?> chunks;
+  final Timer? timeout;
+  int receivedCount = 0;
+
+  _ChunkBuffer({
+    required this.channelName,
+    required this.totalChunks,
+    required this.chunks,
+    required this.timeout,
+  });
 }

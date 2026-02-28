@@ -6,6 +6,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
 import 'remote_dpad_widget.dart';
 import 'remote_addon_export.dart';
+import 'remote_channel_export.dart';
 import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
 
@@ -87,6 +88,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ] else if (_activeView == 'config') ...[
                       // Config view - send setup to TV
                       RemoteConfigExport(onBack: _closeView),
+                    ] else if (_activeView == 'channels') ...[
+                      // Channels view - send Debrify TV channels to TV
+                      RemoteChannelExport(onBack: _closeView),
                     ] else ...[
                       // Main menu
                       _buildConnectedMenu(state),
@@ -427,6 +431,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           title: 'Stremio Addons',
           subtitle: 'Send addons to your TV',
           onTap: () => _openView('addons'),
+        ),
+
+        const SizedBox(height: 8),
+
+        _buildMenuItem(
+          icon: Icons.live_tv_rounded,
+          title: 'Debrify TV Channels',
+          subtitle: 'Send channels to your TV',
+          onTap: () => _openView('channels'),
         ),
 
         const SizedBox(height: 8),
