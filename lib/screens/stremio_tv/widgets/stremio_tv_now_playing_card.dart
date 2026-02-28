@@ -91,6 +91,19 @@ class StremioTvNowPlayingCard extends StatelessWidget {
                 )
               else
                 _buildMetaRow(item, theme),
+              if (!hideDetails &&
+                  item.description != null &&
+                  item.description!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  item.description!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
               const SizedBox(height: 6),
               _buildProgressBar(theme),
             ],

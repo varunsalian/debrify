@@ -35,6 +35,34 @@ class XtreamCodesService {
     return '$serverUrl/player_api.php?username=$username&password=$password';
   }
 
+  /// Safely decode a JSON response body as a List, returning a user-friendly error
+  /// if the server returns non-JSON or non-array data.
+  (List<dynamic>?, String?) _decodeJsonList(String body, String label) {
+    dynamic decoded;
+    try {
+      decoded = json.decode(body);
+    } on FormatException {
+      // Server returned non-JSON (e.g. plain-text error message)
+      final preview = body.length > 200 ? body.substring(0, 200) : body;
+      return (null, 'Server returned invalid response for $label: $preview');
+    }
+
+    if (decoded is List<dynamic>) {
+      return (decoded, null);
+    }
+
+    // Some XC servers return a map with an error message instead of an array
+    if (decoded is Map<String, dynamic>) {
+      final errorMsg = decoded['error'] ?? decoded['message'];
+      if (errorMsg != null) {
+        return (null, 'Server error: $errorMsg');
+      }
+      return (null, 'Server returned unexpected format for $label');
+    }
+
+    return (null, 'Server returned unexpected format for $label');
+  }
+
   /// Authenticate and return account info
   Future<XcAuthResult> authenticate(String serverUrl, String username, String password) async {
     try {
@@ -130,13 +158,20 @@ class XtreamCodesService {
         );
       }
 
-      final categoriesData = json.decode(responses[0].body) as List<dynamic>;
-      final streamsData = json.decode(responses[1].body) as List<dynamic>;
+      final (categoriesData, catError) = _decodeJsonList(responses[0].body, 'categories');
+      if (catError != null) {
+        return IptvParseResult(channels: [], categories: [], error: catError);
+      }
+
+      final (streamsData, streamsError) = _decodeJsonList(responses[1].body, 'streams');
+      if (streamsError != null) {
+        return IptvParseResult(channels: [], categories: [], error: streamsError);
+      }
 
       // Build category ID -> name map
       final categoryMap = <String, String>{};
       final categoryNames = <String>[];
-      for (final cat in categoriesData) {
+      for (final cat in categoriesData!) {
         final id = cat['category_id']?.toString() ?? '';
         final name = cat['category_name']?.toString() ?? '';
         if (id.isNotEmpty && name.isNotEmpty) {
@@ -147,7 +182,7 @@ class XtreamCodesService {
 
       // Convert streams to IptvChannel
       final channels = <IptvChannel>[];
-      for (final stream in streamsData) {
+      for (final stream in streamsData!) {
         final streamId = stream['stream_id']?.toString() ?? '';
         final name = stream['name']?.toString() ?? '';
         if (streamId.isEmpty || name.isEmpty) continue;
@@ -222,13 +257,20 @@ class XtreamCodesService {
         );
       }
 
-      final categoriesData = json.decode(responses[0].body) as List<dynamic>;
-      final streamsData = json.decode(responses[1].body) as List<dynamic>;
+      final (categoriesData, catError) = _decodeJsonList(responses[0].body, 'categories');
+      if (catError != null) {
+        return IptvParseResult(channels: [], categories: [], error: catError);
+      }
+
+      final (streamsData, streamsError) = _decodeJsonList(responses[1].body, 'streams');
+      if (streamsError != null) {
+        return IptvParseResult(channels: [], categories: [], error: streamsError);
+      }
 
       // Build category ID -> name map
       final categoryMap = <String, String>{};
       final categoryNames = <String>[];
-      for (final cat in categoriesData) {
+      for (final cat in categoriesData!) {
         final id = cat['category_id']?.toString() ?? '';
         final name = cat['category_name']?.toString() ?? '';
         if (id.isNotEmpty && name.isNotEmpty) {
@@ -239,7 +281,7 @@ class XtreamCodesService {
 
       // Convert streams to IptvChannel
       final channels = <IptvChannel>[];
-      for (final stream in streamsData) {
+      for (final stream in streamsData!) {
         final streamId = stream['stream_id']?.toString() ?? '';
         final name = stream['name']?.toString() ?? '';
         if (streamId.isEmpty || name.isEmpty) continue;
