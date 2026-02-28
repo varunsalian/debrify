@@ -31,6 +31,7 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/stremio_tv_settings_page.dart';
+import 'settings/trakt_settings_page.dart';
 import '../widgets/remote/remote_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -61,6 +62,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pikpakConnected = false;
   String _pikpakStatus = 'Not connected';
   String _pikpakCaption = 'Tap to connect';
+
+  bool _traktConnected = false;
+  String _traktStatus = 'Not connected';
+  String _traktCaption = 'Tap to connect';
 
   String _appVersion = '';
 
@@ -159,6 +164,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       pikpakCaption = 'Logged in';
     }
 
+    bool traktConnected = false;
+    String traktStatus = 'Not connected';
+    String traktCaption = 'Tap to connect';
+
+    final traktToken = await StorageService.getTraktAccessToken();
+    if (traktToken != null && traktToken.isNotEmpty) {
+      final traktExpiry = await StorageService.getTraktTokenExpiry();
+      final traktExpired = traktExpiry != null &&
+          DateTime.now().millisecondsSinceEpoch >= traktExpiry;
+      if (!traktExpired) {
+        traktConnected = true;
+        traktStatus = 'Active';
+        final traktUsername = await StorageService.getTraktUsername();
+        traktCaption = traktUsername != null ? 'Logged in as $traktUsername' : 'Logged in';
+      } else {
+        traktStatus = 'Expired';
+        traktCaption = 'Tap to reconnect';
+      }
+    }
+
     // Load app version
     final packageInfo = await PackageInfo.fromPlatform();
     final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
@@ -178,6 +203,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _pikpakConnected = pikpakConnected;
       _pikpakStatus = pikpakStatus;
       _pikpakCaption = pikpakCaption;
+      _traktConnected = traktConnected;
+      _traktStatus = traktStatus;
+      _traktCaption = traktCaption;
       _appVersion = appVersion;
       _isAndroidTv = isAndroidTv;
       _loading = false;
@@ -231,6 +259,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           caption: 'M3U playlist channels',
           icon: Icons.live_tv,
           onTap: _openIptvSettings,
+        ),
+        trakt: _ConnectionInfo(
+          title: 'Trakt',
+          connected: _traktConnected,
+          status: _traktStatus,
+          caption: _traktCaption,
+          icon: Icons.movie_filter_rounded,
+          onTap: _openTraktSettings,
         ),
         firstCardFocusNode: _firstCardFocusNode,
       ),
@@ -294,6 +330,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).push(MaterialPageRoute(builder: (_) => const RedditSettingsPage()));
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _openTraktSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TraktSettingsPage()));
+    if (!mounted) return;
+    await _loadSummaries();
   }
 
   Future<void> _openIptvSettings() async {
@@ -478,6 +522,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
     await StorageService.clearPikPakAuth();
+    await StorageService.clearTraktAuth();
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
     await StorageService.clearPlaylist();
@@ -780,6 +825,7 @@ class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo pikpak;
   final _ConnectionInfo reddit;
   final _ConnectionInfo iptv;
+  final _ConnectionInfo trakt;
   final FocusNode? firstCardFocusNode;
 
   const _ConnectionsSummary({
@@ -788,6 +834,7 @@ class _ConnectionsSummary extends StatefulWidget {
     required this.pikpak,
     required this.reddit,
     required this.iptv,
+    required this.trakt,
     this.firstCardFocusNode,
   });
 
@@ -804,6 +851,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   late final FocusNode _pikpakFocusNode;
   late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
+  late final FocusNode _traktFocusNode;
 
   @override
   void initState() {
@@ -812,6 +860,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
     _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
+    _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
   }
 
   @override
@@ -820,6 +869,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     _pikpakFocusNode.dispose();
     _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
+    _traktFocusNode.dispose();
     super.dispose();
   }
 
@@ -894,14 +944,25 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     downNeighbor: wide ? null : _iptvFocusNode,
                   ),
                 ),
-                // Row 3: IPTV (left only)
+                // Row 3: IPTV (left), Trakt (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.iptv,
                     focusNode: _iptvFocusNode,
                     isLeftColumn: true,
+                    rightNeighbor: wide ? _traktFocusNode : null,
                     upNeighbor: _pikpakFocusNode,
+                  ),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.trakt,
+                    focusNode: _traktFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _iptvFocusNode : null,
+                    upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
                   ),
                 ),
               ],

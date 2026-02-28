@@ -6,5 +6,5 @@ Exec=debrify %u
 Icon=debrify
 Terminal=false
 Categories=Network;AudioVideo;
-MimeType=x-scheme-handler/stremio;x-scheme-handler/magnet;
+MimeType=x-scheme-handler/stremio;x-scheme-handler/magnet;x-scheme-handler/debrify;
 StartupNotify=true

@@ -24,6 +24,10 @@ class DeepLinkService {
   // Callback function to handle Stremio addon URLs
   Future<void> Function(String manifestUrl)? onStremioAddonReceived;
 
+  // Callback function to handle Trakt OAuth authorization code + state
+  void Function(String authorizationCode, String? state)? onTraktAuthorizationReceived;
+  String? _lastProcessedTraktCode;
+
   // Track recently processed links to avoid duplicates
   final Map<String, DateTime> _recentlyProcessedMagnets = {};
   final Map<String, DateTime> _recentlyProcessedUrls = {};
@@ -99,6 +103,8 @@ class DeepLinkService {
       _handleMagnetUri(uri);
     } else if (uri.scheme == 'stremio') {
       _handleStremioUri(uri);
+    } else if (uri.scheme == 'debrify') {
+      _handleDebrifyUri(uri);
     } else if (uri.scheme == 'https' || uri.scheme == 'http') {
       // Check if it's a Stremio manifest URL
       if (uri.path.endsWith('manifest.json')) {
@@ -224,6 +230,30 @@ class DeepLinkService {
       onStremioAddonReceived!(manifestUrl);
     } else {
       debugPrint('No Stremio addon handler registered');
+    }
+  }
+
+  /// Handle debrify:// URIs (OAuth callbacks, etc.)
+  void _handleDebrifyUri(Uri uri) {
+    if (uri.host == 'trakt' && uri.path == '/callback') {
+      final code = uri.queryParameters['code'];
+      final state = uri.queryParameters['state'];
+      if (code != null && code.isNotEmpty) {
+        // Deduplicate — app_links can fire the same URI twice
+        if (code == _lastProcessedTraktCode) {
+          debugPrint('Trakt OAuth: ignoring duplicate callback');
+          return;
+        }
+        _lastProcessedTraktCode = code;
+        // Clear after a short window so re-delivery after failure doesn't get stuck
+        Future.delayed(const Duration(seconds: 10), () {
+          if (_lastProcessedTraktCode == code) _lastProcessedTraktCode = null;
+        });
+        debugPrint('Trakt OAuth callback received');
+        onTraktAuthorizationReceived?.call(code, state);
+      } else {
+        debugPrint('Trakt OAuth callback missing authorization code');
+      }
     }
   }
 

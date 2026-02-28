@@ -237,6 +237,12 @@ class StorageService {
   static const String _quickPlayTryMultipleTorrentsKey = 'quick_play_try_multiple_torrents';
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
 
+  // Trakt settings
+  static const String _traktAccessTokenKey = 'trakt_access_token';
+  static const String _traktRefreshTokenKey = 'trakt_refresh_token';
+  static const String _traktUsernameKey = 'trakt_username';
+  static const String _traktTokenExpiryKey = 'trakt_token_expiry';
+
   // Remote Control Settings
   static const String _remoteControlEnabledKey = 'remote_control_enabled';
   static const String _remoteIntroShownKey = 'remote_intro_shown';
@@ -2496,6 +2502,55 @@ class StorageService {
     await prefs.remove(_redditAccessTokenKey);
     await prefs.remove(_redditRefreshTokenKey);
     await prefs.remove(_redditUsernameKey);
+  }
+
+  // Trakt Settings
+  static Future<String?> getTraktAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktAccessTokenKey);
+  }
+
+  static Future<void> setTraktAccessToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_traktAccessTokenKey, token);
+  }
+
+  static Future<String?> getTraktRefreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktRefreshTokenKey);
+  }
+
+  static Future<void> setTraktRefreshToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_traktRefreshTokenKey, token);
+  }
+
+  static Future<String?> getTraktUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktUsernameKey);
+  }
+
+  static Future<void> setTraktUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_traktUsernameKey, username);
+  }
+
+  static Future<int?> getTraktTokenExpiry() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_traktTokenExpiryKey);
+  }
+
+  static Future<void> setTraktTokenExpiry(int expiryMs) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_traktTokenExpiryKey, expiryMs);
+  }
+
+  static Future<void> clearTraktAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_traktAccessTokenKey);
+    await prefs.remove(_traktRefreshTokenKey);
+    await prefs.remove(_traktUsernameKey);
+    await prefs.remove(_traktTokenExpiryKey);
   }
 
   static Future<List<String>> getRedditRecentSubreddits() async {

@@ -46,5 +46,10 @@ Root: HKCU; Subkey: "Software\\Classes\\magnet"; ValueType: string; ValueData: "
 Root: HKCU; Subkey: "Software\\Classes\\magnet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\\Classes\\magnet\\shell\\open\\command"; ValueType: string; ValueData: """{app}\\debrify.exe"" ""%1"""
 
+; Register debrify:// URL protocol (OAuth callbacks, etc.)
+Root: HKCU; Subkey: "Software\\Classes\\debrify"; ValueType: string; ValueData: "URL:Debrify Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\\Classes\\debrify"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\\Classes\\debrify\\shell\\open\\command"; ValueType: string; ValueData: """{app}\\debrify.exe"" ""%1"""
+
 [Run]
 Filename: "{app}\\debrify.exe"; Description: "Launch Debrify"; Flags: nowait postinstall skipifsilent
