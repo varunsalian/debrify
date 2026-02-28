@@ -61,6 +61,7 @@ import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/torrent.dart';
 import '../services/stremio_subtitle_service.dart';
+import '../services/trakt/trakt_service.dart';
 import 'package:http/http.dart' as http;
 
 // Re-export PlaylistEntry for backward compatibility
@@ -139,6 +140,10 @@ class VideoPlayerScreen extends StatefulWidget {
   final String? stremioTvCurrentChannelId;
   final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
   final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
+  // Trakt scrobble: send playback progress to Trakt when playing from Trakt screen
+  final bool traktScrobble;
+  // Trakt progress: resume fallback when no local resume exists (0-100)
+  final double? traktProgressPercent;
 
   const VideoPlayerScreen({
     Key? key,
@@ -181,6 +186,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioTvCurrentChannelId,
     this.stremioTvGuideDataProvider,
     this.stremioTvChannelSwitchProvider,
+    this.traktScrobble = false,
+    this.traktProgressPercent,
   })  : assert(randomStartMaxPercent >= 0),
         super(key: key);
 
@@ -417,6 +424,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
 
+  // Trakt scrobble state
+  bool _traktScrobbleEnabled = false;
+  String? _traktLastScrobbleAction;
+
   Duration? _randomStartOffset(Duration duration) {
     final num clampedPercent =
         widget.randomStartMaxPercent.clamp(0, 99);
@@ -495,6 +506,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       parent: _rainbowController,
       curve: Curves.easeInOut,
     );
+
+    // Check if Trakt scrobbling should be enabled for this playback
+    _initTraktScrobble();
+  }
+
+  Future<void> _initTraktScrobble() async {
+    if (!widget.traktScrobble) return;
+    if (widget.contentImdbId == null || widget.contentType != 'movie') return;
+    _traktScrobbleEnabled = await TraktService.instance.isAuthenticated();
+    if (!mounted) return;
+    // If player started playing before auth resolved, scrobble start now
+    if (_traktScrobbleEnabled && _isPlaying && _duration > Duration.zero) {
+      _traktScrobble('start');
+    }
+  }
+
+  double _traktProgress() {
+    if (_duration.inMilliseconds <= 0) return 0.0;
+    return (_position.inMilliseconds / _duration.inMilliseconds * 100)
+        .clamp(0.0, 100.0);
+  }
+
+  void _traktScrobble(String action) {
+    if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
+    if (_traktLastScrobbleAction == action) return;
+    _traktLastScrobbleAction = action;
+    final imdbId = widget.contentImdbId!;
+    final progress = _traktProgress();
+    switch (action) {
+      case 'start':
+        TraktService.instance.scrobbleStart(imdbId, progress);
+        break;
+      case 'pause':
+        TraktService.instance.scrobblePause(imdbId, progress);
+        break;
+      case 'stop':
+        TraktService.instance.scrobbleStop(imdbId, progress);
+        break;
+    }
+  }
+
+  void _maybeSeekToTraktProgress() {
+    final percent = widget.traktProgressPercent;
+    if (percent == null || percent <= 0 || percent >= 100) return;
+    final dur = _duration;
+    if (dur <= Duration.zero) return;
+    final ms = (dur.inMilliseconds * percent / 100).floor();
+    final position = Duration(milliseconds: ms);
+    if (position > const Duration(seconds: 2) && position < dur * 0.9) {
+      _player.seek(position);
+      debugPrint('Trakt: Resumed from Trakt progress ${percent.round()}%');
+    }
   }
 
   Future<void> _initializePlayer() async {
@@ -702,7 +765,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (mounted) setState(() {});
     });
     _playSub = _player.stream.playing.listen((p) {
+      final wasPlaying = _isPlaying;
       _isPlaying = p;
+      // Trakt scrobble on play/pause
+      if (p && _duration > Duration.zero) {
+        _traktScrobble('start');
+      } else if (!p && wasPlaying && !_isTransitioning && _traktLastScrobbleAction != 'stop') {
+        _traktScrobble('pause');
+      }
       if (p && _transitionRunning) {
         // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
         _transitionStopTimer?.cancel();
@@ -852,6 +922,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _onPlaybackEnded() async {
+    // Scrobble stop to Trakt when movie finishes
+    _traktScrobble('stop');
+
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
 
@@ -2747,6 +2820,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    // Scrobble stop to Trakt when user exits player
+    _traktScrobble('stop');
+
     // Save the current state before disposing
     _saveResume();
 
@@ -2897,6 +2973,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // If playing from Trakt and Trakt has progress, prefer it over local resume
+    if (widget.traktProgressPercent != null && widget.traktProgressPercent! > 0 && widget.traktProgressPercent! < 100) {
+      await _waitForDuration();
+      _maybeSeekToTraktProgress();
+      return;
+    }
+
     // Try enhanced playback state first
     final enhancedData = await _getEnhancedPlaybackState();
     if (enhancedData != null) {
@@ -2912,6 +2995,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (dur > Duration.zero &&
           position > const Duration(seconds: 2) &&
           position < dur * 0.9) {
+        debugPrint('Resume: restored from local state at ${(posMs / 1000).round()}s');
         await _player.seek(position);
       }
 
@@ -2930,6 +3014,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _waitForDuration();
     final data = await StorageService.getVideoResume(_resumeKey);
     if (data == null) {
+      // Final fallback: Trakt progress (only when no local resume exists)
+      _maybeSeekToTraktProgress();
       return;
     }
 

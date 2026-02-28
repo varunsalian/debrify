@@ -117,6 +117,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
   bool _isAuthenticated = false;
   bool _authChecked = false;
 
+  // Watch progress (movies only): imdbId → 0-100
+  Map<String, double> _watchProgress = {};
+  bool _progressLoaded = false;
+
   // Focus nodes for DPAD
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'trakt-content-type');
@@ -234,6 +238,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _items = metas;
       });
       _applySearchFilter(); // Also rebuilds _cardFocusNodes
+
+      // Fetch watch progress for movies (non-blocking)
+      if (_selectedContentType == TraktContentType.movies) {
+        _fetchMovieProgress();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -266,10 +275,43 @@ class TraktResultsViewState extends State<TraktResultsView> {
     setState(() => _filteredItems = filtered);
   }
 
+  Future<void> _fetchMovieProgress() async {
+    try {
+      // Start with watched movies (all 100%)
+      final watched = await _traktService.fetchWatchedMovies();
+      if (!mounted) return;
+
+      // Overlay playback progress (partial overrides completed — user may be rewatching)
+      final playback = await _traktService.fetchPlaybackProgress();
+      if (!mounted) return;
+
+      final merged = <String, double>{...watched};
+      for (final entry in playback.entries) {
+        if (entry.value > 5.0) {
+          // Meaningful rewatch progress — override "Watched"
+          merged[entry.key] = entry.value;
+        } else if (!merged.containsKey(entry.key)) {
+          // Not previously watched — show actual progress
+          merged[entry.key] = entry.value;
+        }
+      }
+      setState(() {
+        _watchProgress = merged;
+        _progressLoaded = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // Non-critical — items still display without progress
+      debugPrint('Trakt: Failed to fetch watch progress: $e');
+    }
+  }
+
   void _onListTypeChanged(TraktListType? type) {
     if (type == null || type == _selectedListType) return;
     setState(() {
       _selectedListType = type;
+      _watchProgress = {};
+      _progressLoaded = false;
       if (type == TraktListType.customList && !_customListsLoaded) {
         _selectedCustomList = null;
       }
@@ -279,7 +321,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   void _onContentTypeChanged(TraktContentType? type) {
     if (type == null || type == _selectedContentType) return;
-    setState(() => _selectedContentType = type);
+    setState(() {
+      _selectedContentType = type;
+      _watchProgress = {};
+      _progressLoaded = false;
+    });
     _fetchItems();
   }
 
@@ -287,6 +333,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
     if (list == null || list == _selectedCustomList) return;
     setState(() => _selectedCustomList = list);
     _fetchItems();
+  }
+
+  double? _traktProgressForItem(StremioMeta item) {
+    if (!_progressLoaded || item.type != 'movie') return null;
+    final imdbId = item.effectiveImdbId ?? item.id;
+    final p = _watchProgress[imdbId];
+    // Only useful for partial progress (not fully watched or unstarted)
+    if (p == null || p <= 0 || p >= 100) return null;
+    return p;
   }
 
   void _onItemTap(StremioMeta item) {
@@ -297,6 +352,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       year: item.year,
       contentType: item.type,
       posterUrl: item.poster,
+      traktProgressPercent: _traktProgressForItem(item),
     );
     widget.onItemSelected(selection);
   }
@@ -309,6 +365,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       year: item.year,
       contentType: item.type,
       posterUrl: item.poster,
+      traktProgressPercent: _traktProgressForItem(item),
     );
     if (widget.onQuickPlay != null) {
       widget.onQuickPlay!(selection);
@@ -552,6 +609,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: _TraktItemCard(
               item: item,
+              progress: _selectedContentType == TraktContentType.movies && _progressLoaded
+                  ? _watchProgress[item.effectiveImdbId ?? item.id]
+                  : null,
               focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
               onSources: () => _onItemTap(item),
               onQuickPlay: () => _onQuickPlay(item),
@@ -706,6 +766,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
 /// Features Browse and Quick Play buttons with DPAD navigation support.
 class _TraktItemCard extends StatefulWidget {
   final StremioMeta item;
+  final double? progress; // null = don't show, 0-100 = percentage
   final FocusNode? focusNode;
   final VoidCallback onSources;
   final VoidCallback onQuickPlay;
@@ -714,6 +775,7 @@ class _TraktItemCard extends StatefulWidget {
 
   const _TraktItemCard({
     required this.item,
+    this.progress,
     this.focusNode,
     required this.onSources,
     required this.onQuickPlay,
@@ -821,15 +883,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Poster
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 80,
-            height: 120,
-            child: _buildPoster(colorScheme),
-          ),
-        ),
+        // Poster with progress bar overlay
+        _buildPosterWithProgress(colorScheme, width: 80, height: 120),
         const SizedBox(width: 14),
         // Details
         Expanded(
@@ -921,14 +976,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 60,
-                height: 85,
-                child: _buildPoster(colorScheme),
-              ),
-            ),
+            _buildPosterWithProgress(colorScheme, width: 60, height: 85),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1026,6 +1074,56 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     );
   }
 
+  Widget _buildPosterWithProgress(ColorScheme colorScheme, {required double width, required double height}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildPoster(colorScheme),
+            if (widget.progress != null && widget.progress! > 0 && widget.progress! < 100)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 3,
+                  color: Colors.black.withValues(alpha: 0.5),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: (widget.progress! / 100).clamp(0.0, 1.0),
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24),
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.progress != null && widget.progress! >= 100)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF34D399),
+                    borderRadius: BorderRadius.circular(1.5),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetadataRow(ThemeData theme, ColorScheme colorScheme) {
     return Row(
       children: [
@@ -1075,6 +1173,36 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               fontWeight: FontWeight.w500,
             ),
           ),
+        ],
+        if (widget.progress != null) ...[
+          const SizedBox(width: 8),
+          if (widget.progress! >= 100.0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF34D399).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'Watched',
+                style: TextStyle(
+                  color: Color(0xFF34D399),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else
+            Text(
+              '${widget.progress!.round()}%',
+              style: TextStyle(
+                color: widget.progress! > 0
+                    ? const Color(0xFFFBBF24)
+                    : Colors.white.withValues(alpha: 0.3),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
         ],
       ],
     );

@@ -184,6 +184,78 @@ class TraktService {
   }
 
   // ============================================================================
+  // Scrobble Methods
+  // ============================================================================
+
+  /// Authenticated POST request with automatic token refresh on 401.
+  Future<http.Response?> _authenticatedPost(
+      String path, Map<String, dynamic> body) async {
+    var accessToken = await StorageService.getTraktAccessToken();
+    if (accessToken == null) return null;
+
+    try {
+      var response = await http.post(
+        Uri.parse('$kTraktApiBaseUrl$path'),
+        headers: _apiHeaders(accessToken: accessToken),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      // If unauthorized, try refreshing the token once
+      if (response.statusCode == 401) {
+        final refreshed = await refreshAccessToken();
+        if (!refreshed) return null;
+
+        accessToken = await StorageService.getTraktAccessToken();
+        if (accessToken == null) return null;
+
+        response = await http.post(
+          Uri.parse('$kTraktApiBaseUrl$path'),
+          headers: _apiHeaders(accessToken: accessToken),
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 15));
+      }
+
+      return response;
+    } catch (e) {
+      debugPrint('Trakt: POST $path error: $e');
+      return null;
+    }
+  }
+
+  /// Scrobble: notify Trakt that playback has started.
+  Future<bool> scrobbleStart(String imdbId, double progress) async {
+    return _scrobble('/scrobble/start', imdbId, progress);
+  }
+
+  /// Scrobble: notify Trakt that playback was paused.
+  Future<bool> scrobblePause(String imdbId, double progress) async {
+    return _scrobble('/scrobble/pause', imdbId, progress);
+  }
+
+  /// Scrobble: notify Trakt that playback was stopped.
+  Future<bool> scrobbleStop(String imdbId, double progress) async {
+    return _scrobble('/scrobble/stop', imdbId, progress);
+  }
+
+  Future<bool> _scrobble(String path, String imdbId, double progress) async {
+    final body = {
+      'movie': {
+        'ids': {'imdb': imdbId},
+      },
+      'progress': progress,
+    };
+    final response = await _authenticatedPost(path, body);
+    if (response == null) return false;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      debugPrint('Trakt: Scrobble $path OK (progress: $progress)');
+      return true;
+    }
+    debugPrint(
+        'Trakt: Scrobble $path failed (${response.statusCode}): ${response.body}');
+    return false;
+  }
+
+  // ============================================================================
   // List API Methods
   // ============================================================================
 
@@ -301,6 +373,67 @@ class TraktService {
     } catch (e) {
       debugPrint('Trakt: Failed to fetch username: $e');
       return false;
+    }
+  }
+
+  // ============================================================================
+  // Watch Progress Methods
+  // ============================================================================
+
+  /// Fetch playback progress for movies paused mid-watch.
+  /// Returns a map of IMDB ID → progress percentage (0-100).
+  Future<Map<String, double>> fetchPlaybackProgress() async {
+    final response = await _authenticatedGet('/sync/playback/movies');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchPlaybackProgress failed (${response?.statusCode})');
+      return {};
+    }
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      final result = <String, double>{};
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final progress = item['progress'] as num?;
+        final movie = item['movie'] as Map<String, dynamic>?;
+        final ids = movie?['ids'] as Map<String, dynamic>?;
+        final imdbId = ids?['imdb'] as String?;
+        if (imdbId != null && progress != null) {
+          result[imdbId] = progress.toDouble();
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Trakt: fetchPlaybackProgress parse error: $e');
+      return {};
+    }
+  }
+
+  /// Fetch all watched movies.
+  /// Returns a map of IMDB ID → 100.0 (fully watched).
+  Future<Map<String, double>> fetchWatchedMovies() async {
+    final response = await _authenticatedGet('/sync/watched/movies');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchWatchedMovies failed (${response?.statusCode})');
+      return {};
+    }
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      final result = <String, double>{};
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        final movie = item['movie'] as Map<String, dynamic>?;
+        final ids = movie?['ids'] as Map<String, dynamic>?;
+        final imdbId = ids?['imdb'] as String?;
+        if (imdbId != null) {
+          result[imdbId] = 100.0;
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Trakt: fetchWatchedMovies parse error: $e');
+      return {};
     }
   }
 }

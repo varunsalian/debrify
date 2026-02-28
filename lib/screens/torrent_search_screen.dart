@@ -637,6 +637,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.infohash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
   }
@@ -2248,6 +2250,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       episode: episode,
       contentType: _selectedImdbTitle!.contentType,
       posterUrl: _selectedImdbTitle!.posterUrl,
+      traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
     );
 
     debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}');
@@ -6463,6 +6466,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: 0,
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
   }
@@ -9003,6 +9008,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+            traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+            traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
       } catch (e) {
@@ -9138,6 +9145,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
   }
@@ -10292,6 +10301,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: 0,
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+            traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+            traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
       } else {
@@ -10792,6 +10803,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           stremioSources: _torrents,
           stremioCurrentSourceIndex: 0,
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+          traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+          traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
         ),
       );
     } catch (e) {

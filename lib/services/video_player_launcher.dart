@@ -193,6 +193,10 @@ class VideoPlayerLaunchArgs {
   final int? stremioTvMixSalt;
   final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
   final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
+  // Trakt scrobble: send playback progress to Trakt
+  final bool traktScrobble;
+  // Trakt progress: resume fallback when no local resume exists (0-100)
+  final double? traktProgressPercent;
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -235,6 +239,8 @@ class VideoPlayerLaunchArgs {
     this.stremioTvMixSalt,
     this.stremioTvGuideDataProvider,
     this.stremioTvChannelSwitchProvider,
+    this.traktScrobble = false,
+    this.traktProgressPercent,
   });
 
   VideoPlayerScreen toWidget() {
@@ -275,6 +281,8 @@ class VideoPlayerLaunchArgs {
       stremioTvCurrentChannelId: stremioTvCurrentChannelId,
       stremioTvGuideDataProvider: stremioTvGuideDataProvider,
       stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
+      traktScrobble: traktScrobble,
+      traktProgressPercent: traktProgressPercent,
     );
   }
 }
