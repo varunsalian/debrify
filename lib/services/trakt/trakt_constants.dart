@@ -12,10 +12,10 @@ const String kTraktClientId =
 const String kTraktClientSecret =
     '74f0994f0783dfb470645685dbf39675f0102fd66f475579ae1de7b2ec2bd466';
 
-const String kTraktRedirectUri = 'debrify://trakt/callback';
-
 const String kTraktApiBaseUrl = 'https://api.trakt.tv';
-const String kTraktAuthUrl = 'https://trakt.tv/oauth/authorize';
 const String kTraktTokenUrl = '$kTraktApiBaseUrl/oauth/token';
+
+const String kTraktDeviceCodeUrl = '$kTraktApiBaseUrl/oauth/device/code';
+const String kTraktDeviceTokenUrl = '$kTraktApiBaseUrl/oauth/device/token';
 
 const String kTraktApiVersion = '2';

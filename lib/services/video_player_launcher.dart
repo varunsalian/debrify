@@ -27,6 +27,11 @@ import '../services/pikpak_api_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
+import '../services/trakt/trakt_service.dart';
+
+/// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
+String? _traktLastScrobbleAction;
+double _traktLastKnownProgress = 0.0;
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 final Map<String, String> _redirectCache = <String, String>{};
@@ -1313,6 +1318,25 @@ class VideoPlayerLauncher {
         _cacheResolvedStream(resumeId, progressUrl);
       }
 
+      // Trakt scrobble for Android TV player (movies only — series needs episode-level scrobble)
+      if (payload.traktScrobble && payload.imdbId != null && durationMs > 0 && payload.contentType != _PlaybackContentType.series) {
+        // Treat buffering as still playing — ExoPlayer sets isPlaying=false during buffer
+        final isPlaying = progress['isPlaying'] == true || progress['isBuffering'] == true;
+        final traktProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
+        _traktLastKnownProgress = traktProgress;
+        final imdbId = payload.imdbId!;
+        if (completed && _traktLastScrobbleAction != 'stop') {
+          _traktLastScrobbleAction = 'stop';
+          TraktService.instance.scrobbleStop(imdbId, traktProgress);
+        } else if (isPlaying && _traktLastScrobbleAction != 'start') {
+          _traktLastScrobbleAction = 'start';
+          TraktService.instance.scrobbleStart(imdbId, traktProgress);
+        } else if (!isPlaying && !completed && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'pause' && _traktLastScrobbleAction != 'stop') {
+          _traktLastScrobbleAction = 'pause';
+          TraktService.instance.scrobblePause(imdbId, traktProgress);
+        }
+      }
+
       if (payload.contentType == _PlaybackContentType.series) {
         final season = progress['season'] as int?;
         final episode = progress['episode'] as int?;
@@ -1433,6 +1457,12 @@ class VideoPlayerLauncher {
     debugPrint(
       'VideoPlayerLauncher: Android TV playback finished for "${payload.title}"',
     );
+    // Final Trakt scrobble stop on playback exit
+    if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'stop') {
+      TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress);
+    }
+    _traktLastScrobbleAction = null;
+    _traktLastKnownProgress = 0.0;
   }
 
   static Future<String> _resolveEntryUrl(
@@ -1543,6 +1573,8 @@ class _AndroidTvPlaybackPayload {
   final List<Map<String, dynamic>>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final bool hasPlaylistResolver;
+  final bool traktScrobble;
+  final double? traktProgressPercent;
 
   const _AndroidTvPlaybackPayload({
     required this.contentType,
@@ -1560,6 +1592,8 @@ class _AndroidTvPlaybackPayload {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.hasPlaylistResolver = false,
+    this.traktScrobble = false,
+    this.traktProgressPercent,
   });
 
   Map<String, dynamic> toMap() {
@@ -1583,6 +1617,8 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
+      if (traktProgressPercent != null && traktProgressPercent! > 0 && traktProgressPercent! < 100)
+        'traktProgressPercent': traktProgressPercent,
     };
   }
 }
@@ -1950,6 +1986,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
       hasPlaylistResolver: args.resolveSourceToPlaylist != null,
+      traktScrobble: args.traktScrobble,
+      traktProgressPercent: args.traktProgressPercent,
     );
 
     return _AndroidTvPlaybackPayloadResult(

@@ -312,8 +312,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
                     hideBufferingIndicator()
+                    // Trakt progress takes priority over local resume (same as Dart player)
+                    val traktPct = payload?.traktProgressPercent ?: 0.0
                     val startPct = payload?.startAtPercent ?: 0.0
-                    if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
+                    if (traktPct > 0 && traktPct < 100 && !percentSeekApplied) {
+                        val duration = player?.duration ?: 0
+                        if (duration > 0) {
+                            val offset = (duration * traktPct / 100.0).toLong()
+                            if (offset > 2000 && offset < (duration * 0.9).toLong()) {
+                                player?.seekTo(offset)
+                                android.util.Log.d("AndroidTvPlayer", "Trakt: Resumed from Trakt progress ${traktPct.toInt()}% ($offset ms of $duration ms)")
+                                percentSeekApplied = true
+                                pendingSeekMs = 0
+                            }
+                            // If guards failed, fall through to startPct / pendingSeekMs
+                        }
+                    } else if (startPct > 0 && !startPct.isNaN() && !percentSeekApplied) {
                         val duration = player?.duration ?: 0
                         if (duration > 0) {
                             val offset = (duration * startPct).toLong()
@@ -4357,7 +4371,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
             "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
             "completed" to completed,
-            "url" to item.url
+            "url" to item.url,
+            "isPlaying" to (player?.isPlaying ?: false),
+            "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
         )
 
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
@@ -5082,6 +5098,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 if (it.isNaN() || it.isInfinite()) 0.0 else it
             }
 
+            // Parse Trakt progress for resume (0-100, takes priority over local resume)
+            val traktProgressPercent = obj.optDouble("traktProgressPercent", 0.0).let {
+                if (it.isNaN() || it.isInfinite()) 0.0 else it
+            }
+
             // Parse Stremio sources for source switching
             val stremioSourcesJson = obj.optJSONArray("stremioSources")
             if (stremioSourcesJson != null && stremioSourcesJson.length() > 0) {
@@ -5111,6 +5132,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 collectionGroups = collectionGroups,
                 imdbId = imdbId,
                 startAtPercent = startAtPercent,
+                traktProgressPercent = traktProgressPercent,
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
@@ -6021,6 +6043,7 @@ private data class PlaybackPayload(
     var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
     val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
     val startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration
+    val traktProgressPercent: Double = 0.0, // Trakt watch progress (0-100) for resume — takes priority over local resume
 )
 
 private data class PlaybackItem(

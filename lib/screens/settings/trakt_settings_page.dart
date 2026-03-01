@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../services/deep_link_service.dart';
 import '../../services/trakt/trakt_service.dart';
 
 class TraktSettingsPage extends StatefulWidget {
@@ -12,99 +13,32 @@ class TraktSettingsPage extends StatefulWidget {
   State<TraktSettingsPage> createState() => _TraktSettingsPageState();
 }
 
-class _TraktSettingsPageState extends State<TraktSettingsPage>
-    with WidgetsBindingObserver {
+class _TraktSettingsPageState extends State<TraktSettingsPage> {
   bool _loading = true;
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _username;
 
-  // Store previous callback so we can restore it on dispose
-  void Function(String, String?)? _previousCallback;
-  Timer? _resumeResetTimer;
+  // Device code flow
+  String? _userCode;
+  String? _verificationUrl;
+  String? _deviceCode;
+  Timer? _pollTimer;
+  int _pollInterval = 5;
+  DateTime? _codeExpiresAt;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
-    _registerDeepLinkCallback();
   }
 
   @override
   void dispose() {
-    _resumeResetTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    DeepLinkService().onTraktAuthorizationReceived = _previousCallback;
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isConnecting && !_isConnected) {
-      // User returned from browser without completing auth — reset after a grace period
-      _resumeResetTimer?.cancel();
-      _resumeResetTimer = Timer(const Duration(seconds: 2), () {
-        if (mounted && _isConnecting && !_isConnected) {
-          setState(() => _isConnecting = false);
-        }
-      });
-    }
-  }
-
-  void _registerDeepLinkCallback() {
-    final deepLinkService = DeepLinkService();
-    _previousCallback = deepLinkService.onTraktAuthorizationReceived;
-    deepLinkService.onTraktAuthorizationReceived = _handleAuthCallback;
-  }
-
-  void _handleAuthCallback(String code, String? state) {
-    _resumeResetTimer?.cancel();
-
-    if (!_isConnecting) return; // Stale callback — not in an active login flow
-
-    // Validate OAuth state to prevent CSRF
-    if (!TraktService.instance.validateState(state)) {
-      debugPrint('Trakt OAuth: state mismatch — ignoring callback');
-      if (mounted) {
-        setState(() => _isConnecting = false);
-        _showSnackBar('Authorization failed: invalid state');
-      }
-      return;
-    }
-
-    _handleAuthCode(code);
-  }
-
-  Future<void> _handleAuthCode(String code) async {
-    try {
-      if (!mounted) return;
-
-      setState(() => _isConnecting = true);
-
-      final success = await TraktService.instance.exchangeCode(code);
-
-      if (!mounted) return;
-
-      if (success) {
-        final username = await TraktService.instance.getUsername();
-        setState(() {
-          _isConnected = true;
-          _isConnecting = false;
-          _username = username;
-        });
-        _showSnackBar('Connected to Trakt as ${username ?? 'unknown'}', isError: false);
-      } else {
-        setState(() => _isConnecting = false);
-        _showSnackBar('Failed to connect to Trakt');
-      }
-    } catch (e) {
-      debugPrint('Trakt: Auth code exchange error: $e');
-      if (mounted) {
-        setState(() => _isConnecting = false);
-        _showSnackBar('Connection error: $e');
-      }
-    }
   }
 
   Future<void> _loadSettings() async {
@@ -124,12 +58,112 @@ class _TraktSettingsPageState extends State<TraktSettingsPage>
     setState(() => _isConnecting = true);
 
     try {
-      await TraktService.instance.launchAuth();
+      final result = await TraktService.instance.requestDeviceCode();
+      if (!mounted) return;
+
+      if (result == null) {
+        setState(() => _isConnecting = false);
+        _showSnackBar('Failed to get device code from Trakt');
+        return;
+      }
+
+      final expiresIn = result['expires_in'] as int? ?? 600;
+      _pollInterval = result['interval'] as int? ?? 5;
+
+      setState(() {
+        _userCode = result['user_code'] as String?;
+        _verificationUrl = result['verification_url'] as String?;
+        _deviceCode = result['device_code'] as String?;
+        _codeExpiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+      });
+
+      _startCountdownTimer();
+      _startPolling();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isConnecting = false);
-      _showSnackBar('Failed to open Trakt login: $e');
+      _showSnackBar('Failed to start login: $e');
     }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(Duration(seconds: _pollInterval), (_) => _pollOnce());
+  }
+
+  Future<void> _pollOnce() async {
+    if (_deviceCode == null) return;
+
+    final error = await TraktService.instance.pollDeviceToken(_deviceCode!);
+
+    if (!mounted) return;
+
+    if (error == null) {
+      // Success
+      _pollTimer?.cancel();
+      _countdownTimer?.cancel();
+      final username = await TraktService.instance.getUsername();
+      if (!mounted) return;
+      setState(() {
+        _isConnected = true;
+        _isConnecting = false;
+        _username = username;
+        _resetDeviceCodeState();
+      });
+      _showSnackBar('Connected to Trakt as ${username ?? 'unknown'}', isError: false);
+      return;
+    }
+
+    switch (error) {
+      case 'authorization_pending':
+        break;
+      case 'slow_down':
+        _pollInterval += 5;
+        _pollTimer?.cancel();
+        _startPolling();
+        break;
+      case 'expired_token':
+        _stopDeviceCodeFlow();
+        _showSnackBar('Code expired. Please try again.');
+        break;
+      case 'access_denied':
+        _stopDeviceCodeFlow();
+        _showSnackBar('Authorization denied.');
+        break;
+      default:
+        _stopDeviceCodeFlow();
+        _showSnackBar('Authorization failed. Please try again.');
+    }
+  }
+
+  void _startCountdownTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {}); // Refresh countdown display
+      if (_codeExpiresAt != null && DateTime.now().isAfter(_codeExpiresAt!)) {
+        _stopDeviceCodeFlow();
+        _showSnackBar('Code expired. Please try again.');
+      }
+    });
+  }
+
+  void _stopDeviceCodeFlow() {
+    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isConnecting = false;
+        _resetDeviceCodeState();
+      });
+    }
+  }
+
+  void _resetDeviceCodeState() {
+    _userCode = null;
+    _verificationUrl = null;
+    _deviceCode = null;
+    _codeExpiresAt = null;
   }
 
   Future<void> _logout() async {
@@ -152,6 +186,15 @@ class _TraktSettingsPageState extends State<TraktSettingsPage>
         backgroundColor: isError ? Colors.red : Colors.green,
       ),
     );
+  }
+
+  String _formatCountdown() {
+    if (_codeExpiresAt == null) return '';
+    final remaining = _codeExpiresAt!.difference(DateTime.now());
+    if (remaining.isNegative) return 'Expired';
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
   @override
@@ -216,23 +259,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage>
                   ),
                   const SizedBox(height: 16),
                   if (!_isConnected)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _isConnecting ? null : _login,
-                        icon: _isConnecting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.login),
-                        label: Text(_isConnecting ? 'Waiting for authorization...' : 'Login with Trakt'),
-                      ),
-                    )
+                    _buildLoginSection()
                   else
                     SizedBox(
                       width: double.infinity,
@@ -271,8 +298,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Clicking "Login with Trakt" will open your browser where you can authorize Debrify. '
-                    'After approval, you\'ll be redirected back to the app automatically.',
+                    'Clicking "Login with Trakt" will show a code on screen. '
+                    'Enter this code at trakt.tv/activate on your phone or computer to authorize Debrify.',
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
@@ -281,6 +308,120 @@ class _TraktSettingsPageState extends State<TraktSettingsPage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoginSection() {
+    // Show device code UI when connecting
+    if (_isConnecting && _userCode != null) {
+      return _buildDeviceCodeCard();
+    }
+
+    // Login button
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _isConnecting ? null : _login,
+        icon: _isConnecting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.login),
+        label: Text(_isConnecting ? 'Getting code...' : 'Login with Trakt'),
+      ),
+    );
+  }
+
+  Widget _buildDeviceCodeCard() {
+    return Column(
+      children: [
+        // User code display
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'Enter this code:',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: _userCode!));
+                  _showSnackBar('Code copied to clipboard', isError: false);
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SelectableText(
+                      _userCode!,
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 4,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.copy, size: 20, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Verification URL
+        GestureDetector(
+          onTap: () {
+            final url = _verificationUrl ?? 'https://trakt.tv/activate';
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          },
+          child: Text(
+            'Go to ${_verificationUrl ?? 'https://trakt.tv/activate'}',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'on your phone or computer',
+          style: TextStyle(fontSize: 13, color: Colors.grey),
+        ),
+        const SizedBox(height: 12),
+
+        // Countdown
+        Text(
+          'Code expires in ${_formatCountdown()}',
+          style: const TextStyle(fontSize: 13, color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+
+        // Cancel button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: _stopDeviceCodeFlow,
+            child: const Text('Cancel'),
+          ),
+        ),
+      ],
     );
   }
 }

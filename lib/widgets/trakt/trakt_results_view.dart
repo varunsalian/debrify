@@ -276,14 +276,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   Future<void> _fetchMovieProgress() async {
+    final capturedContentType = _selectedContentType;
     try {
       // Start with watched movies (all 100%)
       final watched = await _traktService.fetchWatchedMovies();
-      if (!mounted) return;
+      if (!mounted || _selectedContentType != capturedContentType) return;
 
       // Overlay playback progress (partial overrides completed — user may be rewatching)
       final playback = await _traktService.fetchPlaybackProgress();
-      if (!mounted) return;
+      if (!mounted || _selectedContentType != capturedContentType) return;
 
       final merged = <String, double>{...watched};
       for (final entry in playback.entries) {

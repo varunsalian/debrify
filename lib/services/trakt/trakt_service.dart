@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../storage_service.dart';
 import 'trakt_constants.dart';
@@ -15,9 +13,6 @@ class TraktService {
   TraktService._internal();
 
   static TraktService get instance => _instance;
-
-  /// In-memory OAuth state nonce for CSRF protection.
-  String? _pendingOAuthState;
 
   /// Common headers for all Trakt API requests.
   Map<String, String> _apiHeaders({String? accessToken}) => {
@@ -43,73 +38,6 @@ class TraktService {
     return true;
   }
 
-  /// Open the Trakt authorization page in the user's browser.
-  Future<void> launchAuth() async {
-    // Generate a random state nonce for CSRF protection
-    final random = Random.secure();
-    _pendingOAuthState = base64Url.encode(
-      List.generate(16, (_) => random.nextInt(256)),
-    );
-
-    final uri = Uri.parse(
-      '$kTraktAuthUrl'
-      '?client_id=$kTraktClientId'
-      '&response_type=code'
-      '&redirect_uri=${Uri.encodeComponent(kTraktRedirectUri)}'
-      '&state=$_pendingOAuthState',
-    );
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      _pendingOAuthState = null;
-      throw Exception('Could not launch Trakt authorization URL');
-    }
-  }
-
-  /// Validate the OAuth state parameter. Returns true if valid.
-  bool validateState(String? state) {
-    if (_pendingOAuthState == null || state == null) return false;
-    final valid = state == _pendingOAuthState;
-    _pendingOAuthState = null; // Consume the nonce
-    return valid;
-  }
-
-  /// Exchange an authorization code for access + refresh tokens.
-  /// Called after the user approves the app and we receive the callback.
-  Future<bool> exchangeCode(String code) async {
-    try {
-      final response = await http.post(
-        Uri.parse(kTraktTokenUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'code': code,
-          'client_id': kTraktClientId,
-          'client_secret': kTraktClientSecret,
-          'redirect_uri': kTraktRedirectUri,
-          'grant_type': 'authorization_code',
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _storeTokens(data);
-
-        // Fetch and store the username
-        final accessToken = data['access_token'] as String;
-        await _fetchAndStoreUsername(accessToken);
-
-        return true;
-      }
-
-      debugPrint('Trakt: Token exchange failed (${response.statusCode}): ${response.body}');
-      return false;
-    } catch (e) {
-      debugPrint('Trakt: Token exchange error: $e');
-      return false;
-    }
-  }
-
   /// Refresh the access token using the stored refresh token.
   Future<bool> refreshAccessToken() async {
     try {
@@ -123,7 +51,6 @@ class TraktService {
           'refresh_token': refreshToken,
           'client_id': kTraktClientId,
           'client_secret': kTraktClientSecret,
-          'redirect_uri': kTraktRedirectUri,
           'grant_type': 'refresh_token',
         }),
       ).timeout(const Duration(seconds: 10));
@@ -180,6 +107,69 @@ class TraktService {
           .add(Duration(seconds: expiresIn))
           .millisecondsSinceEpoch;
       await StorageService.setTraktTokenExpiry(expiryMs);
+    }
+  }
+
+  // ============================================================================
+  // Device Code Flow (for Android TV)
+  // ============================================================================
+
+  /// Request a device code for the device code OAuth flow.
+  /// Returns the parsed JSON response on success, null on failure.
+  Future<Map<String, dynamic>?> requestDeviceCode() async {
+    try {
+      final response = await http.post(
+        Uri.parse(kTraktDeviceCodeUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'client_id': kTraktClientId}),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      debugPrint('Trakt: Device code request failed (${response.statusCode}): ${response.body}');
+      return null;
+    } catch (e) {
+      debugPrint('Trakt: Device code request error: $e');
+      return null;
+    }
+  }
+
+  /// Poll for a device token using the device code.
+  /// Returns null on success (tokens stored), or an error string:
+  /// "authorization_pending", "slow_down", "expired_token", "access_denied", "error".
+  Future<String?> pollDeviceToken(String deviceCode) async {
+    try {
+      final response = await http.post(
+        Uri.parse(kTraktDeviceTokenUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'code': deviceCode,
+          'client_id': kTraktClientId,
+          'client_secret': kTraktClientSecret,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        await _storeTokens(data);
+        final accessToken = data['access_token'] as String;
+        await _fetchAndStoreUsername(accessToken);
+        return null; // Success
+      }
+
+      if (response.statusCode == 400) {
+        if (response.body.isEmpty) return 'authorization_pending';
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['error'] as String? ?? 'error';
+      }
+
+      debugPrint('Trakt: Device token poll failed (${response.statusCode}): ${response.body}');
+      return 'error';
+    } catch (e) {
+      debugPrint('Trakt: Device token poll error: $e');
+      return 'error';
     }
   }
 
