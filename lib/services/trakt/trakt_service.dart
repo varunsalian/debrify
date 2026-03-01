@@ -213,27 +213,55 @@ class TraktService {
   }
 
   /// Scrobble: notify Trakt that playback has started.
-  Future<bool> scrobbleStart(String imdbId, double progress) async {
-    return _scrobble('/scrobble/start', imdbId, progress);
+  Future<bool> scrobbleStart(String imdbId, double progress,
+      {int? season, int? episode}) async {
+    return _scrobble('/scrobble/start', imdbId, progress,
+        season: season, episode: episode);
   }
 
   /// Scrobble: notify Trakt that playback was paused.
-  Future<bool> scrobblePause(String imdbId, double progress) async {
-    return _scrobble('/scrobble/pause', imdbId, progress);
+  Future<bool> scrobblePause(String imdbId, double progress,
+      {int? season, int? episode}) async {
+    return _scrobble('/scrobble/pause', imdbId, progress,
+        season: season, episode: episode);
   }
 
   /// Scrobble: notify Trakt that playback was stopped.
-  Future<bool> scrobbleStop(String imdbId, double progress) async {
-    return _scrobble('/scrobble/stop', imdbId, progress);
+  Future<bool> scrobbleStop(String imdbId, double progress,
+      {int? season, int? episode}) async {
+    return _scrobble('/scrobble/stop', imdbId, progress,
+        season: season, episode: episode);
   }
 
-  Future<bool> _scrobble(String path, String imdbId, double progress) async {
-    final body = {
-      'movie': {
-        'ids': {'imdb': imdbId},
-      },
-      'progress': progress,
-    };
+  Future<bool> _scrobble(String path, String imdbId, double progress,
+      {int? season, int? episode}) async {
+    // Refuse to scrobble if only one of season/episode is set — would send
+    // a movie body with a show IMDB ID, corrupting Trakt history.
+    if ((season == null) != (episode == null)) {
+      debugPrint(
+          'Trakt: Skipping scrobble — incomplete episode data (season: $season, episode: $episode)');
+      return false;
+    }
+    final Map<String, dynamic> body;
+    if (season != null && episode != null) {
+      body = {
+        'show': {
+          'ids': {'imdb': imdbId},
+        },
+        'episode': {
+          'season': season,
+          'number': episode,
+        },
+        'progress': progress,
+      };
+    } else {
+      body = {
+        'movie': {
+          'ids': {'imdb': imdbId},
+        },
+        'progress': progress,
+      };
+    }
     final response = await _authenticatedPost(path, body);
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -341,6 +369,30 @@ class TraktService {
     }
   }
 
+  /// Fetch all seasons with episodes for a show.
+  /// [showId] can be an IMDB ID (e.g. 'tt1234567') or Trakt slug.
+  /// This is a public endpoint — no auth token required.
+  Future<List<Map<String, dynamic>>> fetchShowSeasons(String showId) async {
+    final url = '$kTraktApiBaseUrl/shows/$showId/seasons?extended=episodes,full';
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _apiHeaders(),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        debugPrint('Trakt: fetchShowSeasons failed for $showId (${response.statusCode})');
+        return [];
+      }
+
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('Trakt: fetchShowSeasons error: $e');
+      return [];
+    }
+  }
+
   /// Fetch the user's Trakt profile settings (username, etc.).
   Future<bool> _fetchAndStoreUsername(String accessToken) async {
     try {
@@ -423,6 +475,76 @@ class TraktService {
       return result;
     } catch (e) {
       debugPrint('Trakt: fetchWatchedMovies parse error: $e');
+      return {};
+    }
+  }
+
+  /// Fetch watched episode keys for a specific show.
+  /// Uses the per-show progress endpoint (much smaller than /sync/watched/shows).
+  /// Returns a set of `"season-episode"` strings (e.g. `"1-5"`) for completed episodes.
+  Future<Set<String>> fetchWatchedShowEpisodes(String showId) async {
+    final response = await _authenticatedGet('/shows/$showId/progress/watched');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchWatchedShowEpisodes failed (${response?.statusCode})');
+      return {};
+    }
+
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = <String>{};
+      final seasons = data['seasons'] as List<dynamic>? ?? [];
+      for (final season in seasons) {
+        if (season is! Map<String, dynamic>) continue;
+        final seasonNum = season['number'] as int?;
+        if (seasonNum == null) continue;
+        final episodes = season['episodes'] as List<dynamic>? ?? [];
+        for (final ep in episodes) {
+          if (ep is! Map<String, dynamic>) continue;
+          final completed = ep['completed'] as bool? ?? false;
+          final epNum = ep['number'] as int?;
+          if (completed && epNum != null) {
+            result.add('$seasonNum-$epNum');
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Trakt: fetchWatchedShowEpisodes parse error: $e');
+      return {};
+    }
+  }
+
+  /// Fetch playback progress for episodes of a specific show.
+  /// Returns a map of `"season-episode"` → progress percentage (0-100).
+  Future<Map<String, double>> fetchEpisodePlaybackProgress(String showImdbId) async {
+    final response = await _authenticatedGet('/sync/playback/episodes');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchEpisodePlaybackProgress failed (${response?.statusCode})');
+      return {};
+    }
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      final result = <String, double>{};
+      for (final item in list) {
+        if (item is! Map<String, dynamic>) continue;
+        // Check if this episode belongs to the target show
+        final show = item['show'] as Map<String, dynamic>?;
+        final showIds = show?['ids'] as Map<String, dynamic>?;
+        final imdbId = showIds?['imdb'] as String?;
+        if (imdbId != showImdbId) continue;
+
+        final progress = item['progress'] as num?;
+        final episode = item['episode'] as Map<String, dynamic>?;
+        final season = episode?['season'] as int?;
+        final number = episode?['number'] as int?;
+        if (season != null && number != null && progress != null) {
+          result['$season-$number'] = progress.toDouble();
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Trakt: fetchEpisodePlaybackProgress parse error: $e');
       return {};
     }
   }

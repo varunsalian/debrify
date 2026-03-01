@@ -514,7 +514,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _initTraktScrobble() async {
     if (!widget.traktScrobble) return;
-    if (widget.contentImdbId == null || widget.contentType != 'movie') return;
+    if (widget.contentImdbId == null) return;
+    if (widget.contentType != 'movie' && widget.contentType != 'series') return;
     _traktScrobbleEnabled = await TraktService.instance.isAuthenticated();
     if (!mounted) return;
     // If player started playing before auth resolved, scrobble start now
@@ -537,13 +538,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final progress = _traktProgress();
     switch (action) {
       case 'start':
-        TraktService.instance.scrobbleStart(imdbId, progress);
+        TraktService.instance.scrobbleStart(imdbId, progress,
+            season: widget.contentSeason, episode: widget.contentEpisode);
         break;
       case 'pause':
-        TraktService.instance.scrobblePause(imdbId, progress);
+        TraktService.instance.scrobblePause(imdbId, progress,
+            season: widget.contentSeason, episode: widget.contentEpisode);
         break;
       case 'stop':
-        TraktService.instance.scrobbleStop(imdbId, progress);
+        TraktService.instance.scrobbleStop(imdbId, progress,
+            season: widget.contentSeason, episode: widget.contentEpisode);
         break;
     }
   }
@@ -555,7 +559,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final imdbId = widget.contentImdbId!;
     final progress = (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(0.0, 100.0);
     _traktLastScrobbleAction = 'start';
-    TraktService.instance.scrobbleStart(imdbId, progress);
+    TraktService.instance.scrobbleStart(imdbId, progress,
+        season: widget.contentSeason, episode: widget.contentEpisode);
   }
 
   void _maybeSeekToTraktProgress() {

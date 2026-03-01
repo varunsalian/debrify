@@ -634,6 +634,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         subtitle: torrent.source,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        contentSeason: _activeAdvancedSelection?.season,
+        contentEpisode: _activeAdvancedSelection?.episode,
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.infohash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
@@ -2293,50 +2295,63 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // For series, fetch season metadata before searching
     if (selection.isSeries) {
-      // Show loading state while fetching metadata
-      setState(() {
-        _isLoading = true;
-        _searchPhase = SearchPhase.fetchingMetadata;
-        _hasSearched = true;
-      });
+      // If season+episode already specified (e.g. from Trakt episode browser),
+      // skip the IMDb metadata probe and use them directly.
+      if (selection.season != null && selection.episode != null) {
+        setState(() {
+          _availableSeasons = [selection.season!];
+          _selectedSeason = selection.season;
+          _episodeController.text = selection.episode.toString();
+          _isLoading = true;
+          _searchPhase = SearchPhase.fetchingMetadata;
+          _hasSearched = true;
+        });
+      } else {
+        // Show loading state while fetching metadata
+        setState(() {
+          _isLoading = true;
+          _searchPhase = SearchPhase.fetchingMetadata;
+          _hasSearched = true;
+        });
 
-      try {
-        debugPrint('TorrentSearchScreen: Fetching season metadata for series: ${selection.imdbId}');
-        final details = await ImdbLookupService.getTitleDetails(selection.imdbId);
-
-        if (!mounted) return;
-
-        // Extract available seasons from IMDbbot API
-        List<int>? availableSeasons;
         try {
-          final main = details['main'];
-          if (main != null && main is Map) {
-            final episodes = main['episodes'];
-            if (episodes != null && episodes is Map) {
-              final seasons = episodes['seasons'];
-              if (seasons != null && seasons is List) {
-                availableSeasons = seasons
-                    .map((s) => (s is Map) ? (s['number'] as int?) : null)
-                    .where((n) => n != null)
-                    .cast<int>()
-                    .toList();
-                debugPrint('TorrentSearchScreen: Extracted ${availableSeasons.length} seasons for catalog series: $availableSeasons');
+          debugPrint('TorrentSearchScreen: Fetching season metadata for series: ${selection.imdbId}');
+          final details = await ImdbLookupService.getTitleDetails(selection.imdbId);
+
+          if (!mounted) return;
+
+          // Extract available seasons from IMDbbot API
+          List<int>? availableSeasons;
+          try {
+            final main = details['main'];
+            if (main != null && main is Map) {
+              final episodes = main['episodes'];
+              if (episodes != null && episodes is Map) {
+                final seasons = episodes['seasons'];
+                if (seasons != null && seasons is List) {
+                  availableSeasons = seasons
+                      .map((s) => (s is Map) ? (s['number'] as int?) : null)
+                      .where((n) => n != null)
+                      .cast<int>()
+                      .toList();
+                  debugPrint('TorrentSearchScreen: Extracted ${availableSeasons.length} seasons for catalog series: $availableSeasons');
+                }
               }
             }
+          } catch (e) {
+            debugPrint('TorrentSearchScreen: Error extracting seasons for catalog series: $e');
+            availableSeasons = null;
+          }
+
+          if (mounted) {
+            setState(() {
+              _availableSeasons = availableSeasons;
+            });
           }
         } catch (e) {
-          debugPrint('TorrentSearchScreen: Error extracting seasons for catalog series: $e');
-          availableSeasons = null;
+          debugPrint('TorrentSearchScreen: Error fetching season metadata for catalog series: $e');
+          // Continue without season data - search will still work
         }
-
-        if (mounted) {
-          setState(() {
-            _availableSeasons = availableSeasons;
-          });
-        }
-      } catch (e) {
-        debugPrint('TorrentSearchScreen: Error fetching season metadata for catalog series: $e');
-        // Continue without season data - search will still work
       }
     }
 
@@ -6344,9 +6359,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               viewMode: PlaylistViewMode.sorted, // Single file - not series
               contentImdbId: _activeAdvancedSelection?.imdbId,
               contentType: _activeAdvancedSelection?.contentType,
+              contentSeason: _activeAdvancedSelection?.season,
+              contentEpisode: _activeAdvancedSelection?.episode,
               stremioSources: _torrents,
               stremioCurrentSourceIndex: 0,
               resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+              traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+              traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
             ),
           );
         }
@@ -6463,6 +6482,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        contentSeason: _activeAdvancedSelection?.season,
+        contentEpisode: _activeAdvancedSelection?.episode,
         stremioSources: _torrents,
         stremioCurrentSourceIndex: 0,
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
@@ -9005,6 +9026,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             viewMode: PlaylistViewMode.sorted, // Single file - not series
             contentImdbId: _activeAdvancedSelection?.imdbId,
             contentType: _activeAdvancedSelection?.contentType,
+            contentSeason: _activeAdvancedSelection?.season,
+            contentEpisode: _activeAdvancedSelection?.episode,
             stremioSources: _torrents,
             stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
@@ -9142,6 +9165,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         viewMode: isSeriesCollection ? PlaylistViewMode.series : PlaylistViewMode.sorted,
         contentImdbId: _activeAdvancedSelection?.imdbId,
         contentType: _activeAdvancedSelection?.contentType,
+        contentSeason: _activeAdvancedSelection?.season,
+        contentEpisode: _activeAdvancedSelection?.episode,
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
@@ -10298,6 +10323,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             viewMode: PlaylistViewMode.sorted, // Single file - not series
             contentImdbId: _activeAdvancedSelection?.imdbId,
             contentType: _activeAdvancedSelection?.contentType,
+            contentSeason: _activeAdvancedSelection?.season,
+            contentEpisode: _activeAdvancedSelection?.episode,
             stremioSources: _torrents,
             stremioCurrentSourceIndex: 0,
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
@@ -10800,6 +10827,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
           contentImdbId: _activeAdvancedSelection?.imdbId,
           contentType: _activeAdvancedSelection?.contentType,
+          contentSeason: _activeAdvancedSelection?.season,
+          contentEpisode: _activeAdvancedSelection?.episode,
           stremioSources: _torrents,
           stremioCurrentSourceIndex: 0,
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
