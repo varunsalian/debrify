@@ -10,11 +10,11 @@ import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 /// Trakt list type options
 enum TraktListType {
+  progress,
   watchlist,
   collection,
   ratings,
   recommendations,
-  progress,
   customList,
 }
 
@@ -30,7 +30,7 @@ extension TraktListTypeExtension on TraktListType {
       case TraktListType.recommendations:
         return 'Recommendations';
       case TraktListType.progress:
-        return 'Progress';
+        return 'Continue Watching';
       case TraktListType.customList:
         return 'Custom Lists';
     }
@@ -109,7 +109,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   bool _quickPlayInProgress = false;
 
   // Filters
-  TraktListType _selectedListType = TraktListType.watchlist;
+  TraktListType _selectedListType = TraktListType.progress;
   TraktContentType _selectedContentType = TraktContentType.movies;
 
   // Custom lists

@@ -317,8 +317,7 @@ class TraktService {
     if (listType == 'recommendations') {
       path = '/recommendations/$contentType?extended=full';
     } else if (listType == 'watched') {
-      // /sync/watched does not support extended=full
-      path = '/sync/watched/$contentType';
+      path = '/sync/watched/$contentType?extended=full';
     } else {
       path = '/sync/$listType/$contentType?extended=full';
     }
