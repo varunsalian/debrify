@@ -530,24 +530,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         .clamp(0.0, 100.0);
   }
 
+  /// Resolve season/episode: prefer explicit launch args, fall back to filename parsing.
+  ({int? season, int? episode}) _traktSeasonEpisode() {
+    if (widget.contentSeason != null && widget.contentEpisode != null) {
+      return (season: widget.contentSeason, episode: widget.contentEpisode);
+    }
+    final title = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
+        ? _activePlaylist![_currentIndex].title
+        : widget.title;
+    final info = SeriesParser.parseFilename(title);
+    return (season: info.season, episode: info.episode);
+  }
+
   void _traktScrobble(String action) {
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (_traktLastScrobbleAction == action) return;
     _traktLastScrobbleAction = action;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
+    final se = _traktSeasonEpisode();
     switch (action) {
       case 'start':
         TraktService.instance.scrobbleStart(imdbId, progress,
-            season: widget.contentSeason, episode: widget.contentEpisode);
+            season: se.season, episode: se.episode);
         break;
       case 'pause':
         TraktService.instance.scrobblePause(imdbId, progress,
-            season: widget.contentSeason, episode: widget.contentEpisode);
+            season: se.season, episode: se.episode);
         break;
       case 'stop':
         TraktService.instance.scrobbleStop(imdbId, progress,
-            season: widget.contentSeason, episode: widget.contentEpisode);
+            season: se.season, episode: se.episode);
         break;
     }
   }
@@ -559,8 +572,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final imdbId = widget.contentImdbId!;
     final progress = (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(0.0, 100.0);
     _traktLastScrobbleAction = 'start';
+    final se = _traktSeasonEpisode();
     TraktService.instance.scrobbleStart(imdbId, progress,
-        season: widget.contentSeason, episode: widget.contentEpisode);
+        season: se.season, episode: se.episode);
   }
 
   void _maybeSeekToTraktProgress() {
