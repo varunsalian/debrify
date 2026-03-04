@@ -13,8 +13,9 @@ class TraktItemTransformer {
   /// Trakt items have the shape `{ "type": "movie", "movie": { ... } }` or
   /// `{ "type": "show", "show": { ... } }`.
   /// The recommendations endpoint returns flat objects: `{ "title": "...", "ids": {...} }`.
+  /// The watched endpoint returns `{ "movie": { ... } }` or `{ "show": { ... } }` without `type`.
   ///
-  /// [inferredType] is used as a fallback when `type` is absent (recommendations).
+  /// [inferredType] is used as a fallback when `type` is absent (recommendations, watched).
   static StremioMeta? transformItem(Map<String, dynamic> raw, {String? inferredType}) {
     final type = raw['type'] as String?;
     Map<String, dynamic>? content;
@@ -23,6 +24,12 @@ class TraktItemTransformer {
     } else if (raw.containsKey('ids')) {
       // Flat format from recommendations endpoint — the item IS the content
       content = raw;
+    } else if (raw.containsKey('movie')) {
+      // Watched endpoint: no type field, content nested under 'movie'
+      content = raw['movie'] as Map<String, dynamic>?;
+    } else if (raw.containsKey('show')) {
+      // Watched endpoint: no type field, content nested under 'show'
+      content = raw['show'] as Map<String, dynamic>?;
     }
     if (content == null) return null;
 

@@ -363,6 +363,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isTransitioning = false; // Show black screen during transitions
+  bool _currentEpisodeMarkedAsFinished = false;
   // We render using a large logical surface; fit is controlled by BoxFit
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
@@ -609,25 +610,43 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if this is a series and we should find the first episode by season/episode
         final seriesPlaylist = _seriesPlaylist;
         if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-          // Try to restore the last played episode first
-          final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
-          if (lastEpisode != null) {
-            debugPrint(
-              'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
+          // If a specific target episode was requested (e.g. quick play from Trakt),
+          // jump directly to it instead of resuming from last played.
+          bool targetEpisodeResolved = false;
+          if (widget.contentSeason != null && widget.contentEpisode != null) {
+            final targetIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
+              widget.contentSeason!, widget.contentEpisode!,
             );
-            initialIndex = lastEpisode['originalIndex'] as int;
-          } else {
-            // Find the first episode (lowest season, lowest episode)
-            final firstEpisodeIndex = seriesPlaylist
-                .getFirstEpisodeOriginalIndex();
-            if (firstEpisodeIndex != -1) {
-              initialIndex = firstEpisodeIndex;
-            } else {
-              initialIndex = widget.startIndex ?? 0;
+            if (targetIndex != -1) {
+              initialIndex = targetIndex;
+              targetEpisodeResolved = true;
+              debugPrint(
+                'VideoPlayer: target episode S${widget.contentSeason}E${widget.contentEpisode} → index=$initialIndex',
+              );
             }
-            debugPrint(
-              'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
-            );
+          }
+
+          if (!targetEpisodeResolved) {
+            // Try to restore the last played episode first
+            final lastEpisode = await _getLastPlayedEpisode(seriesPlaylist);
+            if (lastEpisode != null) {
+              debugPrint(
+                'VideoPlayer: resume series "${seriesPlaylist.seriesTitle}" at S${lastEpisode['season']}E${lastEpisode['episode']} originalIndex=${lastEpisode['originalIndex']}',
+              );
+              initialIndex = lastEpisode['originalIndex'] as int;
+            } else {
+              // Find the first episode (lowest season, lowest episode)
+              final firstEpisodeIndex = seriesPlaylist
+                  .getFirstEpisodeOriginalIndex();
+              if (firstEpisodeIndex != -1) {
+                initialIndex = firstEpisodeIndex;
+              } else {
+                initialIndex = widget.startIndex ?? 0;
+              }
+              debugPrint(
+                'VideoPlayer: no stored resume for "${seriesPlaylist.seriesTitle}", defaulting to index=$initialIndex',
+              );
+            }
           }
         } else {
         // For non-series playlists, try to restore the last played video
@@ -1347,7 +1366,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (url.isNotEmpty) {
           debugPrint('Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).');
 
-          // Clear subtitle and IMDB state when switching content
+          // Clear subtitle, IMDB, and episode-finished state when switching content
           _cachedStremioSubtitles = null;
           _cachedSubtitleKey = null;
           _selectedStremioSubtitleId = null;
@@ -1355,6 +1374,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _addonSubtitleFetchToken++;
           _singleFileImdbId = null;
           _singleFileImdbFetched = false;
+          _currentEpisodeMarkedAsFinished = false;
 
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
@@ -2064,32 +2084,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Mark the current episode as finished if it's a series
   Future<void> _markCurrentEpisodeAsFinished() async {
     final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null &&
-        seriesPlaylist.isSeries &&
-        seriesPlaylist.seriesTitle != null) {
-      try {
-        // Find the current episode info
-        if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-          final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-            (episode) => episode.originalIndex == _currentIndex,
-            orElse: () => seriesPlaylist.allEpisodes.first,
-          );
+    if (seriesPlaylist == null || !seriesPlaylist.isSeries || seriesPlaylist.seriesTitle == null) return;
+    _currentEpisodeMarkedAsFinished = true;
+    try {
+      // Find the current episode info
+      if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+        final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
+          (episode) => episode.originalIndex == _currentIndex,
+          orElse: () => seriesPlaylist.allEpisodes.first,
+        );
 
-          if (currentEpisode.seriesInfo.season != null &&
-              currentEpisode.seriesInfo.episode != null) {
-            await StorageService.markEpisodeAsFinished(
-              seriesTitle: seriesPlaylist.seriesTitle!,
-              season: currentEpisode.seriesInfo.season!,
-              episode: currentEpisode.seriesInfo.episode!,
-            );
-          }
+        if (currentEpisode.seriesInfo.season != null &&
+            currentEpisode.seriesInfo.episode != null) {
+          await StorageService.markEpisodeAsFinished(
+            seriesTitle: seriesPlaylist.seriesTitle!,
+            season: currentEpisode.seriesInfo.season!,
+            episode: currentEpisode.seriesInfo.episode!,
+          );
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
   }
 
   /// Check if current episode should be marked as finished (for manual seeking)
   Future<void> _checkAndMarkEpisodeAsFinished() async {
+    if (_currentEpisodeMarkedAsFinished) return;
     // Only check if we're near the end of the video (within last 30 seconds)
     if (_duration > Duration.zero && _position > Duration.zero) {
       final timeRemaining = _duration - _position;
@@ -2110,6 +2129,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _saveResume();
     final entry = _activePlaylist![index];
     _currentIndex = index;
+    _currentEpisodeMarkedAsFinished = false;
 
     // Clear subtitle cache and selection when changing content
     _cachedStremioSubtitles = null;

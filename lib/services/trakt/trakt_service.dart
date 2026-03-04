@@ -316,6 +316,9 @@ class TraktService {
     final String path;
     if (listType == 'recommendations') {
       path = '/recommendations/$contentType?extended=full';
+    } else if (listType == 'watched') {
+      // /sync/watched does not support extended=full
+      path = '/sync/watched/$contentType';
     } else {
       path = '/sync/$listType/$contentType?extended=full';
     }
@@ -511,6 +514,28 @@ class TraktService {
     } catch (e) {
       debugPrint('Trakt: fetchWatchedShowEpisodes parse error: $e');
       return {};
+    }
+  }
+
+  /// Fetch the next episode to watch for a show.
+  /// Returns (season, episode) or null if show is complete / not started / error.
+  Future<({int season, int episode})?> fetchNextEpisode(String showId) async {
+    final response = await _authenticatedGet('/shows/$showId/progress/watched');
+    if (response == null || response.statusCode != 200) return null;
+
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final nextEp = data['next_episode'] as Map<String, dynamic>?;
+      if (nextEp == null) return null;
+
+      final season = nextEp['season'] as int?;
+      final number = nextEp['number'] as int?;
+      if (season == null || number == null) return null;
+
+      return (season: season, episode: number);
+    } catch (e) {
+      debugPrint('Trakt: fetchNextEpisode parse error: $e');
+      return null;
     }
   }
 

@@ -14,6 +14,7 @@ enum TraktListType {
   collection,
   ratings,
   recommendations,
+  progress,
   customList,
 }
 
@@ -28,6 +29,8 @@ extension TraktListTypeExtension on TraktListType {
         return 'Ratings';
       case TraktListType.recommendations:
         return 'Recommendations';
+      case TraktListType.progress:
+        return 'Progress';
       case TraktListType.customList:
         return 'Custom Lists';
     }
@@ -43,6 +46,8 @@ extension TraktListTypeExtension on TraktListType {
         return 'ratings';
       case TraktListType.recommendations:
         return 'recommendations';
+      case TraktListType.progress:
+        return 'watched';
       case TraktListType.customList:
         return '';
     }
@@ -101,6 +106,7 @@ class TraktResultsView extends StatefulWidget {
 class TraktResultsViewState extends State<TraktResultsView> {
   final ScrollController _scrollController = ScrollController();
   final TraktService _traktService = TraktService.instance;
+  bool _quickPlayInProgress = false;
 
   // Filters
   TraktListType _selectedListType = TraktListType.watchlist;
@@ -383,20 +389,53 @@ class TraktResultsViewState extends State<TraktResultsView> {
     widget.onItemSelected(selection);
   }
 
-  void _onQuickPlay(StremioMeta item) {
-    final selection = AdvancedSearchSelection(
-      imdbId: item.effectiveImdbId ?? item.id,
-      isSeries: item.type == 'series',
-      title: item.name,
-      year: item.year,
-      contentType: item.type,
-      posterUrl: item.poster,
-      traktProgressPercent: _traktProgressForItem(item),
-    );
-    if (widget.onQuickPlay != null) {
-      widget.onQuickPlay!(selection);
-    } else {
-      widget.onItemSelected(selection);
+  void _onQuickPlay(StremioMeta item) async {
+    if (_quickPlayInProgress) return;
+    _quickPlayInProgress = true;
+
+    try {
+      int? season;
+      int? episode;
+
+      double? traktProgress = _traktProgressForItem(item);
+
+      if (item.type == 'series') {
+        final showId = item.effectiveImdbId ?? item.id;
+        final next = await _traktService.fetchNextEpisode(showId);
+        if (!mounted) return;
+        season = next?.season;
+        episode = next?.episode;
+
+        // Fetch episode-specific playback progress from Trakt
+        if (season != null && episode != null) {
+          final episodeProgress = await _traktService.fetchEpisodePlaybackProgress(showId);
+          if (!mounted) return;
+          final key = '$season-$episode';
+          final p = episodeProgress[key];
+          if (p != null && p > 0 && p < 100) {
+            traktProgress = p;
+          }
+        }
+      }
+
+      final selection = AdvancedSearchSelection(
+        imdbId: item.effectiveImdbId ?? item.id,
+        isSeries: item.type == 'series',
+        title: item.name,
+        year: item.year,
+        season: season,
+        episode: episode,
+        contentType: item.type,
+        posterUrl: item.poster,
+        traktProgressPercent: traktProgress,
+      );
+      if (widget.onQuickPlay != null) {
+        widget.onQuickPlay!(selection);
+      } else {
+        widget.onItemSelected(selection);
+      }
+    } finally {
+      _quickPlayInProgress = false;
     }
   }
 
@@ -1223,7 +1262,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
+            _selectedListType == TraktListType.progress
+                ? 'You haven\'t watched any ${_selectedContentType.label.toLowerCase()} yet.'
+                : 'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
