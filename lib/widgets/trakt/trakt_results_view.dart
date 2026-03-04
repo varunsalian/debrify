@@ -145,6 +145,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   bool _isLoadingEpisodes = false;
   String? _episodeErrorMessage;
   Map<String, double> _episodeWatchProgress = {};
+  ({int season, int episode})? _nextEpisode;
   final ScrollController _episodeScrollController = ScrollController();
   final List<FocusNode> _episodeFocusNodes = [];
   final FocusNode _seasonDropdownFocusNode = FocusNode(debugLabel: 'trakt-season-dropdown');
@@ -503,18 +504,75 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _episodeFocusNodes.add(FocusNode(debugLabel: 'trakt-ep-$i'));
       }
 
-      // Enrich episodes with TVMaze thumbnails + fetch watch progress in parallel
+      // Enrich episodes with TVMaze thumbnails + fetch watch progress + next episode in parallel
+      final nextEpisodeFuture = _traktService.fetchNextEpisode(showId);
       await Future.wait([
         _enrichEpisodeThumbnails(showId, seasons, generation),
         _fetchEpisodeWatchProgress(showId, generation),
       ]);
+      final nextEpisode = await nextEpisodeFuture;
       if (!mounted || generation != _episodeModeGeneration) return;
+
+      // Store next episode for UI highlighting
+      _nextEpisode = nextEpisode;
+
+      // Default to first regular season, but override with next episode's season if available
+      var targetSeason = defaultSeason.number;
+      if (nextEpisode != null) {
+        final hasSeason = seasons.any((s) => s.number == nextEpisode.season);
+        if (hasSeason) targetSeason = nextEpisode.season;
+      }
+
+      // Rebuild focus nodes for the target season
+      if (targetSeason != defaultSeason.number) {
+        for (final node in _episodeFocusNodes) {
+          node.dispose();
+        }
+        _episodeFocusNodes.clear();
+        final targetSeasonObj = seasons.firstWhere((s) => s.number == targetSeason);
+        for (int i = 0; i < targetSeasonObj.episodes.length; i++) {
+          _episodeFocusNodes.add(FocusNode(debugLabel: 'trakt-ep-$i'));
+        }
+      }
 
       setState(() {
         _seasons = seasons;
-        _selectedSeasonNumber = defaultSeason.number;
+        _selectedSeasonNumber = targetSeason;
         _isLoadingEpisodes = false;
       });
+
+      // Scroll to the next episode after the frame renders
+      if (nextEpisode != null && targetSeason == nextEpisode.season) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _episodeModeGeneration) return;
+          final season = _seasons.firstWhere(
+            (s) => s.number == targetSeason,
+            orElse: () => _seasons.first,
+          );
+          final epIndex = season.episodes.indexWhere((e) => e.number == nextEpisode.episode);
+          if (epIndex > 0 && _episodeScrollController.hasClients) {
+            // Estimate scroll position to force lazy ListView to build the target item
+            final maxExtent = _episodeScrollController.position.maxScrollExtent;
+            final ratio = epIndex / season.episodes.length;
+            _episodeScrollController.jumpTo((maxExtent * ratio).clamp(0.0, maxExtent));
+            // After the item is built, use ensureVisible for precise positioning
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || generation != _episodeModeGeneration) return;
+              if (epIndex < _episodeFocusNodes.length) {
+                final ctx = _episodeFocusNodes[epIndex].context;
+                if (ctx != null) {
+                  Scrollable.ensureVisible(
+                    ctx,
+                    alignment: 0.3,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+              }
+            });
+          }
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -617,6 +675,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       _isLoadingEpisodes = false;
       _episodeErrorMessage = null;
       _episodeWatchProgress = {};
+      _nextEpisode = null;
     });
   }
 
@@ -1149,6 +1208,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onQuickPlay: () => _onEpisodeQuickPlay(episode),
               showQuickPlay: widget.showQuickPlay,
               watchProgress: _episodeWatchProgress['${episode.season}-${episode.number}'],
+              isNextEpisode: _nextEpisode != null && _nextEpisode!.season == episode.season && _nextEpisode!.episode == episode.number,
               onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
                   _handleEpisodeCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
             ),
@@ -1805,6 +1865,7 @@ class _TraktEpisodeCard extends StatefulWidget {
   final VoidCallback onQuickPlay;
   final bool showQuickPlay;
   final double? watchProgress;
+  final bool isNextEpisode;
   final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
 
   const _TraktEpisodeCard({
@@ -1815,6 +1876,7 @@ class _TraktEpisodeCard extends StatefulWidget {
     required this.onQuickPlay,
     this.showQuickPlay = true,
     this.watchProgress,
+    this.isNextEpisode = false,
     required this.onKeyEvent,
   });
 
@@ -1884,13 +1946,17 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            color: widget.isNextEpisode && !_isFocused
+                ? const Color(0xFF6366F1).withOpacity(0.08)
+                : colorScheme.surfaceContainerHighest.withOpacity(0.5),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
                   ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.2),
-              width: _isFocused ? 2 : 1,
+                  : widget.isNextEpisode
+                      ? const Color(0xFF6366F1).withOpacity(0.5)
+                      : colorScheme.outline.withOpacity(0.2),
+              width: _isFocused ? 2 : widget.isNextEpisode ? 1.5 : 1,
             ),
           ),
           child: LayoutBuilder(
@@ -2088,7 +2154,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Row 1: S##E## badge + air date
+        // Row 1: S##E## badge + Up Next badge + air date
         Row(
           children: [
             Container(
@@ -2106,6 +2172,24 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                 ),
               ),
             ),
+            if (widget.isNextEpisode) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Up Next',
+                  style: TextStyle(
+                    color: Color(0xFF818CF8),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
             if (ep.formattedAirDate != null) ...[
               const SizedBox(width: 8),
               Text(
