@@ -32,6 +32,8 @@ import '../services/trakt/trakt_service.dart';
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
 double _traktLastKnownProgress = 0.0;
+int? _traktLastKnownSeason;
+int? _traktLastKnownEpisode;
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 final Map<String, String> _redirectCache = <String, String>{};
@@ -783,6 +785,12 @@ class VideoPlayerLauncher {
       return _launchIptvOnAndroidTv(args);
     }
 
+    // Reset Trakt scrobble state for clean session
+    _traktLastScrobbleAction = null;
+    _traktLastKnownProgress = 0.0;
+    _traktLastKnownSeason = null;
+    _traktLastKnownEpisode = null;
+
     try {
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
@@ -1318,22 +1326,27 @@ class VideoPlayerLauncher {
         _cacheResolvedStream(resumeId, progressUrl);
       }
 
-      // Trakt scrobble for Android TV player (movies only — series needs episode-level scrobble)
-      if (payload.traktScrobble && payload.imdbId != null && durationMs > 0 && payload.contentType != _PlaybackContentType.series) {
+      // Trakt scrobble for Android TV player (movies and series)
+      if (payload.traktScrobble && payload.imdbId != null && durationMs > 0) {
         // Treat buffering as still playing — ExoPlayer sets isPlaying=false during buffer
         final isPlaying = progress['isPlaying'] == true || progress['isBuffering'] == true;
         final traktProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
         _traktLastKnownProgress = traktProgress;
         final imdbId = payload.imdbId!;
+        // For series, read season/episode from Kotlin progress update
+        final season = progress['season'] as int?;
+        final episode = progress['episode'] as int?;
+        _traktLastKnownSeason = season;
+        _traktLastKnownEpisode = episode;
         if (completed && _traktLastScrobbleAction != 'stop') {
           _traktLastScrobbleAction = 'stop';
-          TraktService.instance.scrobbleStop(imdbId, traktProgress);
+          TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
         } else if (isPlaying && _traktLastScrobbleAction != 'start') {
           _traktLastScrobbleAction = 'start';
-          TraktService.instance.scrobbleStart(imdbId, traktProgress);
+          TraktService.instance.scrobbleStart(imdbId, traktProgress, season: season, episode: episode);
         } else if (!isPlaying && !completed && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'pause' && _traktLastScrobbleAction != 'stop') {
           _traktLastScrobbleAction = 'pause';
-          TraktService.instance.scrobblePause(imdbId, traktProgress);
+          TraktService.instance.scrobblePause(imdbId, traktProgress, season: season, episode: episode);
         }
       }
 
@@ -1459,10 +1472,12 @@ class VideoPlayerLauncher {
     );
     // Final Trakt scrobble stop on playback exit
     if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'stop') {
-      TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress);
+      TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
     }
     _traktLastScrobbleAction = null;
     _traktLastKnownProgress = 0.0;
+    _traktLastKnownSeason = null;
+    _traktLastKnownEpisode = null;
   }
 
   static Future<String> _resolveEntryUrl(
@@ -2241,6 +2256,18 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (playlist == null || playlist.allEpisodes.isEmpty) {
       return args.startIndex ?? 0;
     }
+
+    // Target episode override (e.g. Trakt Quick Play next episode)
+    if (args.contentSeason != null && args.contentEpisode != null) {
+      final targetIndex = playlist.findOriginalIndexBySeasonEpisode(
+        args.contentSeason!, args.contentEpisode!,
+      );
+      if (targetIndex != -1) {
+        debugPrint('AndroidTV: target episode S${args.contentSeason}E${args.contentEpisode} → index=$targetIndex');
+        return targetIndex;
+      }
+    }
+
     final lastEpisode = await StorageService.getLastPlayedEpisode(
       seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
     );

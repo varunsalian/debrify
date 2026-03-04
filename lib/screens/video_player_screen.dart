@@ -428,6 +428,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Trakt scrobble state
   bool _traktScrobbleEnabled = false;
+  bool _traktProgressApplied = false;
   String? _traktLastScrobbleAction;
 
   Duration? _randomStartOffset(Duration duration) {
@@ -531,15 +532,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         .clamp(0.0, 100.0);
   }
 
-  /// Resolve season/episode: prefer explicit launch args, fall back to filename parsing.
+  /// Resolve season/episode: prefer current playlist entry (tracks auto-advance),
+  /// fall back to launch args, then filename parsing.
   ({int? season, int? episode}) _traktSeasonEpisode() {
+    // Prefer current playlist entry — correct even after auto-advance
+    if (_activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+      final info = SeriesParser.parseFilename(_activePlaylist![_currentIndex].title);
+      if (info.season != null && info.episode != null) {
+        return (season: info.season, episode: info.episode);
+      }
+    }
+    // Fallback: explicit launch args (single-stream series playback)
     if (widget.contentSeason != null && widget.contentEpisode != null) {
       return (season: widget.contentSeason, episode: widget.contentEpisode);
     }
-    final title = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
-        ? _activePlaylist![_currentIndex].title
-        : widget.title;
-    final info = SeriesParser.parseFilename(title);
+    final info = SeriesParser.parseFilename(widget.title);
     return (season: info.season, episode: info.episode);
   }
 
@@ -3023,8 +3030,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    // If playing from Trakt and Trakt has progress, prefer it over local resume
-    if (widget.traktProgressPercent != null && widget.traktProgressPercent! > 0 && widget.traktProgressPercent! < 100) {
+    // If playing from Trakt and Trakt has progress, prefer it over local resume (first load only)
+    if (!_traktProgressApplied && widget.traktProgressPercent != null && widget.traktProgressPercent! > 0 && widget.traktProgressPercent! < 100) {
+      _traktProgressApplied = true;
       await _waitForDuration();
       _maybeSeekToTraktProgress();
       return;
@@ -3064,8 +3072,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _waitForDuration();
     final data = await StorageService.getVideoResume(_resumeKey);
     if (data == null) {
-      // Final fallback: Trakt progress (only when no local resume exists)
-      _maybeSeekToTraktProgress();
+      // Final fallback: Trakt progress (only when no local resume exists, first load only)
+      if (!_traktProgressApplied) {
+        _traktProgressApplied = true;
+        _maybeSeekToTraktProgress();
+      }
       return;
     }
 
