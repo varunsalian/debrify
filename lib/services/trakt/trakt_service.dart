@@ -274,6 +274,70 @@ class TraktService {
   }
 
   // ============================================================================
+  // Sync Action Methods (Watchlist, Collection, History, Ratings, Custom Lists)
+  // ============================================================================
+
+  /// Generic sync action helper for add/remove operations.
+  /// [path] is the API path (e.g. '/sync/watchlist').
+  /// [imdbId] is the IMDB ID (e.g. 'tt1234567').
+  /// [type] is 'movie' or 'series' (mapped to 'movies'/'shows' API key).
+  /// [extraItemFields] adds fields to the item object (e.g. {"rating": 8}).
+  Future<bool> _syncAction(
+    String path,
+    String imdbId,
+    String type, {
+    Map<String, dynamic>? extraItemFields,
+  }) async {
+    final apiKey = type == 'series' ? 'shows' : 'movies';
+    final item = <String, dynamic>{
+      'ids': {'imdb': imdbId},
+      if (extraItemFields != null) ...extraItemFields,
+    };
+    final body = {apiKey: [item]};
+    final response = await _authenticatedPost(path, body);
+    if (response == null) return false;
+    final ok = response.statusCode >= 200 && response.statusCode < 300;
+    if (!ok) {
+      debugPrint(
+          'Trakt: $path failed (${response.statusCode}): ${response.body}');
+    }
+    return ok;
+  }
+
+  Future<bool> addToWatchlist(String imdbId, String type) =>
+      _syncAction('/sync/watchlist', imdbId, type);
+
+  Future<bool> removeFromWatchlist(String imdbId, String type) =>
+      _syncAction('/sync/watchlist/remove', imdbId, type);
+
+  Future<bool> addToCollection(String imdbId, String type) =>
+      _syncAction('/sync/collection', imdbId, type);
+
+  Future<bool> removeFromCollection(String imdbId, String type) =>
+      _syncAction('/sync/collection/remove', imdbId, type);
+
+  Future<bool> addToHistory(String imdbId, String type) =>
+      _syncAction('/sync/history', imdbId, type);
+
+  Future<bool> removeFromHistory(String imdbId, String type) =>
+      _syncAction('/sync/history/remove', imdbId, type);
+
+  Future<bool> rateItem(String imdbId, String type, int rating) =>
+      _syncAction('/sync/ratings', imdbId, type,
+          extraItemFields: {'rating': rating});
+
+  Future<bool> removeRating(String imdbId, String type) =>
+      _syncAction('/sync/ratings/remove', imdbId, type);
+
+  Future<bool> addToCustomList(
+          String listId, String imdbId, String type) =>
+      _syncAction('/users/me/lists/$listId/items', imdbId, type);
+
+  Future<bool> removeFromCustomList(
+          String listId, String imdbId, String type) =>
+      _syncAction('/users/me/lists/$listId/items/remove', imdbId, type);
+
+  // ============================================================================
   // List API Methods
   // ============================================================================
 
@@ -384,7 +448,7 @@ class TraktService {
         headers: _apiHeaders(),
       ).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        debugPrint('Trakt: search failed ($type, "${query}") — ${response.statusCode}');
+        debugPrint('Trakt: search failed ($type, "$query") — ${response.statusCode}');
         return [];
       }
       return jsonDecode(response.body) as List<dynamic>;

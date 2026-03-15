@@ -86,6 +86,20 @@ extension TraktContentTypeExtension on TraktContentType {
   }
 }
 
+/// Actions available in the Trakt item overflow menu.
+enum TraktItemMenuAction {
+  addToWatchlist,
+  removeFromWatchlist,
+  addToCollection,
+  removeFromCollection,
+  markWatched,
+  markUnwatched,
+  rate,
+  removeRating,
+  addToList,
+  removeFromList,
+}
+
 /// Main view for Trakt list results, embedded in TorrentSearchScreen.
 class TraktResultsView extends StatefulWidget {
   final String searchQuery;
@@ -471,6 +485,231 @@ class TraktResultsViewState extends State<TraktResultsView> {
     } finally {
       _quickPlayInProgress = false;
     }
+  }
+
+  Future<void> _onMenuAction(StremioMeta item, TraktItemMenuAction action) async {
+    final imdbId = item.effectiveImdbId ?? item.id;
+    final type = item.type;
+    bool success = false;
+    String actionLabel = '';
+
+    switch (action) {
+      case TraktItemMenuAction.addToWatchlist:
+        actionLabel = 'Added to Watchlist';
+        success = await _traktService.addToWatchlist(imdbId, type);
+      case TraktItemMenuAction.removeFromWatchlist:
+        actionLabel = 'Removed from Watchlist';
+        success = await _traktService.removeFromWatchlist(imdbId, type);
+        if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.addToCollection:
+        actionLabel = 'Added to Collection';
+        success = await _traktService.addToCollection(imdbId, type);
+      case TraktItemMenuAction.removeFromCollection:
+        actionLabel = 'Removed from Collection';
+        success = await _traktService.removeFromCollection(imdbId, type);
+        if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.markWatched:
+        actionLabel = 'Marked as Watched';
+        success = await _traktService.addToHistory(imdbId, type);
+        if (success && mounted) {
+          setState(() => _watchProgress[imdbId] = 100.0);
+        }
+      case TraktItemMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched';
+        success = await _traktService.removeFromHistory(imdbId, type);
+        if (success && mounted) {
+          setState(() => _watchProgress.remove(imdbId));
+        }
+      case TraktItemMenuAction.rate:
+        final rating = await _showRatingDialog();
+        if (rating == null) return;
+        actionLabel = 'Rated $rating/10';
+        success = await _traktService.rateItem(imdbId, type, rating);
+      case TraktItemMenuAction.removeRating:
+        actionLabel = 'Rating Removed';
+        success = await _traktService.removeRating(imdbId, type);
+        if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.addToList:
+        final list = await _showCustomListPickerDialog();
+        if (list == null) return;
+        final listSlug = list['ids']?['slug'] as String? ??
+            list['ids']?['trakt']?.toString();
+        if (listSlug == null || listSlug.isEmpty) return;
+        actionLabel = 'Added to "${list['name']}"';
+        success = await _traktService.addToCustomList(listSlug, imdbId, type);
+      case TraktItemMenuAction.removeFromList:
+        if (_selectedCustomList == null) return;
+        final listSlug = _selectedCustomList!['ids']?['slug'] as String? ??
+            _selectedCustomList!['ids']?['trakt']?.toString();
+        if (listSlug == null || listSlug.isEmpty) return;
+        actionLabel = 'Removed from List';
+        success = await _traktService.removeFromCustomList(
+            listSlug, imdbId, type);
+        if (success && mounted) _fetchItems();
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+      backgroundColor:
+          success ? const Color(0xFF34D399) : const Color(0xFFEF4444),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  Future<int?> _showRatingDialog() async {
+    return showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.star_rate_rounded,
+                        color: Color(0xFFFBBF24), size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'Rate this item',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: List.generate(10, (i) {
+                    final rating = i + 1;
+                    return SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF334155),
+                          foregroundColor: const Color(0xFFFBBF24),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: () =>
+                            Navigator.of(dialogContext).pop(rating),
+                        child: Text(
+                          '$rating',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel',
+                      style: TextStyle(color: Colors.white54)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> _showCustomListPickerDialog() async {
+    final lists = await _traktService.fetchCustomLists();
+    if (!mounted) return null;
+    if (lists.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No custom lists found. Create one on Trakt first.'),
+        backgroundColor: Color(0xFFEF4444),
+      ));
+      return null;
+    }
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.playlist_add,
+                          color: Color(0xFFEC4899), size: 24),
+                      SizedBox(width: 8),
+                      Text(
+                        'Add to List',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: lists.length,
+                      itemBuilder: (context, index) {
+                        final list = lists[index];
+                        final name = list['name'] as String? ?? 'Unknown';
+                        final itemCount = list['item_count'] as int? ?? 0;
+                        return ListTile(
+                          leading: const Icon(Icons.playlist_play,
+                              color: Color(0xFFEC4899)),
+                          title: Text(name,
+                              style: const TextStyle(color: Colors.white)),
+                          subtitle: Text('$itemCount items',
+                              style: const TextStyle(color: Colors.white54)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          onTap: () =>
+                              Navigator.of(dialogContext).pop(list),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.white54)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Focus the first filter (for DPAD navigation from search input)
@@ -1053,6 +1292,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onQuickPlay: () => _onQuickPlay(item),
               showQuickPlay: widget.showQuickPlay,
               onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+              listType: _selectedListType,
+              onMenuAction: (action) => _onMenuAction(item, action),
             ),
           );
         },
@@ -1384,6 +1625,8 @@ class _TraktItemCard extends StatefulWidget {
   final VoidCallback onQuickPlay;
   final bool showQuickPlay;
   final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final TraktListType? listType;
+  final void Function(TraktItemMenuAction action)? onMenuAction;
 
   const _TraktItemCard({
     required this.item,
@@ -1393,6 +1636,8 @@ class _TraktItemCard extends StatefulWidget {
     required this.onQuickPlay,
     this.showQuickPlay = true,
     required this.onKeyEvent,
+    this.listType,
+    this.onMenuAction,
   });
 
   @override
@@ -1401,24 +1646,38 @@ class _TraktItemCard extends StatefulWidget {
 
 class _TraktItemCardState extends State<_TraktItemCard> {
   bool _isFocused = false;
-  // For DPAD: track which button is focused (true = Quick Play, false = Browse)
-  bool _isQuickPlayButtonFocused = false;
+  // For DPAD: track which button is focused by index
+  // Order: [Browse=0] [Quick Play=1?] [More=last?]
+  int _focusedButtonIndex = 0;
+  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
+      GlobalKey();
+
+  int get _buttonCount {
+    int count = 1; // Browse always exists
+    if (widget.showQuickPlay) count++;
+    if (widget.onMenuAction != null) count++;
+    return count;
+  }
+
+  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
+  int? get _moreIndex =>
+      widget.onMenuAction != null ? _buttonCount - 1 : null;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // Left/Right arrow navigation between buttons
-    // Order: [Browse] [Quick Play]
+    // Order: [Browse] [Quick Play?] [More?]
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = false);
+      if (_focusedButtonIndex > 0) {
+        setState(() => _focusedButtonIndex--);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (!_isQuickPlayButtonFocused && widget.showQuickPlay) {
-        setState(() => _isQuickPlayButtonFocused = true);
+      if (_focusedButtonIndex < _buttonCount - 1) {
+        setState(() => _focusedButtonIndex++);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -1427,15 +1686,18 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     // Select/Enter triggers the focused button
     if (event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_isQuickPlayButtonFocused) {
-        widget.onQuickPlay();
-      } else {
+      if (_focusedButtonIndex == 0) {
         widget.onSources();
+      } else if (_focusedButtonIndex == _quickPlayIndex) {
+        widget.onQuickPlay();
+      } else if (_focusedButtonIndex == _moreIndex) {
+        _menuKey.currentState?.showButtonMenu();
       }
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event, isQuickPlayFocused: _isQuickPlayButtonFocused);
+    return widget.onKeyEvent(event,
+        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
   }
 
   String _stripHtml(String text) {
@@ -1452,7 +1714,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       onFocusChange: (focused) {
         setState(() {
           _isFocused = focused;
-          _isQuickPlayButtonFocused = false;
+          _focusedButtonIndex = 0;
         });
         if (focused) {
           Scrollable.ensureVisible(
@@ -1487,6 +1749,132 @@ class _TraktItemCardState extends State<_TraktItemCard> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOverflowMenu() {
+    final listType = widget.listType;
+    final isWatched = (widget.progress ?? 0) >= 100 ||
+        (widget.progress == null && listType == TraktListType.progress);
+    final isHighlighted = _isFocused && _focusedButtonIndex == _moreIndex;
+
+    return Container(
+      decoration: isHighlighted
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.4),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ],
+            )
+          : null,
+      child: PopupMenuButton<TraktItemMenuAction>(
+        key: _menuKey,
+        icon: Icon(
+          Icons.more_vert,
+          size: 20,
+          color: isHighlighted
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.7),
+        ),
+        tooltip: 'More options',
+        color: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (action) => widget.onMenuAction?.call(action),
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: listType == TraktListType.watchlist
+              ? TraktItemMenuAction.removeFromWatchlist
+              : TraktItemMenuAction.addToWatchlist,
+          child: Row(children: [
+            Icon(
+              listType == TraktListType.watchlist
+                  ? Icons.bookmark_remove
+                  : Icons.bookmark_add_outlined,
+              size: 18,
+              color: const Color(0xFFFBBF24),
+            ),
+            const SizedBox(width: 12),
+            Text(listType == TraktListType.watchlist
+                ? 'Remove from Watchlist'
+                : 'Add to Watchlist'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: listType == TraktListType.collection
+              ? TraktItemMenuAction.removeFromCollection
+              : TraktItemMenuAction.addToCollection,
+          child: Row(children: [
+            Icon(
+              listType == TraktListType.collection
+                  ? Icons.library_add_check
+                  : Icons.library_add_outlined,
+              size: 18,
+              color: const Color(0xFF60A5FA),
+            ),
+            const SizedBox(width: 12),
+            Text(listType == TraktListType.collection
+                ? 'Remove from Collection'
+                : 'Add to Collection'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: isWatched
+              ? TraktItemMenuAction.markUnwatched
+              : TraktItemMenuAction.markWatched,
+          child: Row(children: [
+            Icon(
+              isWatched ? Icons.visibility_off : Icons.visibility,
+              size: 18,
+              color: const Color(0xFF34D399),
+            ),
+            const SizedBox(width: 12),
+            Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: listType == TraktListType.ratings
+              ? TraktItemMenuAction.removeRating
+              : TraktItemMenuAction.rate,
+          child: Row(children: [
+            Icon(
+              listType == TraktListType.ratings
+                  ? Icons.star_border
+                  : Icons.star_rate_rounded,
+              size: 18,
+              color: const Color(0xFFFBBF24),
+            ),
+            const SizedBox(width: 12),
+            Text(listType == TraktListType.ratings ? 'Remove Rating' : 'Rate'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: listType == TraktListType.customList
+              ? TraktItemMenuAction.removeFromList
+              : TraktItemMenuAction.addToList,
+          child: Row(children: [
+            Icon(
+              listType == TraktListType.customList
+                  ? Icons.playlist_remove
+                  : Icons.playlist_add,
+              size: 18,
+              color: const Color(0xFFEC4899),
+            ),
+            const SizedBox(width: 12),
+            Text(listType == TraktListType.customList
+                ? 'Remove from List'
+                : 'Add to List...'),
+          ]),
+        ),
+      ],
       ),
     );
   }
@@ -1563,7 +1951,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           icon: Icons.list_rounded,
           label: 'Browse',
           color: const Color(0xFF6366F1),
-          isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+          isHighlighted: _isFocused && _focusedButtonIndex == 0,
           onTap: widget.onSources,
         ),
         if (widget.showQuickPlay) ...[
@@ -1572,9 +1960,13 @@ class _TraktItemCardState extends State<_TraktItemCard> {
             icon: Icons.play_arrow_rounded,
             label: 'Quick Play',
             color: const Color(0xFFB91C1C),
-            isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
             onTap: widget.onQuickPlay,
           ),
+        ],
+        if (widget.onMenuAction != null) ...[
+          const SizedBox(width: 4),
+          _buildOverflowMenu(),
         ],
       ],
     );
@@ -1642,7 +2034,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 icon: Icons.list_rounded,
                 label: 'Browse',
                 color: const Color(0xFF6366F1),
-                isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+                isHighlighted: _isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onSources,
               ),
             ),
@@ -1653,10 +2045,14 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
                   color: const Color(0xFFB91C1C),
-                  isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
+            ],
+            if (widget.onMenuAction != null) ...[
+              const SizedBox(width: 4),
+              _buildOverflowMenu(),
             ],
           ],
         ),
