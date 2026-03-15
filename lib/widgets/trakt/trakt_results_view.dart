@@ -1121,7 +1121,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
     FocusNode? onRightFocus,
   }) {
     return Focus(
-      focusNode: focusNode,
+      // Outer Focus intercepts DPAD arrows before DropdownButton sees them
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -1142,35 +1142,60 @@ class TraktResultsViewState extends State<TraktResultsView> {
         }
         return KeyEventResult.ignored;
       },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<T>(
-            value: value,
-            isExpanded: true,
-            isDense: true,
-            dropdownColor: const Color(0xFF1E293B),
-            icon: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 20,
-              color: Colors.white.withValues(alpha: 0.7),
+      child: ListenableBuilder(
+        listenable: focusNode,
+        builder: (context, _) {
+          final hasFocus = focusNode.hasFocus;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: hasFocus
+                  ? Theme.of(context).colorScheme.surfaceContainerHighest
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: hasFocus
+                    ? const Color(0xFF60A5FA)
+                    : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                width: hasFocus ? 2.0 : 1.0,
+              ),
+              boxShadow: hasFocus
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : null,
             ),
-            hint: Text(
-              hint,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-              overflow: TextOverflow.ellipsis,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<T>(
+                focusNode: focusNode,
+                focusColor: Colors.transparent,
+                value: value,
+                isExpanded: true,
+                isDense: true,
+                dropdownColor: const Color(0xFF1E293B),
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: hasFocus
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.7),
+                ),
+                hint: Text(
+                  hint,
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                items: items,
+                onChanged: onChanged,
+              ),
             ),
-            items: items,
-            onChanged: onChanged,
-          ),
-        ),
+          );
+        },
       ),
     );
   }
