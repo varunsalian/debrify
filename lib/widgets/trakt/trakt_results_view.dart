@@ -979,45 +979,53 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Widget _buildFiltersBar(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final hasCustomList = _selectedListType == TraktListType.customList;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           // List type dropdown
-          _buildDropdown<TraktListType>(
-            focusNode: _listTypeFocusNode,
-            value: _selectedListType,
-            items: TraktListType.values.map((t) => DropdownMenuItem(
-              value: t,
-              child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-            )).toList(),
-            onChanged: _onListTypeChanged,
-            hint: 'List Type',
-            onUpArrow: widget.onUpArrowFromFilters,
-            onDownArrow: _focusFirstCard,
-            onRightFocus: _contentTypeFocusNode,
+          Flexible(
+            flex: hasCustomList ? 3 : 4,
+            child: _buildDropdown<TraktListType>(
+              focusNode: _listTypeFocusNode,
+              value: _selectedListType,
+              items: TraktListType.values.map((t) => DropdownMenuItem(
+                value: t,
+                child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              )).toList(),
+              onChanged: _onListTypeChanged,
+              hint: 'List Type',
+              onUpArrow: widget.onUpArrowFromFilters,
+              onDownArrow: _focusFirstCard,
+              onRightFocus: _contentTypeFocusNode,
+            ),
           ),
           const SizedBox(width: 8),
           // Content type dropdown
-          _buildDropdown<TraktContentType>(
-            focusNode: _contentTypeFocusNode,
-            value: _selectedContentType,
-            items: TraktContentType.values.map((t) => DropdownMenuItem(
-              value: t,
-              child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-            )).toList(),
-            onChanged: _onContentTypeChanged,
-            hint: 'Content Type',
-            onUpArrow: widget.onUpArrowFromFilters,
-            onDownArrow: _focusFirstCard,
-            onLeftFocus: _listTypeFocusNode,
-            onRightFocus: _selectedListType == TraktListType.customList ? _customListFocusNode : null,
+          Flexible(
+            flex: 2,
+            child: _buildDropdown<TraktContentType>(
+              focusNode: _contentTypeFocusNode,
+              value: _selectedContentType,
+              items: TraktContentType.values.map((t) => DropdownMenuItem(
+                value: t,
+                child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              )).toList(),
+              onChanged: _onContentTypeChanged,
+              hint: 'Type',
+              onUpArrow: widget.onUpArrowFromFilters,
+              onDownArrow: _focusFirstCard,
+              onLeftFocus: _listTypeFocusNode,
+              onRightFocus: hasCustomList ? _customListFocusNode : null,
+            ),
           ),
           // Custom list dropdown (only when Custom Lists is selected)
-          if (_selectedListType == TraktListType.customList) ...[
+          if (hasCustomList) ...[
             const SizedBox(width: 8),
             Flexible(
+              flex: 3,
               child: _buildDropdown<String>(
                 focusNode: _customListFocusNode,
                 value: _selectedCustomList != null
@@ -1028,7 +1036,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                   final name = list['name'] as String? ?? 'Unknown';
                   return DropdownMenuItem(
                     value: slug,
-                    child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 13)),
                   );
                 }).toList(),
                 onChanged: (slug) {
@@ -1046,17 +1054,17 @@ class TraktResultsViewState extends State<TraktResultsView> {
               ),
             ),
           ],
-          // Item count
-          const Spacer(),
+          // Item count / loading indicator
+          const SizedBox(width: 8),
           if (_isLoading)
             const SizedBox(
-              width: 16,
-              height: 16,
+              width: 14,
+              height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else if (_filteredItems.isNotEmpty)
             Text(
-              '${_filteredItems.length} item${_filteredItems.length != 1 ? 's' : ''}',
+              '${_filteredItems.length}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1104,22 +1112,25 @@ class TraktResultsViewState extends State<TraktResultsView> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<T>(
             value: value,
             isExpanded: true,
+            isDense: true,
             dropdownColor: const Color(0xFF1E293B),
             icon: Icon(
               Icons.keyboard_arrow_down_rounded,
+              size: 20,
               color: Colors.white.withValues(alpha: 0.7),
             ),
             hint: Text(
               hint,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+              overflow: TextOverflow.ellipsis,
             ),
             items: items,
             onChanged: onChanged,
@@ -1261,6 +1272,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
           // Show title
           Flexible(
+            flex: 2,
             child: Text(
               _selectedShow!.name,
               style: theme.textTheme.titleSmall?.copyWith(
@@ -1274,21 +1286,24 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
           // Season dropdown
           if (_seasons.isNotEmpty)
-            _buildDropdown<int>(
-              focusNode: _seasonDropdownFocusNode,
-              value: _selectedSeasonNumber,
-              items: _seasons.map((s) => DropdownMenuItem(
-                value: s.number,
-                child: Text(
-                  s.displayLabel,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              )).toList(),
-              onChanged: _onSeasonChanged,
-              hint: 'Season',
-              onUpArrow: widget.onUpArrowFromFilters,
-              onDownArrow: _focusFirstEpisodeCard,
-              onLeftFocus: _backButtonFocusNode,
+            Flexible(
+              flex: 3,
+              child: _buildDropdown<int>(
+                focusNode: _seasonDropdownFocusNode,
+                value: _selectedSeasonNumber,
+                items: _seasons.map((s) => DropdownMenuItem(
+                  value: s.number,
+                  child: Text(
+                    s.displayLabel,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                )).toList(),
+                onChanged: _onSeasonChanged,
+                hint: 'Season',
+                onUpArrow: widget.onUpArrowFromFilters,
+                onDownArrow: _focusFirstEpisodeCard,
+                onLeftFocus: _backButtonFocusNode,
+              ),
             ),
 
           if (!_isLoadingEpisodes && _seasons.isNotEmpty) ...[
@@ -1626,12 +1641,12 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            color: colorScheme.surfaceContainerHighest.withValues(alpha:0.5),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
                   ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.2),
+                  : colorScheme.outline.withValues(alpha:0.2),
               width: _isFocused ? 2 : 1,
             ),
           ),
@@ -1971,7 +1986,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       color: colorScheme.surfaceContainerHighest,
       child: Icon(
         widget.item.type == 'series' ? Icons.tv_rounded : Icons.movie_rounded,
-        color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+        color: colorScheme.onSurfaceVariant.withValues(alpha:0.5),
         size: 32,
       ),
     );
@@ -2124,7 +2139,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -2161,17 +2176,21 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           children: [
             Icon(
               icon,
-              size: 18,
+              size: 16,
               color: Colors.white,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],
@@ -2293,15 +2312,15 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: widget.isNextEpisode && !_isFocused
-                ? const Color(0xFF6366F1).withOpacity(0.08)
-                : colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                ? const Color(0xFF6366F1).withValues(alpha:0.08)
+                : colorScheme.surfaceContainerHighest.withValues(alpha:0.5),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
                   ? colorScheme.primary
                   : widget.isNextEpisode
-                      ? const Color(0xFF6366F1).withOpacity(0.5)
-                      : colorScheme.outline.withOpacity(0.2),
+                      ? const Color(0xFF6366F1).withValues(alpha:0.5)
+                      : colorScheme.outline.withValues(alpha:0.2),
               width: _isFocused ? 2 : widget.isNextEpisode ? 1.5 : 1,
             ),
           ),
@@ -2558,7 +2577,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
       color: colorScheme.surfaceContainerHighest,
       child: Icon(
         Icons.tv_rounded,
-        color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+        color: colorScheme.onSurfaceVariant.withValues(alpha:0.5),
         size: 24,
       ),
     );
@@ -2716,7 +2735,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -2753,17 +2772,21 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           children: [
             Icon(
               icon,
-              size: 18,
+              size: 16,
               color: Colors.white,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
           ],
