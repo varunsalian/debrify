@@ -371,6 +371,29 @@ class TraktService {
     }
   }
 
+  /// Search Trakt for movies or shows by query.
+  /// [query] is the search text, [type] is 'movie' or 'show'.
+  /// Returns raw API results. Public endpoint — no auth required.
+  Future<List<dynamic>> searchItems(String query, String type) async {
+    if (query.trim().isEmpty) return [];
+    final encoded = Uri.encodeComponent(query.trim());
+    final url = '$kTraktApiBaseUrl/search/$type?query=$encoded&extended=full&limit=30';
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _apiHeaders(),
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        debugPrint('Trakt: search failed ($type, "${query}") — ${response.statusCode}');
+        return [];
+      }
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: search error: $e');
+      return [];
+    }
+  }
+
   /// Fetch all seasons with episodes for a show.
   /// [showId] can be an IMDB ID (e.g. 'tt1234567') or Trakt slug.
   /// This is a public endpoint — no auth token required.

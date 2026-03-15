@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
@@ -15,6 +16,7 @@ enum TraktListType {
   collection,
   ratings,
   recommendations,
+  search,
   customList,
 }
 
@@ -31,6 +33,8 @@ extension TraktListTypeExtension on TraktListType {
         return 'Recommendations';
       case TraktListType.progress:
         return 'Continue Watching';
+      case TraktListType.search:
+        return 'Search Trakt';
       case TraktListType.customList:
         return 'Custom Lists';
     }
@@ -48,6 +52,8 @@ extension TraktListTypeExtension on TraktListType {
         return 'recommendations';
       case TraktListType.progress:
         return 'watched';
+      case TraktListType.search:
+        return 'search';
       case TraktListType.customList:
         return '';
     }
@@ -136,6 +142,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
+  Timer? _searchDebounce;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
@@ -162,12 +169,25 @@ class TraktResultsViewState extends State<TraktResultsView> {
     super.didUpdateWidget(oldWidget);
     if (widget.searchQuery != _lastSearchQuery) {
       _lastSearchQuery = widget.searchQuery;
-      _applySearchFilter();
+      if (_selectedListType == TraktListType.search) {
+        // Debounce API search to avoid hammering Trakt on every keystroke
+        _searchDebounce?.cancel();
+        if (widget.searchQuery.isEmpty) {
+          _fetchItems(); // Clear results immediately
+        } else {
+          _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+            if (mounted) _fetchItems();
+          });
+        }
+      } else {
+        _applySearchFilter();
+      }
     }
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     _episodeScrollController.dispose();
     _listTypeFocusNode.dispose();
@@ -197,6 +217,16 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   Future<void> _fetchItems() async {
+    // Search type: don't auto-fetch, wait for query
+    if (_selectedListType == TraktListType.search && widget.searchQuery.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _items = [];
+        _filteredItems = [];
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -213,7 +243,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     try {
       List<dynamic> rawItems;
 
-      if (_selectedListType == TraktListType.customList) {
+      if (_selectedListType == TraktListType.search) {
+        final searchType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
+        rawItems = await _traktService.searchItems(widget.searchQuery, searchType);
+      } else if (_selectedListType == TraktListType.customList) {
         // Load custom lists if not loaded
         if (!_customListsLoaded) {
           _customLists = await _traktService.fetchCustomLists();
@@ -1311,7 +1344,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.movie_filter_outlined,
+            _selectedListType == TraktListType.search ? Icons.search : Icons.movie_filter_outlined,
             size: 64,
             color: colorScheme.onSurfaceVariant,
           ),
@@ -1322,9 +1355,13 @@ class TraktResultsViewState extends State<TraktResultsView> {
           ),
           const SizedBox(height: 8),
           Text(
-            _selectedListType == TraktListType.progress
-                ? 'You haven\'t watched any ${_selectedContentType.label.toLowerCase()} yet.'
-                : 'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
+            _selectedListType == TraktListType.search
+                ? (widget.searchQuery.isEmpty
+                    ? 'Type in the search bar above to search Trakt.'
+                    : 'No ${_selectedContentType.label.toLowerCase()} found for "${widget.searchQuery}".')
+                : _selectedListType == TraktListType.progress
+                    ? 'You haven\'t watched any ${_selectedContentType.label.toLowerCase()} yet.'
+                    : 'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
