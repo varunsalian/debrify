@@ -44,6 +44,9 @@ class _HomeTraktContinueWatchingSectionState
   final TraktService _traktService = TraktService.instance;
   List<StremioMeta> _items = [];
   Map<String, double> _progressMap = {};
+  /// Playback entry IDs from Trakt API, keyed by IMDB ID.
+  /// For shows, stores all playback IDs for that show.
+  Map<String, List<int>> _playbackIds = {};
   bool _isLoading = true;
 
   final List<FocusNode> _cardFocusNodes = [];
@@ -116,6 +119,7 @@ class _HomeTraktContinueWatchingSectionState
 
       List<StremioMeta> items;
       Map<String, double> progressMap = {};
+      Map<String, List<int>> playbackIds = {};
 
       if (widget.contentType == 'movies') {
         items = TraktItemTransformer.transformList(rawItems,
@@ -123,11 +127,15 @@ class _HomeTraktContinueWatchingSectionState
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
+          final pbId = raw['id'] as int?;
           final movie = raw['movie'] as Map<String, dynamic>?;
           final ids = movie?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
           if (imdbId != null && progress != null) {
             progressMap[imdbId] = progress.toDouble();
+          }
+          if (imdbId != null && pbId != null) {
+            playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
           }
         }
       } else {
@@ -135,11 +143,15 @@ class _HomeTraktContinueWatchingSectionState
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
+          final pbId = raw['id'] as int?;
           final show = raw['show'] as Map<String, dynamic>?;
           final ids = show?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
           if (imdbId != null && progress != null) {
             progressMap.putIfAbsent(imdbId, () => progress.toDouble());
+          }
+          if (imdbId != null && pbId != null) {
+            playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
           }
         }
       }
@@ -148,6 +160,7 @@ class _HomeTraktContinueWatchingSectionState
       setState(() {
         _items = items;
         _progressMap = progressMap;
+        _playbackIds = playbackIds;
         _isLoading = false;
       });
       _ensureFocusNodes();
@@ -207,6 +220,19 @@ class _HomeTraktContinueWatchingSectionState
               ],
             ),
           ),
+          const Divider(height: 1),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'remove'),
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline_rounded, size: 20,
+                    color: Colors.red.withValues(alpha: 0.8)),
+                const SizedBox(width: 12),
+                Text('Remove from Continue Watching',
+                    style: TextStyle(color: Colors.red.withValues(alpha: 0.8))),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -216,6 +242,8 @@ class _HomeTraktContinueWatchingSectionState
       _browseItem(item);
     } else if (choice == 'quick_play') {
       _quickPlayItem(item);
+    } else if (choice == 'remove') {
+      _removePlayback(item);
     }
   }
 
@@ -280,6 +308,24 @@ class _HomeTraktContinueWatchingSectionState
       widget.onQuickPlay!(selection);
     } else {
       widget.onItemSelected?.call(selection);
+    }
+  }
+
+  Future<void> _removePlayback(StremioMeta item) async {
+    final imdbId = item.imdbId ?? item.id;
+    final ids = _playbackIds[imdbId];
+    if (ids == null || ids.isEmpty) return;
+
+    // Remove all playback entries for this item
+    bool anySuccess = false;
+    for (final pbId in ids) {
+      final ok = await _traktService.removePlaybackItem(pbId);
+      if (ok) anySuccess = true;
+    }
+
+    if (anySuccess && mounted) {
+      // Reload the list
+      _loadItems();
     }
   }
 

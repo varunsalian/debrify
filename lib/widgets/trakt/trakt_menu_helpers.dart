@@ -21,6 +21,7 @@ enum TraktItemMenuAction {
   removeRating,
   addToList,
   removeFromList,
+  removeFromPlayback,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -231,6 +232,8 @@ Future<void> handleTraktMenuAction(
       success = await traktService.removeRating(imdbId, type);
     case TraktItemMenuAction.removeFromList:
       return; // No context for which list to remove from
+    case TraktItemMenuAction.removeFromPlayback:
+      return; // Only handled in TraktResultsView which has playback IDs
   }
 
   if (!context.mounted) return;

@@ -138,6 +138,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Map<String, double> _watchProgress = {};
   bool _progressLoaded = false;
 
+  // Playback entry IDs from /sync/playback, keyed by IMDB ID
+  Map<String, List<int>> _playbackIds = {};
+
   // Focus nodes for DPAD
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'trakt-content-type');
@@ -299,6 +302,25 @@ class TraktResultsViewState extends State<TraktResultsView> {
       }
 
       if (!mounted) return;
+
+      // Capture playback IDs for Continue Watching items
+      if (_selectedListType == TraktListType.progress) {
+        final pbIds = <String, List<int>>{};
+        for (final raw in rawItems) {
+          if (raw is! Map<String, dynamic>) continue;
+          final pbId = raw['id'] as int?;
+          final contentKey = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
+          final content = raw[contentKey] as Map<String, dynamic>?;
+          final ids = content?['ids'] as Map<String, dynamic>?;
+          final imdbId = ids?['imdb'] as String?;
+          if (imdbId != null && pbId != null) {
+            pbIds.putIfAbsent(imdbId, () => []).add(pbId);
+          }
+        }
+        _playbackIds = pbIds;
+      } else {
+        _playbackIds = {};
+      }
 
       // Transform raw items into StremioMeta objects
       final List<StremioMeta> metas;
@@ -548,6 +570,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
         actionLabel = 'Removed from List';
         success = await _traktService.removeFromCustomList(
             listSlug, imdbId, type);
+        if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.removeFromPlayback:
+        final pbIds = _playbackIds[imdbId];
+        if (pbIds == null || pbIds.isEmpty) return;
+        actionLabel = 'Removed from Continue Watching';
+        for (final pbId in pbIds) {
+          final ok = await _traktService.removePlaybackItem(pbId);
+          if (ok) success = true;
+        }
         if (success && mounted) _fetchItems();
     }
 
@@ -1788,6 +1819,16 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 : 'Add to List...'),
           ]),
         ),
+        if (listType == TraktListType.progress)
+          const PopupMenuItem(
+            value: TraktItemMenuAction.removeFromPlayback,
+            child: Row(children: [
+              Icon(Icons.delete_outline_rounded,
+                  size: 18, color: Color(0xFFEF4444)),
+              SizedBox(width: 12),
+              Text('Remove from Continue Watching'),
+            ]),
+          ),
       ],
       ),
     );

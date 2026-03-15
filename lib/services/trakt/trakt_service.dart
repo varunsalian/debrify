@@ -422,6 +422,47 @@ class TraktService {
     }
   }
 
+  Future<http.Response?> _authenticatedDelete(String path) async {
+    var accessToken = await StorageService.getTraktAccessToken();
+    if (accessToken == null) return null;
+
+    try {
+      var response = await http.delete(
+        Uri.parse('$kTraktApiBaseUrl$path'),
+        headers: _apiHeaders(accessToken: accessToken),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 401) {
+        final refreshed = await refreshAccessToken();
+        if (!refreshed) return null;
+
+        accessToken = await StorageService.getTraktAccessToken();
+        if (accessToken == null) return null;
+
+        response = await http.delete(
+          Uri.parse('$kTraktApiBaseUrl$path'),
+          headers: _apiHeaders(accessToken: accessToken),
+        ).timeout(const Duration(seconds: 15));
+      }
+
+      return response;
+    } catch (e) {
+      debugPrint('Trakt: DELETE $path error: $e');
+      return null;
+    }
+  }
+
+  /// Remove a playback entry by its ID.
+  /// Returns true if successfully deleted (204 No Content).
+  Future<bool> removePlaybackItem(int playbackId) async {
+    final response = await _authenticatedDelete('/sync/playback/$playbackId');
+    if (response == null || response.statusCode != 204) {
+      debugPrint('Trakt: removePlaybackItem failed (${response?.statusCode})');
+      return false;
+    }
+    return true;
+  }
+
   /// Fetch a standard Trakt list (watchlist, collection, ratings, recommendations).
   /// [listType] is one of: watchlist, collection, ratings, recommendations.
   /// [contentType] is one of: movies, shows.
