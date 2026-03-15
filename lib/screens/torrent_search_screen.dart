@@ -53,6 +53,7 @@ import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
 import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
+import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
@@ -639,7 +640,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.infohash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -6364,7 +6365,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               stremioSources: _torrents,
               stremioCurrentSourceIndex: 0,
               resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-              traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+              traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
               traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
             ),
           );
@@ -6487,7 +6488,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: 0,
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -9031,7 +9032,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-            traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+            traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
@@ -9170,7 +9171,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -10328,7 +10329,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: 0,
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-            traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+            traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
@@ -10832,7 +10833,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           stremioSources: _torrents,
           stremioCurrentSourceIndex: 0,
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-          traktScrobble: _selectedSource.type == SearchSourceType.trakt,
+          traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
           traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
         ),
       );
@@ -12599,98 +12600,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         // For "All" mode with empty search, show favorites/provider cards
                         // For addon mode (Cinemeta etc), CatalogBrowser has its own content - don't overlay
                         if (_selectedSource.type == SearchSourceType.all && _searchController.text.isEmpty) {
-                          return ListView(
-                            padding: const EdgeInsets.all(12),
-                            children: [
-                              // Playlist favorites section (horizontal scroll)
-                              HomeFavoritesSection(
-                                focusController: _homeFocusController,
-                                isTelevision: _isTelevision,
-                                onRequestFocusAbove: () {
-                                  _providerAccordionFocusNode.requestFocus();
-                                },
-                                onRequestFocusBelow: () {
-                                  final next = _homeFocusController.getNextSection(HomeSection.favorites);
-                                  if (next != null) {
-                                    _homeFocusController.focusSection(next);
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              // IPTV favorites section (horizontal scroll)
-                              HomeIptvFavoritesSection(
-                                focusController: _homeFocusController,
-                                isTelevision: _isTelevision,
-                                onRequestFocusAbove: () {
-                                  final prev = _homeFocusController.getPreviousSection(HomeSection.iptvFavorites);
-                                  if (prev != null) {
-                                    _homeFocusController.focusSection(prev);
-                                  }
-                                },
-                                onRequestFocusBelow: () {
-                                  final next = _homeFocusController.getNextSection(HomeSection.iptvFavorites);
-                                  if (next != null) {
-                                    _homeFocusController.focusSection(next);
-                                  }
-                                },
-                                onPlayChannel: _playIptvChannelFromHome,
-                              ),
-                              const SizedBox(height: 16),
-                              // Debrify TV favorites section (horizontal scroll)
-                              HomeDebrifyTvFavoritesSection(
-                                focusController: _homeFocusController,
-                                isTelevision: _isTelevision,
-                                onRequestFocusAbove: () {
-                                  final prev = _homeFocusController.getPreviousSection(HomeSection.tvFavorites);
-                                  if (prev != null) {
-                                    _homeFocusController.focusSection(prev);
-                                  }
-                                },
-                                onRequestFocusBelow: () {
-                                  final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
-                                  if (next != null) {
-                                    _homeFocusController.focusSection(next);
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              // Stremio TV favorites section (horizontal scroll)
-                              HomeStremioTvFavoritesSection(
-                                focusController: _homeFocusController,
-                                isTelevision: _isTelevision,
-                                onRequestFocusAbove: () {
-                                  final prev = _homeFocusController.getPreviousSection(HomeSection.stremioTvFavorites);
-                                  if (prev != null) {
-                                    _homeFocusController.focusSection(prev);
-                                  }
-                                },
-                                onRequestFocusBelow: () {
-                                  final next = _homeFocusController.getNextSection(HomeSection.stremioTvFavorites);
-                                  if (next != null) {
-                                    _homeFocusController.focusSection(next);
-                                  }
-                                },
-                              ),
-                              if (!_hideProviderCards) ...[
-                                const SizedBox(height: 16),
-                                // Debrid services section
-                                ProviderStatusCards(
-                                  focusController: _homeFocusController,
-                                  isTelevision: _isTelevision,
-                                  onTapRealDebrid: () => MainPageBridge.switchTab?.call(4),
-                                  onTapTorbox: () => MainPageBridge.switchTab?.call(5),
-                                  onTapPikPak: () => MainPageBridge.switchTab?.call(6),
-                                  onRequestFocusAbove: () {
-                                    final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
-                                    if (prev != null) {
-                                      _homeFocusController.focusSection(prev);
-                                    }
-                                  },
-                                  // Providers is the last section, no onRequestFocusBelow needed
-                                ),
-                              ],
-                            ],
-                          );
+                          return _buildHomeSection();
                         }
                         return const SizedBox.shrink();
                       }
@@ -13286,16 +13196,90 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Home Section UI (Favorites & Providers)
   // ============================================================================
 
+  /// Switch to Trakt source and open episode browser for a show.
+  void _browseTraktShow(StremioMeta show) {
+    // Find the existing Trakt option from available sources
+    final traktOption = _availableSourceOptions.cast<SearchSourceOption?>().firstWhere(
+      (o) => o?.type == SearchSourceType.trakt,
+      orElse: () => null,
+    );
+    if (traktOption == null) return; // Trakt not available
+
+    // Switch source to Trakt
+    _onSearchSourceChanged(traktOption);
+
+    // Enter episode mode after the TraktResultsView has mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _traktResultsKey.currentState?.enterEpisodeMode(show);
+    });
+  }
+
   Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        // Trakt Continue Watching - Movies
+        HomeTraktContinueWatchingSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          homeSection: HomeSection.traktContinueWatchingMovies,
+          contentType: 'movies',
+          onItemSelected: (selection) {
+            _handleCatalogItemSelected(selection, updateSearchText: true);
+          },
+          onQuickPlay: (selection) {
+            _handleQuickPlay(selection);
+          },
+          onBrowseShow: (show) => _browseTraktShow(show),
+          onRequestFocusAbove: () {
+            _providerAccordionFocusNode.requestFocus();
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingMovies);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        // Trakt Continue Watching - Shows
+        HomeTraktContinueWatchingSection(
+          focusController: _homeFocusController,
+          isTelevision: _isTelevision,
+          homeSection: HomeSection.traktContinueWatchingShows,
+          contentType: 'episodes',
+          onItemSelected: (selection) {
+            _handleCatalogItemSelected(selection, updateSearchText: true);
+          },
+          onQuickPlay: (selection) {
+            _handleQuickPlay(selection);
+          },
+          onBrowseShow: (show) => _browseTraktShow(show),
+          onRequestFocusAbove: () {
+            final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingShows);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            }
+          },
+          onRequestFocusBelow: () {
+            final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingShows);
+            if (next != null) {
+              _homeFocusController.focusSection(next);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
         // Playlist favorites section (horizontal scroll)
         HomeFavoritesSection(
           focusController: _homeFocusController,
           isTelevision: _isTelevision,
           onRequestFocusAbove: () {
-            _providerAccordionFocusNode.requestFocus();
+            final prev = _homeFocusController.getPreviousSection(HomeSection.favorites);
+            if (prev != null) {
+              _homeFocusController.focusSection(prev);
+            } else {
+              _providerAccordionFocusNode.requestFocus();
+            }
           },
           onRequestFocusBelow: () {
             final next = _homeFocusController.getNextSection(HomeSection.favorites);

@@ -576,6 +576,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
+  /// Public entry point to open episode browser for a show.
+  /// Used by HomeTraktContinueWatchingSection to navigate here.
+  void enterEpisodeMode(StremioMeta show) => _enterEpisodeMode(show);
+
   // ── Episode drill-down ──────────────────────────────────────────────────────
 
   Future<void> _enterEpisodeMode(StremioMeta show) async {
