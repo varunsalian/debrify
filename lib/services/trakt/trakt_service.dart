@@ -557,6 +557,30 @@ class TraktService {
   }
 
   // ============================================================================
+  // Playback / Continue Watching Methods
+  // ============================================================================
+
+  /// Fetch playback items (paused mid-watch) with full metadata.
+  /// Returns raw items from /sync/playback for transformation.
+  /// Each item has shape: { "progress": N, "movie": { ... } } or { "progress": N, "show": { ... } }
+  Future<List<dynamic>> fetchPlaybackItems(String contentType) async {
+    final response =
+        await _authenticatedGet('/sync/playback/$contentType?extended=full');
+    if (response == null || response.statusCode != 200) {
+      debugPrint(
+          'Trakt: fetchPlaybackItems failed (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchPlaybackItems parse error: $e');
+      return [];
+    }
+  }
+
+  // ============================================================================
   // Watch Progress Methods
   // ============================================================================
 

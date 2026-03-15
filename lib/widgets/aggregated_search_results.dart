@@ -7,6 +7,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
+import '../services/trakt/trakt_service.dart';
+import 'trakt/trakt_menu_helpers.dart';
 
 /// Displays aggregated search results from all catalog sources
 ///
@@ -81,6 +83,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   late List<GlobalKey> _resultCardKeys; // Keys for scroll-into-view
   int _focusedIndex = -1; // -1 = keyword card focused, 0+ = result index
 
+  // Trakt integration
+  bool _isTraktAuthenticated = false;
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +95,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     // Notify parent of the focus node for external focus control
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onKeywordFocusNodeReady?.call(_keywordSearchFocusNode);
+    });
+    TraktService.instance.isAuthenticated().then((auth) {
+      if (mounted) setState(() => _isTraktAuthenticated = auth);
     });
     // Initial search without debounce
     _performSearch();
@@ -519,6 +527,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
                             _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
                         showQuickPlay: widget.showQuickPlay,
+                        onTraktMenuAction: _isTraktAuthenticated &&
+                                (item.effectiveImdbId != null || item.id.startsWith('tt'))
+                            ? (action) => handleTraktMenuAction(context, item, action)
+                            : null,
                       ),
                     ),
                   );
@@ -671,6 +683,7 @@ class _CatalogResultCard extends StatefulWidget {
   final ValueChanged<bool> onFocusChange;
   final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
   final bool showQuickPlay;
+  final void Function(TraktItemMenuAction action)? onTraktMenuAction;
 
   const _CatalogResultCard({
     required this.item,
@@ -681,6 +694,7 @@ class _CatalogResultCard extends StatefulWidget {
     required this.onFocusChange,
     required this.onKeyEvent,
     this.showQuickPlay = true,
+    this.onTraktMenuAction,
   });
 
   @override
@@ -688,49 +702,58 @@ class _CatalogResultCard extends StatefulWidget {
 }
 
 class _CatalogResultCardState extends State<_CatalogResultCard> {
-  // For DPAD: track which button is focused (true = Quick Play, false = Torrents)
-  // Default to Torrents (first button)
-  bool _isQuickPlayButtonFocused = false;
+  int _focusedButtonIndex = 0;
+  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
+      GlobalKey();
+
+  int get _buttonCount {
+    int count = 1; // Browse
+    if (widget.showQuickPlay) count++;
+    if (widget.onTraktMenuAction != null) count++;
+    return count;
+  }
+
+  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
+  int? get _moreIndex =>
+      widget.onTraktMenuAction != null ? _buttonCount - 1 : null;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Left/Right arrow navigation between buttons
-    // Order: [Torrents] [Quick Play]
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = false); // Move to Torrents
+      if (_focusedButtonIndex > 0) {
+        setState(() => _focusedButtonIndex--);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (!_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = true); // Move to Quick Play
+      if (_focusedButtonIndex < _buttonCount - 1) {
+        setState(() => _focusedButtonIndex++);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
 
-    // Select/Enter triggers the focused button
     if (event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_isQuickPlayButtonFocused) {
-        widget.onQuickPlay();
-      } else {
+      if (_focusedButtonIndex == 0) {
         widget.onSources();
+      } else if (_focusedButtonIndex == _quickPlayIndex) {
+        widget.onQuickPlay();
+      } else if (_focusedButtonIndex == _moreIndex) {
+        _menuKey.currentState?.showButtonMenu();
       }
       return KeyEventResult.handled;
     }
 
-    // Pass other key events (up/down navigation) to parent
-    return widget.onKeyEvent(node, event, isQuickPlayFocused: _isQuickPlayButtonFocused);
+    return widget.onKeyEvent(node, event,
+        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
   }
 
   void _handleFocusChange(bool focused) {
-    // Reset to Torrents button (first) when card gains focus
     if (focused) {
-      setState(() => _isQuickPlayButtonFocused = false);
+      setState(() => _focusedButtonIndex = 0);
     }
     widget.onFocusChange(focused);
   }
@@ -818,7 +841,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
               icon: Icons.list_rounded,
               label: 'Browse',
               color: const Color(0xFF6366F1),
-              isHighlighted: widget.isFocused && !_isQuickPlayButtonFocused,
+              isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
               onTap: widget.onSources,
             ),
             if (widget.showQuickPlay) ...[
@@ -827,8 +850,16 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 icon: Icons.play_arrow_rounded,
                 label: 'Quick Play',
                 color: const Color(0xFF10B981),
-                isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
+                isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
                 onTap: widget.onQuickPlay,
+              ),
+            ],
+            if (widget.onTraktMenuAction != null) ...[
+              const SizedBox(width: 4),
+              buildTraktAddOnlyOverflowMenu(
+                isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
+                menuKey: _menuKey,
+                onSelected: (action) => widget.onTraktMenuAction?.call(action),
               ),
             ],
           ],
@@ -889,7 +920,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 icon: Icons.list_rounded,
                 label: 'Browse',
                 color: const Color(0xFF6366F1),
-                isHighlighted: widget.isFocused && !_isQuickPlayButtonFocused,
+                isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onSources,
               ),
             ),
@@ -900,9 +931,17 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
                   color: const Color(0xFF10B981),
-                  isHighlighted: widget.isFocused && _isQuickPlayButtonFocused,
+                  isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
+              ),
+            ],
+            if (widget.onTraktMenuAction != null) ...[
+              const SizedBox(width: 4),
+              buildTraktAddOnlyOverflowMenu(
+                isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
+                menuKey: _menuKey,
+                onSelected: (action) => widget.onTraktMenuAction?.call(action),
               ),
             ],
           ],

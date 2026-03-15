@@ -6,6 +6,7 @@ import '../../models/advanced_search_selection.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/trakt/trakt_item_transformer.dart';
 import '../../services/trakt/trakt_episode_model.dart';
+import 'trakt_menu_helpers.dart';
 import '../../services/tvmaze_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
@@ -51,7 +52,7 @@ extension TraktListTypeExtension on TraktListType {
       case TraktListType.recommendations:
         return 'recommendations';
       case TraktListType.progress:
-        return 'watched';
+        return 'playback';
       case TraktListType.search:
         return 'search';
       case TraktListType.customList:
@@ -86,26 +87,7 @@ extension TraktContentTypeExtension on TraktContentType {
   }
 }
 
-/// Actions available in the Trakt episode overflow menu.
-enum TraktEpisodeMenuAction {
-  markWatched,
-  markUnwatched,
-  rate,
-}
-
-/// Actions available in the Trakt item overflow menu.
-enum TraktItemMenuAction {
-  addToWatchlist,
-  removeFromWatchlist,
-  addToCollection,
-  removeFromCollection,
-  markWatched,
-  markUnwatched,
-  rate,
-  removeRating,
-  addToList,
-  removeFromList,
-}
+// TraktEpisodeMenuAction and TraktItemMenuAction enums are in trakt_menu_helpers.dart
 
 /// Main view for Trakt list results, embedded in TorrentSearchScreen.
 class TraktResultsView extends StatefulWidget {
@@ -302,6 +284,13 @@ class TraktResultsViewState extends State<TraktResultsView> {
           listSlug,
           _selectedContentType.apiValue,
         );
+      } else if (_selectedListType == TraktListType.progress) {
+        // Continue Watching — fetch from /sync/playback (partial progress items)
+        // Trakt uses 'movies' and 'episodes' (not 'shows') for playback
+        final playbackType = _selectedContentType == TraktContentType.shows
+            ? 'episodes'
+            : 'movies';
+        rawItems = await _traktService.fetchPlaybackItems(playbackType);
       } else {
         rawItems = await _traktService.fetchList(
           _selectedListType.apiValue,
@@ -311,9 +300,16 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
       if (!mounted) return;
 
-      // Infer type for flat-format endpoints (recommendations)
-      final inferredType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
-      final metas = TraktItemTransformer.transformList(rawItems, inferredType: inferredType);
+      // Transform raw items into StremioMeta objects
+      final List<StremioMeta> metas;
+      if (_selectedListType == TraktListType.progress &&
+          _selectedContentType == TraktContentType.shows) {
+        // Playback episodes → deduplicate into shows
+        metas = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
+      } else {
+        final inferredType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
+        metas = TraktItemTransformer.transformList(rawItems, inferredType: inferredType);
+      }
 
       setState(() {
         _isLoading = false;
@@ -564,160 +560,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     ));
   }
 
-  Future<int?> _showRatingDialog() async {
-    return showDialog<int>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.star_rate_rounded,
-                        color: Color(0xFFFBBF24), size: 24),
-                    SizedBox(width: 8),
-                    Text(
-                      'Rate this item',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: List.generate(10, (i) {
-                    final rating = i + 1;
-                    return SizedBox(
-                      width: 52,
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF334155),
-                          foregroundColor: const Color(0xFFFBBF24),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                        onPressed: () =>
-                            Navigator.of(dialogContext).pop(rating),
-                        child: Text(
-                          '$rating',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel',
-                      style: TextStyle(color: Colors.white54)),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  Future<int?> _showRatingDialog() => showTraktRatingDialog(context);
 
-  Future<Map<String, dynamic>?> _showCustomListPickerDialog() async {
-    final lists = await _traktService.fetchCustomLists();
-    if (!mounted) return null;
-    if (lists.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('No custom lists found. Create one on Trakt first.'),
-        backgroundColor: Color(0xFFEF4444),
-      ));
-      return null;
-    }
-
-    return showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.playlist_add,
-                          color: Color(0xFFEC4899), size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        'Add to List',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: lists.length,
-                      itemBuilder: (context, index) {
-                        final list = lists[index];
-                        final name = list['name'] as String? ?? 'Unknown';
-                        final itemCount = list['item_count'] as int? ?? 0;
-                        return ListTile(
-                          leading: const Icon(Icons.playlist_play,
-                              color: Color(0xFFEC4899)),
-                          title: Text(name,
-                              style: const TextStyle(color: Colors.white)),
-                          subtitle: Text('$itemCount items',
-                              style: const TextStyle(color: Colors.white54)),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          onTap: () =>
-                              Navigator.of(dialogContext).pop(list),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Cancel',
-                        style: TextStyle(color: Colors.white54)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+  Future<Map<String, dynamic>?> _showCustomListPickerDialog() =>
+      showTraktCustomListPickerDialog(context);
 
   /// Focus the first filter (for DPAD navigation from search input)
   void focusFirstFilter() {

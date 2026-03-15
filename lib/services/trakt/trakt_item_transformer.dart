@@ -119,4 +119,23 @@ class TraktItemTransformer {
     }
     return result;
   }
+
+  /// Transform playback episode items into deduplicated show [StremioMeta] objects.
+  /// Playback episodes have shape: { "type": "episode", "episode": {...}, "show": {...} }
+  /// We extract the show and deduplicate by IMDB ID so each show appears once.
+  static List<StremioMeta> transformPlaybackEpisodes(List<dynamic> items) {
+    final seen = <String>{};
+    final result = <StremioMeta>[];
+    for (final raw in items) {
+      if (raw is! Map<String, dynamic>) continue;
+      final show = raw['show'] as Map<String, dynamic>?;
+      if (show == null) continue;
+      final meta = transformItem({'show': show}, inferredType: 'show');
+      if (meta == null) continue;
+      if (seen.contains(meta.id)) continue;
+      seen.add(meta.id);
+      result.add(meta);
+    }
+    return result;
+  }
 }
