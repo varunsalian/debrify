@@ -2133,6 +2133,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
 
+    // Scrobble stop for the current episode before switching
+    _traktScrobble('stop');
+
     await _saveResume();
     final entry = _activePlaylist![index];
     _currentIndex = index;

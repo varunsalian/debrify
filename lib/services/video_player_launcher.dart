@@ -1331,11 +1331,20 @@ class VideoPlayerLauncher {
         // Treat buffering as still playing — ExoPlayer sets isPlaying=false during buffer
         final isPlaying = progress['isPlaying'] == true || progress['isBuffering'] == true;
         final traktProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
-        _traktLastKnownProgress = traktProgress;
         final imdbId = payload.imdbId!;
         // For series, read season/episode from Kotlin progress update
         final season = progress['season'] as int?;
         final episode = progress['episode'] as int?;
+
+        // Detect episode switch — scrobble stop for the old episode
+        if (_traktLastKnownSeason != null && _traktLastKnownEpisode != null &&
+            (season != _traktLastKnownSeason || episode != _traktLastKnownEpisode) &&
+            _traktLastScrobbleAction != 'stop') {
+          TraktService.instance.scrobbleStop(imdbId, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
+          _traktLastScrobbleAction = 'stop';
+        }
+
+        _traktLastKnownProgress = traktProgress;
         _traktLastKnownSeason = season;
         _traktLastKnownEpisode = episode;
         if (completed && _traktLastScrobbleAction != 'stop') {
