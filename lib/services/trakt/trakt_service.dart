@@ -337,6 +337,55 @@ class TraktService {
           String listId, String imdbId, String type) =>
       _syncAction('/users/me/lists/$listId/items/remove', imdbId, type);
 
+  /// Episode-level sync action helper.
+  /// Body format: { "shows": [{ "ids": {"imdb": ...}, "seasons": [{ "number": N, "episodes": [{ "number": M, ...extraFields }] }] }] }
+  Future<bool> _syncEpisodeAction(
+    String path,
+    String showImdbId,
+    int season,
+    int episode, {
+    Map<String, dynamic>? extraEpisodeFields,
+  }) async {
+    final ep = <String, dynamic>{
+      'number': episode,
+      if (extraEpisodeFields != null) ...extraEpisodeFields,
+    };
+    final body = {
+      'shows': [
+        {
+          'ids': {'imdb': showImdbId},
+          'seasons': [
+            {
+              'number': season,
+              'episodes': [ep],
+            }
+          ],
+        }
+      ],
+    };
+    final response = await _authenticatedPost(path, body);
+    if (response == null) return false;
+    final ok = response.statusCode >= 200 && response.statusCode < 300;
+    if (!ok) {
+      debugPrint(
+          'Trakt: $path S${season}E$episode failed (${response.statusCode}): ${response.body}');
+    }
+    return ok;
+  }
+
+  Future<bool> markEpisodeWatched(
+          String showImdbId, int season, int episode) =>
+      _syncEpisodeAction('/sync/history', showImdbId, season, episode);
+
+  Future<bool> markEpisodeUnwatched(
+          String showImdbId, int season, int episode) =>
+      _syncEpisodeAction('/sync/history/remove', showImdbId, season, episode);
+
+  Future<bool> rateEpisode(
+          String showImdbId, int season, int episode, int rating) =>
+      _syncEpisodeAction('/sync/ratings', showImdbId, season, episode,
+          extraEpisodeFields: {'rating': rating});
+
   // ============================================================================
   // List API Methods
   // ============================================================================

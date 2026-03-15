@@ -86,6 +86,13 @@ extension TraktContentTypeExtension on TraktContentType {
   }
 }
 
+/// Actions available in the Trakt episode overflow menu.
+enum TraktEpisodeMenuAction {
+  markWatched,
+  markUnwatched,
+  rate,
+}
+
 /// Actions available in the Trakt item overflow menu.
 enum TraktItemMenuAction {
   addToWatchlist,
@@ -1011,6 +1018,47 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
+  Future<void> _onEpisodeMenuAction(
+      TraktEpisode episode, TraktEpisodeMenuAction action) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final showImdbId = show.effectiveImdbId ?? show.id;
+    final key = '${episode.season}-${episode.number}';
+    bool success = false;
+    String actionLabel = '';
+
+    switch (action) {
+      case TraktEpisodeMenuAction.markWatched:
+        actionLabel = 'Marked as Watched';
+        success = await _traktService.markEpisodeWatched(
+            showImdbId, episode.season, episode.number);
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress[key] = 100.0);
+        }
+      case TraktEpisodeMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched';
+        success = await _traktService.markEpisodeUnwatched(
+            showImdbId, episode.season, episode.number);
+        if (success && mounted) {
+          setState(() => _episodeWatchProgress.remove(key));
+        }
+      case TraktEpisodeMenuAction.rate:
+        final rating = await _showRatingDialog();
+        if (rating == null) return;
+        actionLabel = 'Rated $rating/10';
+        success = await _traktService.rateEpisode(
+            showImdbId, episode.season, episode.number, rating);
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+      backgroundColor:
+          success ? const Color(0xFF34D399) : const Color(0xFFEF4444),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
   void _focusFirstEpisodeCard() {
     if (_episodeFocusNodes.isNotEmpty) {
       _episodeFocusNodes[0].requestFocus();
@@ -1485,6 +1533,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               isNextEpisode: _nextEpisode != null && _nextEpisode!.season == episode.season && _nextEpisode!.episode == episode.number,
               onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
                   _handleEpisodeCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+              onMenuAction: (action) => _onEpisodeMenuAction(episode, action),
             ),
           );
         },
@@ -2300,6 +2349,7 @@ class _TraktEpisodeCard extends StatefulWidget {
   final double? watchProgress;
   final bool isNextEpisode;
   final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final void Function(TraktEpisodeMenuAction action)? onMenuAction;
 
   const _TraktEpisodeCard({
     required this.episode,
@@ -2311,6 +2361,7 @@ class _TraktEpisodeCard extends StatefulWidget {
     this.watchProgress,
     this.isNextEpisode = false,
     required this.onKeyEvent,
+    this.onMenuAction,
   });
 
   @override
@@ -2319,21 +2370,34 @@ class _TraktEpisodeCard extends StatefulWidget {
 
 class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
   bool _isFocused = false;
-  bool _isQuickPlayButtonFocused = false;
+  int _focusedButtonIndex = 0;
+  final GlobalKey<PopupMenuButtonState<TraktEpisodeMenuAction>> _menuKey =
+      GlobalKey();
+
+  int get _buttonCount {
+    int count = 1; // Browse
+    if (widget.showQuickPlay) count++;
+    if (widget.onMenuAction != null) count++;
+    return count;
+  }
+
+  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
+  int? get _moreIndex =>
+      widget.onMenuAction != null ? _buttonCount - 1 : null;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_isQuickPlayButtonFocused) {
-        setState(() => _isQuickPlayButtonFocused = false);
+      if (_focusedButtonIndex > 0) {
+        setState(() => _focusedButtonIndex--);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (!_isQuickPlayButtonFocused && widget.showQuickPlay) {
-        setState(() => _isQuickPlayButtonFocused = true);
+      if (_focusedButtonIndex < _buttonCount - 1) {
+        setState(() => _focusedButtonIndex++);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -2341,15 +2405,18 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
 
     if (event.logicalKey == LogicalKeyboardKey.select ||
         event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_isQuickPlayButtonFocused) {
-        widget.onQuickPlay();
-      } else {
+      if (_focusedButtonIndex == 0) {
         widget.onBrowse();
+      } else if (_focusedButtonIndex == _quickPlayIndex) {
+        widget.onQuickPlay();
+      } else if (_focusedButtonIndex == _moreIndex) {
+        _menuKey.currentState?.showButtonMenu();
       }
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event, isQuickPlayFocused: _isQuickPlayButtonFocused);
+    return widget.onKeyEvent(event,
+        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
   }
 
   @override
@@ -2362,7 +2429,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
       onFocusChange: (focused) {
         setState(() {
           _isFocused = focused;
-          _isQuickPlayButtonFocused = false;
+          _focusedButtonIndex = 0;
         });
         if (focused) {
           Scrollable.ensureVisible(
@@ -2401,6 +2468,72 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEpisodeOverflowMenu() {
+    final isWatched = (widget.watchProgress ?? 0) >= 100;
+    final isHighlighted = _isFocused && _focusedButtonIndex == _moreIndex;
+
+    return Container(
+      decoration: isHighlighted
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.4),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ],
+            )
+          : null,
+      child: PopupMenuButton<TraktEpisodeMenuAction>(
+        key: _menuKey,
+        icon: Icon(
+          Icons.more_vert,
+          size: 20,
+          color: isHighlighted
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.7),
+        ),
+        tooltip: 'More options',
+        color: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        onSelected: (action) => widget.onMenuAction?.call(action),
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: isWatched
+                ? TraktEpisodeMenuAction.markUnwatched
+                : TraktEpisodeMenuAction.markWatched,
+            child: Row(children: [
+              Icon(
+                isWatched ? Icons.visibility_off : Icons.visibility,
+                size: 18,
+                color: const Color(0xFF34D399),
+              ),
+              const SizedBox(width: 12),
+              Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
+            ]),
+          ),
+          PopupMenuItem(
+            value: TraktEpisodeMenuAction.rate,
+            child: Row(children: [
+              Icon(
+                Icons.star_rate_rounded,
+                size: 18,
+                color: const Color(0xFFFBBF24),
+              ),
+              const SizedBox(width: 12),
+              const Text('Rate Episode'),
+            ]),
+          ),
+        ],
       ),
     );
   }
@@ -2456,7 +2589,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           icon: Icons.list_rounded,
           label: 'Browse',
           color: const Color(0xFF6366F1),
-          isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+          isHighlighted: _isFocused && _focusedButtonIndex == 0,
           onTap: widget.onBrowse,
         ),
         if (widget.showQuickPlay) ...[
@@ -2465,9 +2598,13 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             icon: Icons.play_arrow_rounded,
             label: 'Quick Play',
             color: const Color(0xFFB91C1C),
-            isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
             onTap: widget.onQuickPlay,
           ),
+        ],
+        if (widget.onMenuAction != null) ...[
+          const SizedBox(width: 4),
+          _buildEpisodeOverflowMenu(),
         ],
       ],
     );
@@ -2531,7 +2668,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                 icon: Icons.list_rounded,
                 label: 'Browse',
                 color: const Color(0xFF6366F1),
-                isHighlighted: _isFocused && !_isQuickPlayButtonFocused,
+                isHighlighted: _isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onBrowse,
               ),
             ),
@@ -2542,10 +2679,14 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
                   color: const Color(0xFFB91C1C),
-                  isHighlighted: _isFocused && _isQuickPlayButtonFocused,
+                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
+            ],
+            if (widget.onMenuAction != null) ...[
+              const SizedBox(width: 4),
+              _buildEpisodeOverflowMenu(),
             ],
           ],
         ),
