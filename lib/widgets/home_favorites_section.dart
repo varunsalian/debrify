@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -6,7 +8,7 @@ import '../services/main_page_bridge.dart';
 import '../screens/playlist_content_view_screen.dart';
 import 'home_focus_controller.dart';
 
-/// Horizontal scrollable favorites section for the home screen
+/// Premium OTT-style horizontal scrollable favorites section for the home screen
 class HomeFavoritesSection extends StatefulWidget {
   final HomeFocusController? focusController;
   final VoidCallback? onRequestFocusAbove;
@@ -31,13 +33,13 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   bool _isLoading = true;
   String? _playingItemKey;
 
-  // Focus management for DPAD navigation
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
 
-  // Scroll indicators
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
+
+  static const _accentColor = Color(0xFFFFD700);
 
   @override
   void initState() {
@@ -61,9 +63,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
   @override
   void dispose() {
-    // Unregister from controller
     widget.focusController?.unregisterSection(HomeSection.favorites);
-    // Dispose focus nodes
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -72,13 +72,11 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     super.dispose();
   }
 
-  /// Ensure we have the right number of focus nodes for current items
   void _ensureFocusNodes() {
-    // Add nodes if needed
     while (_cardFocusNodes.length < _favoriteItems.length) {
-      _cardFocusNodes.add(FocusNode(debugLabel: 'favorite_card_${_cardFocusNodes.length}'));
+      _cardFocusNodes
+          .add(FocusNode(debugLabel: 'favorite_card_${_cardFocusNodes.length}'));
     }
-    // Remove extra nodes if needed
     while (_cardFocusNodes.length > _favoriteItems.length) {
       _cardFocusNodes.removeLast().dispose();
     }
@@ -88,10 +86,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     setState(() => _isLoading = true);
 
     try {
-      // Get all playlist items
       final allItems = await StorageService.getPlaylistItemsRaw();
-
-      // Get favorite keys
       final favoriteKeys = await StorageService.getPlaylistFavoriteKeys();
 
       if (favoriteKeys.isEmpty) {
@@ -104,7 +99,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         return;
       }
 
-      // Filter to only favorited items
       final favorites = <Map<String, dynamic>>[];
       for (final item in allItems) {
         final dedupeKey = StorageService.computePlaylistDedupeKey(item);
@@ -113,16 +107,16 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         }
       }
 
-      // Apply poster overrides for items that have saved custom posters
       for (var item in favorites) {
-        final posterOverride = await StorageService.getPlaylistPosterOverride(item);
+        final posterOverride =
+            await StorageService.getPlaylistPosterOverride(item);
         if (posterOverride != null && posterOverride.isNotEmpty) {
           item['posterUrl'] = posterOverride;
         }
       }
 
-      // Load progress data for all favorites using the same method as PlaylistScreen
-      final progressMap = await StorageService.buildPlaylistProgressMap(favorites);
+      final progressMap =
+          await StorageService.buildPlaylistProgressMap(favorites);
 
       if (mounted) {
         setState(() {
@@ -130,10 +124,9 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           _progressMap = progressMap;
           _isLoading = false;
         });
-        // Update focus nodes and register with controller
         _ensureFocusNodes();
-        // Check scroll indicators after frame
-        WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollIndicators());
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _updateScrollIndicators());
         widget.focusController?.registerSection(
           HomeSection.favorites,
           hasItems: _favoriteItems.isNotEmpty,
@@ -147,7 +140,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           _favoriteItems = [];
           _isLoading = false;
         });
-        // Register as empty section
         _ensureFocusNodes();
         widget.focusController?.registerSection(
           HomeSection.favorites,
@@ -186,7 +178,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 
   Future<void> _playItem(Map<String, dynamic> item) async {
-    // Check user's preferred tap action
     String tapAction = await StorageService.getHomeFavoritesTapAction();
     if (tapAction == 'choose') {
       if (!mounted) return;
@@ -252,11 +243,9 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
 
-    // Check if play handler is available
     if (MainPageBridge.playPlaylistItem == null) {
-      // PlaylistScreen not mounted - switch to playlist tab first
       MainPageBridge.notifyPlaylistItemToAutoPlay(item);
-      MainPageBridge.switchTab?.call(1); // Playlist tab
+      MainPageBridge.switchTab?.call(1);
       return;
     }
 
@@ -278,88 +267,36 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     }
   }
 
+  // ── Provider info ─────────────────────────────────────────────────────────
+
+  (String badge, Color color) _providerInfo(String provider) {
+    switch (provider.toLowerCase()) {
+      case 'torbox':
+        return ('TB', const Color(0xFF3B82F6));
+      case 'pikpak':
+        return ('PP', const Color(0xFFF59E0B));
+      default:
+        return ('RD', const Color(0xFF10B981));
+    }
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // Don't show anything if loading or no favorites
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
-
-    if (_favoriteItems.isEmpty) {
+    if (_isLoading || _favoriteItems.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Premium section header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-          child: Row(
-            children: [
-              // Glowing icon container
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD700).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.star_rounded,
-                  size: 18,
-                  color: Color(0xFFFFD700),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
-                ).createShader(bounds),
-                child: const Text(
-                  'Favorites',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Item count badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Text(
-                  '${_favoriteItems.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Horizontal scrolling favorites with edge fade and scroll indicators
+        // ── Section header ──
+        _buildSectionHeader(),
+        const SizedBox(height: 12),
+        // ── Horizontal card row ──
         SizedBox(
-          height: 230,
+          height: 195,
           child: Stack(
             children: [
               ShaderMask(
@@ -373,24 +310,28 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       Colors.white,
                       Colors.transparent,
                     ],
-                    stops: const [0.0, 0.02, 0.98, 1.0],
+                    stops: const [0.0, 0.015, 0.985, 1.0],
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.dstIn,
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteItems.length,
                   itemBuilder: (context, index) {
                     final item = _favoriteItems[index];
-                    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+                    final dedupeKey =
+                        StorageService.computePlaylistDedupeKey(item);
                     final progress = _progressMap[dedupeKey];
                     final isPlaying = _playingItemKey == dedupeKey;
 
                     return Padding(
-                      padding: EdgeInsets.only(right: index < _favoriteItems.length - 1 ? 14 : 0),
+                      padding: EdgeInsets.only(
+                          right:
+                              index < _favoriteItems.length - 1 ? 16 : 0),
                       child: _buildFavoriteCard(
                         item: item,
                         progress: progress,
@@ -398,27 +339,27 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                         onTap: () => _playItem(item),
                         onLongPress: () => _confirmRemoveFavorite(item),
                         index: index,
-                        focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+                        focusNode: index < _cardFocusNodes.length
+                            ? _cardFocusNodes[index]
+                            : null,
                       ),
                     );
                   },
                 ),
               ),
-              // Left scroll indicator
               if (_canScrollLeft)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.left, accentColor: const Color(0xFFFFD700)),
+                  child: _ScrollIndicator(direction: _ScrollDirection.left),
                 ),
-              // Right scroll indicator
               if (_canScrollRight)
                 Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.right, accentColor: const Color(0xFFFFD700)),
+                  child: _ScrollIndicator(direction: _ScrollDirection.right),
                 ),
             ],
           ),
@@ -426,6 +367,83 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       ],
     );
   }
+
+  Widget _buildSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          // Star icon
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFD700), Color(0xFFF59E0B)],
+              ),
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: [
+                BoxShadow(
+                  color: _accentColor.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Icon(Icons.star_rounded, size: 16, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Favorites',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Colors.white.withValues(alpha: 0.95),
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${_favoriteItems.length}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 1,
+              margin: const EdgeInsets.only(left: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _accentColor.withValues(alpha: 0.3),
+                    _accentColor.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Landscape card ────────────────────────────────────────────────────────
 
   Widget _buildFavoriteCard({
     required Map<String, dynamic> item,
@@ -441,8 +459,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     final String? posterUrl = item['posterUrl'] as String?;
     final String provider =
         ((item['provider'] as String?) ?? 'realdebrid').toLowerCase();
+    final providerInfo = _providerInfo(provider);
 
-    // Calculate progress percentage
     double? progressPercent;
     if (progress != null) {
       final position = progress['position'] as int?;
@@ -450,23 +468,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       if (position != null && duration != null && duration > 0) {
         progressPercent = position / duration;
       }
-    }
-
-    // Provider badge text
-    String providerBadge;
-    Color providerColor;
-    switch (provider) {
-      case 'torbox':
-        providerBadge = 'TB';
-        providerColor = const Color(0xFF3B82F6);
-        break;
-      case 'pikpak':
-        providerBadge = 'PP';
-        providerColor = const Color(0xFFF59E0B);
-        break;
-      default:
-        providerBadge = 'RD';
-        providerColor = const Color(0xFF10B981);
     }
 
     return _FavoriteCardWithFocus(
@@ -481,82 +482,85 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       onDownPressed: widget.onRequestFocusBelow,
       onFocusChanged: (focused, idx) {
         if (focused) {
-          widget.focusController?.saveLastFocusedIndex(HomeSection.favorites, idx);
+          widget.focusController
+              ?.saveLastFocusedIndex(HomeSection.favorites, idx);
         }
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
         return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.08 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 150,
-            height: 210,
+            width: 290,
+            height: 175,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isActive ? const Color(0xFFE50914) : Colors.white.withValues(alpha: 0.1),
-                width: isActive ? 2.5 : 1,
+                color: isActive
+                    ? _accentColor.withValues(alpha: 0.9)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: isActive ? 2.0 : 1.0,
               ),
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFE50914).withValues(alpha: 0.5),
-                        blurRadius: 20,
-                        spreadRadius: 2,
+                        color: _accentColor.withValues(alpha: 0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 4),
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+                        color: Colors.black.withValues(alpha: 0.6),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
                       ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 10,
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
                     ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(isActive ? 10 : 11),
+              borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Poster image or placeholder
+                  // ── Poster image ──
                   if (posterUrl != null && posterUrl.isNotEmpty)
                     CachedNetworkImage(
                       imageUrl: posterUrl,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
-                        color: const Color(0xFF1A1A2E),
+                        color: const Color(0xFF0D1117),
                         child: Center(
                           child: SizedBox(
-                            width: 24,
-                            height: 24,
+                            width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 1.5,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white.withValues(alpha: 0.3),
+                                Colors.white.withValues(alpha: 0.2),
                               ),
                             ),
                           ),
                         ),
                       ),
-                      errorWidget: (context, url, error) => _buildPlaceholder(title),
+                      errorWidget: (context, url, error) =>
+                          _buildPlaceholder(title),
                     )
                   else
                     _buildPlaceholder(title),
 
-                  // Gradient overlay for text readability
+                  // ── Cinematic gradient ──
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -565,80 +569,78 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.6),
+                            Colors.black.withValues(alpha: 0.1),
+                            Colors.black.withValues(alpha: 0.75),
                             Colors.black.withValues(alpha: 0.95),
                           ],
-                          stops: const [0.0, 0.4, 0.7, 1.0],
+                          stops: const [0.0, 0.3, 0.65, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Left vignette
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.3),
+                            Colors.transparent,
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.3, 1.0],
                         ),
                       ),
                     ),
                   ),
 
-                  // Provider badge (top-left) with glassmorphism
+                  // ── Top badges ──
                   Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: providerColor,
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: providerColor.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            spreadRadius: 0,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        providerBadge,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Favorite star (top-right) with glow
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.star_rounded,
-                        size: 14,
-                        color: Color(0xFFFFD700),
-                      ),
-                    ),
-                  ),
-
-                  // Title (bottom)
-                  Positioned(
-                    bottom: progressPercent != null ? 14 : 10,
+                    top: 10,
                     left: 10,
                     right: 10,
+                    child: Row(
+                      children: [
+                        // Provider badge
+                        _GlassPill(
+                          color: providerInfo.$2,
+                          child: Text(
+                            providerInfo.$1,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Favorite star
+                        _GlassPill(
+                          child: const Icon(Icons.star_rounded,
+                              size: 13, color: Color(0xFFFFD700)),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Bottom info ──
+                  Positioned(
+                    bottom: progressPercent != null ? 5 : 12,
+                    left: 12,
+                    right: 12,
                     child: Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                         height: 1.2,
+                        letterSpacing: -0.2,
                         shadows: [
-                          Shadow(
-                            color: Colors.black,
-                            blurRadius: 6,
-                          ),
+                          Shadow(color: Colors.black, blurRadius: 8),
                         ],
                       ),
                       maxLines: 2,
@@ -646,83 +648,113 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                     ),
                   ),
 
-                  // Progress bar (bottom) with gradient
+                  // ── Progress bar ──
                   if (progressPercent != null)
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progressPercent,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                      child: SizedBox(
+                        height: 3.5,
+                        child: Stack(
+                          children: [
+                            Container(
+                                color:
+                                    Colors.white.withValues(alpha: 0.1)),
+                            FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progressPercent,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFFD700),
+                                      Color(0xFFFFA500),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _accentColor
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, -1),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
 
-                  // Loading overlay when playing
+                  // ── Loading overlay ──
                   if (isPlaying)
                     Positioned.fill(
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
-                        ),
-                        child: const Center(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        child: Center(
                           child: SizedBox(
                             width: 32,
                             height: 32,
                             child: CircularProgressIndicator(
                               strokeWidth: 3,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFFE50914),
-                              ),
+                                  _accentColor),
                             ),
                           ),
                         ),
                       ),
                     ),
 
-                  // Play icon overlay - only show on hover/focus
+                  // ── Play overlay ──
                   Positioned.fill(
                     child: AnimatedOpacity(
                       opacity: isActive && !isPlaying ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
-                      child: Center(
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOutBack,
-                          builder: (context, scale, child) {
-                            return Transform.scale(scale: scale, child: child);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE50914),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFE50914).withValues(alpha: 0.6),
-                                  blurRadius: 16,
-                                  spreadRadius: 2,
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        child: Center(
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(
+                                begin: 0.85,
+                                end: isActive ? 1.0 : 0.85),
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutBack,
+                            builder: (context, scale, child) =>
+                                Transform.scale(
+                                    scale: scale, child: child),
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white
+                                    .withValues(alpha: 0.15),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.4),
+                                  width: 1.5,
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 28,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.4),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: 10, sigmaY: 10),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -740,25 +772,27 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
   Widget _buildPlaceholder(String title) {
     return Container(
-      color: const Color(0xFF1E293B),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A1A2E), Color(0xFF0D1117)],
+        ),
+      ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.movie_rounded,
-              size: 32,
-              color: Colors.white.withValues(alpha: 0.3),
-            ),
-            const SizedBox(height: 4),
+            Icon(Icons.movie_rounded,
+                size: 28, color: Colors.white.withValues(alpha: 0.15)),
+            const SizedBox(height: 6),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.3)),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -771,7 +805,40 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 }
 
-/// Focus-aware wrapper for favorite cards with DPAD/TV support
+// ── Glass pill badge ──────────────────────────────────────────────────────────
+
+class _GlassPill extends StatelessWidget {
+  final Widget child;
+  final Color? color;
+
+  const _GlassPill({required this.child, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: color?.withValues(alpha: 0.7) ??
+                Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+              width: 0.5,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Focus-aware card wrapper (DPAD/TV) ────────────────────────────────────────
+
 class _FavoriteCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -812,7 +879,6 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
     setState(() => _isFocused = focused);
     widget.onFocusChanged?.call(focused, widget.index);
 
-    // Scroll card into view when focused
     if (focused && widget.scrollController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = _cardKey.currentContext;
@@ -830,28 +896,20 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
-      // Select/Enter/GameButtonA - activate the card
       if (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.gameButtonA) {
         widget.onTap?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Up - go to previous section
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Down - go to next section
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
         widget.onDownPressed?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Left/Right - let Flutter's directional focus handle it
-      // (FocusTraversalGroup will move to adjacent cards)
       if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
           event.logicalKey == LogicalKeyboardKey.arrowRight) {
         return KeyEventResult.ignored;
@@ -883,52 +941,39 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
   }
 }
 
-/// Direction for scroll indicator
+// ── Scroll indicator ──────────────────────────────────────────────────────────
+
 enum _ScrollDirection { left, right }
 
-/// Subtle scroll indicator widget
 class _ScrollIndicator extends StatelessWidget {
   final _ScrollDirection direction;
-  final Color accentColor;
 
-  const _ScrollIndicator({
-    required this.direction,
-    required this.accentColor,
-  });
+  const _ScrollIndicator({required this.direction});
 
   @override
   Widget build(BuildContext context) {
     final isLeft = direction == _ScrollDirection.left;
 
     return IgnorePointer(
-      child: AnimatedOpacity(
-        opacity: 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          width: 28,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-              end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-              colors: [
-                const Color(0xFF0F0F1A).withValues(alpha: 0.9),
-                Colors.transparent,
-              ],
-            ),
+      child: Container(
+        width: 36,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+            end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+            colors: [
+              const Color(0xFF0F0F1A).withValues(alpha: 0.95),
+              Colors.transparent,
+            ],
           ),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                size: 16,
-                color: accentColor.withValues(alpha: 0.7),
-              ),
-            ),
+        ),
+        child: Center(
+          child: Icon(
+            isLeft
+                ? Icons.chevron_left_rounded
+                : Icons.chevron_right_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: 0.4),
           ),
         ),
       ),

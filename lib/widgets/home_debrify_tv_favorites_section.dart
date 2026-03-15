@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/debrify_tv/channel.dart';
@@ -6,7 +8,7 @@ import '../services/debrify_tv_repository.dart';
 import '../services/main_page_bridge.dart';
 import 'home_focus_controller.dart';
 
-/// Horizontal scrollable Debrify TV channel favorites section for the home screen
+/// Premium Debrify TV channel favorites section for the home screen
 class HomeDebrifyTvFavoritesSection extends StatefulWidget {
   final HomeFocusController? focusController;
   final VoidCallback? onRequestFocusAbove;
@@ -31,13 +33,13 @@ class _HomeDebrifyTvFavoritesSectionState
   List<DebrifyTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
 
-  // Focus management for DPAD navigation
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
 
-  // Scroll indicators
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
+
+  static const _accentColor = Color(0xFF8B5CF6); // Purple accent
 
   @override
   void initState() {
@@ -61,9 +63,7 @@ class _HomeDebrifyTvFavoritesSectionState
 
   @override
   void dispose() {
-    // Unregister from controller
     widget.focusController?.unregisterSection(HomeSection.tvFavorites);
-    // Dispose focus nodes
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -72,10 +72,10 @@ class _HomeDebrifyTvFavoritesSectionState
     super.dispose();
   }
 
-  /// Ensure we have the right number of focus nodes for current items
   void _ensureFocusNodes() {
     while (_cardFocusNodes.length < _favoriteChannels.length) {
-      _cardFocusNodes.add(FocusNode(debugLabel: 'tv_channel_card_${_cardFocusNodes.length}'));
+      _cardFocusNodes.add(
+          FocusNode(debugLabel: 'tv_channel_card_${_cardFocusNodes.length}'));
     }
     while (_cardFocusNodes.length > _favoriteChannels.length) {
       _cardFocusNodes.removeLast().dispose();
@@ -86,8 +86,8 @@ class _HomeDebrifyTvFavoritesSectionState
     setState(() => _isLoading = true);
 
     try {
-      // Get favorite channel IDs
-      final favoriteIds = await StorageService.getDebrifyTvFavoriteChannelIds();
+      final favoriteIds =
+          await StorageService.getDebrifyTvFavoriteChannelIds();
 
       if (favoriteIds.isEmpty) {
         if (mounted) {
@@ -99,12 +99,11 @@ class _HomeDebrifyTvFavoritesSectionState
         return;
       }
 
-      // Get all channels
-      final records = await DebrifyTvRepository.instance.fetchAllChannels();
+      final records =
+          await DebrifyTvRepository.instance.fetchAllChannels();
       final allChannels =
           records.map(DebrifyTvChannel.fromRecord).toList(growable: false);
 
-      // Filter to only favorited channels
       final favorites = allChannels
           .where((channel) => favoriteIds.contains(channel.id))
           .toList();
@@ -114,15 +113,14 @@ class _HomeDebrifyTvFavoritesSectionState
           _favoriteChannels = favorites;
           _isLoading = false;
         });
-        // Update focus nodes and register with controller
         _ensureFocusNodes();
         widget.focusController?.registerSection(
           HomeSection.tvFavorites,
           hasItems: _favoriteChannels.isNotEmpty,
           focusNodes: _cardFocusNodes,
         );
-        // Check scroll indicators after frame
-        WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollIndicators());
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _updateScrollIndicators());
       }
     } catch (e) {
       debugPrint('Error loading Debrify TV favorites: $e');
@@ -131,7 +129,6 @@ class _HomeDebrifyTvFavoritesSectionState
           _favoriteChannels = [];
           _isLoading = false;
         });
-        // Register as empty section
         _ensureFocusNodes();
         widget.focusController?.registerSection(
           HomeSection.tvFavorites,
@@ -169,101 +166,29 @@ class _HomeDebrifyTvFavoritesSectionState
   }
 
   void _openChannel(DebrifyTvChannel channel) {
-    // Check if watch handler is available (DebrifyTVScreen is mounted)
     if (MainPageBridge.watchDebrifyTvChannel != null) {
-      // Directly call the watch handler
       MainPageBridge.watchDebrifyTvChannel!(channel.id);
       return;
     }
-
-    // DebrifyTVScreen not mounted - notify and switch tab
     MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
-    // Switch to Debrify TV tab (tab index 3)
     MainPageBridge.switchTab?.call(3);
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // Don't show anything if loading or no favorites
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
-
-    if (_favoriteChannels.isEmpty) {
+    if (_isLoading || _favoriteChannels.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Premium section header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-          child: Row(
-            children: [
-              // Glowing icon container
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE50914).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE50914).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.tv_rounded,
-                  size: 18,
-                  color: Color(0xFFE50914),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
-                ).createShader(bounds),
-                child: const Text(
-                  'Debrify TV',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Item count badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Text(
-                  '${_favoriteChannels.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Horizontal scrolling favorites with edge fade and scroll indicators
+        _buildSectionHeader(),
+        const SizedBox(height: 12),
         SizedBox(
-          height: 115,
+          height: 140,
           child: Stack(
             children: [
               ShaderMask(
@@ -277,45 +202,51 @@ class _HomeDebrifyTvFavoritesSectionState
                       Colors.white,
                       Colors.transparent,
                     ],
-                    stops: const [0.0, 0.02, 0.98, 1.0],
+                    stops: const [0.0, 0.015, 0.985, 1.0],
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.dstIn,
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
                     final channel = _favoriteChannels[index];
                     return Padding(
-                      padding: EdgeInsets.only(right: index < _favoriteChannels.length - 1 ? 12 : 0),
+                      padding: EdgeInsets.only(
+                          right: index < _favoriteChannels.length - 1
+                              ? 14
+                              : 0),
                       child: _buildChannelCard(
                         channel,
                         index: index,
-                        focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
-                        onLongPress: () => _confirmRemoveFavorite(channel),
+                        focusNode: index < _cardFocusNodes.length
+                            ? _cardFocusNodes[index]
+                            : null,
+                        onLongPress: () =>
+                            _confirmRemoveFavorite(channel),
                       ),
                     );
                   },
                 ),
               ),
-              // Left scroll indicator
               if (_canScrollLeft)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.left, accentColor: const Color(0xFFE50914)),
+                  child: _ScrollIndicator(direction: _ScrollDirection.left),
                 ),
-              // Right scroll indicator
               if (_canScrollRight)
                 Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.right, accentColor: const Color(0xFFE50914)),
+                  child:
+                      _ScrollIndicator(direction: _ScrollDirection.right),
                 ),
             ],
           ),
@@ -324,13 +255,91 @@ class _HomeDebrifyTvFavoritesSectionState
     );
   }
 
+  Widget _buildSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+              ),
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: [
+                BoxShadow(
+                  color: _accentColor.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Icon(Icons.tv_rounded, size: 15, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Debrify TV',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Colors.white.withValues(alpha: 0.95),
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${_favoriteChannels.length}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          const Spacer(),
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 1,
+              margin: const EdgeInsets.only(left: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _accentColor.withValues(alpha: 0.3),
+                    _accentColor.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Channel card ──────────────────────────────────────────────────────────
+
   Widget _buildChannelCard(
     DebrifyTvChannel channel, {
     int index = 0,
     FocusNode? focusNode,
     VoidCallback? onLongPress,
   }) {
-    final channelNum = channel.channelNumber > 0 ? channel.channelNumber : _favoriteChannels.indexOf(channel) + 1;
+    final channelNum = channel.channelNumber > 0
+        ? channel.channelNumber
+        : _favoriteChannels.indexOf(channel) + 1;
 
     return _ChannelCardWithFocus(
       onTap: () => _openChannel(channel),
@@ -343,194 +352,224 @@ class _HomeDebrifyTvFavoritesSectionState
       onDownPressed: widget.onRequestFocusBelow,
       onFocusChanged: (focused, idx) {
         if (focused) {
-          widget.focusController?.saveLastFocusedIndex(HomeSection.tvFavorites, idx);
+          widget.focusController
+              ?.saveLastFocusedIndex(HomeSection.tvFavorites, idx);
         }
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
         return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.06 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 170,
-            height: 95,
+            width: 220,
+            height: 120,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1A1A2E),
-                  const Color(0xFFE50914).withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isActive ? const Color(0xFFE50914) : Colors.white.withValues(alpha: 0.08),
-                width: isActive ? 2 : 1,
+                color: isActive
+                    ? _accentColor.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: isActive ? 2.0 : 1.0,
               ),
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                        blurRadius: 16,
-                        spreadRadius: 1,
+                        color: _accentColor.withValues(alpha: 0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  // Subtle pattern overlay
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.03,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(
-                            center: Alignment.topRight,
-                            radius: 1.5,
-                            colors: [
-                              const Color(0xFFE50914),
-                              Colors.transparent,
-                            ],
-                          ),
+                  // ── Background gradient ──
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFF1A1030),
+                          _accentColor.withValues(alpha: 0.12),
+                          const Color(0xFF0D0D1A),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                    ),
+                  ),
+
+                  // ── Decorative glow ──
+                  Positioned(
+                    top: -20,
+                    right: -20,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            _accentColor.withValues(alpha: 0.08),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
                   ),
-                  // Main content
+
+                  // ── Content ──
                   Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top row: Channel badge + Star
+                        // Top row: channel badge + star
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Channel number badge with gradient
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFE50914), Color(0xFFB91C1C)],
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                                    blurRadius: 8,
+                            // Channel number
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                    sigmaX: 8, sigmaY: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        _accentColor,
+                                        _accentColor
+                                            .withValues(alpha: 0.8),
+                                      ],
+                                    ),
+                                    borderRadius:
+                                        BorderRadius.circular(6),
                                   ),
-                                ],
-                              ),
-                              child: Text(
-                                'CH $channelNum',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
+                                  child: Text(
+                                    'CH $channelNum',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                            // Star with background
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Icon(
-                                Icons.star_rounded,
-                                size: 12,
-                                color: Color(0xFFFFD700),
-                              ),
-                            ),
+                            const Spacer(),
+                            Icon(Icons.star_rounded,
+                                size: 14, color: const Color(0xFFFFD700).withValues(alpha: 0.8)),
                           ],
                         ),
                         const Spacer(),
                         // Channel name
                         Text(
                           channel.name.toUpperCase(),
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
+                            letterSpacing: 0.5,
                             height: 1.2,
-                            letterSpacing: 0.3,
                           ),
                         ),
                         if (channel.keywords.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          // Genre tag from keywords
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE50914).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              channel.keywords.first,
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFFE50914).withValues(alpha: 0.9),
-                              ),
-                            ),
+                          const SizedBox(height: 5),
+                          // Keywords as subtle pills
+                          Row(
+                            children: [
+                              for (final kw in channel.keywords.take(3)) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  margin: const EdgeInsets.only(right: 6),
+                                  decoration: BoxDecoration(
+                                    color: _accentColor
+                                        .withValues(alpha: 0.12),
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: _accentColor
+                                          .withValues(alpha: 0.2),
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    kw,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: _accentColor
+                                          .withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ],
                     ),
                   ),
-                  // Play overlay on focus
+
+                  // ── Play overlay ──
                   if (isActive)
                     Positioned.fill(
                       child: AnimatedOpacity(
-                        opacity: isActive ? 1.0 : 0.0,
+                        opacity: 1.0,
                         duration: const Duration(milliseconds: 200),
                         child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.3),
-                          ),
+                          color: Colors.black.withValues(alpha: 0.3),
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.all(10),
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE50914),
                                 shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFE50914).withValues(alpha: 0.5),
-                                    blurRadius: 12,
-                                  ),
-                                ],
+                                color: Colors.white
+                                    .withValues(alpha: 0.15),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.35),
+                                  width: 1.5,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 20,
+                              child: ClipOval(
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: 8, sigmaY: 8),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -547,7 +586,8 @@ class _HomeDebrifyTvFavoritesSectionState
   }
 }
 
-/// Focus-aware wrapper for channel cards with DPAD/TV support
+// ── Focus-aware card wrapper (DPAD/TV) ────────────────────────────────────────
+
 class _ChannelCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -586,7 +626,6 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
     setState(() => _isFocused = focused);
     widget.onFocusChanged?.call(focused, widget.index);
 
-    // Scroll card into view when focused
     if (focused && widget.scrollController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final context = _cardKey.currentContext;
@@ -604,27 +643,20 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
-      // Select/Enter/GameButtonA - activate the card
       if (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.gameButtonA) {
         widget.onTap?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Up - go to previous section
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Down - go to next section
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
         widget.onDownPressed?.call();
         return KeyEventResult.handled;
       }
-
-      // Arrow Left/Right - let Flutter's directional focus handle it
       if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
           event.logicalKey == LogicalKeyboardKey.arrowRight) {
         return KeyEventResult.ignored;
@@ -655,52 +687,39 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
   }
 }
 
-/// Direction for scroll indicator
+// ── Scroll indicator ──────────────────────────────────────────────────────────
+
 enum _ScrollDirection { left, right }
 
-/// Subtle scroll indicator widget
 class _ScrollIndicator extends StatelessWidget {
   final _ScrollDirection direction;
-  final Color accentColor;
 
-  const _ScrollIndicator({
-    required this.direction,
-    required this.accentColor,
-  });
+  const _ScrollIndicator({required this.direction});
 
   @override
   Widget build(BuildContext context) {
     final isLeft = direction == _ScrollDirection.left;
 
     return IgnorePointer(
-      child: AnimatedOpacity(
-        opacity: 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          width: 28,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-              end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-              colors: [
-                const Color(0xFF0F0F1A).withValues(alpha: 0.9),
-                Colors.transparent,
-              ],
-            ),
+      child: Container(
+        width: 36,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+            end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+            colors: [
+              const Color(0xFF0F0F1A).withValues(alpha: 0.95),
+              Colors.transparent,
+            ],
           ),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                size: 16,
-                color: accentColor.withValues(alpha: 0.7),
-              ),
-            ),
+        ),
+        child: Center(
+          child: Icon(
+            isLeft
+                ? Icons.chevron_left_rounded
+                : Icons.chevron_right_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: 0.4),
           ),
         ),
       ),

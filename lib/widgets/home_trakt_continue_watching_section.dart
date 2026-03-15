@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -7,8 +9,7 @@ import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
 import 'home_focus_controller.dart';
 
-/// Trakt Continue Watching section for the home screen.
-/// Shows two horizontal rows: one for movies, one for shows.
+/// Premium OTT-style Trakt Continue Watching section for the home screen.
 class HomeTraktContinueWatchingSection extends StatefulWidget {
   final HomeFocusController? focusController;
   final VoidCallback? onRequestFocusAbove;
@@ -50,7 +51,7 @@ class _HomeTraktContinueWatchingSectionState
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  static const _accentColor = Color(0xFFED1C24); // Trakt red
+  static const _accentColor = Color(0xFFED1C24);
 
   @override
   void initState() {
@@ -85,13 +86,16 @@ class _HomeTraktContinueWatchingSectionState
 
   void _ensureFocusNodes() {
     while (_cardFocusNodes.length < _items.length) {
-      _cardFocusNodes.add(
-          FocusNode(debugLabel: 'trakt_cw_${widget.contentType}_${_cardFocusNodes.length}'));
+      _cardFocusNodes.add(FocusNode(
+          debugLabel:
+              'trakt_cw_${widget.contentType}_${_cardFocusNodes.length}'));
     }
     while (_cardFocusNodes.length > _items.length) {
       _cardFocusNodes.removeLast().dispose();
     }
   }
+
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadItems() async {
     setState(() => _isLoading = true);
@@ -116,7 +120,6 @@ class _HomeTraktContinueWatchingSectionState
       if (widget.contentType == 'movies') {
         items = TraktItemTransformer.transformList(rawItems,
             inferredType: 'movie');
-        // Extract progress from raw items
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
@@ -129,7 +132,6 @@ class _HomeTraktContinueWatchingSectionState
         }
       } else {
         items = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
-        // For shows, extract per-show progress from the most recent episode
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
@@ -137,7 +139,6 @@ class _HomeTraktContinueWatchingSectionState
           final ids = show?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
           if (imdbId != null && progress != null) {
-            // Keep the first (most recent) progress per show
             progressMap.putIfAbsent(imdbId, () => progress.toDouble());
           }
         }
@@ -177,13 +178,13 @@ class _HomeTraktContinueWatchingSectionState
     );
   }
 
+  // ── Actions ───────────────────────────────────────────────────────────────
+
   void _onItemTap(StremioMeta item) async {
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           SimpleDialogOption(
@@ -218,9 +219,6 @@ class _HomeTraktContinueWatchingSectionState
     }
   }
 
-  /// Browse: same as tapping an item in TraktResultsView.
-  /// For movies, triggers a search via onItemSelected.
-  /// For series, enters episode mode via onBrowseShow.
   void _browseItem(StremioMeta item) {
     if (item.type == 'series') {
       widget.onBrowseShow?.call(item);
@@ -239,8 +237,6 @@ class _HomeTraktContinueWatchingSectionState
     widget.onItemSelected?.call(selection);
   }
 
-  /// Quick Play: same as Quick Play in TraktResultsView (onQuickPlay).
-  /// For series, fetches next episode from Trakt first.
   void _quickPlayItem(StremioMeta item) async {
     int? season;
     int? episode;
@@ -251,7 +247,6 @@ class _HomeTraktContinueWatchingSectionState
       final next = await _traktService.fetchNextEpisode(showId);
       if (!mounted) return;
       if (next == null) {
-        // No next episode (show complete or error) — fall back to browse
         _browseItem(item);
         return;
       }
@@ -294,6 +289,8 @@ class _HomeTraktContinueWatchingSectionState
     return p;
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading || _items.isEmpty) {
@@ -301,79 +298,20 @@ class _HomeTraktContinueWatchingSectionState
     }
 
     final isMovies = widget.contentType == 'movies';
-    final title = isMovies ? 'Trakt Continue Watching' : 'Trakt Continue Watching Shows';
-    final icon = isMovies ? Icons.movie_rounded : Icons.tv_rounded;
+    final title = isMovies ? 'Trakt Continue Watching - Movies' : 'Trakt Continue Watching - Shows';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-          child: Row(
-            children: [
-              // Icon container
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _accentColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accentColor.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: Icon(icon, size: 18, color: _accentColor),
-              ),
-              const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFFED1C24), Color(0xFFFF6B6B)],
-                ).createShader(bounds),
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Item count badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Text(
-                  '${_items.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Horizontal scrolling cards
+        // ── Section header ──
+        _buildSectionHeader(title),
+        const SizedBox(height: 12),
+        // ── Horizontal card row ──
         SizedBox(
-          height: 230,
+          height: 195,
           child: Stack(
             children: [
+              // Edge fade
               ShaderMask(
                 shaderCallback: (Rect bounds) {
                   return LinearGradient(
@@ -385,7 +323,7 @@ class _HomeTraktContinueWatchingSectionState
                       Colors.white,
                       Colors.transparent,
                     ],
-                    stops: const [0.0, 0.02, 0.98, 1.0],
+                    stops: const [0.0, 0.015, 0.985, 1.0],
                   ).createShader(bounds);
                 },
                 blendMode: BlendMode.dstIn,
@@ -402,10 +340,11 @@ class _HomeTraktContinueWatchingSectionState
 
                     return Padding(
                       padding: EdgeInsets.only(
-                          right: index < _items.length - 1 ? 14 : 0),
+                          right: index < _items.length - 1 ? 16 : 0),
                       child: _buildCard(
                         item: item,
-                        progressPercent: progress != null ? progress / 100 : null,
+                        progressPercent:
+                            progress != null ? progress / 100 : null,
                         index: index,
                         focusNode: index < _cardFocusNodes.length
                             ? _cardFocusNodes[index]
@@ -415,25 +354,20 @@ class _HomeTraktContinueWatchingSectionState
                   },
                 ),
               ),
-              // Left scroll indicator
+              // Scroll indicators
               if (_canScrollLeft)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(
-                      direction: _ScrollDirection.left,
-                      accentColor: _accentColor),
+                  child: _ScrollIndicator(direction: _ScrollDirection.left),
                 ),
-              // Right scroll indicator
               if (_canScrollRight)
                 Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
-                  child: _ScrollIndicator(
-                      direction: _ScrollDirection.right,
-                      accentColor: _accentColor),
+                  child: _ScrollIndicator(direction: _ScrollDirection.right),
                 ),
             ],
           ),
@@ -441,6 +375,96 @@ class _HomeTraktContinueWatchingSectionState
       ],
     );
   }
+
+  // ── Section header ────────────────────────────────────────────────────────
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          // Trakt "T" logo mark
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFED1C24), Color(0xFFBF1017)],
+              ),
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: [
+                BoxShadow(
+                  color: _accentColor.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                'T',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Title
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Colors.white.withValues(alpha: 0.95),
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Count pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${_items.length}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Subtle decorative line
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 1,
+              margin: const EdgeInsets.only(left: 16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _accentColor.withValues(alpha: 0.3),
+                    _accentColor.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Landscape card ────────────────────────────────────────────────────────
 
   Widget _buildCard({
     required StremioMeta item,
@@ -465,79 +489,62 @@ class _HomeTraktContinueWatchingSectionState
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
+        // Metadata
+        final year = item.year ?? '';
+        final rating = item.imdbRating;
+        final genres = item.genres;
+        final typeBadge = item.type == 'series' ? 'SERIES' : 'MOVIE';
+
         return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.08 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 150,
-            height: 210,
+            width: 290,
+            height: 175,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isActive
-                    ? _accentColor
-                    : Colors.white.withValues(alpha: 0.1),
-                width: isActive ? 2.5 : 1,
+                    ? _accentColor.withValues(alpha: 0.9)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: isActive ? 2.0 : 1.0,
               ),
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: _accentColor.withValues(alpha: 0.5),
-                        blurRadius: 20,
-                        spreadRadius: 2,
+                        color: _accentColor.withValues(alpha: 0.4),
+                        blurRadius: 24,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 4),
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+                        color: Colors.black.withValues(alpha: 0.6),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
                       ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 10,
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
                     ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(isActive ? 10 : 11),
+              borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Poster image
-                  if (item.poster != null && item.poster!.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: item.poster!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: const Color(0xFF1A1A2E),
-                        child: Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white.withValues(alpha: 0.3),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) =>
-                          _buildPlaceholder(item.name),
-                    )
-                  else
-                    _buildPlaceholder(item.name),
+                  // ── Backdrop image ──
+                  _buildBackdropImage(item),
 
-                  // Gradient overlay
+                  // ── Cinematic gradient overlay ──
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -546,127 +553,242 @@ class _HomeTraktContinueWatchingSectionState
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.6),
+                            Colors.black.withValues(alpha: 0.1),
+                            Colors.black.withValues(alpha: 0.75),
                             Colors.black.withValues(alpha: 0.95),
                           ],
-                          stops: const [0.0, 0.4, 0.7, 1.0],
+                          stops: const [0.0, 0.3, 0.65, 1.0],
                         ),
                       ),
                     ),
                   ),
-
-                  // Trakt badge (top-left)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
+                  // Left vignette
+                  Positioned.fill(
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: _accentColor,
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accentColor.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        'TRAKT',
-                        style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.3),
+                            Colors.transparent,
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.3, 1.0],
                         ),
                       ),
                     ),
                   ),
 
-                  // Title (bottom)
+                  // ── Top badges row ──
                   Positioned(
-                    bottom: progressPercent != null ? 14 : 10,
+                    top: 10,
                     left: 10,
                     right: 10,
-                    child: Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        height: 1.2,
-                        shadows: [
-                          Shadow(color: Colors.black, blurRadius: 6),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        // Type badge
+                        _GlassPill(
+                          child: Text(
+                            typeBadge,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Rating badge
+                        if (rating != null)
+                          _GlassPill(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star_rounded,
+                                    size: 12, color: Color(0xFFFFD700)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  rating.toStringAsFixed(1),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ),
 
-                  // Progress bar
+                  // ── Bottom info area ──
+                  Positioned(
+                    bottom: progressPercent != null ? 5 : 12,
+                    left: 12,
+                    right: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Title
+                        Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.2,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 8),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Metadata row: year + genres
+                        Row(
+                          children: [
+                            if (year.isNotEmpty) ...[
+                              Text(
+                                year,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      Colors.white.withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                            if (year.isNotEmpty &&
+                                genres != null &&
+                                genres.isNotEmpty)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                child: Container(
+                                  width: 3,
+                                  height: 3,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                            if (genres != null && genres.isNotEmpty)
+                              Flexible(
+                                child: Text(
+                                  genres.take(2).join(' / '),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w400,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Progress bar ──
                   if (progressPercent != null)
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progressPercent.clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0xFFED1C24),
-                                  Color(0xFFFF6B6B),
-                                ],
+                      child: SizedBox(
+                        height: 3.5,
+                        child: Stack(
+                          children: [
+                            // Track
+                            Container(
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                            // Fill
+                            FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progressPercent.clamp(0.0, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFED1C24),
+                                      Color(0xFFFF4D4D),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _accentColor
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, -1),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
 
-                  // Play icon overlay on hover/focus
+                  // ── Play overlay on hover/focus ──
                   Positioned.fill(
                     child: AnimatedOpacity(
                       opacity: isActive ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
-                      child: Center(
-                        child: TweenAnimationBuilder<double>(
-                          tween:
-                              Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOutBack,
-                          builder: (context, scale, child) {
-                            return Transform.scale(
-                                scale: scale, child: child);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: _accentColor,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        child: Center(
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(
+                                begin: 0.85, end: isActive ? 1.0 : 0.85),
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutBack,
+                            builder: (context, scale, child) =>
+                                Transform.scale(
+                                    scale: scale, child: child),
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color:
+                                    Colors.white.withValues(alpha: 0.15),
+                                border: Border.all(
                                   color:
-                                      _accentColor.withValues(alpha: 0.6),
-                                  blurRadius: 16,
-                                  spreadRadius: 2,
+                                      Colors.white.withValues(alpha: 0.4),
+                                  width: 1.5,
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 28,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.4),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: 10, sigmaY: 10),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -682,26 +804,61 @@ class _HomeTraktContinueWatchingSectionState
     );
   }
 
+  Widget _buildBackdropImage(StremioMeta item) {
+    // Prefer backdrop, fallback to poster
+    final imageUrl = item.background ?? item.poster;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: const Color(0xFF0D1117),
+          child: Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) =>
+            _buildPlaceholder(item.name),
+      );
+    }
+    return _buildPlaceholder(item.name);
+  }
+
   Widget _buildPlaceholder(String title) {
     return Container(
-      color: const Color(0xFF1E293B),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A1A2E), Color(0xFF0D1117)],
+        ),
+      ),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.movie_rounded,
-              size: 32,
-              color: Colors.white.withValues(alpha: 0.3),
+              size: 28,
+              color: Colors.white.withValues(alpha: 0.15),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.3),
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
@@ -715,7 +872,38 @@ class _HomeTraktContinueWatchingSectionState
   }
 }
 
-/// Focus-aware wrapper for Trakt cards with DPAD/TV support
+// ── Glass pill badge ──────────────────────────────────────────────────────────
+
+class _GlassPill extends StatelessWidget {
+  final Widget child;
+
+  const _GlassPill({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+              width: 0.5,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Focus-aware card wrapper (DPAD/TV) ────────────────────────────────────────
+
 class _TraktCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
   final FocusNode? focusNode;
@@ -812,18 +1000,14 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
   }
 }
 
-/// Direction for scroll indicator
+// ── Scroll indicator ──────────────────────────────────────────────────────────
+
 enum _ScrollDirection { left, right }
 
-/// Subtle scroll indicator widget
 class _ScrollIndicator extends StatelessWidget {
   final _ScrollDirection direction;
-  final Color accentColor;
 
-  const _ScrollIndicator({
-    required this.direction,
-    required this.accentColor,
-  });
+  const _ScrollIndicator({required this.direction});
 
   @override
   Widget build(BuildContext context) {
@@ -831,31 +1015,24 @@ class _ScrollIndicator extends StatelessWidget {
 
     return IgnorePointer(
       child: Container(
-        width: 28,
+        width: 36,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
             end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
             colors: [
-              const Color(0xFF0F0F1A).withValues(alpha: 0.9),
+              const Color(0xFF0F0F1A).withValues(alpha: 0.95),
               Colors.transparent,
             ],
           ),
         ),
         child: Center(
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isLeft
-                  ? Icons.chevron_left_rounded
-                  : Icons.chevron_right_rounded,
-              size: 16,
-              color: accentColor.withValues(alpha: 0.7),
-            ),
+          child: Icon(
+            isLeft
+                ? Icons.chevron_left_rounded
+                : Icons.chevron_right_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: 0.4),
           ),
         ),
       ),
