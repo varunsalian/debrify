@@ -20,6 +20,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
   final void Function(StremioMeta show)? onBrowseShow;
+  final void Function(StremioMeta show)? onSelectSource;
 
   const HomeTraktContinueWatchingSection({
     super.key,
@@ -32,6 +33,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
     this.onItemSelected,
     this.onQuickPlay,
     this.onBrowseShow,
+    this.onSelectSource,
   });
 
   @override
@@ -220,6 +222,17 @@ class _HomeTraktContinueWatchingSectionState
               ],
             ),
           ),
+          if (item.type == 'series' && widget.onSelectSource != null)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'select_source'),
+              child: const Row(
+                children: [
+                  Icon(Icons.link_rounded, size: 20, color: Color(0xFF60A5FA)),
+                  SizedBox(width: 12),
+                  Text('Select Source'),
+                ],
+              ),
+            ),
           const Divider(height: 1),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 'remove'),
@@ -242,6 +255,8 @@ class _HomeTraktContinueWatchingSectionState
       _browseItem(item);
     } else if (choice == 'quick_play') {
       _quickPlayItem(item);
+    } else if (choice == 'select_source') {
+      widget.onSelectSource?.call(item);
     } else if (choice == 'remove') {
       _removePlayback(item);
     }

@@ -45,6 +45,9 @@ class CatalogBrowser extends StatefulWidget {
   /// If set and found in the addon's catalogs, it will be auto-selected instead of the first catalog
   final String? defaultCatalogId;
 
+  /// Callback when user selects "Select Source" for a series
+  final void Function(StremioMeta show)? onSelectSource;
+
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
@@ -54,6 +57,7 @@ class CatalogBrowser extends StatefulWidget {
     this.searchQuery,
     this.onRequestFocusAbove,
     this.defaultCatalogId,
+    this.onSelectSource,
   });
 
   @override
@@ -1012,7 +1016,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             showQuickPlay: widget.showQuickPlay,
             onTraktMenuAction: _isTraktAuthenticated &&
                     (item.effectiveImdbId != null || item.id.startsWith('tt'))
-                ? (action) => handleTraktMenuAction(context, item, action)
+                ? (action) => handleTraktMenuAction(context, item, action, onSelectSource: widget.onSelectSource)
                 : null,
           ),
         );
@@ -1261,6 +1265,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 isHighlighted: _isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
+                isSeries: widget.item.type == 'series',
               ),
             ],
           ],
@@ -1356,6 +1361,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 isHighlighted: _isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
+                isSeries: widget.item.type == 'series',
               ),
             ],
           ],

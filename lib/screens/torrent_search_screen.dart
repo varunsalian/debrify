@@ -57,6 +57,7 @@ import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
+import '../services/series_source_service.dart';
 import '../widgets/home_focus_controller.dart';
 import '../models/iptv_playlist.dart';
 import '../services/imdb_lookup_service.dart';
@@ -242,6 +243,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Quick Play state - auto-selects best torrent after search
   bool _quickPlayPending = false;
   AdvancedSearchSelection? _quickPlaySelection;
+
+  // Select Source mode - user is picking a torrent to bind to a series
+  bool _isSelectSourceMode = false;
+  StremioMeta? _selectSourceShow;
 
   // Quick Play retry state - for trying multiple torrents on cache failure
   List<Torrent> _quickPlayTorrentsList = [];
@@ -559,6 +564,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   void _handleTorrentCardActivated(Torrent torrent, int index) async {
     debugPrint('[TorrentSearch] _handleTorrentCardActivated called for index $index: ${torrent.displayTitle}');
+
+    // Select Source mode — add to debrid and store as bound source
+    if (_isSelectSourceMode && _selectSourceShow != null) {
+      _handleSelectSourceTorrentPicked(torrent, index);
+      return;
+    }
 
     // Check if this is a Quick Play action (to skip dialog if multiple services)
     final isQuickPlay = _quickPlayPending;
@@ -2360,6 +2371,293 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _createAdvancedSelectionAndSearch();
   }
 
+  /// Handle "Select Source" — triggers series probing search in select-source mode.
+  /// User picks a torrent → stored as bound source → plays immediately.
+  void _handleSelectSource(StremioMeta show) {
+    debugPrint('TorrentSearchScreen: Select Source triggered for ${show.name}');
+
+    setState(() {
+      _isSelectSourceMode = true;
+      _selectSourceShow = show;
+    });
+
+    // Create a series-level search (no season/episode) to get packs
+    final selection = AdvancedSearchSelection(
+      imdbId: show.effectiveImdbId ?? show.id,
+      isSeries: true,
+      title: show.name,
+      year: show.year,
+      contentType: show.type,
+      posterUrl: show.poster,
+      // No season/episode → triggers series probing (all packs)
+    );
+
+    _handleCatalogItemSelected(selection, updateSearchText: true);
+  }
+
+  /// Exit select-source mode without selecting anything.
+  void _exitSelectSourceMode() {
+    setState(() {
+      _isSelectSourceMode = false;
+      _selectSourceShow = null;
+    });
+  }
+
+  /// Handle torrent picked in select-source mode.
+  /// Adds to debrid, stores as bound source, then plays.
+  Future<void> _handleSelectSourceTorrentPicked(Torrent torrent, int index) async {
+    final show = _selectSourceShow!;
+    final imdbId = show.effectiveImdbId ?? show.id;
+    final infohash = torrent.infohash;
+    final torrentName = torrent.name;
+
+    // Determine which debrid service to use
+    final defaultProvider = await StorageService.getDefaultTorrentProvider();
+    if (!mounted) return;
+
+    String debridService;
+    if (defaultProvider == 'debrid' && _realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      debridService = 'rd';
+    } else if (defaultProvider == 'torbox' && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      debridService = 'torbox';
+    } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
+      debridService = 'pikpak';
+    } else if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      debridService = 'rd';
+    } else if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      debridService = 'torbox';
+    } else if (_pikpakEnabled) {
+      debridService = 'pikpak';
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please configure a debrid provider in Settings')),
+      );
+      return;
+    }
+
+    // Exit select-source mode
+    _exitSelectSourceMode();
+
+    if (debridService == 'rd') {
+      // Show loading dialog
+      _showSelectSourceLoadingDialog(torrentName);
+
+      try {
+        final apiKey = _apiKey!;
+        final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+        final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink);
+        if (!mounted) return;
+        Navigator.of(context).pop(); // close loading
+
+        final torrentId = result['torrentId']?.toString() ?? '';
+
+        // Store as bound source
+        await SeriesSourceService.setSource(
+          imdbId,
+          SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'rd',
+            debridTorrentId: torrentId,
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Source set: $torrentName'),
+          backgroundColor: const Color(0xFF34D399),
+          duration: const Duration(seconds: 2),
+        ));
+
+        // Go back to Trakt view (clear search state so catalog/Trakt view reappears)
+        _goBackToCatalog();
+      } on TorrentNotCachedException catch (e) {
+        if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        // Still store as source even if not cached — it'll download in background
+        await SeriesSourceService.setSource(
+          imdbId,
+          SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'rd',
+            debridTorrentId: e.torrentId,
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Source set (torrent not cached yet — will download in background)'),
+          backgroundColor: Color(0xFFF59E0B),
+          duration: Duration(seconds: 3),
+        ));
+        _goBackToCatalog();
+      } catch (e) {
+        if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to set source: $e'),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 3),
+        ));
+      }
+    } else if (debridService == 'torbox') {
+      // For TorBox, use existing flow but store binding
+      await _addToTorboxAndBindSource(infohash, torrentName, imdbId);
+    } else {
+      // PikPak — use existing flow but store binding
+      await _addToPikPakAndBindSource(infohash, torrentName, imdbId);
+    }
+  }
+
+  /// Show loading dialog for select source operation.
+  void _showSelectSourceLoadingDialog(String torrentName) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionDuration: const Duration(milliseconds: 220),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.95, end: 1.0).animate(curved),
+            child: Dialog(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF60A5FA).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 32),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Setting Series Source...',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      torrentName,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 20),
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Add torrent to TorBox and store as bound source.
+  Future<void> _addToTorboxAndBindSource(String infohash, String torrentName, String imdbId) async {
+    if (!mounted) return;
+    _showSelectSourceLoadingDialog(torrentName);
+    try {
+      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final result = await TorboxService.createTorrent(
+        apiKey: _torboxApiKey!,
+        magnet: magnetLink,
+        seed: true,
+        allowZip: true,
+        addOnlyIfCached: false,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading
+
+      final torrentId = result['data']?['torrent_id']?.toString() ?? '';
+      await SeriesSourceService.setSource(
+        imdbId,
+        SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'torbox',
+          debridTorrentId: torrentId,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Source set: $torrentName'),
+        backgroundColor: const Color(0xFF34D399),
+        duration: const Duration(seconds: 2),
+      ));
+      _goBackToCatalog();
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to set source: $e'),
+        backgroundColor: const Color(0xFFEF4444),
+        duration: const Duration(seconds: 3),
+      ));
+    }
+  }
+
+  /// Add torrent to PikPak and store as bound source.
+  Future<void> _addToPikPakAndBindSource(String infohash, String torrentName, String imdbId) async {
+    if (!mounted) return;
+    _showSelectSourceLoadingDialog(torrentName);
+    try {
+      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final pikpak = PikPakApiService.instance;
+      final result = await pikpak.addOfflineDownload(magnetLink);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading
+
+      final taskId = result['task']?['id']?.toString() ?? '';
+      await SeriesSourceService.setSource(
+        imdbId,
+        SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'pikpak',
+          debridTorrentId: taskId,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Source set: $torrentName'),
+        backgroundColor: const Color(0xFF34D399),
+        duration: const Duration(seconds: 2),
+      ));
+      _goBackToCatalog();
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Failed to set source: $e'),
+        backgroundColor: const Color(0xFFEF4444),
+        duration: const Duration(seconds: 3),
+      ));
+    }
+  }
+
   /// Handle Quick Play - searches and auto-selects best torrent
   /// Priority:
   /// - Movies: prefer direct links, then first torrent
@@ -2367,6 +2665,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// - Other: first result
   Future<void> _handleQuickPlay(AdvancedSearchSelection selection) async {
     debugPrint('TorrentSearchScreen: Quick Play triggered for ${selection.title}');
+
+    // Check if a bound source exists for this series
+    if (selection.isSeries) {
+      final played = await _tryPlayFromBoundSource(selection);
+      if (played) return; // Played from bound source, skip normal search
+    }
 
     // Set quick play pending state
     setState(() {
@@ -2378,6 +2682,193 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     await _handleCatalogItemSelected(selection);
 
     // The search completion handler will check _quickPlayPending and auto-play
+  }
+
+  /// Try to play an episode from a bound series source.
+  /// Returns true if playback was initiated, false if should fall back to normal search.
+  Future<bool> _tryPlayFromBoundSource(AdvancedSearchSelection selection) async {
+    final source = await SeriesSourceService.getSource(selection.imdbId);
+    if (source == null) return false;
+
+    debugPrint('TorrentSearchScreen: Found bound source for ${selection.title}: ${source.torrentName}');
+
+    // Currently only supports Real-Debrid bound sources for playback
+    if (source.debridService != 'rd') {
+      debugPrint('TorrentSearchScreen: Bound source is ${source.debridService}, only RD supported for Quick Play from source');
+      return false;
+    }
+
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return false;
+
+    try {
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+        _searchPhase = SearchPhase.searching;
+        _hasSearched = true;
+        _activeAdvancedSelection = selection;
+      });
+
+      // Fetch torrent info from RD to get current links/files
+      final torrentInfo = await DebridService.getTorrentInfo(apiKey, source.debridTorrentId);
+      if (!mounted) return false;
+
+      final links = torrentInfo['links'] as List<dynamic>? ?? [];
+      final files = torrentInfo['files'] as List<dynamic>? ?? [];
+      final status = torrentInfo['status']?.toString() ?? '';
+
+      // Check if torrent is still valid
+      if (links.isEmpty || status == 'magnet_error' || status == 'dead') {
+        debugPrint('TorrentSearchScreen: Bound source torrent is gone/invalid, clearing binding');
+        await SeriesSourceService.removeSource(selection.imdbId);
+        if (!mounted) return false;
+        setState(() {
+          _isLoading = false;
+          _hasSearched = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Saved source is no longer available. Falling back to search.'),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ));
+        }
+        return false;
+      }
+
+      // Get selected video files with their links
+      final selectedFiles = <Map<String, dynamic>>[];
+      final selectedLinks = <String>[];
+      for (final f in files) {
+        if (f is Map<String, dynamic> && (f['selected'] == 1 || f['selected'] == true)) {
+          final name = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
+          if (FileUtils.isVideoFile(name.split('/').last)) {
+            selectedFiles.add(f);
+          }
+        }
+      }
+
+      // Map file IDs to links (RD returns links in order of selected files)
+      // Track original link indices for correct rdLinkIndex in playlist entries
+      int linkIdx = 0;
+      final videoLinkIndices = <int>[];
+      for (final f in files) {
+        if (f is Map<String, dynamic> && (f['selected'] == 1 || f['selected'] == true)) {
+          if (linkIdx < links.length) {
+            final name = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
+            if (FileUtils.isVideoFile(name.split('/').last)) {
+              selectedLinks.add(links[linkIdx].toString());
+              videoLinkIndices.add(linkIdx);
+            }
+            linkIdx++;
+          }
+        }
+      }
+
+      if (selectedFiles.isEmpty || selectedLinks.isEmpty) {
+        debugPrint('TorrentSearchScreen: No video files in bound source');
+        setState(() { _isLoading = false; _hasSearched = false; });
+        return false;
+      }
+
+      // Use SeriesParser to find the target episode
+      final filenames = selectedFiles.map((f) {
+        final path = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
+        return path.split('/').last;
+      }).toList();
+
+      // Need season+episode to find the right file in the pack
+      if (selection.season == null || selection.episode == null) {
+        setState(() { _isLoading = false; _hasSearched = false; });
+        return false; // Fall back to normal search silently
+      }
+
+      int? targetIndex;
+      final parsed = SeriesParser.parsePlaylist(filenames);
+      for (int i = 0; i < parsed.length; i++) {
+        if (parsed[i].season == selection.season && parsed[i].episode == selection.episode) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex == null) {
+        debugPrint('TorrentSearchScreen: Episode S${selection.season}E${selection.episode} not found in bound source');
+        setState(() { _isLoading = false; _hasSearched = false; });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Episode S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} not found in saved source. Falling back to search.'),
+            backgroundColor: const Color(0xFFF59E0B),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+        return false;
+      }
+
+      // Unrestrict the target link
+      final targetLink = selectedLinks[targetIndex];
+      final unrestrictResult = await DebridService.unrestrictLink(apiKey, targetLink);
+      if (!mounted) return false;
+
+      final videoUrl = unrestrictResult['download']?.toString() ?? '';
+      if (videoUrl.isEmpty) {
+        setState(() { _isLoading = false; _hasSearched = false; });
+        return false;
+      }
+
+      setState(() { _isLoading = false; });
+
+      // Build playlist entries for all episodes (lazy unrestriction)
+      final playlistEntries = <PlaylistEntry>[];
+      for (int i = 0; i < selectedFiles.length; i++) {
+        final name = filenames[i];
+        if (i == targetIndex) {
+          playlistEntries.add(PlaylistEntry(
+            url: videoUrl,
+            title: name,
+            sizeBytes: selectedFiles[i]['bytes'] as int?,
+          ));
+        } else {
+          playlistEntries.add(PlaylistEntry(
+            url: '',
+            title: name,
+            restrictedLink: selectedLinks[i],
+            sizeBytes: selectedFiles[i]['bytes'] as int?,
+            rdTorrentId: source.debridTorrentId,
+            rdLinkIndex: videoLinkIndices[i],
+          ));
+        }
+      }
+
+      debugPrint('TorrentSearchScreen: Playing S${selection.season}E${selection.episode} from bound source (${source.torrentName})');
+
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: videoUrl,
+          title: source.torrentName,
+          playlist: playlistEntries,
+          startIndex: targetIndex,
+          viewMode: PlaylistViewMode.series,
+          contentImdbId: selection.imdbId,
+          contentType: selection.contentType,
+          contentSeason: selection.season,
+          contentEpisode: selection.episode,
+          traktScrobble: true,
+          traktProgressPercent: selection.traktProgressPercent,
+        ),
+      );
+
+      // After player returns, clear search state so Trakt/catalog view reappears
+      if (mounted) _goBackToCatalog();
+
+      return true;
+    } catch (e) {
+      debugPrint('TorrentSearchScreen: Failed to play from bound source: $e');
+      setState(() { _isLoading = false; _hasSearched = false; });
+      return false; // Fall back to normal search
+    }
   }
 
   /// Called after search completes to check if Quick Play should auto-select
@@ -12390,6 +12881,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             // Go back to Sources row (focuses Sources, left arrow goes to dropdown)
                             _providerAccordionFocusNode.requestFocus();
                           },
+                          onSelectSource: _handleSelectSource,
                         ),
                       ),
 
@@ -12415,6 +12907,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           onRequestFocusAbove: () {
                             _providerAccordionFocusNode.requestFocus();
                           },
+                          onSelectSource: _handleSelectSource,
                         ),
                       ),
 
@@ -12474,6 +12967,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           },
                           showQuickPlay: _defaultTorrentProvider != 'pikpak',
                           onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
+                          onSelectSource: _handleSelectSource,
                         ),
                       ),
 
@@ -12694,13 +13188,54 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       });
                     }
 
+                    final selectSourceBannerRows = _isSelectSourceMode ? 1 : 0;
                     return ListView.builder(
                       controller: _resultsScrollController,
                       padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: _torrents.length + metadataRows,
+                      itemCount: _torrents.length + metadataRows + selectSourceBannerRows,
                       itemBuilder: (context, index) {
+                        // Select Source banner
+                        if (_isSelectSourceMode && index == 0) {
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF1E3A5F), Color(0xFF1E293B)],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF60A5FA).withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Select a torrent to use as source for "${_selectSourceShow?.name ?? ''}"',
+                                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                                  onPressed: _exitSelectSourceMode,
+                                  tooltip: 'Cancel',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        // Adjust index for select-source banner
+                        final adjustedIndex = index - selectSourceBannerRows;
+
                         // Combined Results + Sort row
-                        if (index == 0) {
+                        if (adjustedIndex == 0) {
                           return FadeTransition(
                             opacity: _listAnimation,
                             child: Container(
@@ -13028,18 +13563,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           );
                         }
 
-                        if (showCachedOnlyBanner && index == 1) {
+                        if (showCachedOnlyBanner && adjustedIndex == 1) {
                           return _buildTorboxCachedOnlyNotice();
                         }
 
-                        final torrent = _torrents[index - metadataRows];
+                        final torrent = _torrents[adjustedIndex - metadataRows];
                         return RepaintBoundary(
                           child: Padding(
                             key: ValueKey(torrent.infohash),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: _buildTorrentCard(
                               torrent,
-                              index - metadataRows,
+                              adjustedIndex - metadataRows,
                             ),
                           ),
                         );
@@ -13255,6 +13790,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _handleQuickPlay(selection);
           },
           onBrowseShow: (show) => _browseTraktShow(show),
+          onSelectSource: _handleSelectSource,
           onRequestFocusAbove: () {
             final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingShows);
             if (prev != null) {

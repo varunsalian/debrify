@@ -43,6 +43,9 @@ class AggregatedSearchResults extends StatefulWidget {
   /// Callback when user presses Up arrow from keyword card (to return focus to search field)
   final VoidCallback? onRequestFocusAbove;
 
+  /// Callback when user selects "Select Source" for a series
+  final void Function(StremioMeta)? onSelectSource;
+
   const AggregatedSearchResults({
     super.key,
     required this.query,
@@ -53,6 +56,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.isTelevision = false,
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
+    this.onSelectSource,
   });
 
   @override
@@ -529,7 +533,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         showQuickPlay: widget.showQuickPlay,
                         onTraktMenuAction: _isTraktAuthenticated &&
                                 (item.effectiveImdbId != null || item.id.startsWith('tt'))
-                            ? (action) => handleTraktMenuAction(context, item, action)
+                            ? (action) => handleTraktMenuAction(context, item, action, onSelectSource: widget.onSelectSource)
                             : null,
                       ),
                     ),
@@ -860,6 +864,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
+                isSeries: widget.item.type == 'series',
               ),
             ],
           ],
@@ -942,6 +947,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
+                isSeries: widget.item.type == 'series',
               ),
             ],
           ],

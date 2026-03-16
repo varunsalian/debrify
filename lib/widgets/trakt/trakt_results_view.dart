@@ -8,6 +8,7 @@ import '../../services/trakt/trakt_item_transformer.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import 'trakt_menu_helpers.dart';
 import '../../services/tvmaze_service.dart';
+import '../../services/series_source_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 /// Trakt list type options
@@ -97,6 +98,9 @@ class TraktResultsView extends StatefulWidget {
   final void Function(AdvancedSearchSelection)? onQuickPlay;
   final bool showQuickPlay;
   final VoidCallback? onUpArrowFromFilters;
+  /// Called when user wants to select a torrent source for a series.
+  /// Parent should trigger series probing search in select-source mode.
+  final void Function(StremioMeta show)? onSelectSource;
 
   const TraktResultsView({
     super.key,
@@ -106,6 +110,7 @@ class TraktResultsView extends StatefulWidget {
     this.onQuickPlay,
     this.showQuickPlay = true,
     this.onUpArrowFromFilters,
+    this.onSelectSource,
   });
 
   @override
@@ -140,6 +145,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   // Playback entry IDs from /sync/playback, keyed by IMDB ID
   Map<String, List<int>> _playbackIds = {};
+
+  // Bound series sources: imdbId → SeriesSource (cached for menu display)
+  Map<String, SeriesSource> _boundSources = {};
 
   // Focus nodes for DPAD
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
@@ -338,6 +346,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _items = metas;
       });
       _applySearchFilter(); // Also rebuilds _cardFocusNodes
+
+      // Load bound sources for series items (non-blocking)
+      if (_selectedContentType == TraktContentType.shows) {
+        _loadBoundSources();
+      }
 
       // Fetch watch progress for movies (non-blocking)
       if (_selectedContentType == TraktContentType.movies) {
@@ -580,6 +593,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
           if (ok) success = true;
         }
         if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.selectSource:
+        _handleSelectSourceAction(item);
+        return; // Handled via dialog, no snackbar needed
     }
 
     if (!mounted) return;
@@ -595,6 +611,190 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   Future<Map<String, dynamic>?> _showCustomListPickerDialog() =>
       showTraktCustomListPickerDialog(context);
+
+  /// Load bound sources for all currently displayed series items.
+  Future<void> _loadBoundSources() async {
+    final seriesItems = _filteredItems.where((i) => i.type == 'series');
+    final sources = <String, SeriesSource>{};
+    for (final item in seriesItems) {
+      final imdbId = item.effectiveImdbId ?? item.id;
+      final source = await SeriesSourceService.getSource(imdbId);
+      if (source != null) sources[imdbId] = source;
+    }
+    if (mounted) setState(() => _boundSources = sources);
+  }
+
+  /// Load bound source for the currently selected show (episode mode).
+  Future<void> _loadBoundSourceForShow() async {
+    if (_selectedShow == null) return;
+    final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+    final source = await SeriesSourceService.getSource(imdbId);
+    if (mounted) {
+      setState(() {
+        if (source != null) {
+          _boundSources[imdbId] = source;
+        } else {
+          _boundSources.remove(imdbId);
+        }
+      });
+    }
+  }
+
+  /// Show "Edit Source" dialog with current source info and delete option.
+  Future<void> _showEditSourceDialog(StremioMeta show) async {
+    final imdbId = show.effectiveImdbId ?? show.id;
+    final source = _boundSources[imdbId] ?? await SeriesSourceService.getSource(imdbId);
+    if (source == null || !mounted) return;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'Series Source',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        source.torrentName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: source.debridService == 'rd'
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                  : source.debridService == 'torbox'
+                                      ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
+                                      : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              source.debridService == 'rd'
+                                  ? 'Real-Debrid'
+                                  : source.debridService == 'torbox'
+                                      ? 'TorBox'
+                                      : 'PikPak',
+                              style: TextStyle(
+                                color: source.debridService == 'rd'
+                                    ? const Color(0xFF10B981)
+                                    : source.debridService == 'torbox'
+                                        ? const Color(0xFF3B82F6)
+                                        : const Color(0xFFF59E0B),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.of(dialogContext).pop('delete'),
+                        icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFEF4444)),
+                        label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(dialogContext).pop('change'),
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                        label: const Text('Change'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+
+    if (result == 'delete') {
+      await SeriesSourceService.removeSource(imdbId);
+      if (mounted) {
+        setState(() => _boundSources.remove(imdbId));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Series source removed'),
+          backgroundColor: Color(0xFF34D399),
+          duration: Duration(seconds: 2),
+        ));
+      }
+    } else if (result == 'change') {
+      widget.onSelectSource?.call(show);
+    }
+  }
+
+  /// Handle menu action for select/edit source on a series item.
+  void _handleSelectSourceAction(StremioMeta item) {
+    final imdbId = item.effectiveImdbId ?? item.id;
+    if (_boundSources.containsKey(imdbId)) {
+      _showEditSourceDialog(item);
+    } else {
+      widget.onSelectSource?.call(item);
+    }
+  }
 
   /// Focus the first filter (for DPAD navigation from search input)
   void focusFirstFilter() {
@@ -700,6 +900,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _selectedSeasonNumber = targetSeason;
         _isLoadingEpisodes = false;
       });
+
+      // Load bound source for this show (non-blocking)
+      _loadBoundSourceForShow();
 
       // Scroll to the next episode after the frame renders
       if (nextEpisode != null && targetSeason == nextEpisode.season) {
@@ -1259,6 +1462,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
               listType: _selectedListType,
               onMenuAction: (action) => _onMenuAction(item, action),
+              hasBoundSource: item.type == 'series' && _boundSources.containsKey(item.effectiveImdbId ?? item.id),
             ),
           );
         },
@@ -1378,6 +1582,22 @@ class TraktResultsViewState extends State<TraktResultsView> {
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
+              );
+            }),
+          ],
+
+          // Select Source / Edit Source button
+          if (_selectedShow != null && widget.onSelectSource != null) ...[
+            const SizedBox(width: 8),
+            Builder(builder: (context) {
+              final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+              final hasBound = _boundSources.containsKey(imdbId);
+              return _SelectSourceButton(
+                hasBoundSource: hasBound,
+                onTap: () => _handleSelectSourceAction(_selectedShow!),
+                onLeftFocus: _seasons.isNotEmpty ? _seasonDropdownFocusNode : _backButtonFocusNode,
+                onUpArrow: widget.onUpArrowFromFilters,
+                onDownArrow: _focusFirstEpisodeCard,
               );
             }),
           ],
@@ -1597,6 +1817,7 @@ class _TraktItemCard extends StatefulWidget {
   final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
   final TraktListType? listType;
   final void Function(TraktItemMenuAction action)? onMenuAction;
+  final bool hasBoundSource;
 
   const _TraktItemCard({
     required this.item,
@@ -1608,6 +1829,7 @@ class _TraktItemCard extends StatefulWidget {
     required this.onKeyEvent,
     this.listType,
     this.onMenuAction,
+    this.hasBoundSource = false,
   });
 
   @override
@@ -1852,6 +2074,19 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                   size: 18, color: Color(0xFFEF4444)),
               SizedBox(width: 12),
               Text('Remove from Continue Watching'),
+            ]),
+          ),
+        if (widget.item.type == 'series')
+          PopupMenuItem(
+            value: TraktItemMenuAction.selectSource,
+            child: Row(children: [
+              Icon(
+                widget.hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+                size: 18,
+                color: const Color(0xFF60A5FA),
+              ),
+              const SizedBox(width: 12),
+              Text(widget.hasBoundSource ? 'Edit Source' : 'Select Source'),
             ]),
           ),
       ],
@@ -2860,6 +3095,123 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Select Source Button ─────────────────────────────────────────────────────
+
+/// Compact button for the episode browser header to select/edit a series source.
+class _SelectSourceButton extends StatefulWidget {
+  final bool hasBoundSource;
+  final VoidCallback onTap;
+  final FocusNode? onLeftFocus;
+  final VoidCallback? onUpArrow;
+  final VoidCallback? onDownArrow;
+
+  const _SelectSourceButton({
+    required this.hasBoundSource,
+    required this.onTap,
+    this.onLeftFocus,
+    this.onUpArrow,
+    this.onDownArrow,
+  });
+
+  @override
+  State<_SelectSourceButton> createState() => _SelectSourceButtonState();
+}
+
+class _SelectSourceButtonState extends State<_SelectSourceButton> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'select-source-btn');
+  bool _isFocused = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftFocus != null) {
+          widget.onLeftFocus!.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          return KeyEventResult.handled; // rightmost button, block traversal
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          widget.onUpArrow?.call();
+          return widget.onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          widget.onDownArrow?.call();
+          return widget.onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.hasBoundSource
+                ? const Color(0xFF60A5FA).withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _isFocused
+                  ? const Color(0xFF60A5FA)
+                  : widget.hasBoundSource
+                      ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.15),
+              width: _isFocused ? 2 : 1,
+            ),
+            boxShadow: _isFocused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.hasBoundSource ? Icons.link_rounded : Icons.link_off_rounded,
+                size: 16,
+                color: widget.hasBoundSource
+                    ? const Color(0xFF60A5FA)
+                    : Colors.white.withValues(alpha: 0.6),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.hasBoundSource ? 'Source' : 'Select Source',
+                style: TextStyle(
+                  color: widget.hasBoundSource
+                      ? const Color(0xFF60A5FA)
+                      : Colors.white.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

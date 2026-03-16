@@ -22,6 +22,7 @@ enum TraktItemMenuAction {
   addToList,
   removeFromList,
   removeFromPlayback,
+  selectSource,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -181,11 +182,13 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
 
 /// Handles a Trakt menu action for a given item. Shows snackbar feedback.
 /// Standalone handler for use outside of TraktResultsView (catalog/search cards).
+/// [onSelectSource] is called when user selects the "Select Source" action for a series.
 Future<void> handleTraktMenuAction(
   BuildContext context,
   StremioMeta item,
-  TraktItemMenuAction action,
-) async {
+  TraktItemMenuAction action, {
+  void Function(StremioMeta)? onSelectSource,
+}) async {
   final traktService = TraktService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
   final type = item.type;
@@ -234,6 +237,9 @@ Future<void> handleTraktMenuAction(
       return; // No context for which list to remove from
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
+    case TraktItemMenuAction.selectSource:
+      onSelectSource?.call(item);
+      return;
   }
 
   if (!context.mounted) return;
@@ -251,6 +257,7 @@ Widget buildTraktAddOnlyOverflowMenu({
   required bool isHighlighted,
   required GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> menuKey,
   required void Function(TraktItemMenuAction) onSelected,
+  bool isSeries = false,
 }) {
   return Container(
     decoration: isHighlighted
@@ -325,6 +332,15 @@ Widget buildTraktAddOnlyOverflowMenu({
             Text('Add to Trakt List...'),
           ]),
         ),
+        if (isSeries)
+          const PopupMenuItem(
+            value: TraktItemMenuAction.selectSource,
+            child: Row(children: [
+              Icon(Icons.link_rounded, size: 18, color: Color(0xFF60A5FA)),
+              SizedBox(width: 12),
+              Text('Select Source'),
+            ]),
+          ),
       ],
     ),
   );
