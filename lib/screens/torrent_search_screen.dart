@@ -2789,13 +2789,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // The search completion handler will check _quickPlayPending and auto-play
   }
 
-  /// Try to play an episode from a bound series source.
+  /// Try to play an episode from bound series sources (tries each in priority order).
   /// Returns true if playback was initiated, false if should fall back to normal search.
   Future<bool> _tryPlayFromBoundSource(AdvancedSearchSelection selection) async {
-    final source = await SeriesSourceService.getSource(selection.imdbId);
-    if (source == null) return false;
+    final sources = await SeriesSourceService.getSources(selection.imdbId);
+    if (sources.isEmpty) return false;
 
-    debugPrint('TorrentSearchScreen: Found bound source for ${selection.title}: ${source.torrentName} (${source.debridService})');
+    debugPrint('TorrentSearchScreen: Found ${sources.length} bound source(s) for ${selection.title}');
 
     // Need season+episode to find the right file in the pack
     if (selection.season == null || selection.episode == null) {
@@ -2811,32 +2811,49 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _activeAdvancedSelection = selection;
       });
 
-      bool result;
-      switch (source.debridService) {
-        case 'rd':
-          result = await _tryPlayFromBoundSourceRD(selection, source);
-        case 'torbox':
-          result = await _tryPlayFromBoundSourceTorbox(selection, source);
-        case 'pikpak':
-          result = await _tryPlayFromBoundSourcePikPak(selection, source);
-        default:
+      // Try each source in priority order until one has the episode
+      for (int i = 0; i < sources.length; i++) {
+        final source = sources[i];
+        debugPrint('TorrentSearchScreen: Trying source ${i + 1}/${sources.length}: ${source.torrentName} (${source.debridService})');
+
+        // Suppress the "not found" snackbar for intermediate sources
+        final isLastSource = i == sources.length - 1;
+        bool result;
+        try {
+          switch (source.debridService) {
+            case 'rd':
+              result = await _tryPlayFromBoundSourceRD(selection, source, showNotFoundHint: isLastSource, showUnavailableHint: isLastSource);
+            case 'torbox':
+              result = await _tryPlayFromBoundSourceTorbox(selection, source, showNotFoundHint: isLastSource, showUnavailableHint: isLastSource);
+            case 'pikpak':
+              result = await _tryPlayFromBoundSourcePikPak(selection, source, showNotFoundHint: isLastSource, showUnavailableHint: isLastSource);
+            default:
+              result = false;
+          }
+        } catch (e) {
+          debugPrint('TorrentSearchScreen: Source ${i + 1} failed: $e');
           result = false;
+        }
+
+        if (result) return true;
+        if (!mounted) return false;
       }
 
-      if (!result && mounted) {
+      // None of the sources had the episode
+      if (mounted) {
         setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       }
-      return result;
+      return false;
     } catch (e) {
-      debugPrint('TorrentSearchScreen: Failed to play from bound source: $e');
+      debugPrint('TorrentSearchScreen: Failed to play from bound sources: $e');
       if (mounted) setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       return false; // Fall back to normal search
     }
   }
 
   /// Find the target episode index from a list of filenames using SeriesParser.
-  /// Returns null if not found, and shows a hint snackbar.
-  int? _findEpisodeInFilenames(List<String> filenames, int season, int episode) {
+  /// Returns null if not found. Shows a hint snackbar only if [showHint] is true.
+  int? _findEpisodeInFilenames(List<String> filenames, int season, int episode, {bool showHint = true}) {
     final parsed = SeriesParser.parsePlaylist(filenames);
     for (int i = 0; i < parsed.length; i++) {
       if (parsed[i].season == season && parsed[i].episode == episode) {
@@ -2844,9 +2861,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
     debugPrint('TorrentSearchScreen: Episode S${season}E$episode not found in bound source');
-    if (mounted) {
+    if (showHint && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} not in saved source. Use Edit Source to change it.'),
+        content: Text('S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} not in saved sources. Use Edit Source to change them.'),
         backgroundColor: const Color(0xFFF59E0B),
         duration: const Duration(seconds: 4),
       ));
@@ -2894,7 +2911,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // ── Real-Debrid bound source playback ─────────────────────────────────────
 
-  Future<bool> _tryPlayFromBoundSourceRD(AdvancedSearchSelection selection, SeriesSource source) async {
+  Future<bool> _tryPlayFromBoundSourceRD(AdvancedSearchSelection selection, SeriesSource source, {bool showNotFoundHint = true, bool showUnavailableHint = true}) async {
     final apiKey = _apiKey;
     if (apiKey == null || apiKey.isEmpty) return false;
 
@@ -2906,13 +2923,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final status = torrentInfo['status']?.toString() ?? '';
 
     if (links.isEmpty || status == 'magnet_error' || status == 'dead') {
-      await SeriesSourceService.removeSource(selection.imdbId);
+      await SeriesSourceService.removeSourceByHash(selection.imdbId, source.torrentHash);
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Saved source is no longer available. Falling back to search.'),
-        backgroundColor: Color(0xFFF59E0B),
-        duration: Duration(seconds: 2),
-      ));
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Saved source is no longer available. Falling back to search.'),
+          backgroundColor: Color(0xFFF59E0B),
+          duration: Duration(seconds: 2),
+        ));
+      }
       return false;
     }
 
@@ -2941,7 +2960,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return path.split('/').last;
     }).toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
     if (targetIndex == null) return false;
 
     // Unrestrict the target link
@@ -2977,7 +2996,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // ── TorBox bound source playback ──────────────────────────────────────────
 
-  Future<bool> _tryPlayFromBoundSourceTorbox(AdvancedSearchSelection selection, SeriesSource source) async {
+  Future<bool> _tryPlayFromBoundSourceTorbox(AdvancedSearchSelection selection, SeriesSource source, {bool showNotFoundHint = true, bool showUnavailableHint = true}) async {
     final apiKey = _torboxApiKey;
     if (apiKey == null || apiKey.isEmpty) return false;
 
@@ -2989,13 +3008,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (!mounted) return false;
 
     if (torrent == null) {
-      await SeriesSourceService.removeSource(selection.imdbId);
+      await SeriesSourceService.removeSourceByHash(selection.imdbId, source.torrentHash);
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Saved source is no longer available. Falling back to search.'),
-        backgroundColor: Color(0xFFF59E0B),
-        duration: Duration(seconds: 2),
-      ));
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Saved source is no longer available. Falling back to search.'),
+          backgroundColor: Color(0xFFF59E0B),
+          duration: Duration(seconds: 2),
+        ));
+      }
       return false;
     }
 
@@ -3012,7 +3033,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return f.shortName.isNotEmpty ? f.shortName : FileUtils.getFileName(f.name);
     }).toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
     if (targetIndex == null) return false;
 
     // Get download link for target episode
@@ -3050,7 +3071,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // ── PikPak bound source playback ──────────────────────────────────────────
 
-  Future<bool> _tryPlayFromBoundSourcePikPak(AdvancedSearchSelection selection, SeriesSource source) async {
+  Future<bool> _tryPlayFromBoundSourcePikPak(AdvancedSearchSelection selection, SeriesSource source, {bool showNotFoundHint = true, bool showUnavailableHint = true}) async {
     final pikpak = PikPakApiService.instance;
 
     // The debridTorrentId for PikPak is the task/file ID of the folder
@@ -3062,13 +3083,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (!mounted) return false;
 
     if (allFiles.isEmpty) {
-      await SeriesSourceService.removeSource(selection.imdbId);
+      await SeriesSourceService.removeSourceByHash(selection.imdbId, source.torrentHash);
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Saved source is no longer available. Falling back to search.'),
-        backgroundColor: Color(0xFFF59E0B),
-        duration: Duration(seconds: 2),
-      ));
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Saved source is no longer available. Falling back to search.'),
+          backgroundColor: Color(0xFFF59E0B),
+          duration: Duration(seconds: 2),
+        ));
+      }
       return false;
     }
 
@@ -3083,7 +3106,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final filenames = videoFiles.map((f) => (f['name'] as String?) ?? '').toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
     if (targetIndex == null) return false;
 
     // Get streaming URL for target episode

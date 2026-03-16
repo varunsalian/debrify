@@ -35,34 +35,109 @@ class SeriesSource {
       );
 }
 
-/// Manages series-to-torrent source bindings.
+/// Manages series-to-torrent source bindings (multiple sources per series).
 /// Stores in SharedPreferences with key prefix 'series_source_'.
+/// Backward compatible: reads old single-source format and migrates to list.
 class SeriesSourceService {
   static const String _prefix = 'series_source_';
 
-  static Future<SeriesSource?> getSource(String imdbId) async {
+  /// Get all bound sources for a series, ordered by priority (first = highest).
+  static Future<List<SeriesSource>> getSources(String imdbId) async {
     final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString('$_prefix$imdbId');
-    if (json == null) return null;
+    final raw = prefs.getString('$_prefix$imdbId');
+    if (raw == null) return [];
     try {
-      return SeriesSource.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      final decoded = jsonDecode(raw);
+      // New format: JSON array
+      if (decoded is List) {
+        return decoded
+            .whereType<Map<String, dynamic>>()
+            .map((j) => SeriesSource.fromJson(j))
+            .toList();
+      }
+      // Old format: single JSON object — migrate
+      if (decoded is Map<String, dynamic>) {
+        final source = SeriesSource.fromJson(decoded);
+        // Auto-migrate to list format
+        await _saveSources(prefs, imdbId, [source]);
+        return [source];
+      }
+      return [];
     } catch (_) {
-      return null;
+      return [];
     }
   }
 
-  static Future<void> setSource(String imdbId, SeriesSource source) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_prefix$imdbId', jsonEncode(source.toJson()));
+  /// Get the first (highest priority) source. Convenience for quick checks.
+  static Future<SeriesSource?> getSource(String imdbId) async {
+    final sources = await getSources(imdbId);
+    return sources.isEmpty ? null : sources.first;
   }
 
-  static Future<void> removeSource(String imdbId) async {
+  /// Add a source to the list (appends at end = lowest priority).
+  /// Deduplicates by torrentHash — if the same hash exists, it's replaced in-place.
+  static Future<void> addSource(String imdbId, SeriesSource source) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sources = await getSources(imdbId);
+    // Replace if same hash already exists
+    final existingIdx = sources.indexWhere((s) => s.torrentHash == source.torrentHash);
+    if (existingIdx >= 0) {
+      sources[existingIdx] = source;
+    } else {
+      sources.add(source);
+    }
+    await _saveSources(prefs, imdbId, sources);
+  }
+
+  /// Remove a specific source by torrentHash.
+  static Future<void> removeSourceByHash(String imdbId, String torrentHash) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sources = await getSources(imdbId);
+    sources.removeWhere((s) => s.torrentHash == torrentHash);
+    if (sources.isEmpty) {
+      await prefs.remove('$_prefix$imdbId');
+    } else {
+      await _saveSources(prefs, imdbId, sources);
+    }
+  }
+
+  /// Remove all sources for a series.
+  static Future<void> removeAllSources(String imdbId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_prefix$imdbId');
   }
 
-  static Future<bool> hasSource(String imdbId) async {
+  /// Replace the entire source list (for reordering).
+  static Future<void> setSources(String imdbId, List<SeriesSource> sources) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey('$_prefix$imdbId');
+    if (sources.isEmpty) {
+      await prefs.remove('$_prefix$imdbId');
+    } else {
+      await _saveSources(prefs, imdbId, sources);
+    }
+  }
+
+  /// Check if any sources are bound.
+  static Future<bool> hasSource(String imdbId) async {
+    final sources = await getSources(imdbId);
+    return sources.isNotEmpty;
+  }
+
+  // Keep old setSource/removeSource for backward compatibility during transition
+  /// @deprecated Use addSource instead.
+  static Future<void> setSource(String imdbId, SeriesSource source) =>
+      addSource(imdbId, source);
+
+  /// @deprecated Use removeAllSources instead.
+  static Future<void> removeSource(String imdbId) =>
+      removeAllSources(imdbId);
+
+  static Future<void> _saveSources(
+    SharedPreferences prefs,
+    String imdbId,
+    List<SeriesSource> sources,
+  ) async {
+    final jsonList = sources.map((s) => s.toJson()).toList();
+    await prefs.setString('$_prefix$imdbId', jsonEncode(jsonList));
   }
 }

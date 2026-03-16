@@ -146,8 +146,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
   // Playback entry IDs from /sync/playback, keyed by IMDB ID
   Map<String, List<int>> _playbackIds = {};
 
-  // Bound series sources: imdbId → SeriesSource (cached for menu display)
-  Map<String, SeriesSource> _boundSources = {};
+  // Bound series sources: imdbId → List<SeriesSource> (cached for menu display)
+  Map<String, List<SeriesSource>> _boundSources = {};
 
   // Focus nodes for DPAD
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
@@ -621,11 +621,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
   /// Load bound sources for all currently displayed series items.
   Future<void> _loadBoundSources() async {
     final seriesItems = _filteredItems.where((i) => i.type == 'series');
-    final sources = <String, SeriesSource>{};
+    final sources = <String, List<SeriesSource>>{};
     for (final item in seriesItems) {
       final imdbId = item.effectiveImdbId ?? item.id;
-      final source = await SeriesSourceService.getSource(imdbId);
-      if (source != null) sources[imdbId] = source;
+      final list = await SeriesSourceService.getSources(imdbId);
+      if (list.isNotEmpty) sources[imdbId] = list;
     }
     if (mounted) setState(() => _boundSources = sources);
   }
@@ -634,11 +634,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Future<void> _loadBoundSourceForShow() async {
     if (_selectedShow == null) return;
     final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-    final source = await SeriesSourceService.getSource(imdbId);
+    final list = await SeriesSourceService.getSources(imdbId);
     if (mounted) {
       setState(() {
-        if (source != null) {
-          _boundSources[imdbId] = source;
+        if (list.isNotEmpty) {
+          _boundSources[imdbId] = list;
         } else {
           _boundSources.remove(imdbId);
         }
@@ -646,150 +646,245 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
-  /// Show "Edit Source" dialog with current source info and delete option.
+  /// Show "Edit Sources" dialog with list of bound sources and management options.
   Future<void> _showEditSourceDialog(StremioMeta show) async {
     final imdbId = show.effectiveImdbId ?? show.id;
-    final source = _boundSources[imdbId] ?? await SeriesSourceService.getSource(imdbId);
-    if (source == null || !mounted) return;
+    var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
+    if (sources.isEmpty || !mounted) return;
 
-    final result = await showDialog<String>(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
-                    SizedBox(width: 8),
-                    Text(
-                      'Series Source',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                  ),
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        source.torrentName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: source.debridService == 'rd'
-                                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                                  : source.debridService == 'torbox'
-                                      ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
-                                      : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              source.debridService == 'rd'
-                                  ? 'Real-Debrid'
-                                  : source.debridService == 'torbox'
-                                      ? 'TorBox'
-                                      : 'PikPak',
-                              style: TextStyle(
-                                color: source.debridService == 'rd'
-                                    ? const Color(0xFF10B981)
-                                    : source.debridService == 'torbox'
-                                        ? const Color(0xFF3B82F6)
-                                        : const Color(0xFFF59E0B),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Series Sources (${sources.length})',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 4),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'First match wins — reorder by priority',
+                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ReorderableListView.builder(
+                          shrinkWrap: true,
+                          itemCount: sources.length,
+                          onReorder: (oldIndex, newIndex) {
+                            if (newIndex > oldIndex) newIndex--;
+                            setDialogState(() {
+                              final item = sources.removeAt(oldIndex);
+                              sources.insert(newIndex, item);
+                            });
+                            // Persist reorder (defensive copy)
+                            SeriesSourceService.setSources(imdbId, List.of(sources));
+                            setState(() => _boundSources[imdbId] = List.of(sources));
+                          },
+                          proxyDecorator: (child, index, animation) {
+                            return Material(
+                              color: Colors.transparent,
+                              elevation: 4,
+                              child: child,
+                            );
+                          },
+                          itemBuilder: (context, index) {
+                            final source = sources[index];
+                            return _buildSourceListTile(
+                              key: ValueKey(source.torrentHash),
+                              source: source,
+                              index: index,
+                              onDelete: () async {
+                                await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                final updated = await SeriesSourceService.getSources(imdbId);
+                                setDialogState(() {
+                                  sources.clear();
+                                  sources.addAll(updated);
+                                });
+                                if (mounted) {
+                                  setState(() {
+                                    if (updated.isEmpty) {
+                                      _boundSources.remove(imdbId);
+                                    } else {
+                                      _boundSources[imdbId] = updated;
+                                    }
+                                  });
+                                }
+                                if (updated.isEmpty && dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                widget.onSelectSource?.call(show);
+                              },
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Add Source'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          if (sources.length > 1) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  if (mounted) {
+                                    setState(() => _boundSources.remove(imdbId));
+                                  }
+                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                },
+                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.of(dialogContext).pop('delete'),
-                        icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFEF4444)),
-                        label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.of(dialogContext).pop('change'),
-                        icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                        label: const Text('Change'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF6366F1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                  ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build a single source tile for the Edit Sources dialog.
+  Widget _buildSourceListTile({
+    required Key key,
+    required SeriesSource source,
+    required int index,
+    required VoidCallback onDelete,
+  }) {
+    Color serviceColor;
+    String serviceLabel;
+    switch (source.debridService) {
+      case 'rd':
+        serviceColor = const Color(0xFF10B981);
+        serviceLabel = 'Real-Debrid';
+      case 'torbox':
+        serviceColor = const Color(0xFF3B82F6);
+        serviceLabel = 'TorBox';
+      case 'pikpak':
+        serviceColor = const Color(0xFFF59E0B);
+        serviceLabel = 'PikPak';
+      default:
+        serviceColor = Colors.white54;
+        serviceLabel = source.debridService;
+    }
+
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          // Priority number
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '${index + 1}',
+              style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Source info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  source.torrentName,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: serviceColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    serviceLabel,
+                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
           ),
-        );
-      },
+          // Delete button
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            onPressed: onDelete,
+            tooltip: 'Remove source',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+          // Drag handle
+          const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+        ],
+      ),
     );
-
-    if (!mounted || result == null) return;
-
-    if (result == 'delete') {
-      await SeriesSourceService.removeSource(imdbId);
-      if (mounted) {
-        setState(() => _boundSources.remove(imdbId));
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Series source removed'),
-          backgroundColor: Color(0xFF34D399),
-          duration: Duration(seconds: 2),
-        ));
-      }
-    } else if (result == 'change') {
-      widget.onSelectSource?.call(show);
-    }
   }
 
   /// Handle menu action for select/edit source on a series item.
@@ -1597,9 +1692,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
             const SizedBox(width: 8),
             Builder(builder: (context) {
               final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-              final hasBound = _boundSources.containsKey(imdbId);
+              final sourceCount = _boundSources[imdbId]?.length ?? 0;
               return _SelectSourceButton(
-                hasBoundSource: hasBound,
+                hasBoundSource: sourceCount > 0,
+                sourceCount: sourceCount,
                 onTap: () => _handleSelectSourceAction(_selectedShow!),
                 onLeftFocus: _seasons.isNotEmpty ? _seasonDropdownFocusNode : _backButtonFocusNode,
                 onUpArrow: widget.onUpArrowFromFilters,
@@ -2092,7 +2188,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 color: const Color(0xFF60A5FA),
               ),
               const SizedBox(width: 12),
-              Text(widget.hasBoundSource ? 'Edit Source' : 'Select Source'),
+              Text(widget.hasBoundSource ? 'Edit Sources' : 'Select Source'),
             ]),
           ),
       ],
@@ -3112,6 +3208,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
 /// Compact button for the episode browser header to select/edit a series source.
 class _SelectSourceButton extends StatefulWidget {
   final bool hasBoundSource;
+  final int sourceCount;
   final VoidCallback onTap;
   final FocusNode? onLeftFocus;
   final VoidCallback? onUpArrow;
@@ -3119,6 +3216,7 @@ class _SelectSourceButton extends StatefulWidget {
 
   const _SelectSourceButton({
     required this.hasBoundSource,
+    this.sourceCount = 0,
     required this.onTap,
     this.onLeftFocus,
     this.onUpArrow,
@@ -3207,7 +3305,9 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
               ),
               const SizedBox(width: 4),
               Text(
-                widget.hasBoundSource ? 'Source' : 'Select Source',
+                widget.hasBoundSource
+                    ? (widget.sourceCount > 1 ? 'Sources (${widget.sourceCount})' : 'Source')
+                    : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource
                       ? const Color(0xFF60A5FA)
