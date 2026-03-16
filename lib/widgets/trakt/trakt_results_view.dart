@@ -612,6 +612,12 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Future<Map<String, dynamic>?> _showCustomListPickerDialog() =>
       showTraktCustomListPickerDialog(context);
 
+  /// Public: refresh bound sources cache (call after Select Source completes).
+  void refreshBoundSources() {
+    _loadBoundSources();
+    _loadBoundSourceForShow();
+  }
+
   /// Load bound sources for all currently displayed series items.
   Future<void> _loadBoundSources() async {
     final seriesItems = _filteredItems.where((i) => i.type == 'series');

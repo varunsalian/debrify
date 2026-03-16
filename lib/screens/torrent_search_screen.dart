@@ -1326,10 +1326,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // ============================================================================
 
   /// Go back to the catalog browse view after viewing search results
+  /// Go back to catalog view and refresh Trakt bound sources cache.
+  void _goBackAndRefreshSources() {
+    _goBackToCatalog();
+    _traktResultsKey.currentState?.refreshBoundSources();
+  }
+
   void _goBackToCatalog() {
     setState(() {
       // Clear search results
       _hasSearched = false;
+      _isLoading = false;
+      _searchPhase = SearchPhase.idle;
       _torrents = [];
       _allTorrents = [];
       _engineCounts = {};
@@ -1341,6 +1349,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _selectedImdbTitle = null;
       _activeAdvancedSelection = null;
       _seriesControlsExpanded = false;
+
+      // Clear select source mode
+      _isSelectSourceMode = false;
+      _selectSourceShow = null;
 
       // Restore previous search query (empty for homepage, or the query for aggregated results)
       _searchController.text = _previousSearchQuery;
@@ -2471,7 +2483,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ));
 
         // Go back to Trakt view (clear search state so catalog/Trakt view reappears)
-        _goBackToCatalog();
+        _goBackAndRefreshSources();
       } on TorrentNotCachedException catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
         // Still store as source even if not cached — it'll download in background
@@ -2491,7 +2503,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           backgroundColor: Color(0xFFF59E0B),
           duration: Duration(seconds: 3),
         ));
-        _goBackToCatalog();
+        _goBackAndRefreshSources();
       } catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
         if (!mounted) return;
@@ -2574,39 +2586,100 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Add torrent to TorBox and store as bound source.
+  /// Uses addOnlyIfCached first; if not cached, asks the user before adding.
   Future<void> _addToTorboxAndBindSource(String infohash, String torrentName, String imdbId) async {
     if (!mounted) return;
+    final apiKey = _torboxApiKey!;
+    final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+
     _showSelectSourceLoadingDialog(torrentName);
     try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final result = await TorboxService.createTorrent(
-        apiKey: _torboxApiKey!,
+      // Try cache-only first
+      final response = await TorboxService.createTorrent(
+        apiKey: apiKey,
         magnet: magnetLink,
         seed: true,
         allowZip: true,
-        addOnlyIfCached: false,
+        addOnlyIfCached: true,
       );
       if (!mounted) return;
-      Navigator.of(context).pop(); // close loading
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
 
-      final torrentId = result['data']?['torrent_id']?.toString() ?? '';
-      await SeriesSourceService.setSource(
-        imdbId,
-        SeriesSource(
-          torrentHash: infohash,
-          torrentName: torrentName,
-          debridService: 'torbox',
-          debridTorrentId: torrentId,
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
+      final success = response['success'] as bool? ?? false;
+      if (!success) {
+        final error = (response['error'] ?? '').toString();
+        if (error == 'DOWNLOAD_NOT_CACHED') {
+          // Ask user if they want to add it anyway (will download in background)
+          if (!mounted) return;
+          final addAnyway = await _showNotCachedDialog('torbox');
+          if (!mounted) return;
+          if (addAnyway) {
+            _showSelectSourceLoadingDialog(torrentName);
+            final retryResponse = await TorboxService.createTorrent(
+              apiKey: apiKey,
+              magnet: magnetLink,
+              seed: true,
+              allowZip: true,
+              addOnlyIfCached: false,
+            );
+            if (!mounted) return;
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+
+            final retrySuccess = retryResponse['success'] as bool? ?? false;
+            if (retrySuccess) {
+              final torrentId = retryResponse['data']?['torrent_id']?.toString() ?? '';
+              await SeriesSourceService.setSource(imdbId, SeriesSource(
+                torrentHash: infohash,
+                torrentName: torrentName,
+                debridService: 'torbox',
+                debridTorrentId: torrentId,
+                boundAt: DateTime.now().millisecondsSinceEpoch,
+              ));
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Source set (torrent not cached yet — will download in background)'),
+                backgroundColor: Color(0xFFF59E0B),
+                duration: Duration(seconds: 3),
+              ));
+              _goBackAndRefreshSources();
+            } else {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Failed to add torrent: ${_formatTorboxError(retryResponse['error'] ?? '')}'),
+                backgroundColor: const Color(0xFFEF4444),
+                duration: const Duration(seconds: 3),
+              ));
+            }
+          }
+          // User cancelled — do nothing, stay on results
+          return;
+        }
+        // Other TorBox errors
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('TorBox error: ${_formatTorboxError(error)}'),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 3),
+        ));
+        return;
+      }
+
+      // Cached and successful — store binding
+      final torrentId = response['data']?['torrent_id']?.toString() ?? '';
+      await SeriesSourceService.setSource(imdbId, SeriesSource(
+        torrentHash: infohash,
+        torrentName: torrentName,
+        debridService: 'torbox',
+        debridTorrentId: torrentId,
+        boundAt: DateTime.now().millisecondsSinceEpoch,
+      ));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Source set: $torrentName'),
         backgroundColor: const Color(0xFF34D399),
         duration: const Duration(seconds: 2),
       ));
-      _goBackToCatalog();
+      _goBackAndRefreshSources();
     } catch (e) {
       if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
       if (!mounted) return;
@@ -2619,34 +2692,66 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Add torrent to PikPak and store as bound source.
+  /// Uses the same subfolder pattern as _sendToPikPak.
+  /// PikPak doesn't have a cache-check API, so the download starts immediately.
+  /// If not ready at playback time, the bound source flow handles it gracefully.
   Future<void> _addToPikPakAndBindSource(String infohash, String torrentName, String imdbId) async {
     if (!mounted) return;
     _showSelectSourceLoadingDialog(torrentName);
     try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final magnet = 'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
       final pikpak = PikPakApiService.instance;
-      final result = await pikpak.addOfflineDownload(magnetLink);
-      if (!mounted) return;
-      Navigator.of(context).pop(); // close loading
 
-      final taskId = result['task']?['id']?.toString() ?? '';
-      await SeriesSourceService.setSource(
-        imdbId,
-        SeriesSource(
-          torrentHash: infohash,
-          torrentName: torrentName,
-          debridService: 'pikpak',
-          debridTorrentId: taskId,
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
+      // Use same subfolder logic as _sendToPikPak
+      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      String? subFolderId;
+      try {
+        subFolderId = await pikpak.findOrCreateSubfolder(
+          folderName: 'debrify-torrents',
+          parentFolderId: parentFolderId,
+          getCachedId: StorageService.getPikPakTorrentsFolderId,
+          setCachedId: StorageService.setPikPakTorrentsFolderId,
+        );
+      } catch (e) {
+        if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
+          if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (mounted) await _handlePikPakRestrictedFolderDeleted();
+          return;
+        }
+        subFolderId = parentFolderId;
+      }
+
+      final result = await pikpak.addOfflineDownload(magnet, parentFolderId: subFolderId);
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+
+      // Extract file/folder ID (needed for listFilesRecursive)
+      final fileId = (result['file']?['id'] ?? result['task']?['file_id'] ?? result['id'] ?? '').toString();
+      if (fileId.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not get file ID from PikPak'),
+            backgroundColor: Color(0xFFEF4444),
+            duration: Duration(seconds: 3),
+          ));
+        }
+        return;
+      }
+
+      await SeriesSourceService.setSource(imdbId, SeriesSource(
+        torrentHash: infohash,
+        torrentName: torrentName,
+        debridService: 'pikpak',
+        debridTorrentId: fileId,
+        boundAt: DateTime.now().millisecondsSinceEpoch,
+      ));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Source set: $torrentName'),
         backgroundColor: const Color(0xFF34D399),
         duration: const Duration(seconds: 2),
       ));
-      _goBackToCatalog();
+      _goBackAndRefreshSources();
     } catch (e) {
       if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
       if (!mounted) return;
@@ -2690,16 +2795,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final source = await SeriesSourceService.getSource(selection.imdbId);
     if (source == null) return false;
 
-    debugPrint('TorrentSearchScreen: Found bound source for ${selection.title}: ${source.torrentName}');
+    debugPrint('TorrentSearchScreen: Found bound source for ${selection.title}: ${source.torrentName} (${source.debridService})');
 
-    // Currently only supports Real-Debrid bound sources for playback
-    if (source.debridService != 'rd') {
-      debugPrint('TorrentSearchScreen: Bound source is ${source.debridService}, only RD supported for Quick Play from source');
-      return false;
+    // Need season+episode to find the right file in the pack
+    if (selection.season == null || selection.episode == null) {
+      return false; // Fall back to normal search silently
     }
-
-    final apiKey = _apiKey;
-    if (apiKey == null || apiKey.isEmpty) return false;
 
     try {
       // Show loading indicator
@@ -2710,165 +2811,312 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _activeAdvancedSelection = selection;
       });
 
-      // Fetch torrent info from RD to get current links/files
-      final torrentInfo = await DebridService.getTorrentInfo(apiKey, source.debridTorrentId);
-      if (!mounted) return false;
-
-      final links = torrentInfo['links'] as List<dynamic>? ?? [];
-      final files = torrentInfo['files'] as List<dynamic>? ?? [];
-      final status = torrentInfo['status']?.toString() ?? '';
-
-      // Check if torrent is still valid
-      if (links.isEmpty || status == 'magnet_error' || status == 'dead') {
-        debugPrint('TorrentSearchScreen: Bound source torrent is gone/invalid, clearing binding');
-        await SeriesSourceService.removeSource(selection.imdbId);
-        if (!mounted) return false;
-        setState(() {
-          _isLoading = false;
-          _hasSearched = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Saved source is no longer available. Falling back to search.'),
-            backgroundColor: Color(0xFFF59E0B),
-            duration: Duration(seconds: 2),
-          ));
-        }
-        return false;
+      bool result;
+      switch (source.debridService) {
+        case 'rd':
+          result = await _tryPlayFromBoundSourceRD(selection, source);
+        case 'torbox':
+          result = await _tryPlayFromBoundSourceTorbox(selection, source);
+        case 'pikpak':
+          result = await _tryPlayFromBoundSourcePikPak(selection, source);
+        default:
+          result = false;
       }
 
-      // Get selected video files with their links
-      final selectedFiles = <Map<String, dynamic>>[];
-      final selectedLinks = <String>[];
-      for (final f in files) {
-        if (f is Map<String, dynamic> && (f['selected'] == 1 || f['selected'] == true)) {
-          final name = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
-          if (FileUtils.isVideoFile(name.split('/').last)) {
-            selectedFiles.add(f);
-          }
-        }
+      if (!result && mounted) {
+        setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       }
-
-      // Map file IDs to links (RD returns links in order of selected files)
-      // Track original link indices for correct rdLinkIndex in playlist entries
-      int linkIdx = 0;
-      final videoLinkIndices = <int>[];
-      for (final f in files) {
-        if (f is Map<String, dynamic> && (f['selected'] == 1 || f['selected'] == true)) {
-          if (linkIdx < links.length) {
-            final name = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
-            if (FileUtils.isVideoFile(name.split('/').last)) {
-              selectedLinks.add(links[linkIdx].toString());
-              videoLinkIndices.add(linkIdx);
-            }
-            linkIdx++;
-          }
-        }
-      }
-
-      if (selectedFiles.isEmpty || selectedLinks.isEmpty) {
-        debugPrint('TorrentSearchScreen: No video files in bound source');
-        setState(() { _isLoading = false; _hasSearched = false; });
-        return false;
-      }
-
-      // Use SeriesParser to find the target episode
-      final filenames = selectedFiles.map((f) {
-        final path = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
-        return path.split('/').last;
-      }).toList();
-
-      // Need season+episode to find the right file in the pack
-      if (selection.season == null || selection.episode == null) {
-        setState(() { _isLoading = false; _hasSearched = false; });
-        return false; // Fall back to normal search silently
-      }
-
-      int? targetIndex;
-      final parsed = SeriesParser.parsePlaylist(filenames);
-      for (int i = 0; i < parsed.length; i++) {
-        if (parsed[i].season == selection.season && parsed[i].episode == selection.episode) {
-          targetIndex = i;
-          break;
-        }
-      }
-
-      if (targetIndex == null) {
-        debugPrint('TorrentSearchScreen: Episode S${selection.season}E${selection.episode} not found in bound source');
-        setState(() { _isLoading = false; _hasSearched = false; });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} not in saved source. Use Edit Source to change it.'),
-            backgroundColor: const Color(0xFFF59E0B),
-            duration: const Duration(seconds: 4),
-          ));
-        }
-        return false;
-      }
-
-      // Unrestrict the target link
-      final targetLink = selectedLinks[targetIndex];
-      final unrestrictResult = await DebridService.unrestrictLink(apiKey, targetLink);
-      if (!mounted) return false;
-
-      final videoUrl = unrestrictResult['download']?.toString() ?? '';
-      if (videoUrl.isEmpty) {
-        setState(() { _isLoading = false; _hasSearched = false; });
-        return false;
-      }
-
-      setState(() { _isLoading = false; });
-
-      // Build playlist entries for all episodes (lazy unrestriction)
-      final playlistEntries = <PlaylistEntry>[];
-      for (int i = 0; i < selectedFiles.length; i++) {
-        final name = filenames[i];
-        if (i == targetIndex) {
-          playlistEntries.add(PlaylistEntry(
-            url: videoUrl,
-            title: name,
-            sizeBytes: selectedFiles[i]['bytes'] as int?,
-          ));
-        } else {
-          playlistEntries.add(PlaylistEntry(
-            url: '',
-            title: name,
-            restrictedLink: selectedLinks[i],
-            sizeBytes: selectedFiles[i]['bytes'] as int?,
-            rdTorrentId: source.debridTorrentId,
-            rdLinkIndex: videoLinkIndices[i],
-          ));
-        }
-      }
-
-      debugPrint('TorrentSearchScreen: Playing S${selection.season}E${selection.episode} from bound source (${source.torrentName})');
-
-      await VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: videoUrl,
-          title: source.torrentName,
-          playlist: playlistEntries,
-          startIndex: targetIndex,
-          viewMode: PlaylistViewMode.series,
-          contentImdbId: selection.imdbId,
-          contentType: selection.contentType,
-          contentSeason: selection.season,
-          contentEpisode: selection.episode,
-          traktScrobble: true,
-          traktProgressPercent: selection.traktProgressPercent,
-        ),
-      );
-
-      // After player returns, clear search state so Trakt/catalog view reappears
-      if (mounted) _goBackToCatalog();
-
-      return true;
+      return result;
     } catch (e) {
       debugPrint('TorrentSearchScreen: Failed to play from bound source: $e');
-      setState(() { _isLoading = false; _hasSearched = false; });
+      if (mounted) setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       return false; // Fall back to normal search
     }
+  }
+
+  /// Find the target episode index from a list of filenames using SeriesParser.
+  /// Returns null if not found, and shows a hint snackbar.
+  int? _findEpisodeInFilenames(List<String> filenames, int season, int episode) {
+    final parsed = SeriesParser.parsePlaylist(filenames);
+    for (int i = 0; i < parsed.length; i++) {
+      if (parsed[i].season == season && parsed[i].episode == episode) {
+        return i;
+      }
+    }
+    debugPrint('TorrentSearchScreen: Episode S${season}E$episode not found in bound source');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} not in saved source. Use Edit Source to change it.'),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 4),
+      ));
+    }
+    return null;
+  }
+
+  /// Launch the video player with a series playlist and clean up after.
+  Future<void> _launchBoundSourcePlayer({
+    required String videoUrl,
+    required String title,
+    required List<PlaylistEntry> playlist,
+    required int startIndex,
+    required AdvancedSearchSelection selection,
+    String? rdTorrentId,
+    String? torboxTorrentId,
+    String? pikpakCollectionId,
+  }) async {
+    setState(() { _isLoading = false; _searchPhase = SearchPhase.idle; });
+
+    debugPrint('TorrentSearchScreen: Playing S${selection.season}E${selection.episode} from bound source ($title)');
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: videoUrl,
+        title: title,
+        playlist: playlist,
+        startIndex: startIndex,
+        viewMode: PlaylistViewMode.series,
+        contentImdbId: selection.imdbId,
+        contentType: selection.contentType,
+        contentSeason: selection.season,
+        contentEpisode: selection.episode,
+        traktScrobble: true,
+        traktProgressPercent: selection.traktProgressPercent,
+        rdTorrentId: rdTorrentId,
+        torboxTorrentId: torboxTorrentId,
+        pikpakCollectionId: pikpakCollectionId,
+      ),
+    );
+
+    if (mounted) _goBackToCatalog();
+  }
+
+  // ── Real-Debrid bound source playback ─────────────────────────────────────
+
+  Future<bool> _tryPlayFromBoundSourceRD(AdvancedSearchSelection selection, SeriesSource source) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return false;
+
+    final torrentInfo = await DebridService.getTorrentInfo(apiKey, source.debridTorrentId);
+    if (!mounted) return false;
+
+    final links = torrentInfo['links'] as List<dynamic>? ?? [];
+    final files = torrentInfo['files'] as List<dynamic>? ?? [];
+    final status = torrentInfo['status']?.toString() ?? '';
+
+    if (links.isEmpty || status == 'magnet_error' || status == 'dead') {
+      await SeriesSourceService.removeSource(selection.imdbId);
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Saved source is no longer available. Falling back to search.'),
+        backgroundColor: Color(0xFFF59E0B),
+        duration: Duration(seconds: 2),
+      ));
+      return false;
+    }
+
+    // Collect selected video files and their corresponding links
+    final videoFiles = <Map<String, dynamic>>[];
+    final videoLinks = <String>[];
+    final videoLinkIndices = <int>[];
+    int linkIdx = 0;
+    for (final f in files) {
+      if (f is Map<String, dynamic> && (f['selected'] == 1 || f['selected'] == true)) {
+        final name = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
+        final isVideo = FileUtils.isVideoFile(name.split('/').last);
+        if (isVideo && linkIdx < links.length) {
+          videoFiles.add(f);
+          videoLinks.add(links[linkIdx].toString());
+          videoLinkIndices.add(linkIdx);
+        }
+        linkIdx++;
+      }
+    }
+
+    if (videoFiles.isEmpty) return false;
+
+    final filenames = videoFiles.map((f) {
+      final path = (f['path'] as String?) ?? (f['name'] as String?) ?? '';
+      return path.split('/').last;
+    }).toList();
+
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    if (targetIndex == null) return false;
+
+    // Unrestrict the target link
+    final unrestrictResult = await DebridService.unrestrictLink(apiKey, videoLinks[targetIndex]);
+    if (!mounted) return false;
+
+    final videoUrl = unrestrictResult['download']?.toString() ?? '';
+    if (videoUrl.isEmpty) return false;
+
+    // Build playlist (target eagerly resolved, rest lazy)
+    final playlist = <PlaylistEntry>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      playlist.add(PlaylistEntry(
+        url: i == targetIndex ? videoUrl : '',
+        title: filenames[i],
+        restrictedLink: i != targetIndex ? videoLinks[i] : null,
+        sizeBytes: videoFiles[i]['bytes'] as int?,
+        rdTorrentId: source.debridTorrentId,
+        rdLinkIndex: videoLinkIndices[i],
+      ));
+    }
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
+      rdTorrentId: source.debridTorrentId,
+    );
+    return true;
+  }
+
+  // ── TorBox bound source playback ──────────────────────────────────────────
+
+  Future<bool> _tryPlayFromBoundSourceTorbox(AdvancedSearchSelection selection, SeriesSource source) async {
+    final apiKey = _torboxApiKey;
+    if (apiKey == null || apiKey.isEmpty) return false;
+
+    final torrentId = int.tryParse(source.debridTorrentId);
+    if (torrentId == null) return false;
+
+    // Fetch torrent with file list
+    final torrent = await TorboxService.getTorrentById(apiKey, torrentId);
+    if (!mounted) return false;
+
+    if (torrent == null) {
+      await SeriesSourceService.removeSource(selection.imdbId);
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Saved source is no longer available. Falling back to search.'),
+        backgroundColor: Color(0xFFF59E0B),
+        duration: Duration(seconds: 2),
+      ));
+      return false;
+    }
+
+    // Filter to video files
+    final videoFiles = torrent.files.where((f) {
+      if (f.zipped) return false;
+      final name = f.shortName.isNotEmpty ? f.shortName : FileUtils.getFileName(f.name);
+      return FileUtils.isVideoFile(name) || (f.mimetype?.toLowerCase().startsWith('video/') ?? false);
+    }).toList();
+
+    if (videoFiles.isEmpty) return false;
+
+    final filenames = videoFiles.map((f) {
+      return f.shortName.isNotEmpty ? f.shortName : FileUtils.getFileName(f.name);
+    }).toList();
+
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    if (targetIndex == null) return false;
+
+    // Get download link for target episode
+    final videoUrl = await TorboxService.requestFileDownloadLink(
+      apiKey: apiKey,
+      torrentId: torrentId,
+      fileId: videoFiles[targetIndex].id,
+    );
+    if (!mounted) return false;
+    if (videoUrl.isEmpty) return false;
+
+    // Build playlist (target eagerly resolved, rest lazy via torboxFileId)
+    final playlist = <PlaylistEntry>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      playlist.add(PlaylistEntry(
+        url: i == targetIndex ? videoUrl : '',
+        title: filenames[i],
+        provider: 'torbox',
+        torboxTorrentId: torrentId,
+        torboxFileId: videoFiles[i].id,
+        sizeBytes: videoFiles[i].size,
+      ));
+    }
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
+      torboxTorrentId: torrentId.toString(),
+    );
+    return true;
+  }
+
+  // ── PikPak bound source playback ──────────────────────────────────────────
+
+  Future<bool> _tryPlayFromBoundSourcePikPak(AdvancedSearchSelection selection, SeriesSource source) async {
+    final pikpak = PikPakApiService.instance;
+
+    // The debridTorrentId for PikPak is the task/file ID of the folder
+    final folderId = source.debridTorrentId;
+    if (folderId.isEmpty) return false;
+
+    // List all files recursively in the folder
+    final allFiles = await pikpak.listFilesRecursive(folderId: folderId);
+    if (!mounted) return false;
+
+    if (allFiles.isEmpty) {
+      await SeriesSourceService.removeSource(selection.imdbId);
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Saved source is no longer available. Falling back to search.'),
+        backgroundColor: Color(0xFFF59E0B),
+        duration: Duration(seconds: 2),
+      ));
+      return false;
+    }
+
+    // Filter to video files
+    final videoFiles = allFiles.where((f) {
+      final name = (f['name'] as String?) ?? '';
+      final mime = (f['mime_type'] as String?) ?? '';
+      return FileUtils.isVideoFile(name) || mime.startsWith('video/');
+    }).toList();
+
+    if (videoFiles.isEmpty) return false;
+
+    final filenames = videoFiles.map((f) => (f['name'] as String?) ?? '').toList();
+
+    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!);
+    if (targetIndex == null) return false;
+
+    // Get streaming URL for target episode
+    final targetFileId = videoFiles[targetIndex]['id'] as String;
+    final fileData = await pikpak.getFileDetails(targetFileId);
+    if (!mounted) return false;
+
+    final videoUrl = pikpak.getStreamingUrl(fileData) ?? '';
+    if (videoUrl.isEmpty) return false;
+
+    // Build playlist (target eagerly resolved, rest lazy via pikpakFileId)
+    final playlist = <PlaylistEntry>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final fileId = videoFiles[i]['id'] as String;
+      final size = int.tryParse(videoFiles[i]['size']?.toString() ?? '');
+      playlist.add(PlaylistEntry(
+        url: i == targetIndex ? videoUrl : '',
+        title: filenames[i],
+        provider: 'pikpak',
+        pikpakFileId: fileId,
+        sizeBytes: size,
+      ));
+    }
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
+      pikpakCollectionId: folderId,
+    );
+    return true;
   }
 
   /// Called after search completes to check if Quick Play should auto-select
