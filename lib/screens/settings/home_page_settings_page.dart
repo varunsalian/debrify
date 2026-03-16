@@ -15,6 +15,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _selectedSourceType = 'all';
   String? _selectedAddonUrl;
   String? _selectedCatalogId;
+  String _selectedTraktListType = 'progress';
+  String _selectedTraktContentType = 'movies';
   bool _hideProviderCards = false;
   String _favoritesTapAction = 'choose';
   List<StremioAddon> _addons = [];
@@ -35,12 +37,16 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final favoritesTapAction = await StorageService.getHomeFavoritesTapAction();
+      final traktListType = await StorageService.getHomeDefaultTraktListType();
+      final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
       setState(() {
         _addons = addons;
         _selectedSourceType = sourceType ?? 'all';
         _selectedAddonUrl = addonUrl;
         _selectedCatalogId = catalogId;
+        _selectedTraktListType = traktListType ?? 'progress';
+        _selectedTraktContentType = traktContentType ?? 'movies';
         _hideProviderCards = hideProviderCards;
         _favoritesTapAction = favoritesTapAction;
         _loading = false;
@@ -68,6 +74,15 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         setState(() {
           _selectedAddonUrl = null;
           _selectedCatalogId = null;
+        });
+      }
+      // If not trakt, clear trakt-specific settings
+      if (type != 'trakt') {
+        await StorageService.setHomeDefaultTraktListType(null);
+        await StorageService.setHomeDefaultTraktContentType(null);
+        setState(() {
+          _selectedTraktListType = 'progress';
+          _selectedTraktContentType = 'movies';
         });
       }
     } catch (e) {
@@ -245,6 +260,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         DropdownMenuItem(value: 'all', child: Text('All')),
                         DropdownMenuItem(value: 'keyword', child: Text('Keyword')),
                         DropdownMenuItem(value: 'addon', child: Text('Addon')),
+                        DropdownMenuItem(value: 'trakt', child: Text('Trakt')),
                         DropdownMenuItem(value: 'iptv', child: Text('IPTV')),
                         DropdownMenuItem(value: 'reddit', child: Text('Reddit')),
                       ],
@@ -323,6 +339,67 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           );
                         }).toList(),
                         onChanged: (value) => _selectCatalog(value),
+                      ),
+                    ],
+
+                    // Trakt list type dropdown (shown when source type is 'trakt')
+                    if (_selectedSourceType == 'trakt') ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _selectedTraktListType,
+                        decoration: InputDecoration(
+                          labelText: 'List',
+                          prefixIcon: Icon(
+                            Icons.list_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'progress', child: Text('Continue Watching')),
+                          DropdownMenuItem(value: 'watchlist', child: Text('Watchlist')),
+                          DropdownMenuItem(value: 'collection', child: Text('Collection')),
+                          DropdownMenuItem(value: 'ratings', child: Text('Ratings')),
+                          DropdownMenuItem(value: 'recommendations', child: Text('Recommendations')),
+                        ],
+                        onChanged: (value) async {
+                          if (value == null) return;
+                          await StorageService.setHomeDefaultTraktListType(value);
+                          setState(() => _selectedTraktListType = value);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _selectedTraktContentType,
+                        decoration: InputDecoration(
+                          labelText: 'Content type',
+                          prefixIcon: Icon(
+                            _selectedTraktContentType == 'movies'
+                                ? Icons.movie_outlined
+                                : Icons.tv_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'movies', child: Text('Movies')),
+                          DropdownMenuItem(value: 'shows', child: Text('Shows')),
+                        ],
+                        onChanged: (value) async {
+                          if (value == null) return;
+                          await StorageService.setHomeDefaultTraktContentType(value);
+                          setState(() => _selectedTraktContentType = value);
+                        },
                       ),
                     ],
 
@@ -440,6 +517,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return Icons.live_tv;
       case 'reddit':
         return Icons.play_circle_outline;
+      case 'trakt':
+        return Icons.movie_filter_rounded;
       default:
         return Icons.apps;
     }
@@ -457,6 +536,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return 'The home screen will open in IPTV mode, showing your M3U playlist channels.';
       case 'reddit':
         return 'The home screen will open in Reddit mode, showing video content from subreddits.';
+      case 'trakt':
+        return 'The home screen will open in Trakt mode, showing your watchlist, continue watching, and more.';
       default:
         return 'Choose which view appears first when you open the app.';
     }

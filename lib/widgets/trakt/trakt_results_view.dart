@@ -11,6 +11,7 @@ import '../../services/trakt/trakt_episode_model.dart';
 import 'trakt_menu_helpers.dart';
 import '../../services/tvmaze_service.dart';
 import '../../services/series_source_service.dart';
+import '../../services/storage_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 // ─── Shared OTT Constants ────────────────────────────────────────────────────
@@ -242,6 +243,19 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   Future<void> _checkAuthAndLoad() async {
+    // Load saved Trakt defaults (list type + content type)
+    final savedListType = await StorageService.getHomeDefaultTraktListType();
+    final savedContentType = await StorageService.getHomeDefaultTraktContentType();
+    if (!mounted) return;
+    if (savedListType != null) {
+      final listType = TraktListType.values.where((t) => t.apiValue == savedListType || t.name == savedListType).firstOrNull;
+      if (listType != null) _selectedListType = listType;
+    }
+    if (savedContentType != null) {
+      final contentType = TraktContentType.values.where((t) => t.apiValue == savedContentType || t.name == savedContentType).firstOrNull;
+      if (contentType != null) _selectedContentType = contentType;
+    }
+
     final authenticated = await _traktService.isAuthenticated();
     if (!mounted) return;
     setState(() {

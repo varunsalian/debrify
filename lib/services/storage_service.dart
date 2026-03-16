@@ -60,6 +60,8 @@ class StorageService {
   static const String _homeDefaultSourceTypeKey = 'home_default_source_type';
   static const String _homeDefaultAddonUrlKey = 'home_default_addon_url';
   static const String _homeDefaultCatalogIdKey = 'home_default_catalog_id';
+  static const String _homeDefaultTraktListTypeKey = 'home_default_trakt_list_type';
+  static const String _homeDefaultTraktContentTypeKey = 'home_default_trakt_content_type';
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
   static const String _homeFavoritesOpenFolderKey = 'home_favorites_open_folder';
 
@@ -2404,6 +2406,34 @@ class StorageService {
       await prefs.remove(_homeDefaultCatalogIdKey);
     } else {
       await prefs.setString(_homeDefaultCatalogIdKey, value);
+    }
+  }
+
+  static Future<String?> getHomeDefaultTraktListType() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeDefaultTraktListTypeKey);
+  }
+
+  static Future<void> setHomeDefaultTraktListType(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null) {
+      await prefs.remove(_homeDefaultTraktListTypeKey);
+    } else {
+      await prefs.setString(_homeDefaultTraktListTypeKey, value);
+    }
+  }
+
+  static Future<String?> getHomeDefaultTraktContentType() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_homeDefaultTraktContentTypeKey);
+  }
+
+  static Future<void> setHomeDefaultTraktContentType(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null) {
+      await prefs.remove(_homeDefaultTraktContentTypeKey);
+    } else {
+      await prefs.setString(_homeDefaultTraktContentTypeKey, value);
     }
   }
 
