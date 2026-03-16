@@ -295,6 +295,35 @@ class VideoPlayerLaunchArgs {
 }
 
 class VideoPlayerLauncher {
+  /// Generate a resume key for a playlist entry.
+  /// Used to pre-populate playback state (e.g., from Trakt progress).
+  static String resumeIdForEntry(PlaylistEntry entry, {String fallbackTitle = ''}) {
+    final provider = entry.provider?.toLowerCase();
+    // Torbox
+    if (provider == 'torbox') {
+      final torrentId = entry.torboxTorrentId;
+      final webDownloadId = entry.torboxWebDownloadId;
+      final fileId = entry.torboxFileId;
+      if (webDownloadId != null && fileId != null) {
+        return 'torbox_web_${webDownloadId}_$fileId';
+      }
+      if (torrentId != null && fileId != null) {
+        return 'torbox_${torrentId}_$fileId';
+      }
+    }
+    // PikPak
+    if (provider == 'pikpak') {
+      final fileId = entry.pikpakFileId;
+      if (fileId != null && fileId.isNotEmpty) {
+        return 'pikpak_$fileId';
+      }
+    }
+    // Fallback: filename hash
+    final name = entry.title.isNotEmpty ? entry.title : fallbackTitle;
+    final nameWithoutExt = name.replaceAll(RegExp(r'\.[^.]*$'), '');
+    return nameWithoutExt.hashCode.toString();
+  }
+
   static Future<void> push(BuildContext context, VideoPlayerLaunchArgs args) async {
     // Log playlist entries to trace relativePath
     if (args.playlist != null && args.playlist!.isNotEmpty) {
@@ -2407,53 +2436,9 @@ class _AndroidTvPlaybackPayloadBuilder {
   /// Generate resume ID for a playlist entry - MUST match mobile video_player_screen.dart
   /// This ensures Android TV and mobile share the same resume state
   String _resumeIdForEntry(PlaylistEntry entry) {
-    // Check for Torbox-specific key
-    final torboxKey = _torboxResumeKeyForEntry(entry);
-    if (torboxKey != null) {
-      return torboxKey;
-    }
-    // Check for PikPak-specific key
-    final pikpakKey = _pikpakResumeKeyForEntry(entry);
-    if (pikpakKey != null) {
-      return pikpakKey;
-    }
-    // Fallback to filename hash
-    final name = entry.title.isNotEmpty ? entry.title : args.title;
-    return _generateFilenameHash(name);
+    return VideoPlayerLauncher.resumeIdForEntry(entry, fallbackTitle: args.title);
   }
 
-  String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
-    final provider = entry.provider?.toLowerCase();
-    if (provider == 'torbox') {
-      final torrentId = entry.torboxTorrentId;
-      final webDownloadId = entry.torboxWebDownloadId;
-      final fileId = entry.torboxFileId;
-      if (webDownloadId != null && fileId != null) {
-        return 'torbox_web_${webDownloadId}_$fileId';
-      }
-      if (torrentId != null && fileId != null) {
-        return 'torbox_${torrentId}_$fileId';
-      }
-    }
-    return null;
-  }
-
-  String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
-    final provider = entry.provider?.toLowerCase();
-    if (provider == 'pikpak') {
-      final fileId = entry.pikpakFileId;
-      if (fileId != null && fileId.isNotEmpty) {
-        return 'pikpak_$fileId';
-      }
-    }
-    return null;
-  }
-
-  String _generateFilenameHash(String filename) {
-    final nameWithoutExt = filename.replaceAll(RegExp(r'\.[^.]*$'), '');
-    final hash = nameWithoutExt.hashCode.toString();
-    return hash;
-  }
 }
 
 class _PerItemState {
