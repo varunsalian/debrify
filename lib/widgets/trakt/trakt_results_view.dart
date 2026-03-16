@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/advanced_search_selection.dart';
 import '../../services/trakt/trakt_service.dart';
@@ -10,6 +12,27 @@ import 'trakt_menu_helpers.dart';
 import '../../services/tvmaze_service.dart';
 import '../../services/series_source_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+
+// ─── Shared OTT Constants ────────────────────────────────────────────────────
+const _traktRed = Color(0xFFED1C24);
+const _surfaceDark = Color(0xFF0D1117);
+
+const _placeholderGradient = BoxDecoration(
+  gradient: LinearGradient(colors: [Color(0xFF1A1A2E), _surfaceDark]),
+);
+
+/// Renders a CachedNetworkImage if URL is valid, otherwise a dark gradient placeholder.
+Widget _buildOttBackdropImage(String? imageUrl) {
+  if (imageUrl == null || imageUrl.isEmpty) {
+    return Container(decoration: _placeholderGradient);
+  }
+  return CachedNetworkImage(
+    imageUrl: imageUrl,
+    fit: BoxFit.cover,
+    placeholder: (context, url) => Container(decoration: _placeholderGradient),
+    errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),
+  );
+}
 
 /// Trakt list type options
 enum TraktListType {
@@ -1014,15 +1037,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
             orElse: () => _seasons.first,
           );
           final epIndex = season.episodes.indexWhere((e) => e.number == nextEpisode.episode);
-          if (epIndex > 0 && _episodeScrollController.hasClients) {
-            // Estimate scroll position to force lazy ListView to build the target item
-            final maxExtent = _episodeScrollController.position.maxScrollExtent;
-            final ratio = epIndex / season.episodes.length;
-            _episodeScrollController.jumpTo((maxExtent * ratio).clamp(0.0, maxExtent));
-            // After the item is built, use ensureVisible for precise positioning
+          if (epIndex >= 0) {
+            // Scroll to the episode if it's not at the top
+            if (epIndex > 0 && _episodeScrollController.hasClients) {
+              final maxExtent = _episodeScrollController.position.maxScrollExtent;
+              final ratio = epIndex / season.episodes.length;
+              _episodeScrollController.jumpTo((maxExtent * ratio).clamp(0.0, maxExtent));
+            }
+            // After the item is built, focus it and ensure visible
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted || generation != _episodeModeGeneration) return;
               if (epIndex < _episodeFocusNodes.length) {
+                _episodeFocusNodes[epIndex].requestFocus();
                 final ctx = _episodeFocusNodes[epIndex].context;
                 if (ctx != null) {
                   Scrollable.ensureVisible(
@@ -1034,6 +1060,14 @@ class TraktResultsViewState extends State<TraktResultsView> {
                 }
               }
             });
+          }
+        });
+      } else {
+        // No next episode — focus the first episode card
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _episodeModeGeneration) return;
+          if (_episodeFocusNodes.isNotEmpty) {
+            _episodeFocusNodes[0].requestFocus();
           }
         });
       }
@@ -1322,7 +1356,14 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Row(
         children: [
           // List type dropdown
           Flexible(
@@ -1409,6 +1450,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               ),
             ),
         ],
+      ),
       ),
     );
   }
@@ -1597,7 +1639,17 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A1A2E), _surfaceDark],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
         children: [
           // Back button
           Focus(
@@ -1635,24 +1687,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
           ),
           const SizedBox(width: 8),
 
-          // Show title
-          Flexible(
-            flex: 2,
-            child: Text(
-              _selectedShow!.name,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-
           // Season dropdown
           if (_seasons.isNotEmpty)
             Flexible(
-              flex: 3,
+              flex: 1,
               child: _buildDropdown<int>(
                 focusNode: _seasonDropdownFocusNode,
                 value: _selectedSeasonNumber,
@@ -1671,22 +1709,6 @@ class TraktResultsViewState extends State<TraktResultsView> {
               ),
             ),
 
-          if (!_isLoadingEpisodes && _seasons.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Builder(builder: (context) {
-              final season = _seasons.firstWhere(
-                (s) => s.number == _selectedSeasonNumber,
-                orElse: () => _seasons.first,
-              );
-              return Text(
-                '${season.episodes.length} ep',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              );
-            }),
-          ],
-
           // Select Source / Edit Source button
           if (_selectedShow != null && widget.onSelectSource != null) ...[
             const SizedBox(width: 8),
@@ -1704,6 +1726,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
             }),
           ],
         ],
+      ),
       ),
     );
   }
@@ -2021,26 +2044,91 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
         onTap: widget.onSources,
-        child: AnimatedContainer(
+        child: AnimatedScale(
+          scale: _isFocused ? 1.02 : 1.0,
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withValues(alpha:0.5),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : colorScheme.outline.withValues(alpha:0.2),
-              width: _isFocused ? 2 : 1,
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _isFocused
+                    ? Colors.white.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: _isFocused ? 1.5 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        blurRadius: 16,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final useVerticalLayout = constraints.maxWidth < 500;
-              return useVerticalLayout
-                  ? _buildVerticalLayout(theme, colorScheme)
-                  : _buildHorizontalLayout(theme, colorScheme);
-            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                children: [
+                  // Layer 1: Backdrop image
+                  Positioned.fill(
+                    child: _buildOttBackdropImage(widget.item.background ?? widget.item.poster),
+                  ),
+                  // Layer 2: Dark gradient scrim
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.9),
+                            Colors.black.withValues(alpha: 0.6),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.5, 0.85],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Layer 3: Content
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final useVerticalLayout = constraints.maxWidth < 500;
+                        return useVerticalLayout
+                            ? _buildVerticalLayout(theme, colorScheme)
+                            : _buildHorizontalLayout(theme, colorScheme);
+                      },
+                    ),
+                  ),
+                  // Layer 4: Progress bar
+                  if (widget.progress != null && widget.progress! > 0)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: (widget.progress! / 100).clamp(0.0, 1.0),
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -2213,6 +2301,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
+                  shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -2228,14 +2317,14 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                       ),
                       child: Text(
                         genre,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                         ),
@@ -2266,8 +2355,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         // Action buttons (side-by-side)
         _buildActionButton(
           icon: Icons.list_rounded,
-          label: 'Browse',
-          color: const Color(0xFF6366F1),
+          label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
+          color: const Color(0xFF8B5CF6),
           isHighlighted: _isFocused && _focusedButtonIndex == 0,
           onTap: widget.onSources,
         ),
@@ -2275,8 +2364,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           const SizedBox(width: 6),
           _buildActionButton(
             icon: Icons.play_arrow_rounded,
-            label: 'Quick Play',
-            color: const Color(0xFFB91C1C),
+            label: 'Play',
+            color: _traktRed,
             isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
             onTap: widget.onQuickPlay,
           ),
@@ -2308,6 +2397,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -2316,11 +2406,27 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                   _buildMetadataRow(theme, colorScheme),
                   if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      widget.item.genres!.join(', '),
-                      style: const TextStyle(color: Colors.white54, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: widget.item.genres!.take(3).map((genre) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                          ),
+                          child: Text(
+                            genre,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
                 ],
@@ -2349,8 +2455,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
             Expanded(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
-                label: 'Browse',
-                color: const Color(0xFF6366F1),
+                label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
+                color: const Color(0xFF8B5CF6),
                 isHighlighted: _isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onSources,
               ),
@@ -2360,8 +2466,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               Expanded(
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Quick Play',
-                  color: const Color(0xFFB91C1C),
+                  label: 'Play',
+                  color: _traktRed,
                   isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
@@ -2405,46 +2511,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       child: SizedBox(
         width: width,
         height: height,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildPoster(colorScheme),
-            if (widget.progress != null && widget.progress! > 0 && widget.progress! < 100)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  height: 3,
-                  color: Colors.black.withValues(alpha: 0.5),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: (widget.progress! / 100).clamp(0.0, 1.0),
-                    child: Container(
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFBBF24),
-                        borderRadius: BorderRadius.circular(1.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            if (widget.progress != null && widget.progress! >= 100)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF34D399),
-                    borderRadius: BorderRadius.circular(1.5),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        child: _buildPoster(colorScheme),
       ),
     );
   }
@@ -2499,35 +2566,16 @@ class _TraktItemCardState extends State<_TraktItemCard> {
             ),
           ),
         ],
-        if (widget.progress != null) ...[
+        if (widget.progress != null && widget.progress! > 0) ...[
           const SizedBox(width: 8),
-          if (widget.progress! >= 100.0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF34D399).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'Watched',
-                style: TextStyle(
-                  color: Color(0xFF34D399),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          else
-            Text(
-              '${widget.progress!.round()}%',
-              style: TextStyle(
-                color: widget.progress! > 0
-                    ? const Color(0xFFFBBF24)
-                    : Colors.white.withValues(alpha: 0.3),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+          Text(
+            widget.progress! >= 100.0 ? 'Watched' : '${widget.progress!.round()}%',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
+          ),
         ],
       ],
     );
@@ -2540,67 +2588,61 @@ class _TraktItemCardState extends State<_TraktItemCard> {
     required bool isHighlighted,
     required VoidCallback onTap,
   }) {
-    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
-
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
+      child: AnimatedScale(
+        scale: isHighlighted ? 1.08 : 1.0,
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isHighlighted
-                ? [color, darkColor]
-                : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
             color: isHighlighted
-                ? Colors.white.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.15),
-            width: isHighlighted ? 2 : 1,
+                ? color
+                : Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isHighlighted
+                  ? color
+                  : color.withValues(alpha: 0.4),
+              width: 1,
+            ),
+            boxShadow: isHighlighted
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
-              blurRadius: isHighlighted ? 16 : 8,
-              spreadRadius: isHighlighted ? 2 : 0,
-              offset: const Offset(0, 4),
-            ),
-            if (isHighlighted)
-              BoxShadow(
-                color: color.withValues(alpha: 0.3),
-                blurRadius: 24,
-                spreadRadius: 4,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isHighlighted ? Colors.white : color,
               ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isHighlighted ? Colors.white : color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2718,18 +2760,32 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: widget.isNextEpisode && !_isFocused
-                ? const Color(0xFF6366F1).withValues(alpha:0.08)
-                : colorScheme.surfaceContainerHighest.withValues(alpha:0.5),
+            color: _isFocused
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? colorScheme.primary
-                  : widget.isNextEpisode
-                      ? const Color(0xFF6366F1).withValues(alpha:0.5)
-                      : colorScheme.outline.withValues(alpha:0.2),
-              width: _isFocused ? 2 : widget.isNextEpisode ? 1.5 : 1,
-            ),
+            border: widget.isNextEpisode && !_isFocused
+                ? Border(
+                    left: const BorderSide(color: _traktRed, width: 3),
+                    top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                    right: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                    bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                  )
+                : Border.all(
+                    color: _isFocused
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.06),
+                    width: _isFocused ? 1.5 : 1,
+                  ),
+            boxShadow: _isFocused
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -2814,13 +2870,61 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Show poster as thumbnail
+        // Episode thumbnail with overlays
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            width: 60,
-            height: 90,
-            child: _buildPoster(colorScheme),
+            width: 155,
+            height: 88,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildOttBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                // "UP NEXT" badge top-left
+                if (widget.isNextEpisode)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _traktRed.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'UP NEXT',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Progress bar bottom
+                if (widget.watchProgress != null && widget.watchProgress! > 0)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                        child: Container(
+                          height: 3,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(width: 14),
@@ -2859,8 +2963,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
         const SizedBox(width: 8),
         _buildActionButton(
           icon: Icons.list_rounded,
-          label: 'Browse',
-          color: const Color(0xFF6366F1),
+          label: 'Sources',
+          color: const Color(0xFF8B5CF6),
           isHighlighted: _isFocused && _focusedButtonIndex == 0,
           onTap: widget.onBrowse,
         ),
@@ -2868,8 +2972,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           const SizedBox(width: 6),
           _buildActionButton(
             icon: Icons.play_arrow_rounded,
-            label: 'Quick Play',
-            color: const Color(0xFFB91C1C),
+            label: 'Play',
+            color: _traktRed,
             isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
             onTap: widget.onQuickPlay,
           ),
@@ -2890,12 +2994,59 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Thumbnail with overlays
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
-                width: 50,
-                height: 75,
-                child: _buildPoster(colorScheme),
+                width: 120,
+                height: 68,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildOttBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                    if (widget.isNextEpisode)
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _traktRed.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'UP NEXT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (widget.watchProgress != null && widget.watchProgress! > 0)
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -2938,8 +3089,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             Expanded(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
-                label: 'Browse',
-                color: const Color(0xFF6366F1),
+                label: 'Sources',
+                color: const Color(0xFF8B5CF6),
                 isHighlighted: _isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onBrowse,
               ),
@@ -2949,8 +3100,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
               Expanded(
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Quick Play',
-                  color: const Color(0xFFB91C1C),
+                  label: 'Play',
+                  color: _traktRed,
                   isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
@@ -2966,30 +3117,6 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     );
   }
 
-  Widget _buildPoster(ColorScheme colorScheme) {
-    // Prefer episode thumbnail, fall back to show poster
-    final url = widget.episode.thumbnailUrl ?? widget.showPosterUrl;
-    if (url != null) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPosterPlaceholder(colorScheme),
-      );
-    }
-    return _buildPosterPlaceholder(colorScheme);
-  }
-
-  Widget _buildPosterPlaceholder(ColorScheme colorScheme) {
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.tv_rounded,
-        color: colorScheme.onSurfaceVariant.withValues(alpha:0.5),
-        size: 24,
-      ),
-    );
-  }
-
   Widget _buildMetadataRow(ColorScheme colorScheme) {
     final ep = widget.episode;
     final progress = widget.watchProgress;
@@ -3000,8 +3127,11 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Row 1: S##E## badge + Up Next badge + air date
-        Row(
+        // Episode metadata — uses Wrap to handle small screens
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -3018,8 +3148,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                 ),
               ),
             ),
-            if (widget.isNextEpisode) ...[
-              const SizedBox(width: 6),
+            if (widget.isNextEpisode)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
@@ -3035,96 +3164,48 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                   ),
                 ),
               ),
-            ],
-            if (ep.formattedAirDate != null) ...[
-              const SizedBox(width: 8),
+            if (ep.formattedAirDate != null)
               Text(
                 ep.formattedAirDate!,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
+                  fontSize: 11,
                 ),
               ),
-            ],
-          ],
-        ),
-        // Row 2: runtime + rating
-        if (hasSecondRow) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              if (ep.runtime != null)
-                Text(
-                  '${ep.runtime} min',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 12,
-                  ),
+            if (ep.runtime != null)
+              Text(
+                '${ep.runtime} min',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
                 ),
-              if (ep.rating != null) ...[
-                if (ep.runtime != null) const SizedBox(width: 8),
-                const Icon(
-                  Icons.star_rounded,
-                  size: 14,
-                  color: Color(0xFFFBBF24),
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  ep.rating!.toStringAsFixed(1),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-        // Row 3: watch progress indicator
-        if (progress != null && progress > 0) ...[
-          const SizedBox(height: 4),
-          if (progress >= 100.0)
-            const Row(
-              children: [
-                Icon(Icons.check_circle, size: 14, color: Color(0xFF34D399)),
-                SizedBox(width: 4),
-                Text(
-                  'Watched',
-                  style: TextStyle(
-                    color: Color(0xFF34D399),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                SizedBox(
-                  width: 60,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: progress / 100.0,
-                      minHeight: 3,
-                      backgroundColor: Colors.white.withValues(alpha: 0.1),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF34D399)),
+              ),
+            if (ep.rating != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+                  const SizedBox(width: 2),
+                  Text(
+                    ep.rating!.toStringAsFixed(1),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                ],
+              ),
+            if (progress != null && progress > 0)
+              Text(
+                progress >= 100.0 ? 'Watched' : '${progress.round()}%',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 11,
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  '${progress.round()}%',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-        ],
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -3140,57 +3221,61 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
 
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
+      child: AnimatedScale(
+        scale: isHighlighted ? 1.05 : 1.0,
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isHighlighted
-                ? [color, darkColor]
-                : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isHighlighted
-                ? Colors.white.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.15),
-            width: isHighlighted ? 2 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
-              blurRadius: isHighlighted ? 16 : 8,
-              spreadRadius: isHighlighted ? 2 : 0,
-              offset: const Offset(0, 4),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isHighlighted
+                  ? [color, darkColor]
+                  : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
             ),
-            if (isHighlighted)
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isHighlighted
+                  ? Colors.white.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.15),
+              width: isHighlighted ? 2 : 1,
+            ),
+            boxShadow: [
               BoxShadow(
-                color: color.withValues(alpha: 0.3),
-                blurRadius: 24,
-                spreadRadius: 4,
+                color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
+                blurRadius: isHighlighted ? 16 : 8,
+                spreadRadius: isHighlighted ? 2 : 0,
+                offset: const Offset(0, 4),
               ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              if (isHighlighted)
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  spreadRadius: 4,
+                ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -3198,6 +3283,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
