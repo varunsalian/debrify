@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,7 +97,8 @@ class _HomeStremioTvFavoritesSectionState
 
     try {
       _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
-      _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
+      _seriesRotationMinutes =
+          await StorageService.getStremioTvSeriesRotationMinutes();
       final favoriteIds =
           await StorageService.getStremioTvFavoriteChannelIds();
 
@@ -203,11 +206,12 @@ class _HomeStremioTvFavoritesSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
+        // Premium section header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
             children: [
+              // Glowing icon container
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -229,6 +233,7 @@ class _HomeStremioTvFavoritesSectionState
                 ),
               ),
               const SizedBox(width: 12),
+              // Gradient title
               ShaderMask(
                 shaderCallback: (bounds) => LinearGradient(
                   colors: [
@@ -247,6 +252,7 @@ class _HomeStremioTvFavoritesSectionState
                 ),
               ),
               const SizedBox(width: 10),
+              // Item count badge
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -270,9 +276,9 @@ class _HomeStremioTvFavoritesSectionState
           ),
         ),
         const SizedBox(height: 8),
-        // Horizontal scrolling favorites
+        // Horizontal scrolling favorites with edge fade and scroll indicators
         SizedBox(
-          height: 115,
+          height: 150,
           child: Stack(
             children: [
               ShaderMask(
@@ -298,45 +304,49 @@ class _HomeStremioTvFavoritesSectionState
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
                     final channel = _favoriteChannels[index];
-                    final focusNode = index < _cardFocusNodes.length
-                        ? _cardFocusNodes[index]
-                        : null;
-                    return _buildChannelCard(
-                      channel,
-                      index: index,
-                      focusNode: focusNode,
-                      onLongPress: () => _confirmRemoveFavorite(channel),
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        right:
+                            index < _favoriteChannels.length - 1 ? 12 : 0,
+                      ),
+                      child: _buildChannelCard(
+                        channel,
+                        index: index,
+                        focusNode: index < _cardFocusNodes.length
+                            ? _cardFocusNodes[index]
+                            : null,
+                        onLongPress: () => _confirmRemoveFavorite(channel),
+                      ),
                     );
                   },
                 ),
               ),
-              // Scroll indicators
+              // Left scroll indicator
               if (_canScrollLeft)
                 Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  child: Center(
-                    child: Icon(
-                      Icons.chevron_left_rounded,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
+                  child: _ScrollIndicator(
+                    direction: _ScrollDirection.left,
+                    accentColor: Theme.of(context).colorScheme.primary,
                   ),
                 ),
+              // Right scroll indicator
               if (_canScrollRight)
                 Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
-                  child: Center(
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
+                  child: _ScrollIndicator(
+                    direction: _ScrollDirection.right,
+                    accentColor: Theme.of(context).colorScheme.primary,
                   ),
                 ),
             ],
@@ -352,165 +362,496 @@ class _HomeStremioTvFavoritesSectionState
     FocusNode? focusNode,
     VoidCallback? onLongPress,
   }) {
-    final theme = Theme.of(context);
     final nowPlaying = _service.getNowPlaying(
       channel,
       rotationMinutes: _rotationFor(channel),
     );
 
-    Widget card = Container(
-      width: 150,
-      margin: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _openChannel(channel),
-          onLongPress: onLongPress,
-          child: Container(
+    return _ChannelCardWithFocus(
+      onTap: () => _openChannel(channel),
+      onLongPress: onLongPress,
+      focusNode: focusNode,
+      index: index,
+      totalCount: _favoriteChannels.length,
+      scrollController: _scrollController,
+      onUpPressed: widget.onRequestFocusAbove,
+      onDownPressed: widget.onRequestFocusBelow,
+      onFocusChanged: (focused, idx) {
+        if (focused) {
+          widget.focusController?.saveLastFocusedIndex(
+            HomeSection.stremioTvFavorites,
+            idx,
+          );
+        }
+      },
+      child: (isFocused, isHovered) {
+        final isActive = isFocused || isHovered;
+        final primaryColor = Theme.of(context).colorScheme.primary;
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            width: 240,
+            height: 130,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color:
-                    theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                color: isActive
+                    ? primaryColor.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: isActive ? 2.0 : 1.0,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Poster thumbnail
-                ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: SizedBox(
-                    height: 60,
-                    width: double.infinity,
-                    child: nowPlaying?.item.poster != null
-                        ? CachedNetworkImage(
-                            imageUrl: nowPlaying!.item.poster!,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(
-                              color: theme
-                                  .colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: Icon(Icons.movie_rounded, size: 20),
-                              ),
-                            ),
-                            errorWidget: (_, __, ___) => Container(
-                              color: theme
-                                  .colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: Icon(
-                                  Icons.broken_image_rounded,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          )
-                        : Container(
-                            color:
-                                theme.colorScheme.surfaceContainerHighest,
-                            child: const Center(
-                              child: Icon(Icons.smart_display_rounded,
-                                  size: 20),
-                            ),
-                          ),
-                  ),
-                ),
-                // Channel info
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                          fontSize: 10,
-                        ),
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.35),
+                        blurRadius: 20,
                       ),
-                      Text(
-                        nowPlaying?.item.name ?? channel.displayName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Background image or gradient fallback
+                  if (nowPlaying?.item.background != null ||
+                      nowPlaying?.item.poster != null)
+                    CachedNetworkImage(
+                      imageUrl: nowPlaying!.item.background ??
+                          nowPlaying.item.poster!,
+                      fit: BoxFit.cover,
+                      placeholder: (ctx, url) =>
+                          Container(color: const Color(0xFF0D1117)),
+                      errorWidget: (ctx, url, err) =>
+                          _buildGradientFallback(),
+                    )
+                  else
+                    _buildGradientFallback(),
+
+                  // Cinematic gradient overlay
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.1),
+                            Colors.black.withValues(alpha: 0.75),
+                            Colors.black.withValues(alpha: 0.95),
+                          ],
+                          stops: const [0.0, 0.3, 0.65, 1.0],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+
+                  // Top badges row (channel number + type)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    right: 10,
+                    child: Row(
+                      children: [
+                        _GlassPill(
+                          child: Text(
+                            'CH ${channel.channelNumber}',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        _GlassPill(
+                          child: Text(
+                            channel.type.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Bottom content (NOW PLAYING + title + channel name)
+                  Positioned(
+                    bottom: 10,
+                    left: 12,
+                    right: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (nowPlaying != null) ...[
+                          Row(
+                            children: [
+                              _PulsingDot(color: primaryColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                'NOW PLAYING',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: primaryColor,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                        ],
+                        Text(
+                          nowPlaying?.item.name ??
+                              channel.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          channel.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Play overlay on focus
+                  if (isActive)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: primaryColor
+                                      .withValues(alpha: 0.5),
+                                  blurRadius: 12,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGradientFallback() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1E1B4B),
+            const Color(0xFF312E81).withValues(alpha: 0.3),
+            const Color(0xFF0D0D1A),
+          ],
+          stops: const [0.0, 0.4, 1.0],
+        ),
+      ),
+    );
+  }
+}
+
+/// Focus-aware wrapper for channel cards with DPAD/TV support
+class _ChannelCardWithFocus extends StatefulWidget {
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final FocusNode? focusNode;
+  final int index;
+  final int totalCount;
+  final ScrollController? scrollController;
+  final VoidCallback? onUpPressed;
+  final VoidCallback? onDownPressed;
+  final void Function(bool focused, int index)? onFocusChanged;
+  final Widget Function(bool isFocused, bool isHovered) child;
+
+  const _ChannelCardWithFocus({
+    required this.onTap,
+    required this.child,
+    this.onLongPress,
+    this.focusNode,
+    this.index = 0,
+    this.totalCount = 1,
+    this.scrollController,
+    this.onUpPressed,
+    this.onDownPressed,
+    this.onFocusChanged,
+  });
+
+  @override
+  State<_ChannelCardWithFocus> createState() => _ChannelCardWithFocusState();
+}
+
+class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
+  bool _isFocused = false;
+  bool _isHovered = false;
+  final GlobalKey _cardKey = GlobalKey();
+
+  void _onFocusChange(bool focused) {
+    setState(() => _isFocused = focused);
+    widget.onFocusChanged?.call(focused, widget.index);
+
+    // Scroll card into view when focused
+    if (focused && widget.scrollController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _cardKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      // Select/Enter/GameButtonA - activate the card
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Up - go to previous section
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onUpPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Down - go to next section
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onDownPressed?.call();
+        return KeyEventResult.handled;
+      }
+
+      // Arrow Left/Right - let Flutter's directional focus handle it
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.ignored;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Focus(
+        focusNode: widget.focusNode,
+        onFocusChange: _onFocusChange,
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
+          child: KeyedSubtree(
+            key: _cardKey,
+            child: widget.child(_isFocused, _isHovered),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Glassmorphism pill badge
+class _GlassPill extends StatelessWidget {
+  final Widget child;
+  const _GlassPill({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+              width: 0.5,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Animated pulsing dot indicator for NOW PLAYING state
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({
+    this.color = const Color(0xFF6366F1),
+  });
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      ),
+      child: Container(
+        width: 5,
+        height: 5,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.5),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Direction for scroll indicator
+enum _ScrollDirection { left, right }
+
+/// Subtle scroll indicator widget
+class _ScrollIndicator extends StatelessWidget {
+  final _ScrollDirection direction;
+  final Color accentColor;
+
+  const _ScrollIndicator({
+    required this.direction,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLeft = direction == _ScrollDirection.left;
+
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: 28,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+              end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+              colors: [
+                const Color(0xFF0F0F1A).withValues(alpha: 0.9),
+                Colors.transparent,
               ],
+            ),
+          ),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isLeft
+                    ? Icons.chevron_left_rounded
+                    : Icons.chevron_right_rounded,
+                size: 16,
+                color: accentColor.withValues(alpha: 0.7),
+              ),
             ),
           ),
         ),
       ),
     );
-
-    // Wrap with Focus for DPAD navigation
-    if (widget.isTelevision && focusNode != null) {
-      card = Focus(
-        focusNode: focusNode,
-        onFocusChange: (hasFocus) {
-          if (hasFocus) {
-            widget.focusController?.saveLastFocusedIndex(
-              HomeSection.stremioTvFavorites,
-              index,
-            );
-            // Scroll to make visible
-            if (_scrollController.hasClients) {
-              final offset = index * 158.0; // 150 width + 8 margin
-              _scrollController.animateTo(
-                offset.clamp(0, _scrollController.position.maxScrollExtent),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-              );
-            }
-          }
-          setState(() {});
-        },
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              widget.onRequestFocusAbove?.call();
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              widget.onRequestFocusBelow?.call();
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              if (index > 0 && _cardFocusNodes.length > index - 1) {
-                _cardFocusNodes[index - 1].requestFocus();
-                return KeyEventResult.handled;
-              }
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              if (index < _cardFocusNodes.length - 1) {
-                _cardFocusNodes[index + 1].requestFocus();
-                return KeyEventResult.handled;
-              }
-            }
-            if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter) {
-              _openChannel(channel);
-              return KeyEventResult.handled;
-            }
-          }
-          return KeyEventResult.ignored;
-        },
-        child: AnimatedScale(
-          scale: focusNode.hasFocus ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          child: card,
-        ),
-      );
-    }
-
-    return card;
   }
 }
