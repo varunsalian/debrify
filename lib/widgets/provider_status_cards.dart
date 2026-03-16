@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/rd_user.dart';
@@ -36,6 +38,57 @@ class ProviderStatus {
     this.error,
     this.extraData,
   });
+}
+
+/// Animated pulsing dot for connected provider status
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  final double size;
+  const _PulsingDot({this.color = const Color(0xFF10B981), this.size = 6});
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.5, end: 1.0).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      ),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.5),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Compact provider status cards for the home screen
@@ -138,7 +191,8 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
   /// Ensure we have the right number of focus nodes for configured providers
   void _ensureFocusNodes(int count) {
     while (_cardFocusNodes.length < count) {
-      _cardFocusNodes.add(FocusNode(debugLabel: 'provider_card_${_cardFocusNodes.length}'));
+      _cardFocusNodes
+          .add(FocusNode(debugLabel: 'provider_card_${_cardFocusNodes.length}'));
     }
     while (_cardFocusNodes.length > count) {
       _cardFocusNodes.removeLast().dispose();
@@ -247,7 +301,8 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
       if (user != null) {
         int? daysRemaining;
         if (user.premiumExpiresAt != null) {
-          daysRemaining = user.premiumExpiresAt!.difference(DateTime.now()).inDays;
+          daysRemaining =
+              user.premiumExpiresAt!.difference(DateTime.now()).inDays;
           if (daysRemaining < 0) daysRemaining = 0;
         }
 
@@ -358,10 +413,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
         _buildProviderCard(
           status: _rdStatus!,
           color: const Color(0xFF10B981), // Emerald
-          icon: Icons.bolt_rounded,
           onTap: widget.onTapRealDebrid,
           index: focusIndex,
-          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
+          focusNode: focusIndex < _cardFocusNodes.length
+              ? _cardFocusNodes[focusIndex]
+              : null,
         ),
       );
       focusIndex++;
@@ -371,10 +427,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
         _buildProviderCard(
           status: _torboxStatus!,
           color: const Color(0xFF3B82F6), // Blue
-          icon: Icons.inventory_2_rounded,
           onTap: widget.onTapTorbox,
           index: focusIndex,
-          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
+          focusNode: focusIndex < _cardFocusNodes.length
+              ? _cardFocusNodes[focusIndex]
+              : null,
         ),
       );
       focusIndex++;
@@ -384,10 +441,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
         _buildProviderCard(
           status: _pikpakStatus!,
           color: const Color(0xFFF59E0B), // Amber
-          icon: Icons.cloud_upload_rounded,
           onTap: widget.onTapPikPak,
           index: focusIndex,
-          focusNode: focusIndex < _cardFocusNodes.length ? _cardFocusNodes[focusIndex] : null,
+          focusNode: focusIndex < _cardFocusNodes.length
+              ? _cardFocusNodes[focusIndex]
+              : null,
         ),
       );
       focusIndex++;
@@ -396,24 +454,17 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Premium section header
+        // Section header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
             children: [
-              // Glowing icon container
+              // Icon container
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ],
                 ),
                 child: const Icon(
                   Icons.cloud_done_rounded,
@@ -422,25 +473,21 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                 ),
               ),
               const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                ).createShader(bounds),
-                child: const Text(
-                  'Services',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
+              // Title
+              Text(
+                'Services',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.95),
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(width: 10),
               // Connected count badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
@@ -498,19 +545,19 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
         const SizedBox(height: 8),
         // Horizontal scrolling provider cards with edge fade
         SizedBox(
-          height: 110,
+          height: 120,
           child: ShaderMask(
             shaderCallback: (Rect bounds) {
-              return LinearGradient(
+              return const LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
-                colors: const [
+                colors: [
                   Colors.transparent,
                   Colors.white,
                   Colors.white,
                   Colors.transparent,
                 ],
-                stops: const [0.0, 0.02, 0.98, 1.0],
+                stops: [0.0, 0.02, 0.98, 1.0],
               ).createShader(bounds);
             },
             blendMode: BlendMode.dstIn,
@@ -522,7 +569,9 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
               itemCount: configuredProviders.length,
               itemBuilder: (context, index) {
                 return Padding(
-                  padding: EdgeInsets.only(right: index < configuredProviders.length - 1 ? 12 : 0),
+                  padding: EdgeInsets.only(
+                      right:
+                          index < configuredProviders.length - 1 ? 12 : 0),
                   child: configuredProviders[index],
                 );
               },
@@ -565,20 +614,30 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
             scrollDirection: Axis.horizontal,
             itemCount: 3,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => Container(
-              width: 140,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF6366F1),
+            itemBuilder: (context, index) => ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  width: 155,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF6366F1),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -591,66 +650,66 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
   }
 
   Widget _buildNoProvidersState() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF1E293B),
-            const Color(0xFF1E293B).withValues(alpha: 0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.link_rounded,
-              color: Color(0xFF6366F1),
-              size: 24,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+              width: 0.5,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Connect a Debrid Service',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Add Real-Debrid, Torbox, or PikPak in Settings',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.6),
-                  ),
+                child: const Icon(
+                  Icons.link_rounded,
+                  color: Color(0xFF6366F1),
+                  size: 24,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Connect a Debrid Service',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Add Real-Debrid, Torbox, or PikPak in Settings',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+            ],
           ),
-          Icon(
-            Icons.arrow_forward_ios_rounded,
-            size: 14,
-            color: Colors.white.withValues(alpha: 0.4),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -658,14 +717,10 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
   Widget _buildProviderCard({
     required ProviderStatus status,
     required Color color,
-    required IconData icon,
     VoidCallback? onTap,
     int index = 0,
     FocusNode? focusNode,
   }) {
-    final bool hasWarning = status.daysRemaining != null && status.daysRemaining! <= 7;
-    final bool hasError = status.error != null || !status.isConnected;
-
     // Count configured providers for totalCount
     int configuredCount = 0;
     if (_rdStatus?.isConfigured == true) configuredCount++;
@@ -683,113 +738,78 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
       onDownPressed: widget.onRequestFocusBelow,
       onFocusChanged: (focused, idx) {
         if (focused) {
-          widget.focusController?.saveLastFocusedIndex(HomeSection.providers, idx);
+          widget.focusController
+              ?.saveLastFocusedIndex(HomeSection.providers, idx);
         }
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
-        final statusColor = hasError
-            ? const Color(0xFFEF4444)
-            : hasWarning
-                ? const Color(0xFFF59E0B)
-                : const Color(0xFF10B981);
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            width: 155,
-            height: 90,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1A1A2E),
-                  color.withValues(alpha: 0.08),
-                ],
-              ),
+        // Note: scale animation is handled by _ProviderCardWithFocus's AnimatedScale
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          width: 155,
+          height: 100,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                    ),
+                  ]
+                : [],
+          ),
+          child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isActive ? color : Colors.white.withValues(alpha: 0.08),
-                width: isActive ? 2 : 1,
-              ),
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.4),
-                        blurRadius: 16,
-                        spreadRadius: 1,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: Stack(
-                children: [
-                  // Subtle radial gradient background
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.05,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: RadialGradient(
-                            center: Alignment.topRight,
-                            radius: 1.5,
-                            colors: [color, Colors.transparent],
-                          ),
-                        ),
-                      ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive
+                          ? color.withValues(alpha: 0.8)
+                          : Colors.white.withValues(alpha: 0.06),
+                      width: isActive ? 2.0 : 0.5,
                     ),
                   ),
-                  // Main content
-                  Padding(
+                  child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header row: Icon + Name + Status
+                        // Top row: provider icon/name + connection dot
                         Row(
                           children: [
-                            // Icon with glow
+                            // Provider icon (small colored circle with first letter)
                             Container(
-                              padding: const EdgeInsets.all(7),
+                              width: 24,
+                              height: 24,
                               decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: color.withValues(alpha: 0.2),
-                                    blurRadius: 8,
-                                  ),
-                                ],
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    color,
+                                    color.withValues(alpha: 0.7),
+                                  ],
+                                ),
                               ),
-                              child: Icon(
-                                icon,
-                                size: 14,
-                                color: color,
+                              child: Center(
+                                child: Text(
+                                  status.name[0],
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            // Name
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 status.name,
@@ -801,106 +821,80 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Status indicator with pulse effect
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
+                            // Connection status
+                            if (status.isConnected)
+                              const _PulsingDot(color: Color(0xFF10B981))
+                            else
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: statusColor,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: statusColor.withValues(alpha: 0.6),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
+                                  color: Color(0xFFEF4444),
                                 ),
                               ),
-                            ),
                           ],
                         ),
-                        const Spacer(),
-                        // Status info
-                        if (hasError)
+                        const SizedBox(height: 8),
+                        // Email (if available)
+                        if (status.email != null)
                           Text(
-                            status.error ?? 'Disconnected',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: const Color(0xFFEF4444).withValues(alpha: 0.9),
-                              fontWeight: FontWeight.w500,
-                            ),
+                            status.email!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                          )
-                        else ...[
-                          Row(
-                            children: [
-                              // Plan badge
-                              if (status.planType != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    status.planType!,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: color,
-                                    ),
-                                  ),
-                                ),
-                              const SizedBox(width: 8),
-                              // Days remaining
-                              if (status.daysRemaining != null)
-                                Text(
-                                  '${status.daysRemaining}d left',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: hasWarning
-                                        ? const Color(0xFFF59E0B)
-                                        : Colors.white.withValues(alpha: 0.5),
-                                  ),
-                                )
-                              else if (status.isPremium && status.planType != 'Connected')
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle_rounded,
-                                      size: 12,
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.8),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Active',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.4),
+                            ),
                           ),
-                        ],
+                        const Spacer(),
+                        // Bottom row: PRO badge + days remaining
+                        Row(
+                          children: [
+                            if (status.isPremium)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      color,
+                                      color.withValues(alpha: 0.7),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'PRO',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            const Spacer(),
+                            if (status.daysRemaining != null)
+                              Text(
+                                '${status.daysRemaining}d left',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -1005,7 +999,7 @@ class _ProviderCardWithFocusState extends State<_ProviderCardWithFocus> {
           onTap: widget.onTap,
           child: AnimatedScale(
             scale: (_isFocused || _isHovered) ? 1.05 : 1.0,
-            duration: const Duration(milliseconds: 150),
+            duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
             child: KeyedSubtree(
               key: _cardKey,
