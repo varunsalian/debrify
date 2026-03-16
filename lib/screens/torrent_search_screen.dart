@@ -2798,9 +2798,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         setState(() { _isLoading = false; _hasSearched = false; });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Episode S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} not found in saved source. Falling back to search.'),
+            content: Text('S${selection.season?.toString().padLeft(2, '0')}E${selection.episode?.toString().padLeft(2, '0')} not in saved source. Use Edit Source to change it.'),
             backgroundColor: const Color(0xFFF59E0B),
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 4),
           ));
         }
         return false;
