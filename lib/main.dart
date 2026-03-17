@@ -236,26 +236,26 @@ class DebrifyApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF6366F1), // Indigo
+          primary: Color(0xFF818CF8), // Indigo 400 (brighter for contrast on dark)
           onPrimary: Colors.white,
           primaryContainer: Color(0xFF3730A3),
           onPrimaryContainer: Colors.white,
-          secondary: Color(0xFF10B981), // Emerald
+          secondary: Color(0xFF34D399), // Emerald 400
           onSecondary: Colors.white,
           secondaryContainer: Color(0xFF065F46),
           onSecondaryContainer: Colors.white,
-          tertiary: Color(0xFFF59E0B), // Amber
+          tertiary: Color(0xFFFBBF24), // Amber 400
           onTertiary: Colors.white,
           tertiaryContainer: Color(0xFF92400E),
           onTertiaryContainer: Colors.white,
-          surface: Color(0xFF0F172A), // Slate 900
+          surface: Color(0xFF06080F), // Near black with blue tint
           onSurface: Colors.white,
-          surfaceContainerHighest: Color(0xFF1E293B), // Slate 800
-          surfaceContainerHigh: Color(0xFF334155), // Slate 700
-          surfaceContainer: Color(0xFF475569), // Slate 600
-          surfaceContainerLow: Color(0xFF64748B), // Slate 500
+          surfaceContainerHighest: Color(0xFF141824), // Dark elevated surface
+          surfaceContainerHigh: Color(0xFF1C2233), // Input fills
+          surfaceContainer: Color(0xFF2A3040), // Mid containers
+          surfaceContainerLow: Color(0xFF3A4050), // Lighter containers
           surfaceContainerLowest: Color(0xFF94A3B8), // Slate 400
-          background: Color(0xFF020617), // Slate 950
+          background: Color(0xFF020408), // True near-black
           onBackground: Colors.white,
           error: Color(0xFFEF4444), // Red 500
           onError: Colors.white,
@@ -318,7 +318,7 @@ class DebrifyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          color: const Color(0xFF1E293B),
+          color: const Color(0xFF141824),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
@@ -336,12 +336,12 @@ class DebrifyApp extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            side: const BorderSide(color: Color(0xFF475569)),
+            side: const BorderSide(color: Color(0xFF2A3040)),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFF334155),
+          fillColor: const Color(0xFF1C2233),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -352,7 +352,7 @@ class DebrifyApp extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+            borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -365,7 +365,7 @@ class DebrifyApp extends StatelessWidget {
         ),
         appBarTheme: const AppBarTheme(
           elevation: 0,
-          backgroundColor: Color(0xFF0F172A),
+          backgroundColor: Color(0xFF06080F),
           foregroundColor: Colors.white,
           centerTitle: true,
           titleTextStyle: TextStyle(
@@ -374,9 +374,9 @@ class DebrifyApp extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1E293B)),
+        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF141824)),
         snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF141824),
           contentTextStyle: const TextStyle(color: Colors.white),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

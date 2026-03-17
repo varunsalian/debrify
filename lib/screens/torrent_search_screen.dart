@@ -13008,17 +13008,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: Stack(
       children: [
         Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF0F172A), // Slate 900 - Deep blue-black
-                const Color(0xFF1E293B), // Slate 800 - Rich blue-grey
-                const Color(0xFF1E3A8A), // Blue 900 - Deep premium blue
-              ],
-            ),
-          ),
+          color: const Color(0xFF06080F),
           child: SafeArea(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
@@ -13029,26 +13019,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 margin: const EdgeInsets.all(8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(
-                        0xFF1E40AF,
-                      ).withValues(alpha: 0.9), // Blue 800
-                      const Color(
-                        0xFF1E3A8A,
-                      ).withValues(alpha: 0.8), // Blue 900
-                    ],
-                  ),
+                  color: Colors.white.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1E40AF).withValues(alpha: 0.4),
-                      blurRadius: 25,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

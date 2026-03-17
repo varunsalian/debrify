@@ -91,11 +91,11 @@ class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
 
   List<Color> _lerpGradient(double t) {
     // Indigo -> Violet -> Cyan blend
-    const a = Color(0xFF0B1220); // deep base
-    const b = Color(0xFF1E293B); // slate
-    const c = Color(0xFF232860); // indigo deep
-    const d = Color(0xFF3B82F6); // blue
-    const e = Color(0xFF8B5CF6); // violet
+    const a = Color(0xFF040610); // deep base
+    const b = Color(0xFF0A0E1A); // dark slate
+    const c = Color(0xFF0E1230); // indigo deep
+    const d = Color(0xFF1E3A6E); // muted blue
+    const e = Color(0xFF4338CA); // muted violet
     return [
       Color.lerp(a, e, t * 0.8)!,
       Color.lerp(b, d, 0.2 + 0.6 * (1 - t))!,
@@ -127,7 +127,7 @@ class _ParticlesPainter extends CustomPainter {
         const Color(0xFF22D3EE),
         const Color(0xFF8B5CF6),
         const Color(0xFFF59E0B),
-      ][i % 4].withValues(alpha: 0.08 + 0.04 * (i % 3));
+      ][i % 4].withValues(alpha: 0.04 + 0.02 * (i % 3));
 
       canvas.drawCircle(Offset(x, y), 3 + (i % 3) * 1.5, paint);
     }

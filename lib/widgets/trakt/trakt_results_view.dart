@@ -16,7 +16,7 @@ import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 // ─── Shared OTT Constants ────────────────────────────────────────────────────
 const _traktRed = Color(0xFFED1C24);
-const _surfaceDark = Color(0xFF0D1117);
+const _surfaceDark = Color(0xFF06080F);
 
 const _placeholderGradient = BoxDecoration(
   gradient: LinearGradient(colors: [Color(0xFF1A1A2E), _surfaceDark]),
@@ -2221,11 +2221,11 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                           colors: [
-                            Colors.black.withValues(alpha: 0.9),
-                            Colors.black.withValues(alpha: 0.6),
-                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.95),
+                            Colors.black.withValues(alpha: 0.8),
+                            Colors.black.withValues(alpha: 0.5),
                           ],
-                          stops: const [0.0, 0.5, 0.85],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
                       ),
                     ),
