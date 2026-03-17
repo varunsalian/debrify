@@ -472,6 +472,10 @@ class TraktService {
       path = '/recommendations/$contentType?extended=full';
     } else if (listType == 'watched') {
       path = '/sync/watched/$contentType?extended=full';
+    } else if (listType == 'history') {
+      path = '/sync/history/$contentType?extended=full&limit=100';
+    } else if (listType == 'trending' || listType == 'popular' || listType == 'anticipated') {
+      path = '/$contentType/$listType?extended=full&limit=100';
     } else {
       path = '/sync/$listType/$contentType?extended=full';
     }

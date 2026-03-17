@@ -39,10 +39,14 @@ Widget _buildOttBackdropImage(String? imageUrl) {
 enum TraktListType {
   progress,
   watchlist,
+  history,
   customList,
   likedLists,
   collection,
   ratings,
+  trending,
+  popular,
+  anticipated,
   recommendations,
   search,
 }
@@ -56,6 +60,14 @@ extension TraktListTypeExtension on TraktListType {
         return 'Collection';
       case TraktListType.ratings:
         return 'Ratings';
+      case TraktListType.history:
+        return 'History';
+      case TraktListType.trending:
+        return 'Trending';
+      case TraktListType.popular:
+        return 'Popular';
+      case TraktListType.anticipated:
+        return 'Anticipated';
       case TraktListType.recommendations:
         return 'Recommendations';
       case TraktListType.progress:
@@ -77,6 +89,14 @@ extension TraktListTypeExtension on TraktListType {
         return 'collection';
       case TraktListType.ratings:
         return 'ratings';
+      case TraktListType.history:
+        return 'history';
+      case TraktListType.trending:
+        return 'trending';
+      case TraktListType.popular:
+        return 'popular';
+      case TraktListType.anticipated:
+        return 'anticipated';
       case TraktListType.recommendations:
         return 'recommendations';
       case TraktListType.progress:
@@ -418,9 +438,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
       // Transform raw items into StremioMeta objects
       final List<StremioMeta> metas;
-      if (_selectedListType == TraktListType.progress &&
+      if ((_selectedListType == TraktListType.progress || _selectedListType == TraktListType.history) &&
           _selectedContentType == TraktContentType.shows) {
-        // Playback episodes → deduplicate into shows
+        // Playback/history episodes → deduplicate into shows
         metas = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
       } else {
         final inferredType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
@@ -2717,12 +2737,12 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           decoration: BoxDecoration(
             color: isHighlighted
                 ? color
-                : Colors.black.withValues(alpha: 0.5),
+                : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isHighlighted
                   ? color
-                  : color.withValues(alpha: 0.4),
+                  : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -2742,14 +2762,14 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : color,
+                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : color,
+                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,

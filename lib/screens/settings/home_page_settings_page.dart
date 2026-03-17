@@ -363,8 +363,12 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         items: const [
                           DropdownMenuItem(value: 'progress', child: Text('Continue Watching')),
                           DropdownMenuItem(value: 'watchlist', child: Text('Watchlist')),
+                          DropdownMenuItem(value: 'history', child: Text('History')),
                           DropdownMenuItem(value: 'collection', child: Text('Collection')),
                           DropdownMenuItem(value: 'ratings', child: Text('Ratings')),
+                          DropdownMenuItem(value: 'trending', child: Text('Trending')),
+                          DropdownMenuItem(value: 'popular', child: Text('Popular')),
+                          DropdownMenuItem(value: 'anticipated', child: Text('Anticipated')),
                           DropdownMenuItem(value: 'recommendations', child: Text('Recommendations')),
                           DropdownMenuItem(value: 'likedLists', child: Text('Liked Lists')),
                         ],
