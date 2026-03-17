@@ -507,6 +507,47 @@ class TraktService {
     }
   }
 
+  /// Fetch lists the authenticated user has liked on Trakt.
+  Future<List<Map<String, dynamic>>> fetchLikedLists() async {
+    final response = await _authenticatedGet('/users/me/likes/lists?limit=100');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchLikedLists failed (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      // Each item wraps the list under a "list" key with the owner in "list.user"
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => e['list'] as Map<String, dynamic>?)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    } catch (e) {
+      debugPrint('Trakt: fetchLikedLists parse error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch items from a liked list owned by another user.
+  /// [username] is the list owner's Trakt username.
+  /// [listSlug] is the Trakt slug for the list.
+  /// [contentType] is one of: movies, shows.
+  Future<List<dynamic>> fetchLikedListItems(String username, String listSlug, String contentType) async {
+    final response = await _authenticatedGet('/users/$username/lists/$listSlug/items/$contentType?extended=full');
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchLikedListItems failed (${response?.statusCode})');
+      return [];
+    }
+
+    try {
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchLikedListItems parse error: $e');
+      return [];
+    }
+  }
+
   /// Fetch items from a specific custom list.
   /// [listId] is the Trakt slug for the list.
   /// [contentType] is one of: movies, shows.

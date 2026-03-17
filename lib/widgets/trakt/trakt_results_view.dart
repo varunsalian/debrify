@@ -39,11 +39,12 @@ Widget _buildOttBackdropImage(String? imageUrl) {
 enum TraktListType {
   progress,
   watchlist,
+  customList,
+  likedLists,
   collection,
   ratings,
   recommendations,
   search,
-  customList,
 }
 
 extension TraktListTypeExtension on TraktListType {
@@ -63,6 +64,8 @@ extension TraktListTypeExtension on TraktListType {
         return 'Search Trakt';
       case TraktListType.customList:
         return 'Custom Lists';
+      case TraktListType.likedLists:
+        return 'Liked Lists';
     }
   }
 
@@ -81,6 +84,8 @@ extension TraktListTypeExtension on TraktListType {
       case TraktListType.search:
         return 'search';
       case TraktListType.customList:
+        return '';
+      case TraktListType.likedLists:
         return '';
     }
   }
@@ -155,6 +160,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Map<String, dynamic>? _selectedCustomList;
   bool _customListsLoaded = false;
 
+  // Liked lists
+  List<Map<String, dynamic>> _likedLists = [];
+  Map<String, dynamic>? _selectedLikedList;
+  bool _likedListsLoaded = false;
+
   // Items
   List<StremioMeta> _items = [];
   List<StremioMeta> _filteredItems = [];
@@ -177,6 +187,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'trakt-content-type');
   final FocusNode _customListFocusNode = FocusNode(debugLabel: 'trakt-custom-list');
+  final FocusNode _likedListFocusNode = FocusNode(debugLabel: 'trakt-liked-list');
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
@@ -231,6 +242,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
     _listTypeFocusNode.dispose();
     _contentTypeFocusNode.dispose();
     _customListFocusNode.dispose();
+    _likedListFocusNode.dispose();
     _seasonDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     for (final node in _cardFocusNodes) {
@@ -329,6 +341,43 @@ class TraktResultsViewState extends State<TraktResultsView> {
           return;
         }
         rawItems = await _traktService.fetchCustomListItems(
+          listSlug,
+          _selectedContentType.apiValue,
+        );
+      } else if (_selectedListType == TraktListType.likedLists) {
+        // Load liked lists if not loaded
+        if (!_likedListsLoaded) {
+          _likedLists = await _traktService.fetchLikedLists();
+          if (!mounted) return;
+          _likedListsLoaded = true;
+          if (_likedLists.isNotEmpty && _selectedLikedList == null) {
+            _selectedLikedList = _likedLists.first;
+          }
+        }
+
+        if (_selectedLikedList == null) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _items = [];
+            _filteredItems = [];
+          });
+          return;
+        }
+
+        final listSlug = _selectedLikedList!['ids']?['slug'] as String? ??
+            _selectedLikedList!['ids']?['trakt']?.toString();
+        final owner = (_selectedLikedList!['user'] as Map<String, dynamic>?)?['username'] as String?;
+        if (listSlug == null || listSlug.isEmpty || owner == null || owner.isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Invalid liked list identifier';
+          });
+          return;
+        }
+        rawItems = await _traktService.fetchLikedListItems(
+          owner,
           listSlug,
           _selectedContentType.apiValue,
         );
@@ -466,6 +515,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
       if (type == TraktListType.customList && !_customListsLoaded) {
         _selectedCustomList = null;
       }
+      if (type == TraktListType.likedLists && !_likedListsLoaded) {
+        _selectedLikedList = null;
+      }
     });
     _fetchItems();
   }
@@ -483,6 +535,12 @@ class TraktResultsViewState extends State<TraktResultsView> {
   void _onCustomListChanged(Map<String, dynamic>? list) {
     if (list == null || list == _selectedCustomList) return;
     setState(() => _selectedCustomList = list);
+    _fetchItems();
+  }
+
+  void _onLikedListChanged(Map<String, dynamic>? list) {
+    if (list == null || list == _selectedLikedList) return;
+    setState(() => _selectedLikedList = list);
     _fetchItems();
   }
 
@@ -1367,6 +1425,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final hasCustomList = _selectedListType == TraktListType.customList;
+    final hasLikedList = _selectedListType == TraktListType.likedLists;
+    final hasSubList = hasCustomList || hasLikedList;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1381,7 +1441,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
         children: [
           // List type dropdown
           Flexible(
-            flex: hasCustomList ? 3 : 4,
+            flex: hasSubList ? 3 : 4,
             child: _buildDropdown<TraktListType>(
               focusNode: _listTypeFocusNode,
               value: _selectedListType,
@@ -1412,7 +1472,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onUpArrow: widget.onUpArrowFromFilters,
               onDownArrow: _focusFirstCard,
               onLeftFocus: _listTypeFocusNode,
-              onRightFocus: hasCustomList ? _customListFocusNode : null,
+              onRightFocus: hasCustomList ? _customListFocusNode : hasLikedList ? _likedListFocusNode : null,
             ),
           ),
           // Custom list dropdown (only when Custom Lists is selected)
@@ -1440,6 +1500,49 @@ class TraktResultsViewState extends State<TraktResultsView> {
                     orElse: () => _customLists.first,
                   );
                   _onCustomListChanged(list);
+                },
+                hint: 'Select List',
+                onUpArrow: widget.onUpArrowFromFilters,
+                onDownArrow: _focusFirstCard,
+                onLeftFocus: _contentTypeFocusNode,
+              ),
+            ),
+          ],
+          // Liked list dropdown (only when Liked Lists is selected)
+          if (hasLikedList) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              flex: 3,
+              child: _buildDropdown<String>(
+                focusNode: _likedListFocusNode,
+                value: _selectedLikedList != null
+                    ? '${(_selectedLikedList!['user'] as Map<String, dynamic>?)?['username'] ?? ''}/${_selectedLikedList!['ids']?['slug'] ?? ''}'
+                    : null,
+                items: _likedLists.map((list) {
+                  final slug = list['ids']?['slug'] as String? ?? '';
+                  final name = list['name'] as String? ?? 'Unknown';
+                  final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String? ?? '';
+                  final key = '$owner/$slug';
+                  return DropdownMenuItem(
+                    value: key,
+                    child: Text(
+                      owner.isNotEmpty ? '$name ($owner)' : name,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (key) {
+                  if (key == null) return;
+                  final list = _likedLists.firstWhere(
+                    (l) {
+                      final s = l['ids']?['slug'] as String? ?? '';
+                      final o = (l['user'] as Map<String, dynamic>?)?['username'] as String? ?? '';
+                      return '$o/$s' == key;
+                    },
+                    orElse: () => _likedLists.first,
+                  );
+                  _onLikedListChanged(list);
                 },
                 hint: 'Select List',
                 onUpArrow: widget.onUpArrowFromFilters,

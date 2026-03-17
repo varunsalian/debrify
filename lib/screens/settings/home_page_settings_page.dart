@@ -366,6 +366,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           DropdownMenuItem(value: 'collection', child: Text('Collection')),
                           DropdownMenuItem(value: 'ratings', child: Text('Ratings')),
                           DropdownMenuItem(value: 'recommendations', child: Text('Recommendations')),
+                          DropdownMenuItem(value: 'likedLists', child: Text('Liked Lists')),
                         ],
                         onChanged: (value) async {
                           if (value == null) return;
