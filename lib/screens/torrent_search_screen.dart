@@ -2448,9 +2448,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // Exit select-source mode
-    _exitSelectSourceMode();
-
     if (debridService == 'rd') {
       // Show loading dialog
       _showSelectSourceLoadingDialog(torrentName);
@@ -2477,6 +2474,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
 
         if (!mounted) return;
+        _exitSelectSourceMode();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Source set: $torrentName'),
           backgroundColor: const Color(0xFF34D399),
@@ -2499,6 +2497,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         );
         if (!mounted) return;
+        _exitSelectSourceMode();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Source set (torrent not cached yet — will download in background)'),
           backgroundColor: Color(0xFFF59E0B),
@@ -2508,8 +2507,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       } catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
         if (!mounted) return;
+        // Don't exit select source mode on failure — let user try another torrent
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to set source: $e'),
+          content: Text('Failed to add source: $e — try another torrent'),
           backgroundColor: const Color(0xFFEF4444),
           duration: const Duration(seconds: 3),
         ));
@@ -2637,6 +2637,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 boundAt: DateTime.now().millisecondsSinceEpoch,
               ));
               if (!mounted) return;
+              _exitSelectSourceMode();
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                 content: Text('Source set (torrent not cached yet — will download in background)'),
                 backgroundColor: Color(0xFFF59E0B),
@@ -2675,6 +2676,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         boundAt: DateTime.now().millisecondsSinceEpoch,
       ));
       if (!mounted) return;
+      _exitSelectSourceMode();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Source set: $torrentName'),
         backgroundColor: const Color(0xFF34D399),
@@ -2747,6 +2749,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         boundAt: DateTime.now().millisecondsSinceEpoch,
       ));
       if (!mounted) return;
+      _exitSelectSourceMode();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Source set: $torrentName'),
         backgroundColor: const Color(0xFF34D399),
