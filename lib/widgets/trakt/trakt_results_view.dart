@@ -2275,7 +2275,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
   Widget _buildOverflowMenu() {
     final listType = widget.listType;
     final isWatched = (widget.progress ?? 0) >= 100 ||
-        (widget.progress == null && listType == TraktListType.progress);
+        (widget.progress == null && (listType == TraktListType.progress || listType == TraktListType.history));
     final isHighlighted = _isFocused && _focusedButtonIndex == _moreIndex;
 
     return Container(

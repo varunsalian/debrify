@@ -320,6 +320,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (imported && mounted) _refresh();
   }
 
+  Future<void> _importFromTrakt() async {
+    final imported = await StremioTvLocalCatalogsDialog.importFromTrakt(context);
+    if (imported && mounted) _refresh();
+  }
+
   // ============================================================================
   // Lazy Loading
   // ============================================================================
@@ -1919,8 +1924,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                           label: 'From Repository',
                                           onPressed: _importFromRepo,
                                         ),
+                                        _submenuItem(
+                                          icon: Icons.movie_filter_rounded,
+                                          label: 'From Trakt',
+                                          onPressed: _importFromTrakt,
+                                        ),
                                       ],
-                                      child: const Text('Local Catalogs'),
+                                      child: const Text('Import'),
                                     ),
                                   ],
                                   builder: (context, controller, child) =>

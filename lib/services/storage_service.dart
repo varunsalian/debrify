@@ -3842,6 +3842,20 @@ class StorageService {
     await setStremioTvLocalCatalogs(existing);
   }
 
+  /// Update an existing local catalog by its ID (replaces the entry in-place).
+  static Future<bool> updateStremioTvLocalCatalog(
+    Map<String, dynamic> catalog,
+  ) async {
+    final existing = await getStremioTvLocalCatalogs();
+    final id = catalog['id'] as String?;
+    if (id == null) return false;
+    final idx = existing.indexWhere((c) => c['id'] == id);
+    if (idx < 0) return false;
+    existing[idx] = catalog;
+    await setStremioTvLocalCatalogs(existing);
+    return true;
+  }
+
   // --------------------------------------------------------------------------
   // Stremio TV Catalog Repo URLs
   // --------------------------------------------------------------------------
