@@ -1014,6 +1014,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   /// Focus the first filter (for DPAD navigation from search input)
   void focusFirstFilter() {
+    // In episode mode, focus the episode filter bar instead of the main filters
+    if (_selectedShow != null) {
+      _backButtonFocusNode.requestFocus();
+      return;
+    }
     _listTypeFocusNode.requestFocus();
   }
 
@@ -1603,29 +1608,28 @@ class TraktResultsViewState extends State<TraktResultsView> {
     FocusNode? onLeftFocus,
     FocusNode? onRightFocus,
   }) {
-    return Focus(
-      // Outer Focus intercepts DPAD arrows before DropdownButton sees them
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          onUpArrow?.call();
-          return onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          onDownArrow?.call();
-          return onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && onLeftFocus != null) {
-          onLeftFocus.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && onRightFocus != null) {
-          onRightFocus.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ListenableBuilder(
+    // Attach key handler directly to the dropdown's focus node
+    focusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        onUpArrow?.call();
+        return onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        onDownArrow?.call();
+        return onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft && onLeftFocus != null) {
+        onLeftFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight && onRightFocus != null) {
+        onRightFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+    return ListenableBuilder(
         listenable: focusNode,
         builder: (context, _) {
           final hasFocus = focusNode.hasFocus;
@@ -1679,8 +1683,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ),
           );
         },
-      ),
-    );
+      );
   }
 
   Widget _buildContent(BuildContext context) {
@@ -1791,6 +1794,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
           // Back button
           Focus(
             focusNode: _backButtonFocusNode,
+            onFocusChange: (focused) => setState(() {}),
             onKeyEvent: (node, event) {
               if (event is! KeyDownEvent) return KeyEventResult.ignored;
               if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
@@ -1816,10 +1820,21 @@ class TraktResultsViewState extends State<TraktResultsView> {
               }
               return KeyEventResult.ignored;
             },
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: _exitEpisodeMode,
-              tooltip: 'Back to shows',
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: _backButtonFocusNode.hasFocus
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                border: _backButtonFocusNode.hasFocus
+                    ? Border.all(color: const Color(0xFF60A5FA), width: 2)
+                    : null,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: _exitEpisodeMode,
+                tooltip: 'Back to shows',
+              ),
             ),
           ),
           const SizedBox(width: 8),

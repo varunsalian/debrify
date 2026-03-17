@@ -3809,6 +3809,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
             if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
               _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+            } else if (_selectedSource.type == SearchSourceType.trakt && _traktResultsKey.currentState != null) {
+              _traktResultsKey.currentState!.focusFirstFilter();
             } else {
               _homeFocusController.focusFirstHomeSection();
             }
