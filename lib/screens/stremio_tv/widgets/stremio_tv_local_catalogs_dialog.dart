@@ -106,22 +106,30 @@ class LocalCatalogImporter {
     final source = catalog['traktSource'] as String?;
     final slug = catalog['traktSlug'] as String?;
     final owner = catalog['traktOwner'] as String?;
-    if (source == null || slug == null || slug.isEmpty) {
-      return 'Not a Trakt catalog';
-    }
+    if (source == null) return 'Not a Trakt catalog';
 
     final traktService = TraktService.instance;
     final List<dynamic> rawItems;
-    if (source == 'custom') {
+
+    // Direct sources (watchlist, trending, etc.)
+    const directSources = ['watchlist', 'history', 'collection', 'ratings',
+        'trending', 'popular', 'anticipated', 'recommendations'];
+    if (directSources.contains(source)) {
+      final movies = await traktService.fetchList(source, 'movies');
+      final shows = await traktService.fetchList(source, 'shows');
+      rawItems = [...movies, ...shows];
+    } else if (source == 'custom') {
+      if (slug == null || slug.isEmpty) return 'Missing list slug';
       final movies = await traktService.fetchCustomListItems(slug, 'movies');
       final shows = await traktService.fetchCustomListItems(slug, 'shows');
       rawItems = [...movies, ...shows];
     } else if (source == 'liked' && owner != null && owner.isNotEmpty) {
+      if (slug == null || slug.isEmpty) return 'Missing list slug';
       final movies = await traktService.fetchLikedListItems(owner, slug, 'movies');
       final shows = await traktService.fetchLikedListItems(owner, slug, 'shows');
       rawItems = [...movies, ...shows];
     } else {
-      return 'Missing list owner for liked list';
+      return 'Unknown Trakt source: $source';
     }
 
     final metas = TraktItemTransformer.transformList(rawItems);
@@ -889,7 +897,54 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
 
 // ─── Import from Trakt dialog ────────────────────────────────────────────────
 
-enum _TraktListSource { customLists, likedLists }
+enum _TraktListSource {
+  watchlist,
+  history,
+  collection,
+  ratings,
+  trending,
+  popular,
+  anticipated,
+  recommendations,
+  customLists,
+  likedLists,
+}
+
+extension _TraktListSourceExt on _TraktListSource {
+  String get label {
+    switch (this) {
+      case _TraktListSource.watchlist: return 'Watchlist';
+      case _TraktListSource.history: return 'History';
+      case _TraktListSource.collection: return 'Collection';
+      case _TraktListSource.ratings: return 'Ratings';
+      case _TraktListSource.trending: return 'Trending';
+      case _TraktListSource.popular: return 'Popular';
+      case _TraktListSource.anticipated: return 'Anticipated';
+      case _TraktListSource.recommendations: return 'Recommendations';
+      case _TraktListSource.customLists: return 'Custom Lists';
+      case _TraktListSource.likedLists: return 'Liked Lists';
+    }
+  }
+
+  /// Whether this source requires picking a specific list before importing.
+  bool get needsListPicker =>
+      this == _TraktListSource.customLists || this == _TraktListSource.likedLists;
+
+  /// The API list type value for direct-fetch sources.
+  String get apiValue {
+    switch (this) {
+      case _TraktListSource.watchlist: return 'watchlist';
+      case _TraktListSource.history: return 'history';
+      case _TraktListSource.collection: return 'collection';
+      case _TraktListSource.ratings: return 'ratings';
+      case _TraktListSource.trending: return 'trending';
+      case _TraktListSource.popular: return 'popular';
+      case _TraktListSource.anticipated: return 'anticipated';
+      case _TraktListSource.recommendations: return 'recommendations';
+      default: return '';
+    }
+  }
+}
 
 class _ImportTraktDialog extends StatefulWidget {
   const _ImportTraktDialog();
@@ -900,7 +955,7 @@ class _ImportTraktDialog extends StatefulWidget {
 
 class _ImportTraktDialogState extends State<_ImportTraktDialog> {
   final TraktService _traktService = TraktService.instance;
-  _TraktListSource _source = _TraktListSource.customLists;
+  _TraktListSource _source = _TraktListSource.watchlist;
   List<Map<String, dynamic>> _lists = [];
   bool _loading = false;
   bool _importing = false;
@@ -921,7 +976,19 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
       _authenticated = auth;
       _authChecked = true;
     });
-    if (auth) _fetchLists();
+    if (auth && _source.needsListPicker) _fetchLists();
+  }
+
+  Future<void> _onSourceChanged(_TraktListSource source) {
+    setState(() {
+      _source = source;
+      _error = null;
+      _lists = [];
+    });
+    if (source.needsListPicker) {
+      return _fetchLists();
+    }
+    return Future.value();
   }
 
   Future<void> _fetchLists() async {
@@ -952,6 +1019,44 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     }
   }
 
+  /// Import a direct list type (watchlist, trending, etc.) — no list picker needed.
+  Future<void> _importDirect() async {
+    final name = 'Trakt ${_source.label}';
+
+    setState(() {
+      _importing = true;
+      _error = null;
+    });
+
+    try {
+      // Check for duplicates
+      final existing = await StorageService.getStremioTvLocalCatalogs();
+      if (existing.any((c) => c['name'] == name || c['name'] == '$name — Movies' || c['name'] == '$name — Series')) {
+        setState(() {
+          _error = '"$name" already imported';
+          _importing = false;
+        });
+        return;
+      }
+
+      final movies = await _traktService.fetchList(_source.apiValue, 'movies');
+      final shows = await _traktService.fetchList(_source.apiValue, 'shows');
+      final rawItems = [...movies, ...shows];
+
+      if (!mounted) return;
+      await _saveAsCatalog(rawItems, name, traktMeta: {
+        'traktSource': _source.apiValue,
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to import: $e';
+        _importing = false;
+      });
+    }
+  }
+
+  /// Import a specific custom/liked list.
   Future<void> _importList(Map<String, dynamic> list) async {
     final name = list['name'] as String? ?? 'Unknown';
     final slug = list['ids']?['slug'] as String? ?? '';
@@ -963,6 +1068,16 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     });
 
     try {
+      // Check for duplicates
+      final existing = await StorageService.getStremioTvLocalCatalogs();
+      if (existing.any((c) => c['name'] == name || c['name'] == '$name — Movies' || c['name'] == '$name — Series')) {
+        setState(() {
+          _error = '"$name" already imported';
+          _importing = false;
+        });
+        return;
+      }
+
       final List<dynamic> rawItems;
       if (_source == _TraktListSource.customLists) {
         final movies = await _traktService.fetchCustomListItems(slug, 'movies');
@@ -984,90 +1099,12 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 
       if (!mounted) return;
 
-      if (rawItems.isEmpty) {
-        setState(() {
-          _error = 'List "$name" is empty';
-          _importing = false;
-        });
-        return;
-      }
-
       final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String?;
-      final metas = TraktItemTransformer.transformList(rawItems);
-      if (metas.isEmpty) {
-        setState(() {
-          _error = 'No items with IMDB IDs found';
-          _importing = false;
-        });
-        return;
-      }
-
-      // Build catalog items
-      final catalogItems = <Map<String, dynamic>>[];
-      for (final meta in metas) {
-        catalogItems.add({
-          'id': meta.id,
-          'name': meta.name,
-          'type': meta.type,
-          if (meta.year != null) 'year': int.tryParse(meta.year!) ?? meta.year,
-          if (meta.description != null) 'overview': meta.description,
-          if (meta.imdbRating != null) 'rating': meta.imdbRating,
-          if (meta.poster != null) 'poster': meta.poster,
-          if (meta.background != null) 'fanart': meta.background,
-          if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
-        });
-      }
-
-      // Check for duplicates
-      final existing = await StorageService.getStremioTvLocalCatalogs();
-      if (existing.any((c) => c['name'] == name || c['name'] == '$name — Movies' || c['name'] == '$name — Series')) {
-        setState(() {
-          _error = '"$name" already imported';
-          _importing = false;
-        });
-        return;
-      }
-
-      // Split by type
-      final movies = catalogItems.where((i) => i['type'] != 'series').toList();
-      final series = catalogItems.where((i) => i['type'] == 'series').toList();
-
-      // Trakt metadata for refresh
-      final traktMeta = <String, dynamic>{
+      await _saveAsCatalog(rawItems, name, traktMeta: {
         'traktSource': _source == _TraktListSource.customLists ? 'custom' : 'liked',
         'traktSlug': slug,
         if (owner != null) 'traktOwner': owner,
-      };
-
-      if (movies.isNotEmpty && series.isNotEmpty) {
-        for (final entry in [
-          (items: movies, type: 'movie', suffix: 'Movies'),
-          (items: series, type: 'series', suffix: 'Series'),
-        ]) {
-          final catName = '$name — ${entry.suffix}';
-          await StorageService.addStremioTvLocalCatalog({
-            'id': LocalCatalogImporter.generateId(catName),
-            'name': catName,
-            'type': entry.type,
-            'addedAt': DateTime.now().toIso8601String(),
-            'items': entry.items,
-            ...traktMeta,
-          });
-        }
-      } else {
-        final catalogType = series.length > movies.length ? 'series' : 'movie';
-        await StorageService.addStremioTvLocalCatalog({
-          'id': LocalCatalogImporter.generateId(name),
-          'name': name,
-          'type': catalogType,
-          'addedAt': DateTime.now().toIso8601String(),
-          'items': catalogItems,
-          ...traktMeta,
-        });
-      }
-
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1075,6 +1112,78 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
         _importing = false;
       });
     }
+  }
+
+  /// Shared logic: transform raw items, split by type, save as catalog(s).
+  Future<void> _saveAsCatalog(
+    List<dynamic> rawItems,
+    String name, {
+    required Map<String, dynamic> traktMeta,
+  }) async {
+    if (rawItems.isEmpty) {
+      setState(() {
+        _error = '"$name" is empty';
+        _importing = false;
+      });
+      return;
+    }
+
+    final metas = TraktItemTransformer.transformList(rawItems);
+    if (metas.isEmpty) {
+      setState(() {
+        _error = 'No items with IMDB IDs found';
+        _importing = false;
+      });
+      return;
+    }
+
+    final catalogItems = <Map<String, dynamic>>[];
+    for (final meta in metas) {
+      catalogItems.add({
+        'id': meta.id,
+        'name': meta.name,
+        'type': meta.type,
+        if (meta.year != null) 'year': int.tryParse(meta.year!) ?? meta.year,
+        if (meta.description != null) 'overview': meta.description,
+        if (meta.imdbRating != null) 'rating': meta.imdbRating,
+        if (meta.poster != null) 'poster': meta.poster,
+        if (meta.background != null) 'fanart': meta.background,
+        if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
+      });
+    }
+
+    final movies = catalogItems.where((i) => i['type'] != 'series').toList();
+    final series = catalogItems.where((i) => i['type'] == 'series').toList();
+
+    if (movies.isNotEmpty && series.isNotEmpty) {
+      for (final entry in [
+        (items: movies, type: 'movie', suffix: 'Movies'),
+        (items: series, type: 'series', suffix: 'Series'),
+      ]) {
+        final catName = '$name — ${entry.suffix}';
+        await StorageService.addStremioTvLocalCatalog({
+          'id': LocalCatalogImporter.generateId(catName),
+          'name': catName,
+          'type': entry.type,
+          'addedAt': DateTime.now().toIso8601String(),
+          'items': entry.items,
+          ...traktMeta,
+        });
+      }
+    } else {
+      final catalogType = series.length > movies.length ? 'series' : 'movie';
+      await StorageService.addStremioTvLocalCatalog({
+        'id': LocalCatalogImporter.generateId(name),
+        'name': name,
+        'type': catalogType,
+        'addedAt': DateTime.now().toIso8601String(),
+        'items': catalogItems,
+        ...traktMeta,
+      });
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -1111,23 +1220,22 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SegmentedButton<_TraktListSource>(
-              segments: const [
-                ButtonSegment(
-                  value: _TraktListSource.customLists,
-                  label: Text('Custom Lists'),
-                  icon: Icon(Icons.list_rounded, size: 18),
-                ),
-                ButtonSegment(
-                  value: _TraktListSource.likedLists,
-                  label: Text('Liked Lists'),
-                  icon: Icon(Icons.favorite_rounded, size: 18),
-                ),
-              ],
-              selected: {_source},
-              onSelectionChanged: (selected) {
-                setState(() => _source = selected.first);
-                _fetchLists();
+            // Source dropdown
+            DropdownButtonFormField<_TraktListSource>(
+              isExpanded: true,
+              value: _source,
+              decoration: InputDecoration(
+                labelText: 'List Type',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              items: _TraktListSource.values.map((s) => DropdownMenuItem(
+                value: s,
+                child: Text(s.label),
+              )).toList(),
+              onChanged: (value) {
+                if (value != null) _onSourceChanged(value);
               },
             ),
             const SizedBox(height: 16),
@@ -1139,66 +1247,83 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
                   style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
                 ),
               ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_lists.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  _source == _TraktListSource.customLists
-                      ? 'No custom lists found.'
-                      : 'No liked lists found.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+            // Direct import sources — just show an import button
+            if (!_source.needsListPicker) ...[
+              if (_importing)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else
+                FilledButton.icon(
+                  onPressed: _importDirect,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: Text('Import ${_source.label}'),
+                ),
+            ],
+            // List picker sources — show list of lists
+            if (_source.needsListPicker) ...[
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_lists.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    _source == _TraktListSource.customLists
+                        ? 'No custom lists found.'
+                        : 'No liked lists found.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _lists.length,
-                  itemBuilder: (context, index) {
-                    final list = _lists[index];
-                    final name = list['name'] as String? ?? 'Unknown';
-                    final itemCount = list['item_count'] as int?;
-                    final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String?;
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _lists.length,
+                    itemBuilder: (context, index) {
+                      final list = _lists[index];
+                      final name = list['name'] as String? ?? 'Unknown';
+                      final itemCount = list['item_count'] as int?;
+                      final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String?;
 
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.playlist_play_rounded,
-                        color: theme.colorScheme.primary,
-                        size: 20,
-                      ),
-                      title: Text(name, style: theme.textTheme.bodyMedium),
-                      subtitle: Text(
-                        [
-                          if (owner != null && _source == _TraktListSource.likedLists) 'by $owner',
-                          if (itemCount != null) '$itemCount items',
-                        ].join(' · '),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.playlist_play_rounded,
+                          color: theme.colorScheme.primary,
+                          size: 20,
                         ),
-                      ),
-                      trailing: _importing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add_rounded, size: 20),
-                      onTap: _importing ? null : () => _importList(list),
-                    );
-                  },
+                        title: Text(name, style: theme.textTheme.bodyMedium),
+                        subtitle: Text(
+                          [
+                            if (owner != null && _source == _TraktListSource.likedLists) 'by $owner',
+                            if (itemCount != null) '$itemCount items',
+                          ].join(' · '),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        trailing: _importing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.add_rounded, size: 20),
+                        onTap: _importing ? null : () => _importList(list),
+                      );
+                    },
+                  ),
                 ),
-              ),
+            ],
           ],
         ),
       ),
