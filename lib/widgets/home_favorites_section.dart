@@ -347,20 +347,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   },
                 ),
               ),
-              if (_canScrollLeft)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.left),
-                ),
-              if (_canScrollRight)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.right),
-                ),
             ],
           ),
         ),
@@ -967,15 +953,7 @@ class _ScrollIndicator extends StatelessWidget {
             ],
           ),
         ),
-        child: Center(
-          child: Icon(
-            isLeft
-                ? Icons.chevron_left_rounded
-                : Icons.chevron_right_rounded,
-            size: 20,
-            color: Colors.white.withValues(alpha: 0.4),
-          ),
-        ),
+        child: const SizedBox.shrink(),
       ),
     );
   }

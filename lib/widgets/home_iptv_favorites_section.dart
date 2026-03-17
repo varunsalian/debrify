@@ -303,22 +303,6 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                   },
                 ),
               ),
-              // Left scroll indicator
-              if (_canScrollLeft)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.left, accentColor: const Color(0xFF14B8A6)),
-                ),
-              // Right scroll indicator
-              if (_canScrollRight)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: _ScrollIndicator(direction: _ScrollDirection.right, accentColor: const Color(0xFF14B8A6)),
-                ),
             ],
           ),
         ),
@@ -704,20 +688,7 @@ class _ScrollIndicator extends StatelessWidget {
               ],
             ),
           ),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                size: 16,
-                color: accentColor.withValues(alpha: 0.7),
-              ),
-            ),
-          ),
+          child: const SizedBox.shrink(),
         ),
       ),
     );
