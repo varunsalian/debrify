@@ -7,6 +7,7 @@ import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
+import '../services/series_source_service.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
@@ -193,60 +194,216 @@ class _HomeTraktContinueWatchingSectionState
     );
   }
 
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    bool autofocus = false,
+  }) {
+    return _MenuItem(
+      icon: icon,
+      label: label,
+      subtitle: subtitle,
+      color: color,
+      onTap: onTap,
+      autofocus: autofocus,
+    );
+  }
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
+  Future<void> _showEditSourceDialog(StremioMeta show) async {
+    final imdbId = show.effectiveImdbId ?? show.id;
+    var sources = await SeriesSourceService.getSources(imdbId);
+    if (sources.isEmpty || !mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF141824),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Torrent Sources (${sources.length})',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'First match wins — reorder by priority',
+                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: sources.length,
+                          itemBuilder: (context, index) {
+                            final source = sources[index];
+                            return ListTile(
+                              key: ValueKey(source.torrentHash),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Container(
+                                width: 32, height: 32,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Text('${index + 1}', style: const TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+                                ),
+                              ),
+                              title: Text(
+                                source.torrentName,
+                                style: const TextStyle(fontSize: 13),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                icon: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red.withValues(alpha: 0.7)),
+                                onPressed: () async {
+                                  await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                  final updated = await SeriesSourceService.getSources(imdbId);
+                                  setDialogState(() {
+                                    sources = updated;
+                                  });
+                                  if (updated.isEmpty && dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            child: const Text('Close'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add Source'),
+                            onPressed: () {
+                              Navigator.of(dialogContext).pop();
+                              widget.onSelectSource?.call(show);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _onItemTap(StremioMeta item) async {
+    // Check if series has bound source
+    bool hasBoundSource = false;
+    if (item.type == 'series' && widget.onSelectSource != null) {
+      final imdbId = item.effectiveImdbId ?? item.id;
+      final sources = await SeriesSourceService.getSources(imdbId);
+      hasBoundSource = sources.isNotEmpty;
+    }
+    if (!mounted) return;
+
     final choice = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'browse'),
-            child: const Row(
-              children: [
-                Icon(Icons.list_rounded, size: 20),
-                SizedBox(width: 12),
-                Text('Browse'),
-              ],
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'quick_play'),
-            child: const Row(
-              children: [
-                Icon(Icons.play_arrow_rounded, size: 20),
-                SizedBox(width: 12),
-                Text('Quick Play'),
-              ],
-            ),
-          ),
-          if (item.type == 'series' && widget.onSelectSource != null)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, 'select_source'),
-              child: const Row(
+      builder: (context) => Center(
+        child: Material(
+        color: Colors.transparent,
+        child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141824),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
                 children: [
-                  Icon(Icons.link_rounded, size: 20, color: Color(0xFF60A5FA)),
-                  SizedBox(width: 12),
-                  Text('Select Source'),
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
-          const Divider(height: 1),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'remove'),
-            child: Row(
-              children: [
-                Icon(Icons.delete_outline_rounded, size: 20,
-                    color: Colors.red.withValues(alpha: 0.8)),
-                const SizedBox(width: 12),
-                Text('Remove from Continue Watching',
-                    style: TextStyle(color: Colors.red.withValues(alpha: 0.8))),
-              ],
+            Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+            _buildMenuItem(
+              icon: Icons.play_circle_filled_rounded,
+              label: 'Play',
+              subtitle: 'Quick play with default source',
+              color: const Color(0xFF10B981),
+              onTap: () => Navigator.pop(context, 'quick_play'),
+              autofocus: true,
             ),
-          ),
-        ],
+            _buildMenuItem(
+              icon: item.type == 'series' ? Icons.view_list_rounded : Icons.search_rounded,
+              label: item.type == 'series' ? 'Browse Episodes' : 'Browse Sources',
+              subtitle: item.type == 'series' ? 'View seasons and episodes' : 'Find available sources',
+              color: const Color(0xFF818CF8),
+              onTap: () => Navigator.pop(context, 'browse'),
+            ),
+            if (item.type == 'series' && widget.onSelectSource != null)
+              _buildMenuItem(
+                icon: hasBoundSource ? Icons.edit_rounded : Icons.add_link_rounded,
+                label: hasBoundSource ? 'Edit Torrent Source' : 'Add Torrent Source',
+                subtitle: hasBoundSource ? 'Change the bound torrent source' : 'Bind a torrent source for quick play',
+                color: const Color(0xFF60A5FA),
+                onTap: () => Navigator.pop(context, 'select_source'),
+              ),
+            Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+            _buildMenuItem(
+              icon: Icons.remove_circle_outline_rounded,
+              label: 'Remove from Continue Watching',
+              subtitle: 'Remove playback progress from Trakt',
+              color: const Color(0xFFEF4444),
+              onTap: () => Navigator.pop(context, 'remove'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+      ),
       ),
     );
     if (choice == null || !mounted) return;
@@ -256,7 +413,11 @@ class _HomeTraktContinueWatchingSectionState
     } else if (choice == 'quick_play') {
       _quickPlayItem(item);
     } else if (choice == 'select_source') {
-      widget.onSelectSource?.call(item);
+      if (hasBoundSource) {
+        _showEditSourceDialog(item);
+      } else {
+        widget.onSelectSource?.call(item);
+      }
     } else if (choice == 'remove') {
       _removePlayback(item);
     }
@@ -1073,6 +1234,74 @@ class _ScrollIndicator extends StatelessWidget {
           ),
         ),
         child: const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _MenuItem extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool autofocus;
+
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  State<_MenuItem> createState() => _MenuItemState();
+}
+
+class _MenuItemState extends State<_MenuItem> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      autofocus: widget.autofocus,
+      canRequestFocus: true,
+      onTap: widget.onTap,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(widget.icon, size: 18, color: widget.color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
