@@ -47,6 +47,8 @@ class _HomeTraktContinueWatchingSectionState
   final TraktService _traktService = TraktService.instance;
   List<StremioMeta> _items = [];
   Map<String, double> _progressMap = {};
+  /// Episode info for shows: imdbId → {season, episode, runtime}
+  Map<String, ({int season, int episode, int? runtime})> _episodeInfoMap = {};
   /// Playback entry IDs from Trakt API, keyed by IMDB ID.
   /// For shows, stores all playback IDs for that show.
   Map<String, List<int>> _playbackIds = {};
@@ -143,6 +145,7 @@ class _HomeTraktContinueWatchingSectionState
         }
       } else {
         items = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
+        final episodeInfo = <String, ({int season, int episode, int? runtime})>{};
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
@@ -150,13 +153,22 @@ class _HomeTraktContinueWatchingSectionState
           final show = raw['show'] as Map<String, dynamic>?;
           final ids = show?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
+          final ep = raw['episode'] as Map<String, dynamic>?;
           if (imdbId != null && progress != null) {
             progressMap.putIfAbsent(imdbId, () => progress.toDouble());
           }
           if (imdbId != null && pbId != null) {
             playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
           }
+          if (imdbId != null && ep != null && !episodeInfo.containsKey(imdbId)) {
+            episodeInfo[imdbId] = (
+              season: ep['season'] as int? ?? 0,
+              episode: ep['number'] as int? ?? 0,
+              runtime: ep['runtime'] as int?,
+            );
+          }
         }
+        _episodeInfoMap = episodeInfo;
       }
 
       if (!mounted) return;
@@ -559,6 +571,7 @@ class _HomeTraktContinueWatchingSectionState
                   itemBuilder: (context, index) {
                     final item = _items[index];
                     final progress = _progressMap[item.id];
+                    final epInfo = _episodeInfoMap[item.id];
 
                     return Padding(
                       padding: EdgeInsets.only(
@@ -567,6 +580,7 @@ class _HomeTraktContinueWatchingSectionState
                         item: item,
                         progressPercent:
                             progress != null ? progress / 100 : null,
+                        episodeInfo: epInfo,
                         index: index,
                         focusNode: index < _cardFocusNodes.length
                             ? _cardFocusNodes[index]
@@ -673,9 +687,57 @@ class _HomeTraktContinueWatchingSectionState
 
   // ── Landscape card ────────────────────────────────────────────────────────
 
+  Widget _buildEpisodeLabel(
+    ({int season, int episode, int? runtime}) info,
+    double? progressPercent,
+  ) {
+    final epCode = 'S${info.season.toString().padLeft(2, '0')}E${info.episode.toString().padLeft(2, '0')}';
+
+    String detail;
+    if (progressPercent != null && progressPercent > 0 && info.runtime != null && info.runtime! > 0) {
+      final remainingMin = ((1 - progressPercent) * info.runtime!).round();
+      detail = remainingMin > 0 ? '${remainingMin}m left' : 'Almost done';
+    } else if (progressPercent == null || progressPercent <= 0) {
+      detail = 'Up Next';
+    } else {
+      detail = '${(progressPercent * 100).round()}%';
+    }
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+          decoration: BoxDecoration(
+            color: _accentColor.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            epCode,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: _accentColor,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          detail,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCard({
     required StremioMeta item,
     double? progressPercent,
+    ({int season, int episode, int? runtime})? episodeInfo,
     int index = 0,
     FocusNode? focusNode,
   }) {
@@ -903,6 +965,11 @@ class _HomeTraktContinueWatchingSectionState
                               ),
                           ],
                         ),
+                        // Episode info label for series
+                        if (episodeInfo != null) ...[
+                          const SizedBox(height: 4),
+                          _buildEpisodeLabel(episodeInfo, progressPercent),
+                        ],
                       ],
                     ),
                   ),
