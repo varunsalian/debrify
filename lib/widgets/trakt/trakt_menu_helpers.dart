@@ -188,6 +188,7 @@ Future<void> handleTraktMenuAction(
   StremioMeta item,
   TraktItemMenuAction action, {
   void Function(StremioMeta)? onSelectSource,
+  void Function(StremioMeta)? onEditSource,
 }) async {
   final traktService = TraktService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
@@ -238,7 +239,12 @@ Future<void> handleTraktMenuAction(
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
     case TraktItemMenuAction.selectSource:
-      onSelectSource?.call(item);
+      if (onEditSource != null) {
+        // Caller handles edit-vs-select logic
+        onEditSource.call(item);
+      } else {
+        onSelectSource?.call(item);
+      }
       return;
   }
 
@@ -258,6 +264,9 @@ Widget buildTraktAddOnlyOverflowMenu({
   required GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> menuKey,
   required void Function(TraktItemMenuAction) onSelected,
   bool isSeries = false,
+  bool isMovie = false,
+  bool hasBoundSource = false,
+  bool isTraktAuthenticated = true,
 }) {
   return Container(
     decoration: isHighlighted
@@ -290,55 +299,63 @@ Widget buildTraktAddOnlyOverflowMenu({
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: onSelected,
       itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: TraktItemMenuAction.addToWatchlist,
-          child: Row(children: [
-            Icon(Icons.bookmark_add_outlined,
-                size: 18, color: Color(0xFFFBBF24)),
-            SizedBox(width: 12),
-            Text('Add to Trakt Watchlist'),
-          ]),
-        ),
-        const PopupMenuItem(
-          value: TraktItemMenuAction.addToCollection,
-          child: Row(children: [
-            Icon(Icons.library_add_outlined,
-                size: 18, color: Color(0xFF60A5FA)),
-            SizedBox(width: 12),
-            Text('Add to Trakt Collection'),
-          ]),
-        ),
-        const PopupMenuItem(
-          value: TraktItemMenuAction.markWatched,
-          child: Row(children: [
-            Icon(Icons.visibility, size: 18, color: Color(0xFF34D399)),
-            SizedBox(width: 12),
-            Text('Mark as Watched on Trakt'),
-          ]),
-        ),
-        const PopupMenuItem(
-          value: TraktItemMenuAction.rate,
-          child: Row(children: [
-            Icon(Icons.star_rate_rounded, size: 18, color: Color(0xFFFBBF24)),
-            SizedBox(width: 12),
-            Text('Rate on Trakt'),
-          ]),
-        ),
-        const PopupMenuItem(
-          value: TraktItemMenuAction.addToList,
-          child: Row(children: [
-            Icon(Icons.playlist_add, size: 18, color: Color(0xFFEC4899)),
-            SizedBox(width: 12),
-            Text('Add to Trakt List...'),
-          ]),
-        ),
-        if (isSeries)
+        if (isTraktAuthenticated) ...[
           const PopupMenuItem(
+            value: TraktItemMenuAction.addToWatchlist,
+            child: Row(children: [
+              Icon(Icons.bookmark_add_outlined,
+                  size: 18, color: Color(0xFFFBBF24)),
+              SizedBox(width: 12),
+              Text('Add to Trakt Watchlist'),
+            ]),
+          ),
+          const PopupMenuItem(
+            value: TraktItemMenuAction.addToCollection,
+            child: Row(children: [
+              Icon(Icons.library_add_outlined,
+                  size: 18, color: Color(0xFF60A5FA)),
+              SizedBox(width: 12),
+              Text('Add to Trakt Collection'),
+            ]),
+          ),
+          const PopupMenuItem(
+            value: TraktItemMenuAction.markWatched,
+            child: Row(children: [
+              Icon(Icons.visibility, size: 18, color: Color(0xFF34D399)),
+              SizedBox(width: 12),
+              Text('Mark as Watched on Trakt'),
+            ]),
+          ),
+          const PopupMenuItem(
+            value: TraktItemMenuAction.rate,
+            child: Row(children: [
+              Icon(Icons.star_rate_rounded, size: 18, color: Color(0xFFFBBF24)),
+              SizedBox(width: 12),
+              Text('Rate on Trakt'),
+            ]),
+          ),
+          const PopupMenuItem(
+            value: TraktItemMenuAction.addToList,
+            child: Row(children: [
+              Icon(Icons.playlist_add, size: 18, color: Color(0xFFEC4899)),
+              SizedBox(width: 12),
+              Text('Add to Trakt List...'),
+            ]),
+          ),
+        ],
+        if (isSeries || isMovie)
+          PopupMenuItem(
             value: TraktItemMenuAction.selectSource,
             child: Row(children: [
-              Icon(Icons.link_rounded, size: 18, color: Color(0xFF60A5FA)),
-              SizedBox(width: 12),
-              Text('Select Source'),
+              Icon(
+                hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+                size: 18,
+                color: const Color(0xFF60A5FA),
+              ),
+              const SizedBox(width: 12),
+              Text(hasBoundSource
+                  ? (isMovie ? 'Edit Source' : 'Edit Sources')
+                  : 'Select Source'),
             ]),
           ),
       ],

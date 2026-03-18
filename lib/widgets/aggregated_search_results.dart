@@ -8,6 +8,7 @@ import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/series_source_service.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
 /// Displays aggregated search results from all catalog sources
@@ -89,6 +90,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
   // Trakt integration
   bool _isTraktAuthenticated = false;
+
+  // Bound sources for movies
+  Map<String, List<SeriesSource>> _boundSources = {};
 
   @override
   void initState() {
@@ -226,6 +230,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         _isLoading = false;
         _lastSearchedQuery = searchQuery; // Remember what we searched for
       });
+      _loadBoundSources();
     } catch (e) {
       // Race condition check for error case too
       if (!mounted || requestId != _activeSearchRequestId) {
@@ -394,6 +399,159 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     return KeyEventResult.ignored;
   }
 
+  /// Load bound sources for displayed movie items.
+  Future<void> _loadBoundSources() async {
+    final movieItems = _results.where((i) => i.type == 'movie');
+    final sources = <String, List<SeriesSource>>{};
+    for (final item in movieItems) {
+      final imdbId = item.effectiveImdbId ?? item.id;
+      final list = await SeriesSourceService.getSources(imdbId);
+      if (list.isNotEmpty) sources[imdbId] = list;
+    }
+    if (mounted) setState(() => _boundSources = sources);
+  }
+
+  /// Handle select source action — show edit dialog if source exists, otherwise enter select mode.
+  void _handleSelectSourceAction(StremioMeta item) {
+    final imdbId = item.effectiveImdbId ?? item.id;
+    if (_boundSources.containsKey(imdbId)) {
+      _showMovieEditSourceDialog(item);
+    } else {
+      widget.onSelectSource?.call(item);
+    }
+  }
+
+  /// Show edit source dialog for a movie with an existing bound source.
+  Future<void> _showMovieEditSourceDialog(StremioMeta item) async {
+    final imdbId = item.effectiveImdbId ?? item.id;
+    var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
+    if (sources.isEmpty || !mounted) return;
+
+    final source = sources.first;
+    String serviceLabel;
+    Color serviceColor;
+    switch (source.debridService) {
+      case 'rd':
+        serviceColor = const Color(0xFF10B981);
+        serviceLabel = 'Real-Debrid';
+      case 'torbox':
+        serviceColor = const Color(0xFF3B82F6);
+        serviceLabel = 'TorBox';
+      case 'pikpak':
+        serviceColor = const Color(0xFFF59E0B);
+        serviceLabel = 'PikPak';
+      default:
+        serviceColor = Colors.white54;
+        serviceLabel = source.debridService;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                      SizedBox(width: 8),
+                      Text(
+                        'Movie Source',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          source.torrentName,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: serviceColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            serviceLabel,
+                            style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            widget.onSelectSource?.call(item);
+                          },
+                          icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                          label: const Text('Change Source'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF6366F1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await SeriesSourceService.removeAllSources(imdbId);
+                            if (mounted) {
+                              setState(() => _boundSources.remove(imdbId));
+                            }
+                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                          label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -531,10 +689,14 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
                             _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
                         showQuickPlay: widget.showQuickPlay,
-                        onTraktMenuAction: _isTraktAuthenticated &&
+                        onTraktMenuAction: (_isTraktAuthenticated || item.type == 'movie') &&
                                 (item.effectiveImdbId != null || item.id.startsWith('tt'))
-                            ? (action) => handleTraktMenuAction(context, item, action, onSelectSource: widget.onSelectSource)
+                            ? (action) => handleTraktMenuAction(context, item, action,
+                                onSelectSource: widget.onSelectSource,
+                                onEditSource: item.type == 'movie' ? _handleSelectSourceAction : null)
                             : null,
+                        hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
+                        isTraktAuthenticated: _isTraktAuthenticated,
                       ),
                     ),
                   );
@@ -688,6 +850,8 @@ class _CatalogResultCard extends StatefulWidget {
   final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
   final bool showQuickPlay;
   final void Function(TraktItemMenuAction action)? onTraktMenuAction;
+  final bool hasBoundSource;
+  final bool isTraktAuthenticated;
 
   const _CatalogResultCard({
     required this.item,
@@ -699,6 +863,8 @@ class _CatalogResultCard extends StatefulWidget {
     required this.onKeyEvent,
     this.showQuickPlay = true,
     this.onTraktMenuAction,
+    this.hasBoundSource = false,
+    this.isTraktAuthenticated = false,
   });
 
   @override
@@ -864,7 +1030,9 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
-                isSeries: widget.item.type == 'series',
+                isMovie: widget.item.type == 'movie',
+                hasBoundSource: widget.hasBoundSource,
+                isTraktAuthenticated: widget.isTraktAuthenticated,
               ),
             ],
           ],
@@ -947,7 +1115,9 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
-                isSeries: widget.item.type == 'series',
+                isMovie: widget.item.type == 'movie',
+                hasBoundSource: widget.hasBoundSource,
+                isTraktAuthenticated: widget.isTraktAuthenticated,
               ),
             ],
           ],
