@@ -453,8 +453,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       });
       _applySearchFilter(); // Also rebuilds _cardFocusNodes
 
-      // Load bound sources for series items (non-blocking)
-      if (_selectedContentType == TraktContentType.shows) {
+      // Load bound sources for series and movie items (non-blocking)
+      if (_selectedContentType == TraktContentType.shows || _selectedContentType == TraktContentType.movies) {
         _loadBoundSources();
       }
 
@@ -733,9 +733,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
     _loadBoundSourceForShow();
   }
 
-  /// Load bound sources for all currently displayed series items.
+  /// Load bound sources for all currently displayed series and movie items.
   Future<void> _loadBoundSources() async {
-    final seriesItems = _filteredItems.where((i) => i.type == 'series');
+    final seriesItems = _filteredItems.where((i) => i.type == 'series' || i.type == 'movie');
     final sources = <String, List<SeriesSource>>{};
     for (final item in seriesItems) {
       final imdbId = item.effectiveImdbId ?? item.id;
@@ -764,6 +764,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   /// Show "Edit Sources" dialog with list of bound sources and management options.
   Future<void> _showEditSourceDialog(StremioMeta show) async {
     final imdbId = show.effectiveImdbId ?? show.id;
+    final isMovie = show.type == 'movie';
     var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
     if (sources.isEmpty || !mounted) return;
 
@@ -787,7 +788,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                           const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
                           const SizedBox(width: 8),
                           Text(
-                            'Series Sources (${sources.length})',
+                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -796,65 +797,101 @@ class TraktResultsViewState extends State<TraktResultsView> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'First match wins — reorder by priority',
-                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                      if (!isMovie) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'First match wins — reorder by priority',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 12),
                       Flexible(
-                        child: ReorderableListView.builder(
-                          shrinkWrap: true,
-                          itemCount: sources.length,
-                          onReorder: (oldIndex, newIndex) {
-                            if (newIndex > oldIndex) newIndex--;
-                            setDialogState(() {
-                              final item = sources.removeAt(oldIndex);
-                              sources.insert(newIndex, item);
-                            });
-                            // Persist reorder (defensive copy)
-                            SeriesSourceService.setSources(imdbId, List.of(sources));
-                            setState(() => _boundSources[imdbId] = List.of(sources));
-                          },
-                          proxyDecorator: (child, index, animation) {
-                            return Material(
-                              color: Colors.transparent,
-                              elevation: 4,
-                              child: child,
-                            );
-                          },
-                          itemBuilder: (context, index) {
-                            final source = sources[index];
-                            return _buildSourceListTile(
-                              key: ValueKey(source.torrentHash),
-                              source: source,
-                              index: index,
-                              onDelete: () async {
-                                await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                final updated = await SeriesSourceService.getSources(imdbId);
-                                setDialogState(() {
-                                  sources.clear();
-                                  sources.addAll(updated);
-                                });
-                                if (mounted) {
-                                  setState(() {
-                                    if (updated.isEmpty) {
-                                      _boundSources.remove(imdbId);
-                                    } else {
-                                      _boundSources[imdbId] = updated;
+                        child: isMovie
+                          ? ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  showDragHandle: false,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
                                     }
-                                  });
-                                }
-                                if (updated.isEmpty && dialogContext.mounted) {
-                                  Navigator.of(dialogContext).pop();
-                                }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
                               },
-                            );
-                          },
-                        ),
+                            )
+                          : ReorderableListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              onReorder: (oldIndex, newIndex) {
+                                if (newIndex > oldIndex) newIndex--;
+                                setDialogState(() {
+                                  final item = sources.removeAt(oldIndex);
+                                  sources.insert(newIndex, item);
+                                });
+                                // Persist reorder (defensive copy)
+                                SeriesSourceService.setSources(imdbId, List.of(sources));
+                                setState(() => _boundSources[imdbId] = List.of(sources));
+                              },
+                              proxyDecorator: (child, index, animation) {
+                                return Material(
+                                  color: Colors.transparent,
+                                  elevation: 4,
+                                  child: child,
+                                );
+                              },
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
+                                    }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
+                              },
+                            ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -865,15 +902,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
                                 Navigator.of(dialogContext).pop();
                                 widget.onSelectSource?.call(show);
                               },
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: const Text('Add Source'),
+                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
+                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                             ),
                           ),
-                          if (sources.length > 1) ...[
+                          if (!isMovie && sources.length > 1) ...[
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton.icon(
@@ -917,6 +954,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
     required SeriesSource source,
     required int index,
     required VoidCallback onDelete,
+    bool showDragHandle = true,
   }) {
     Color serviceColor;
     String serviceLabel;
@@ -946,21 +984,23 @@ class TraktResultsViewState extends State<TraktResultsView> {
       ),
       child: Row(
         children: [
-          // Priority number
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
+          // Priority number (hidden for single-source items like movies)
+          if (showDragHandle) ...[
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+              ),
             ),
-            child: Text(
-              '${index + 1}',
-              style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
+          ],
           // Source info
           Expanded(
             child: Column(
@@ -996,7 +1036,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           // Drag handle
-          const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+          if (showDragHandle)
+            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
         ],
       ),
     );
@@ -1745,7 +1786,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
               listType: _selectedListType,
               onMenuAction: (action) => _onMenuAction(item, action),
-              hasBoundSource: item.type == 'series' && _boundSources.containsKey(item.effectiveImdbId ?? item.id),
+              hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
             ),
           );
         },
@@ -2418,19 +2459,20 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               Text('Remove from Continue Watching'),
             ]),
           ),
-        if (widget.item.type == 'series')
-          PopupMenuItem(
-            value: TraktItemMenuAction.selectSource,
-            child: Row(children: [
-              Icon(
-                widget.hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
-                size: 18,
-                color: const Color(0xFF60A5FA),
-              ),
-              const SizedBox(width: 12),
-              Text(widget.hasBoundSource ? 'Edit Sources' : 'Select Source'),
-            ]),
-          ),
+        PopupMenuItem(
+          value: TraktItemMenuAction.selectSource,
+          child: Row(children: [
+            Icon(
+              widget.hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+              size: 18,
+              color: const Color(0xFF60A5FA),
+            ),
+            const SizedBox(width: 12),
+            Text(widget.hasBoundSource
+                ? (widget.item.type == 'movie' ? 'Edit Source' : 'Edit Sources')
+                : 'Select Source'),
+          ]),
+        ),
       ],
       ),
     );

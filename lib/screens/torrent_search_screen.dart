@@ -2384,7 +2384,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _createAdvancedSelectionAndSearch();
   }
 
-  /// Handle "Select Source" — triggers series probing search in select-source mode.
+  /// Handle "Select Source" — triggers search in select-source mode.
   /// User picks a torrent → stored as bound source → plays immediately.
   void _handleSelectSource(StremioMeta show) {
     debugPrint('TorrentSearchScreen: Select Source triggered for ${show.name}');
@@ -2394,15 +2394,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _selectSourceShow = show;
     });
 
-    // Create a series-level search (no season/episode) to get packs
+    // Create a search (no season/episode for series → gets packs; movies search normally)
     final selection = AdvancedSearchSelection(
       imdbId: show.effectiveImdbId ?? show.id,
-      isSeries: true,
+      isSeries: show.type == 'series',
       title: show.name,
       year: show.year,
       contentType: show.type,
       posterUrl: show.poster,
-      // No season/episode → triggers series probing (all packs)
     );
 
     _handleCatalogItemSelected(selection, updateSearchText: true);
@@ -2414,6 +2413,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _isSelectSourceMode = false;
       _selectSourceShow = null;
     });
+  }
+
+  /// Save a bound source — movies override (single source), series append.
+  Future<void> _saveSource(String imdbId, SeriesSource source, {required bool isMovie}) async {
+    if (isMovie) {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    } else {
+      await SeriesSourceService.addSource(imdbId, source);
+    }
   }
 
   /// Handle torrent picked in select-source mode.
@@ -2462,16 +2470,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final torrentId = result['torrentId']?.toString() ?? '';
 
         // Store as bound source
-        await SeriesSourceService.setSource(
-          imdbId,
-          SeriesSource(
-            torrentHash: infohash,
-            torrentName: torrentName,
-            debridService: 'rd',
-            debridTorrentId: torrentId,
-            boundAt: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
+        await _saveSource(imdbId, SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'rd',
+          debridTorrentId: torrentId,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ), isMovie: show.type == 'movie');
 
         if (!mounted) return;
         _exitSelectSourceMode();
@@ -2486,16 +2491,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       } on TorrentNotCachedException catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
         // Still store as source even if not cached — it'll download in background
-        await SeriesSourceService.setSource(
-          imdbId,
-          SeriesSource(
-            torrentHash: infohash,
-            torrentName: torrentName,
-            debridService: 'rd',
-            debridTorrentId: e.torrentId,
-            boundAt: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
+        await _saveSource(imdbId, SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'rd',
+          debridTorrentId: e.torrentId,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ), isMovie: show.type == 'movie');
         if (!mounted) return;
         _exitSelectSourceMode();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2629,13 +2631,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             final retrySuccess = retryResponse['success'] as bool? ?? false;
             if (retrySuccess) {
               final torrentId = retryResponse['data']?['torrent_id']?.toString() ?? '';
-              await SeriesSourceService.setSource(imdbId, SeriesSource(
+              await _saveSource(imdbId, SeriesSource(
                 torrentHash: infohash,
                 torrentName: torrentName,
                 debridService: 'torbox',
                 debridTorrentId: torrentId,
                 boundAt: DateTime.now().millisecondsSinceEpoch,
-              ));
+              ), isMovie: _selectSourceShow?.type == 'movie');
               if (!mounted) return;
               _exitSelectSourceMode();
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2668,13 +2670,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Cached and successful — store binding
       final torrentId = response['data']?['torrent_id']?.toString() ?? '';
-      await SeriesSourceService.setSource(imdbId, SeriesSource(
+      await _saveSource(imdbId, SeriesSource(
         torrentHash: infohash,
         torrentName: torrentName,
         debridService: 'torbox',
         debridTorrentId: torrentId,
         boundAt: DateTime.now().millisecondsSinceEpoch,
-      ));
+      ), isMovie: _selectSourceShow?.type == 'movie');
       if (!mounted) return;
       _exitSelectSourceMode();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2741,13 +2743,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       }
 
-      await SeriesSourceService.setSource(imdbId, SeriesSource(
+      await _saveSource(imdbId, SeriesSource(
         torrentHash: infohash,
         torrentName: torrentName,
         debridService: 'pikpak',
         debridTorrentId: fileId,
         boundAt: DateTime.now().millisecondsSinceEpoch,
-      ));
+      ), isMovie: _selectSourceShow?.type == 'movie');
       if (!mounted) return;
       _exitSelectSourceMode();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2775,11 +2777,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _handleQuickPlay(AdvancedSearchSelection selection) async {
     debugPrint('TorrentSearchScreen: Quick Play triggered for ${selection.title}');
 
-    // Check if a bound source exists for this series
-    if (selection.isSeries) {
-      final played = await _tryPlayFromBoundSource(selection);
-      if (played) return; // Played from bound source, skip normal search
-    }
+    // Check if a bound source exists for this item (series or movie)
+    final played = await _tryPlayFromBoundSource(selection);
+    if (played) return; // Played from bound source, skip normal search
 
     // Set quick play pending state
     setState(() {
@@ -2793,7 +2793,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // The search completion handler will check _quickPlayPending and auto-play
   }
 
-  /// Try to play an episode from bound series sources (tries each in priority order).
+  /// Try to play from bound sources (series: finds the right episode; movies: picks the largest file).
   /// Returns true if playback was initiated, false if should fall back to normal search.
   Future<bool> _tryPlayFromBoundSource(AdvancedSearchSelection selection) async {
     final sources = await SeriesSourceService.getSources(selection.imdbId);
@@ -2801,8 +2801,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     debugPrint('TorrentSearchScreen: Found ${sources.length} bound source(s) for ${selection.title}');
 
-    // Need season+episode to find the right file in the pack
-    if (selection.season == null || selection.episode == null) {
+    // For series, need season+episode to find the right file in the pack
+    if (selection.isSeries && (selection.season == null || selection.episode == null)) {
       return false; // Fall back to normal search silently
     }
 
@@ -2982,7 +2982,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     if (!mounted) return;
 
-    debugPrint('TorrentSearchScreen: Playing S${selection.season}E${selection.episode} from bound source ($title)');
+    if (selection.isSeries) {
+      debugPrint('TorrentSearchScreen: Playing S${selection.season}E${selection.episode} from bound source ($title)');
+    } else {
+      debugPrint('TorrentSearchScreen: Playing movie from bound source ($title)');
+    }
 
     await VideoPlayerLauncher.push(
       context,
@@ -2991,7 +2995,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         title: title,
         playlist: playlist,
         startIndex: startIndex,
-        viewMode: PlaylistViewMode.series,
+        viewMode: selection.isSeries ? PlaylistViewMode.series : PlaylistViewMode.raw,
         contentImdbId: selection.imdbId,
         contentType: selection.contentType,
         contentSeason: selection.season,
@@ -3058,7 +3062,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return path.split('/').last;
     }).toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    int? targetIndex;
+    if (selection.isSeries) {
+      targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    } else {
+      // For movies, pick the largest video file
+      int largestIdx = 0;
+      int largestSize = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        final size = videoFiles[i]['bytes'] as int? ?? 0;
+        if (size > largestSize) {
+          largestSize = size;
+          largestIdx = i;
+        }
+      }
+      targetIndex = largestIdx;
+    }
     if (targetIndex == null) return false;
 
     // Unrestrict the target link
@@ -3131,10 +3150,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return f.shortName.isNotEmpty ? f.shortName : FileUtils.getFileName(f.name);
     }).toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    int? targetIndex;
+    if (selection.isSeries) {
+      targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    } else {
+      // For movies, pick the largest video file
+      int largestIdx = 0;
+      int largestSize = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i].size > largestSize) {
+          largestSize = videoFiles[i].size;
+          largestIdx = i;
+        }
+      }
+      targetIndex = largestIdx;
+    }
     if (targetIndex == null) return false;
 
-    // Get download link for target episode
+    // Get download link for target file
     final videoUrl = await TorboxService.requestFileDownloadLink(
       apiKey: apiKey,
       torrentId: torrentId,
@@ -3204,10 +3237,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final filenames = videoFiles.map((f) => (f['name'] as String?) ?? '').toList();
 
-    final targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    int? targetIndex;
+    if (selection.isSeries) {
+      targetIndex = _findEpisodeInFilenames(filenames, selection.season!, selection.episode!, showHint: showNotFoundHint);
+    } else {
+      // For movies, pick the largest video file
+      int largestIdx = 0;
+      int largestSize = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        final size = int.tryParse(videoFiles[i]['size']?.toString() ?? '') ?? 0;
+        if (size > largestSize) {
+          largestSize = size;
+          largestIdx = i;
+        }
+      }
+      targetIndex = largestIdx;
+    }
     if (targetIndex == null) return false;
 
-    // Get streaming URL for target episode
+    // Get streaming URL for target file
     final targetFileId = videoFiles[targetIndex]['id'] as String;
     final fileData = await pikpak.getFileDetails(targetFileId);
     if (!mounted) return false;
@@ -4654,6 +4702,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       print('PikPak: Extracted file_id: $fileId, task_id: $taskId');
+
+      // Auto-save movie source for quick reuse (overrides any previous source)
+      final sel = _activeAdvancedSelection;
+      if (sel != null && !sel.isSeries && sel.contentType == 'movie' && fileId != null) {
+        await SeriesSourceService.setSources(
+          sel.imdbId,
+          [SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'pikpak',
+            debridTorrentId: fileId,
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          )],
+        );
+      }
 
       if (!mounted) return;
 
@@ -6750,7 +6813,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'play':
         if (hasVideo) {
-          _playPikPakVideos(videoFiles, torrentName);
+          await _playPikPakVideos(videoFiles, torrentName);
+          // Refresh bound sources after movie play so "Edit Source" appears
+          if (_activeAdvancedSelection?.contentType == 'movie') {
+            _traktResultsKey.currentState?.refreshBoundSources();
+          }
           return;
         }
         // Fall through to 'choose' if no video
@@ -8040,6 +8107,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _resetQuickPlayState();
       }
 
+      // Auto-save movie source for quick reuse (overrides any previous source)
+      final sel = _activeAdvancedSelection;
+      if (sel != null && !sel.isSeries && sel.contentType == 'movie') {
+        final torrentId = result['torrentId']?.toString() ?? '';
+        if (torrentId.isNotEmpty) {
+          await SeriesSourceService.setSources(
+            sel.imdbId,
+            [SeriesSource(
+              torrentHash: infohash,
+              torrentName: torrentName,
+              debridService: 'rd',
+              debridTorrentId: torrentId,
+              boundAt: DateTime.now().millisecondsSinceEpoch,
+            )],
+          );
+        }
+      }
+
       // Handle post-torrent action
       await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay);
     } on TorrentNotCachedException catch (e) {
@@ -8920,6 +9005,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (forcePlay) {
         _resetQuickPlayState();
       }
+
+      // Auto-save movie source for quick reuse (overrides any previous source)
+      final sel = _activeAdvancedSelection;
+      if (sel != null && !sel.isSeries && sel.contentType == 'movie') {
+        await SeriesSourceService.setSources(
+          sel.imdbId,
+          [SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'torbox',
+            debridTorrentId: torrentId.toString(),
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          )],
+        );
+      }
+
       final torrent = _findTorrentByInfohash(infohash, torrentName);
       await _showTorboxPostAddOptions(torboxTorrent, torrent, forcePlay: forcePlay);
     } catch (e) {
@@ -9101,7 +9202,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'play':
         if (hasVideo) {
-          _playTorboxTorrent(torboxTorrent);
+          await _playTorboxTorrent(torboxTorrent);
+          // Refresh bound sources after movie play so "Edit Source" appears
+          if (_activeAdvancedSelection?.contentType == 'movie') {
+            _traktResultsKey.currentState?.refreshBoundSources();
+          }
           return;
         }
         // Fall through to 'choose' if no video
@@ -10850,6 +10955,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           fileSelection: fileSelection,
           torrentId: result['torrentId']?.toString(),
         );
+        // Refresh bound sources after movie play so "Edit Source" appears
+        if (_activeAdvancedSelection?.contentType == 'movie') {
+          _traktResultsKey.currentState?.refreshBoundSources();
+        }
         break;
       case 'copy':
         // Copy to clipboard
