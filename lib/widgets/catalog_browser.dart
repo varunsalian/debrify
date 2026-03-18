@@ -429,6 +429,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           _isLoadingContent = false;
           _refreshContentFocusNodes();
         });
+        _loadBoundSources();
       }
     } catch (e) {
       debugPrint('CatalogBrowser: Error searching: $e');
@@ -960,6 +961,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       child: Icon(icon, size: 16, color: color),
     );
   }
+
+  /// Public: refresh bound sources cache (call after Select Source completes).
+  void refreshBoundSources() => _loadBoundSources();
 
   /// Load bound sources for displayed movie items.
   Future<void> _loadBoundSources() async {

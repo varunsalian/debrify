@@ -399,6 +399,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     return KeyEventResult.ignored;
   }
 
+  /// Public: refresh bound sources cache (call after Select Source completes).
+  void refreshBoundSources() => _loadBoundSources();
+
   /// Load bound sources for displayed movie items.
   Future<void> _loadBoundSources() async {
     final movieItems = _results.where((i) => i.type == 'movie');

@@ -1331,6 +1331,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _goBackAndRefreshSources() {
     _goBackToCatalog();
     _traktResultsKey.currentState?.refreshBoundSources();
+    _catalogBrowserKey.currentState?.refreshBoundSources();
+    _aggregatedResultsKey.currentState?.refreshBoundSources();
   }
 
   void _goBackToCatalog() {
@@ -6817,6 +6819,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Refresh bound sources after movie play so "Edit Source" appears
           if (_activeAdvancedSelection?.contentType == 'movie') {
             _traktResultsKey.currentState?.refreshBoundSources();
+            _catalogBrowserKey.currentState?.refreshBoundSources();
+            _aggregatedResultsKey.currentState?.refreshBoundSources();
           }
           return;
         }
@@ -9206,6 +9210,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           // Refresh bound sources after movie play so "Edit Source" appears
           if (_activeAdvancedSelection?.contentType == 'movie') {
             _traktResultsKey.currentState?.refreshBoundSources();
+            _catalogBrowserKey.currentState?.refreshBoundSources();
+            _aggregatedResultsKey.currentState?.refreshBoundSources();
           }
           return;
         }
@@ -10958,6 +10964,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Refresh bound sources after movie play so "Edit Source" appears
         if (_activeAdvancedSelection?.contentType == 'movie') {
           _traktResultsKey.currentState?.refreshBoundSources();
+          _catalogBrowserKey.currentState?.refreshBoundSources();
+          _aggregatedResultsKey.currentState?.refreshBoundSources();
         }
         break;
       case 'copy':
