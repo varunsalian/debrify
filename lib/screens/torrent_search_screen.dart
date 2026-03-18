@@ -1364,6 +1364,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _cameFromCatalogBrowse = false;
       _previousSearchQuery = '';
     });
+
+    // Refresh bound sources in all views (picks up any auto-saved movie sources)
+    _catalogBrowserKey.currentState?.refreshBoundSources();
+    _aggregatedResultsKey.currentState?.refreshBoundSources();
   }
 
   Torrent _findTorrentByInfohash(String infohash, String fallbackName) {
