@@ -935,6 +935,49 @@ class StremioService {
     }
   }
 
+  /// Fetch full meta (including videos/episodes) from an addon's meta endpoint.
+  /// Returns the raw videos list, or null if the addon doesn't support meta or the fetch fails.
+  Future<List<Map<String, dynamic>>?> fetchSeriesMeta(
+    StremioAddon addon,
+    String contentId,
+  ) async {
+    if (!addon.resources.contains('meta') || addon.baseUrl.isEmpty) {
+      return null;
+    }
+
+    final url = '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
+    debugPrint('StremioService: Fetching meta from $url');
+
+    try {
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', Uri.parse(url));
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode != 200) {
+          debugPrint('StremioService: Meta fetch failed: HTTP ${response.statusCode}');
+          return null;
+        }
+
+        final data = json.decode(response.body) as Map<String, dynamic>?;
+        final meta = data?['meta'] as Map<String, dynamic>?;
+        final videos = meta?['videos'] as List<dynamic>?;
+        if (videos == null || videos.isEmpty) return null;
+
+        return videos.whereType<Map<String, dynamic>>().toList();
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      debugPrint('StremioService: Error fetching meta: $e');
+      return null;
+    }
+  }
+
   /// Fetch content from multiple catalogs at once
   ///
   /// Useful for "Browse" mode to show content from all catalog sources

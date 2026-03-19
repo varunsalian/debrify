@@ -450,6 +450,7 @@ class VideoPlayerLauncher {
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                   season: episode.seriesInfo.season!,
                   episode: episode.seriesInfo.episode!,
+                  imdbId: seriesPlaylist.imdbId,
                 );
                 debugPrint('ExternalPlayer: Marked S${episode.seriesInfo.season}E${episode.seriesInfo.episode} as watched');
               }
@@ -1401,6 +1402,7 @@ class VideoPlayerLauncher {
             durationMs: durationMs,
             speed: speed,
             aspect: aspect,
+            imdbId: payload.imdbId,
           );
 
           if (completed) {
@@ -1408,6 +1410,7 @@ class VideoPlayerLauncher {
               seriesTitle: seriesTitle,
               season: season,
               episode: episode,
+              imdbId: payload.imdbId,
             );
           }
         }
@@ -1483,6 +1486,7 @@ class VideoPlayerLauncher {
           durationMs: durationMs,
           speed: speed,
           aspect: aspect,
+          imdbId: payload.imdbId,
         );
 
         debugPrint('✅ AndroidTV Collection Save: title="${payload.seriesTitle}" S0E${fallbackIndex + 1} pos=${positionMs}ms');
@@ -1493,6 +1497,7 @@ class VideoPlayerLauncher {
             seriesTitle: payload.seriesTitle!,
             season: 0,
             episode: fallbackIndex + 1,
+            imdbId: payload.imdbId,
           );
           debugPrint('✅ AndroidTV Collection: Marked S0E${fallbackIndex + 1} as finished');
         }

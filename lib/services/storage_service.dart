@@ -536,6 +536,7 @@ class StorageService {
     required int durationMs,
     double speed = 1.0,
     String aspect = 'contain',
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -546,6 +547,11 @@ class StorageService {
     }
 
     final seriesData = map[key] as Map<String, dynamic>;
+
+    // Store IMDB ID if provided (enables lookup by IMDB ID)
+    if (imdbId != null && imdbId.isNotEmpty) {
+      seriesData['imdbId'] = imdbId;
+    }
     if (!seriesData['seasons'].containsKey(season.toString())) {
       seriesData['seasons'][season.toString()] = {};
     }
@@ -570,6 +576,7 @@ class StorageService {
     required String seriesTitle,
     required int season,
     required int episode,
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -585,6 +592,11 @@ class StorageService {
     }
 
     final seriesData = map[key] as Map<String, dynamic>;
+
+    // Store IMDB ID if provided
+    if (imdbId != null && imdbId.isNotEmpty) {
+      seriesData['imdbId'] = imdbId;
+    }
 
     // Ensure seasons map exists
     if (!seriesData.containsKey('seasons')) {
@@ -887,6 +899,104 @@ class StorageService {
     } else {
       debugPrint(
         'StorageService: getLastPlayedEpisode no episodes for "$seriesTitle"',
+      );
+    }
+
+    return lastEpisode;
+  }
+
+  /// Get all episode watch progress for a series by IMDB ID.
+  /// Returns a map of "season-episode" → progress percentage (0-100).
+  static Future<Map<String, double>> getEpisodeWatchProgressByImdbId(String imdbId) async {
+    final map = await _getPlaybackStateMap();
+    final result = <String, double>{};
+
+    // Find series entry with matching imdbId
+    Map<String, dynamic>? seriesData;
+    for (final entry in map.values) {
+      if (entry is Map<String, dynamic> &&
+          entry['type'] == 'series' &&
+          entry['imdbId'] == imdbId) {
+        seriesData = entry;
+        break;
+      }
+    }
+    if (seriesData == null) return result;
+
+    // Check finished episodes
+    final finishedMap = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
+
+    final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
+    for (final seasonEntry in seasons.entries) {
+      final seasonNum = seasonEntry.key;
+      final episodes = seasonEntry.value as Map<String, dynamic>? ?? {};
+
+      // Get finished episodes for this season
+      final finishedEps = finishedMap?[seasonNum] as Map<String, dynamic>?;
+
+      for (final episodeEntry in episodes.entries) {
+        final epNum = episodeEntry.key;
+        final epData = episodeEntry.value as Map<String, dynamic>;
+        final key = '$seasonNum-$epNum';
+
+        // Check if finished first
+        if (finishedEps != null && finishedEps.containsKey(epNum)) {
+          result[key] = 100.0;
+          continue;
+        }
+
+        final positionMs = (epData['positionMs'] as num?)?.toInt() ?? 0;
+        final durationMs = (epData['durationMs'] as num?)?.toInt() ?? 1;
+        if (durationMs > 0 && positionMs > 0) {
+          result[key] = (positionMs / durationMs * 100).clamp(0.0, 100.0);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /// Look up the last played episode by IMDB ID.
+  /// Scans all series entries for a matching imdbId field.
+  static Future<Map<String, dynamic>?> getLastPlayedEpisodeByImdbId(String imdbId) async {
+    final map = await _getPlaybackStateMap();
+
+    // Find series entry with matching imdbId
+    Map<String, dynamic>? seriesData;
+    for (final entry in map.values) {
+      if (entry is Map<String, dynamic> &&
+          entry['type'] == 'series' &&
+          entry['imdbId'] == imdbId) {
+        seriesData = entry;
+        break;
+      }
+    }
+    if (seriesData == null) return null;
+
+    // Find most recently updated episode (same logic as getLastPlayedEpisode)
+    Map<String, dynamic>? lastEpisode;
+    int lastUpdated = 0;
+
+    final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
+    for (final seasonEntry in seasons.entries) {
+      final season = int.parse(seasonEntry.key);
+      final episodes = seasonEntry.value as Map<String, dynamic>;
+
+      for (final episodeEntry in episodes.entries) {
+        final episode = int.parse(episodeEntry.key);
+        final episodeData = episodeEntry.value as Map<String, dynamic>;
+        final updatedAt = (episodeData['updatedAt'] as num?)?.toInt() ?? 0;
+
+        if (updatedAt > lastUpdated) {
+          lastUpdated = updatedAt;
+          lastEpisode = {'season': season, 'episode': episode, ...episodeData};
+        }
+      }
+    }
+
+    if (lastEpisode != null) {
+      debugPrint(
+        'StorageService: getLastPlayedEpisodeByImdbId found S${lastEpisode['season']}E${lastEpisode['episode']} for "$imdbId"',
       );
     }
 

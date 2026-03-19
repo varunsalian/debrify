@@ -2107,6 +2107,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             seriesTitle: seriesPlaylist.seriesTitle!,
             season: currentEpisode.seriesInfo.season!,
             episode: currentEpisode.seriesInfo.episode!,
+            imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
           );
         }
       }
@@ -3204,6 +3205,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               durationMs: dur.inMilliseconds,
               speed: _playbackSpeed,
               aspect: aspectStr,
+              imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
             );
           }
         }
@@ -3253,6 +3255,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 						durationMs: dur.inMilliseconds,
 						speed: _playbackSpeed,
 						aspect: aspectStr,
+						imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
 					);
 					debugPrint('✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=${_currentIndex}) filename="${currentEntry.title}"');
 				} else {

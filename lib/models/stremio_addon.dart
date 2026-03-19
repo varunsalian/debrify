@@ -350,6 +350,9 @@ class StremioAddon {
   bool get supportsCatalogs =>
       resources.contains('catalog') && catalogs.isNotEmpty;
 
+  /// Whether this addon supports meta (has 'meta' resource)
+  bool get supportsMeta => resources.contains('meta');
+
   /// Whether this addon supports movies
   bool get supportsMovies => types.contains('movie');
 

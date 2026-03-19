@@ -9,7 +9,10 @@ import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/trakt/trakt_episode_model.dart';
 import '../services/series_source_service.dart';
+import '../services/storage_service.dart';
+import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
 /// A browsable catalog widget that shows content from Stremio addons.
@@ -113,6 +116,19 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   // Bound sources for movies
   Map<String, List<SeriesSource>> _boundSources = {};
 
+  // Episode drill-down mode
+  int _episodeModeGeneration = 0;
+  StremioMeta? _selectedShow;
+  List<TraktSeason> _episodeSeasons = [];
+  int _selectedSeasonNumber = 1;
+  bool _isLoadingEpisodes = false;
+  String? _episodeErrorMessage;
+  Map<String, double> _episodeWatchProgress = {};
+  List<FocusNode> _episodeFocusNodes = [];
+  final ScrollController _episodeScrollController = ScrollController();
+  final FocusNode _episodeBackButtonFocusNode = FocusNode(debugLabel: 'catalog-ep-back');
+  final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(debugLabel: 'catalog-ep-season');
+
   /// Public method to request focus on the first dropdown (provider dropdown)
   /// Called from parent when navigating down from Sources
   void requestFocusOnFirstDropdown() {
@@ -160,6 +176,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _providerDropdownFocusNode.onKeyEvent = _handleProviderDropdownKeyEvent;
     _catalogDropdownFocusNode.onKeyEvent = _handleCatalogDropdownKeyEvent;
     _genreDropdownFocusNode.onKeyEvent = _handleGenreDropdownKeyEvent;
+    _episodeSeasonDropdownFocusNode.onKeyEvent = _handleEpisodeSeasonDropdownKeyEvent;
   }
 
   KeyEventResult _handleProviderDropdownKeyEvent(FocusNode node, KeyEvent event) {
@@ -241,6 +258,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
     // Handle filterAddon changes (user switched addon in dropdown)
     if (widget.filterAddon != oldWidget.filterAddon) {
+      // Exit episode mode if active
+      if (_selectedShow != null) _exitEpisodeMode();
       // Reset state and reload with new addon
       setState(() {
         _selectedAddon = null;
@@ -283,6 +302,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _searchDebouncer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _episodeScrollController.dispose();
+    _episodeBackButtonFocusNode.dispose();
+    _episodeSeasonDropdownFocusNode.dispose();
     _providerDropdownFocusNode.dispose();
     _catalogDropdownFocusNode.dispose();
     _genreDropdownFocusNode.dispose();
@@ -290,6 +312,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _catalogDropdownFocused.dispose();
     _genreDropdownFocused.dispose();
     for (final node in _contentFocusNodes) {
+      node.dispose();
+    }
+    for (final node in _episodeFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -516,6 +541,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   void _onItemTap(StremioMeta item) {
     if (widget.onItemSelected == null) return;
 
+    // For series, try episode drill-down if addon supports meta
+    if (item.type == 'series' && _selectedAddon != null && _selectedAddon!.supportsMeta) {
+      _enterEpisodeMode(item);
+      return;
+    }
+
     final selection = AdvancedSearchSelection(
       imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
@@ -528,12 +559,46 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected!(selection);
   }
 
-  void _onQuickPlay(StremioMeta item) {
+  void _onQuickPlay(StremioMeta item) async {
+    int? season;
+    int? episode;
+
+    // For series, look up last played episode to determine S/E
+    // (analogous to Trakt's fetchNextEpisode)
+    if (item.type == 'series') {
+      // Try IMDB-based lookup first (reliable, no title guessing)
+      final imdbId = item.effectiveImdbId;
+      if (imdbId != null) {
+        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        if (!mounted) return;
+        if (lastPlayed != null) {
+          season = lastPlayed['season'] as int?;
+          episode = lastPlayed['episode'] as int?;
+        }
+      }
+
+      // Fallback to title-based lookup (for existing data written before imdbId tracking)
+      if (season == null || episode == null) {
+        final byTitle = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
+        if (!mounted) return;
+        if (byTitle != null) {
+          season = byTitle['season'] as int?;
+          episode = byTitle['episode'] as int?;
+        }
+      }
+
+      // Default to S01E01 if no history at all
+      season ??= 1;
+      episode ??= 1;
+    }
+
     final selection = AdvancedSearchSelection(
       imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
+      season: season,
+      episode: episode,
       contentType: item.type,
       posterUrl: item.poster,
     );
@@ -609,6 +674,22 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                 fontSize: 14,
               ),
             ),
+          ],
+        ),
+      );
+    }
+
+    // Episode drill-down mode
+    if (_selectedShow != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _exitEpisodeMode();
+        },
+        child: Column(
+          children: [
+            _buildEpisodeFiltersBar(),
+            Expanded(child: _buildEpisodeContent()),
           ],
         ),
       );
@@ -963,39 +1044,289 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   }
 
   /// Public: refresh bound sources cache (call after Select Source completes).
-  void refreshBoundSources() => _loadBoundSources();
+  void refreshBoundSources() async {
+    await _loadBoundSources();
+    _loadBoundSourceForShow();
+    if (_selectedShow != null) {
+      _loadEpisodeWatchProgress(_selectedShow!);
+    }
+  }
 
-  /// Load bound sources for displayed movie items.
+  /// Load bound sources for all currently displayed series and movie items.
   Future<void> _loadBoundSources() async {
-    final movieItems = _content.where((i) => i.type == 'movie');
+    final items = _content.where((i) => i.type == 'movie' || i.type == 'series');
+    final contentImdbIds = <String>{};
     final sources = <String, List<SeriesSource>>{};
-    for (final item in movieItems) {
+    for (final item in items) {
       final imdbId = item.effectiveImdbId ?? item.id;
+      contentImdbIds.add(imdbId);
       final list = await SeriesSourceService.getSources(imdbId);
       if (list.isNotEmpty) sources[imdbId] = list;
     }
-    if (mounted) setState(() => _boundSources = sources);
+    if (mounted) {
+      setState(() {
+        // Remove stale entries for content items, then merge new ones
+        // Preserves entries for the episode-mode show (not in _content)
+        _boundSources.removeWhere((k, _) => contentImdbIds.contains(k) && !sources.containsKey(k));
+        _boundSources.addAll(sources);
+      });
+    }
+  }
+
+  /// Load bound source for the currently selected show (episode mode).
+  Future<void> _loadBoundSourceForShow() async {
+    if (_selectedShow == null) return;
+    final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+    final list = await SeriesSourceService.getSources(imdbId);
+    if (mounted) {
+      setState(() {
+        if (list.isNotEmpty) {
+          _boundSources[imdbId] = list;
+        } else {
+          _boundSources.remove(imdbId);
+        }
+      });
+    }
+  }
+
+  /// Load episode watch progress for the selected show.
+  Future<void> _loadEpisodeWatchProgress(StremioMeta show) async {
+    final imdbId = show.effectiveImdbId;
+    if (imdbId == null) return;
+    final progress = await StorageService.getEpisodeWatchProgressByImdbId(imdbId);
+    if (mounted) {
+      setState(() => _episodeWatchProgress = progress);
+    }
   }
 
   /// Handle select source action — show edit dialog if source exists, otherwise enter select mode.
   void _handleSelectSourceAction(StremioMeta item) {
     final imdbId = item.effectiveImdbId ?? item.id;
     if (_boundSources.containsKey(imdbId)) {
-      _showMovieEditSourceDialog(item);
+      _showEditSourceDialog(item);
     } else {
       widget.onSelectSource?.call(item);
     }
   }
 
-  /// Show edit source dialog for a movie with an existing bound source.
-  Future<void> _showMovieEditSourceDialog(StremioMeta item) async {
-    final imdbId = item.effectiveImdbId ?? item.id;
-    var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
+  /// Show "Edit Sources" dialog with list of bound sources and management options.
+  Future<void> _showEditSourceDialog(StremioMeta show) async {
+    final imdbId = show.effectiveImdbId ?? show.id;
+    final isMovie = show.type == 'movie';
+    var sources = List<SeriesSource>.of(
+      _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId),
+    );
     if (sources.isEmpty || !mounted) return;
 
-    final source = sources.first;
-    String serviceLabel;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!isMovie) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'First match wins — reorder by priority',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: isMovie
+                          ? ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  showDragHandle: false,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
+                                    }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
+                              },
+                            )
+                          : ReorderableListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              onReorder: (oldIndex, newIndex) {
+                                if (newIndex > oldIndex) newIndex--;
+                                setDialogState(() {
+                                  final item = sources.removeAt(oldIndex);
+                                  sources.insert(newIndex, item);
+                                });
+                                SeriesSourceService.setSources(imdbId, List.of(sources));
+                                setState(() => _boundSources[imdbId] = List.of(sources));
+                              },
+                              proxyDecorator: (child, index, animation) {
+                                return Material(
+                                  color: Colors.transparent,
+                                  elevation: 4,
+                                  child: child,
+                                );
+                              },
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
+                                    }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                widget.onSelectSource?.call(show);
+                              },
+                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
+                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          if (!isMovie && sources.length > 1) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  if (mounted) {
+                                    setState(() => _boundSources.remove(imdbId));
+                                  }
+                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                },
+                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isMovie) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  if (mounted) {
+                                    setState(() => _boundSources.remove(imdbId));
+                                  }
+                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                },
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build a single source tile for the Edit Sources dialog.
+  Widget _buildSourceListTile({
+    required Key key,
+    required SeriesSource source,
+    required int index,
+    required VoidCallback onDelete,
+    bool showDragHandle = true,
+  }) {
     Color serviceColor;
+    String serviceLabel;
     switch (source.debridService) {
       case 'rd':
         serviceColor = const Color(0xFF10B981);
@@ -1011,110 +1342,521 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         serviceLabel = source.debridService;
     }
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        'Movie Source',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          source.torrentName,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: serviceColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            serviceLabel,
-                            style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(dialogContext).pop();
-                            widget.onSelectSource?.call(item);
-                          },
-                          icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                          label: const Text('Change Source'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF6366F1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await SeriesSourceService.removeAllSources(imdbId);
-                            if (mounted) {
-                              setState(() => _boundSources.remove(imdbId));
-                            }
-                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                          },
-                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                          label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close', style: TextStyle(color: Colors.white54)),
-                  ),
-                ],
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          if (showDragHandle) ...[
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
               ),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  source.torrentName,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: serviceColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    serviceLabel,
+                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            onPressed: onDelete,
+            tooltip: 'Remove source',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+          if (showDragHandle)
+            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+        ],
+      ),
+    );
+  }
+
+  // ── Episode drill-down ──────────────────────────────────────────────────
+
+  /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
+  void _fallbackToDirectSearch(StremioMeta show) {
+    if (!mounted) return;
+    _exitEpisodeMode();
+    final selection = AdvancedSearchSelection(
+      imdbId: show.effectiveImdbId ?? show.id,
+      isSeries: true,
+      title: show.name,
+      year: show.year,
+      contentType: show.type,
+      posterUrl: show.poster,
+    );
+    widget.onItemSelected?.call(selection);
+  }
+
+  void _enterEpisodeMode(StremioMeta show) async {
+    final generation = ++_episodeModeGeneration;
+
+    setState(() {
+      _selectedShow = show;
+      _isLoadingEpisodes = true;
+      _episodeErrorMessage = null;
+      _episodeSeasons = [];
+      _selectedSeasonNumber = 1;
+    });
+
+    // Load bound sources and watch progress for this show
+    _loadBoundSourceForShow();
+    _loadEpisodeWatchProgress(show);
+
+    for (final node in _episodeFocusNodes) {
+      node.dispose();
+    }
+    _episodeFocusNodes.clear();
+
+    try {
+      // Fetch episodes from addon meta endpoint
+      final addon = _selectedAddon;
+      if (addon == null) {
+        setState(() {
+          _isLoadingEpisodes = false;
+          _episodeErrorMessage = 'No addon selected';
+        });
+        return;
+      }
+
+      final videos = await _stremioService.fetchSeriesMeta(addon, show.id);
+      if (!mounted || generation != _episodeModeGeneration) return;
+
+      if (videos == null || videos.isEmpty) {
+        _fallbackToDirectSearch(show);
+        return;
+      }
+
+      // Group videos into seasons
+      final seasonMap = <int, List<TraktEpisode>>{};
+      for (final v in videos) {
+        final seasonRaw = v['season'];
+        final seasonNum = seasonRaw is int ? seasonRaw : (seasonRaw is num ? seasonRaw.toInt() : null);
+        if (seasonNum == null || seasonNum <= 0) continue;
+
+        final epRaw = v['number'] ?? v['episode'];
+        final epNum = epRaw is int ? epRaw : (epRaw is num ? epRaw.toInt() : null);
+        if (epNum == null) continue;
+
+        final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
+        final overview = v['overview'] as String?;
+        final released = v['released'] as String?;
+        final thumbnail = v['thumbnail'] as String?;
+
+        final episode = TraktEpisode(
+          season: seasonNum,
+          number: epNum,
+          title: title,
+          overview: overview,
+          firstAired: released,
+          thumbnailUrl: thumbnail,
+        );
+
+        seasonMap.putIfAbsent(seasonNum, () => []);
+        seasonMap[seasonNum]!.add(episode);
+      }
+
+      if (seasonMap.isEmpty) {
+        if (!mounted || generation != _episodeModeGeneration) return;
+        _fallbackToDirectSearch(show);
+        return;
+      }
+
+      // Sort seasons and episodes
+      final seasons = seasonMap.entries.map((e) {
+        final episodes = e.value..sort((a, b) => a.number.compareTo(b.number));
+        return TraktSeason(
+          number: e.key,
+          episodeCount: episodes.length,
+          episodes: episodes,
+        );
+      }).toList()
+        ..sort((a, b) => a.number.compareTo(b.number));
+
+      // Build focus nodes for first season
+      for (int i = 0; i < seasons.first.episodes.length; i++) {
+        _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
+      }
+
+      setState(() {
+        _episodeSeasons = seasons;
+        _selectedSeasonNumber = seasons.first.number;
+        _isLoadingEpisodes = false;
+      });
+    } catch (e) {
+      if (!mounted || generation != _episodeModeGeneration) return;
+      debugPrint('CatalogBrowser: Episode fetch failed: $e');
+      _fallbackToDirectSearch(show);
+    }
+  }
+
+  void _exitEpisodeMode() {
+    for (final node in _episodeFocusNodes) {
+      node.dispose();
+    }
+    _episodeFocusNodes.clear();
+    setState(() {
+      _selectedShow = null;
+      _episodeSeasons = [];
+      _selectedSeasonNumber = 1;
+      _isLoadingEpisodes = false;
+      _episodeErrorMessage = null;
+      _episodeWatchProgress = {};
+    });
+  }
+
+  void _onSeasonChanged(int? seasonNumber) {
+    if (seasonNumber == null || seasonNumber == _selectedSeasonNumber) return;
+
+    for (final node in _episodeFocusNodes) {
+      node.dispose();
+    }
+    _episodeFocusNodes.clear();
+
+    final season = _episodeSeasons.firstWhere(
+      (s) => s.number == seasonNumber,
+      orElse: () => _episodeSeasons.first,
+    );
+    for (int i = 0; i < season.episodes.length; i++) {
+      _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
+    }
+
+    if (_episodeScrollController.hasClients) {
+      _episodeScrollController.jumpTo(0);
+    }
+
+    setState(() => _selectedSeasonNumber = seasonNumber);
+  }
+
+  void _onEpisodeTap(TraktEpisode episode) {
+    final show = _selectedShow;
+    if (show == null || widget.onItemSelected == null) return;
+
+    final selection = AdvancedSearchSelection(
+      imdbId: show.effectiveImdbId ?? show.id,
+      isSeries: true,
+      title: show.name,
+      year: show.year,
+      season: episode.season,
+      episode: episode.number,
+      contentType: show.type,
+      posterUrl: show.poster,
+    );
+    widget.onItemSelected!(selection);
+  }
+
+  void _onEpisodeQuickPlay(TraktEpisode episode) {
+    final show = _selectedShow;
+    if (show == null) return;
+
+    final selection = AdvancedSearchSelection(
+      imdbId: show.effectiveImdbId ?? show.id,
+      isSeries: true,
+      title: show.name,
+      year: show.year,
+      season: episode.season,
+      episode: episode.number,
+      contentType: show.type,
+      posterUrl: show.poster,
+    );
+
+    if (widget.onQuickPlay != null) {
+      widget.onQuickPlay!(selection);
+    } else if (widget.onItemSelected != null) {
+      widget.onItemSelected!(selection);
+    }
+  }
+
+  KeyEventResult _handleEpisodeCardKey(int index, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (index > 0) {
+        _episodeFocusNodes[index - 1].requestFocus();
+      } else {
+        _episodeBackButtonFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (index < _episodeFocusNodes.length - 1) {
+        _episodeFocusNodes[index + 1].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildEpisodeFiltersBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A1A2E), _surfaceDark],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            // Back button — Focus-wrapped with blue accent border like Trakt
+            Focus(
+              focusNode: _episodeBackButtonFocusNode,
+              onFocusChange: (focused) => setState(() {}),
+              onKeyEvent: (node, event) {
+                if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                  _episodeSeasonDropdownFocusNode.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  if (_episodeFocusNodes.isNotEmpty) {
+                    _episodeFocusNodes.first.requestFocus();
+                  }
+                  return KeyEventResult.handled;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.select ||
+                    event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.escape ||
+                    event.logicalKey == LogicalKeyboardKey.goBack) {
+                  _exitEpisodeMode();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: _episodeBackButtonFocusNode.hasFocus
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.transparent,
+                  border: _episodeBackButtonFocusNode.hasFocus
+                      ? Border.all(color: const Color(0xFF60A5FA), width: 2)
+                      : null,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: _exitEpisodeMode,
+                  tooltip: 'Back to shows',
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Show title
+            Expanded(
+              child: Text(
+                _selectedShow?.name ?? '',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+            // Season dropdown — Trakt-style with blue accent border
+            if (_episodeSeasons.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              _buildEpisodeSeasonDropdown(),
+            ],
+
+            // Select Source button
+            if (_selectedShow != null && widget.onSelectSource != null) ...[
+              const SizedBox(width: 8),
+              Builder(builder: (context) {
+                final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+                final sourceCount = _boundSources[imdbId]?.length ?? 0;
+                return _CatalogSelectSourceButton(
+                  hasBoundSource: sourceCount > 0,
+                  sourceCount: sourceCount,
+                  onTap: () => _handleSelectSourceAction(_selectedShow!),
+                  onLeftFocus: _episodeSeasons.isNotEmpty
+                      ? _episodeSeasonDropdownFocusNode
+                      : _episodeBackButtonFocusNode,
+                  onDownArrow: _episodeFocusNodes.isNotEmpty
+                      ? () => _episodeFocusNodes.first.requestFocus()
+                      : null,
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  KeyEventResult _handleEpisodeSeasonDropdownKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_episodeFocusNodes.isNotEmpty) {
+        _episodeFocusNodes.first.requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _episodeBackButtonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (widget.onSelectSource != null) {
+        node.nextFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildEpisodeSeasonDropdown() {
+    return ListenableBuilder(
+      listenable: _episodeSeasonDropdownFocusNode,
+      builder: (context, _) {
+        final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: hasFocus
+                  ? const Color(0xFF60A5FA)
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+              width: hasFocus ? 2.0 : 1.0,
+            ),
+            boxShadow: hasFocus
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              focusNode: _episodeSeasonDropdownFocusNode,
+              focusColor: Colors.transparent,
+              value: _selectedSeasonNumber,
+              isDense: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 20,
+                color: hasFocus
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.7),
+              ),
+              items: _episodeSeasons.map((s) {
+                return DropdownMenuItem(
+                  value: s.number,
+                  child: Text(
+                    s.displayLabel,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                );
+              }).toList(),
+              onChanged: _onSeasonChanged,
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildEpisodeContent() {
+    if (_isLoadingEpisodes) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_episodeErrorMessage != null) {
+      return Center(
+        child: Text(
+          _episodeErrorMessage!,
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
+    if (_episodeSeasons.isEmpty) {
+      return Center(
+        child: Text(
+          'No episodes found',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
+    final currentSeason = _episodeSeasons.firstWhere(
+      (s) => s.number == _selectedSeasonNumber,
+      orElse: () => _episodeSeasons.first,
+    );
+
+    return TvFocusScrollWrapper(
+      child: ListView.builder(
+        controller: _episodeScrollController,
+        padding: const EdgeInsets.only(top: 8, bottom: 16, left: 16, right: 16),
+        itemCount: currentSeason.episodes.length,
+        itemBuilder: (context, index) {
+          final episode = currentSeason.episodes[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _CatalogEpisodeCard(
+              episode: episode,
+              showPosterUrl: _selectedShow?.poster,
+              focusNode: index < _episodeFocusNodes.length ? _episodeFocusNodes[index] : null,
+              onBrowse: () => _onEpisodeTap(episode),
+              onQuickPlay: () => _onEpisodeQuickPlay(episode),
+              showQuickPlay: widget.showQuickPlay,
+              watchProgress: _episodeWatchProgress['${episode.season}-${episode.number}'],
+              onKeyEvent: (event) => _handleEpisodeCardKey(index, event),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -1176,11 +1918,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
                 _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
             showQuickPlay: widget.showQuickPlay,
-            onTraktMenuAction: (_isTraktAuthenticated || item.type == 'movie') &&
+            onTraktMenuAction: (_isTraktAuthenticated || item.type == 'movie' || item.type == 'series') &&
                     (item.effectiveImdbId != null || item.id.startsWith('tt'))
                 ? (action) => handleTraktMenuAction(context, item, action,
                     onSelectSource: widget.onSelectSource,
-                    onEditSource: item.type == 'movie' ? _handleSelectSourceAction : null)
+                    onEditSource: _handleSelectSourceAction)
                 : null,
             hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
             isTraktAuthenticated: _isTraktAuthenticated,
@@ -1436,6 +2178,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
                 isMovie: widget.item.type == 'movie',
+                isSeries: widget.item.type == 'series',
                 hasBoundSource: widget.hasBoundSource,
                 isTraktAuthenticated: widget.isTraktAuthenticated,
               ),
@@ -1534,6 +2277,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
                 isMovie: widget.item.type == 'movie',
+                isSeries: widget.item.type == 'series',
                 hasBoundSource: widget.hasBoundSource,
                 isTraktAuthenticated: widget.isTraktAuthenticated,
               ),
@@ -1752,6 +2496,604 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       default:
         return Icons.folder_rounded;
     }
+  }
+}
+
+// ─── Shared helpers ─────────────────────────────────────────────────────────
+
+const _surfaceDark = Color(0xFF06080F);
+const _placeholderGradient = BoxDecoration(
+  gradient: LinearGradient(colors: [Color(0xFF1A1A2E), _surfaceDark]),
+);
+
+Widget _buildBackdropImage(String? imageUrl) {
+  if (imageUrl == null || imageUrl.isEmpty) {
+    return Container(decoration: _placeholderGradient);
+  }
+  return CachedNetworkImage(
+    imageUrl: imageUrl,
+    fit: BoxFit.cover,
+    placeholder: (_, __) => Container(decoration: _placeholderGradient),
+    errorWidget: (_, __, ___) => Container(decoration: _placeholderGradient),
+  );
+}
+
+// ─── Episode card for catalog browser ───────────────────────────────────────
+
+const _accentPurple = Color(0xFF8B5CF6);
+const _accentRed = Color(0xFFED1C24);
+
+class _CatalogEpisodeCard extends StatefulWidget {
+  final TraktEpisode episode;
+  final String? showPosterUrl;
+  final FocusNode? focusNode;
+  final VoidCallback onBrowse;
+  final VoidCallback onQuickPlay;
+  final bool showQuickPlay;
+  final double? watchProgress;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+
+  const _CatalogEpisodeCard({
+    required this.episode,
+    this.showPosterUrl,
+    this.focusNode,
+    required this.onBrowse,
+    required this.onQuickPlay,
+    this.showQuickPlay = true,
+    this.watchProgress,
+    required this.onKeyEvent,
+  });
+
+  @override
+  State<_CatalogEpisodeCard> createState() => _CatalogEpisodeCardState();
+}
+
+class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
+  bool _isFocused = false;
+  int _focusedButtonIndex = 0;
+
+  int get _buttonCount => widget.showQuickPlay ? 2 : 1;
+  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (_focusedButtonIndex > 0) {
+        setState(() => _focusedButtonIndex--);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (_focusedButtonIndex < _buttonCount - 1) {
+        setState(() => _focusedButtonIndex++);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      if (_focusedButtonIndex == 0) {
+        widget.onBrowse();
+      } else if (_focusedButtonIndex == _quickPlayIndex) {
+        widget.onQuickPlay();
+      }
+      return KeyEventResult.handled;
+    }
+
+    return widget.onKeyEvent(event);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+          _focusedButtonIndex = 0;
+        });
+        if (focused) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      },
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onBrowse,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _isFocused
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _isFocused
+                  ? Colors.white.withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.06),
+              width: _isFocused ? 1.5 : 1,
+            ),
+            boxShadow: _isFocused
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return constraints.maxWidth < 500
+                  ? _buildVerticalLayout(theme)
+                  : _buildHorizontalLayout(theme);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHorizontalLayout(ThemeData theme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Episode thumbnail with progress bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            width: 155,
+            height: 88,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                if (widget.watchProgress != null && widget.watchProgress! > 0)
+                  Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                        child: Container(
+                          height: 3,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_accentRed, _accentRed.withValues(alpha: 0.7)],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        // Episode details
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.episode.displayTitle,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              _buildMetadataRow(),
+              if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  widget.episode.overview!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildActionButton(
+          icon: Icons.list_rounded,
+          label: 'Sources',
+          color: _accentPurple,
+          isHighlighted: _isFocused && _focusedButtonIndex == 0,
+          onTap: widget.onBrowse,
+        ),
+        if (widget.showQuickPlay) ...[
+          const SizedBox(width: 6),
+          _buildActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
+            color: _accentRed,
+            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+            onTap: widget.onQuickPlay,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildVerticalLayout(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 120,
+                height: 68,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                    if (widget.watchProgress != null && widget.watchProgress! > 0)
+                      Positioned(
+                        bottom: 0, left: 0, right: 0,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [_accentRed, _accentRed.withValues(alpha: 0.7)],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.episode.displayTitle,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  _buildMetadataRow(),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            widget.episode.overview!,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 11,
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.list_rounded,
+                label: 'Sources',
+                color: _accentPurple,
+                isHighlighted: _isFocused && _focusedButtonIndex == 0,
+                onTap: widget.onBrowse,
+              ),
+            ),
+            if (widget.showQuickPlay) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Play',
+                  color: _accentRed,
+                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  onTap: widget.onQuickPlay,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetadataRow() {
+    final ep = widget.episode;
+    final progress = widget.watchProgress;
+    final seasonLabel = ep.season.toString().padLeft(2, '0');
+    final epLabel = ep.number.toString().padLeft(2, '0');
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF34D399).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            'S${seasonLabel}E$epLabel',
+            style: const TextStyle(
+              color: Color(0xFF34D399),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (ep.formattedAirDate != null)
+          Text(
+            ep.formattedAirDate!,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+            ),
+          ),
+        if (ep.runtime != null)
+          Text(
+            '${ep.runtime} min',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+            ),
+          ),
+        if (ep.rating != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+              const SizedBox(width: 2),
+              Text(
+                ep.rating!.toStringAsFixed(1),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        if (progress != null && progress > 0)
+          Text(
+            progress >= 100.0 ? 'Watched' : '${progress.round()}%',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 11,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isHighlighted,
+    required VoidCallback onTap,
+  }) {
+    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedScale(
+        scale: isHighlighted ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isHighlighted
+                  ? [color, darkColor]
+                  : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isHighlighted
+                  ? Colors.white.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.15),
+              width: isHighlighted ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
+                blurRadius: isHighlighted ? 16 : 8,
+                spreadRadius: isHighlighted ? 2 : 0,
+                offset: const Offset(0, 4),
+              ),
+              if (isHighlighted)
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  spreadRadius: 4,
+                ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Select Source Button for catalog episode browser ────────────────────────
+
+class _CatalogSelectSourceButton extends StatefulWidget {
+  final bool hasBoundSource;
+  final int sourceCount;
+  final VoidCallback onTap;
+  final FocusNode? onLeftFocus;
+  final VoidCallback? onDownArrow;
+
+  const _CatalogSelectSourceButton({
+    required this.hasBoundSource,
+    this.sourceCount = 0,
+    required this.onTap,
+    this.onLeftFocus,
+    this.onDownArrow,
+  });
+
+  @override
+  State<_CatalogSelectSourceButton> createState() => _CatalogSelectSourceButtonState();
+}
+
+class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'catalog-select-source-btn');
+  bool _isFocused = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftFocus != null) {
+          widget.onLeftFocus!.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          return KeyEventResult.handled; // rightmost button
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          widget.onDownArrow?.call();
+          return widget.onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.hasBoundSource
+                ? const Color(0xFF60A5FA).withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _isFocused
+                  ? const Color(0xFF60A5FA)
+                  : widget.hasBoundSource
+                      ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.15),
+              width: _isFocused ? 2 : 1,
+            ),
+            boxShadow: _isFocused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.hasBoundSource ? Icons.link_rounded : Icons.link_off_rounded,
+                size: 16,
+                color: widget.hasBoundSource
+                    ? const Color(0xFF60A5FA)
+                    : Colors.white.withValues(alpha: 0.6),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.hasBoundSource
+                    ? (widget.sourceCount > 1 ? 'Sources (${widget.sourceCount})' : 'Source')
+                    : 'Select Source',
+                style: TextStyle(
+                  color: widget.hasBoundSource
+                      ? const Color(0xFF60A5FA)
+                      : Colors.white.withValues(alpha: 0.6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

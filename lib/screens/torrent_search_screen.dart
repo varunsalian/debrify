@@ -2940,6 +2940,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           seriesTitle: effectiveTitle,
           season: info.season!,
           episode: info.episode!,
+          imdbId: imdbId,
         );
 
         // Write to video format (Kotlin Android TV player reads this)
@@ -3006,7 +3007,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentType: selection.contentType,
         contentSeason: selection.season,
         contentEpisode: selection.episode,
-        traktScrobble: true,
+        traktScrobble: _selectedSource.type == SearchSourceType.trakt || selection.traktProgressPercent != null,
         traktProgressPercent: selection.traktProgressPercent,
         rdTorrentId: rdTorrentId,
         torboxTorrentId: torboxTorrentId,
@@ -3014,7 +3015,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
     );
 
-    if (mounted) _goBackToCatalog();
+    if (mounted) _goBackAndRefreshSources();
   }
 
   // ── Real-Debrid bound source playback ─────────────────────────────────────
