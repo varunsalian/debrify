@@ -402,11 +402,11 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   /// Public: refresh bound sources cache (call after Select Source completes).
   void refreshBoundSources() => _loadBoundSources();
 
-  /// Load bound sources for displayed movie items.
+  /// Load bound sources for displayed movie and series items.
   Future<void> _loadBoundSources() async {
-    final movieItems = _results.where((i) => i.type == 'movie');
+    final items = _results.where((i) => i.type == 'movie' || i.type == 'series');
     final sources = <String, List<SeriesSource>>{};
-    for (final item in movieItems) {
+    for (final item in items) {
       final imdbId = item.effectiveImdbId ?? item.id;
       final list = await SeriesSourceService.getSources(imdbId);
       if (list.isNotEmpty) sources[imdbId] = list;
@@ -418,21 +418,230 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   void _handleSelectSourceAction(StremioMeta item) {
     final imdbId = item.effectiveImdbId ?? item.id;
     if (_boundSources.containsKey(imdbId)) {
-      _showMovieEditSourceDialog(item);
+      _showEditSourceDialog(item);
     } else {
       widget.onSelectSource?.call(item);
     }
   }
 
-  /// Show edit source dialog for a movie with an existing bound source.
-  Future<void> _showMovieEditSourceDialog(StremioMeta item) async {
-    final imdbId = item.effectiveImdbId ?? item.id;
-    var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
+  /// Show "Edit Sources" dialog with list of bound sources and management options.
+  Future<void> _showEditSourceDialog(StremioMeta show) async {
+    final imdbId = show.effectiveImdbId ?? show.id;
+    final isMovie = show.type == 'movie';
+    var sources = List<SeriesSource>.of(
+      _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId),
+    );
     if (sources.isEmpty || !mounted) return;
 
-    final source = sources.first;
-    String serviceLabel;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (!isMovie) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'First match wins — reorder by priority',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: isMovie
+                          ? ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  showDragHandle: false,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
+                                    }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
+                              },
+                            )
+                          : ReorderableListView.builder(
+                              shrinkWrap: true,
+                              itemCount: sources.length,
+                              onReorder: (oldIndex, newIndex) {
+                                if (newIndex > oldIndex) newIndex--;
+                                setDialogState(() {
+                                  final item = sources.removeAt(oldIndex);
+                                  sources.insert(newIndex, item);
+                                });
+                                SeriesSourceService.setSources(imdbId, List.of(sources));
+                                setState(() => _boundSources[imdbId] = List.of(sources));
+                              },
+                              proxyDecorator: (child, index, animation) {
+                                return Material(
+                                  color: Colors.transparent,
+                                  elevation: 4,
+                                  child: child,
+                                );
+                              },
+                              itemBuilder: (context, index) {
+                                final source = sources[index];
+                                return _buildSourceListTile(
+                                  key: ValueKey(source.torrentHash),
+                                  source: source,
+                                  index: index,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
+                                    final updated = await SeriesSourceService.getSources(imdbId);
+                                    setDialogState(() {
+                                      sources.clear();
+                                      sources.addAll(updated);
+                                    });
+                                    if (mounted) {
+                                      setState(() {
+                                        if (updated.isEmpty) {
+                                          _boundSources.remove(imdbId);
+                                        } else {
+                                          _boundSources[imdbId] = updated;
+                                        }
+                                      });
+                                    }
+                                    if (updated.isEmpty && dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                widget.onSelectSource?.call(show);
+                              },
+                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
+                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          if (!isMovie && sources.length > 1) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  if (mounted) {
+                                    setState(() => _boundSources.remove(imdbId));
+                                  }
+                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                },
+                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isMovie) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  if (mounted) {
+                                    setState(() => _boundSources.remove(imdbId));
+                                  }
+                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                },
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Build a single source tile for the Edit Sources dialog.
+  Widget _buildSourceListTile({
+    required Key key,
+    required SeriesSource source,
+    required int index,
+    required VoidCallback onDelete,
+    bool showDragHandle = true,
+  }) {
     Color serviceColor;
+    String serviceLabel;
     switch (source.debridService) {
       case 'rd':
         serviceColor = const Color(0xFF10B981);
@@ -448,110 +657,69 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         serviceLabel = source.debridService;
     }
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
-                      SizedBox(width: 8),
-                      Text(
-                        'Movie Source',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          source.torrentName,
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: serviceColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            serviceLabel,
-                            style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(dialogContext).pop();
-                            widget.onSelectSource?.call(item);
-                          },
-                          icon: const Icon(Icons.swap_horiz_rounded, size: 18),
-                          label: const Text('Change Source'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF6366F1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await SeriesSourceService.removeAllSources(imdbId);
-                            if (mounted) {
-                              setState(() => _boundSources.remove(imdbId));
-                            }
-                            if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                          },
-                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                          label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close', style: TextStyle(color: Colors.white54)),
-                  ),
-                ],
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          if (showDragHandle) ...[
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
               ),
             ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  source.torrentName,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: serviceColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    serviceLabel,
+                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            onPressed: onDelete,
+            tooltip: 'Remove source',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+          if (showDragHandle)
+            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+        ],
+      ),
     );
   }
 
@@ -692,11 +860,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
                             _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
                         showQuickPlay: widget.showQuickPlay,
-                        onTraktMenuAction: (_isTraktAuthenticated || item.type == 'movie') &&
-                                (item.effectiveImdbId != null || item.id.startsWith('tt'))
+                        onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
                             ? (action) => handleTraktMenuAction(context, item, action,
                                 onSelectSource: widget.onSelectSource,
-                                onEditSource: item.type == 'movie' ? _handleSelectSourceAction : null)
+                                onEditSource: _handleSelectSourceAction)
                             : null,
                         hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
                         isTraktAuthenticated: _isTraktAuthenticated,
@@ -1034,6 +1201,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
                 isMovie: widget.item.type == 'movie',
+                isSeries: widget.item.type == 'series',
                 hasBoundSource: widget.hasBoundSource,
                 isTraktAuthenticated: widget.isTraktAuthenticated,
               ),
@@ -1119,6 +1287,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
                 isMovie: widget.item.type == 'movie',
+                isSeries: widget.item.type == 'series',
                 hasBoundSource: widget.hasBoundSource,
                 isTraktAuthenticated: widget.isTraktAuthenticated,
               ),

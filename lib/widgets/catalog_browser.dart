@@ -1918,8 +1918,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
                 _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
             showQuickPlay: widget.showQuickPlay,
-            onTraktMenuAction: (_isTraktAuthenticated || item.type == 'movie' || item.type == 'series') &&
-                    (item.effectiveImdbId != null || item.id.startsWith('tt'))
+            onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
                 ? (action) => handleTraktMenuAction(context, item, action,
                     onSelectSource: widget.onSelectSource,
                     onEditSource: _handleSelectSourceAction)
