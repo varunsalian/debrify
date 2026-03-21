@@ -559,17 +559,16 @@ class _HomeTraktContinueWatchingSectionState
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
-      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      padding: const EdgeInsets.only(top: 16, bottom: 10),
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Section header ──
         _buildSectionHeader(title),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         // ── Horizontal card row ──
         SizedBox(
           height: 195,
@@ -632,24 +631,23 @@ class _HomeTraktContinueWatchingSectionState
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Trakt "T" logo mark
           Container(
-            width: 28,
-            height: 28,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [Color(0xFFED1C24), Color(0xFFBF1017)],
               ),
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: _accentColor.withValues(alpha: 0.35),
-                  blurRadius: 10,
+                  color: _accentColor.withValues(alpha: 0.25),
+                  blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -658,7 +656,7 @@ class _HomeTraktContinueWatchingSectionState
               child: Text(
                 'T',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   height: 1.0,
@@ -667,30 +665,28 @@ class _HomeTraktContinueWatchingSectionState
             ),
           ),
           const SizedBox(width: 12),
-          // Title
           Text(
             title,
             style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: 0.95),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
               letterSpacing: -0.2,
             ),
           ),
-          const SizedBox(width: 10),
-          // Count pill
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               '${_items.length}',
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.5),
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.4),
               ),
             ),
           ),

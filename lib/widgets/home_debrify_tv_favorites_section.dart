@@ -184,16 +184,16 @@ class _HomeDebrifyTvFavoritesSectionState
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
-      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      padding: const EdgeInsets.only(top: 16, bottom: 10),
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         SizedBox(
           height: 140,
           child: Stack(
@@ -250,54 +250,54 @@ class _HomeDebrifyTvFavoritesSectionState
 
   Widget _buildSectionHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
               ),
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: _accentColor.withValues(alpha: 0.35),
-                  blurRadius: 10,
+                  color: _accentColor.withValues(alpha: 0.25),
+                  blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: const Center(
-              child: Icon(Icons.tv_rounded, size: 15, color: Colors.white),
+              child: Icon(Icons.tv_rounded, size: 16, color: Colors.white),
             ),
           ),
           const SizedBox(width: 12),
           Text(
             'Debrify TV',
             style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: 0.95),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
               letterSpacing: -0.2,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               '${_favoriteChannels.length}',
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.5),
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.4),
               ),
             ),
           ),
