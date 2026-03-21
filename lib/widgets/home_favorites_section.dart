@@ -294,8 +294,11 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         _buildSectionHeader(),
         const SizedBox(height: 8),
         // ── Horizontal card row ──
-        SizedBox(
-          height: 230,
+        Builder(
+          builder: (context) {
+            final isMobile = MediaQuery.of(context).size.width < 600;
+            return SizedBox(
+          height: isMobile ? 180.0 : 230.0,
           child: Stack(
             children: [
               ShaderMask(
@@ -348,6 +351,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
               ),
             ],
           ),
+        );
+          },
         ),
       ],
     );
@@ -442,11 +447,15 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           curve: Curves.easeOutCubic,
           builder: (context, scale, child) =>
               Transform.scale(scale: scale, child: child),
-          child: AnimatedContainer(
+          child: Builder(
+            builder: (context) {
+              final sw = MediaQuery.of(context).size.width;
+              final isMobile = sw < 600;
+              return AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 350,
-            height: 210,
+            width: isMobile ? sw * 0.7 : 350,
+            height: isMobile ? 155.0 : 210,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -698,6 +707,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 ],
               ),
             ),
+          );
+            },
           ),
         );
       },

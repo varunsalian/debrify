@@ -563,8 +563,13 @@ class _HomeTraktContinueWatchingSectionState
         _buildSectionHeader(title),
         const SizedBox(height: 8),
         // ── Horizontal card row ──
-        SizedBox(
-          height: 270,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final isMobile = screenWidth < 600;
+            final rowHeight = isMobile ? 200.0 : 270.0;
+            return SizedBox(
+          height: rowHeight,
           child: Stack(
             children: [
               // Edge fade
@@ -614,6 +619,8 @@ class _HomeTraktContinueWatchingSectionState
               ),
             ],
           ),
+        );
+          },
         ),
       ],
     );
@@ -730,9 +737,15 @@ class _HomeTraktContinueWatchingSectionState
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isMobile = screenWidth < 600;
         final isHero = index == 0;
-        final cardWidth = isHero ? 420.0 : 350.0;
-        final cardHeight = isHero ? 250.0 : 210.0;
+        final cardWidth = isMobile
+            ? (isHero ? screenWidth * 0.82 : screenWidth * 0.7)
+            : (isHero ? 420.0 : 350.0);
+        final cardHeight = isMobile
+            ? (isHero ? 180.0 : 155.0)
+            : (isHero ? 250.0 : 210.0);
 
         // Metadata
         final year = item.year ?? '';
