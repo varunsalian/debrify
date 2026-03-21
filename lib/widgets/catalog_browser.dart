@@ -2504,6 +2504,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
     if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: widget.item.poster!,
+        memCacheWidth: 200,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: colorScheme.surfaceContainerHighest,
@@ -2611,6 +2612,7 @@ Widget _buildBackdropImage(String? imageUrl) {
   }
   return CachedNetworkImage(
     imageUrl: imageUrl,
+    memCacheWidth: 600,
     fit: BoxFit.cover,
     placeholder: (_, __) => Container(decoration: _placeholderGradient),
     errorWidget: (_, __, ___) => Container(decoration: _placeholderGradient),

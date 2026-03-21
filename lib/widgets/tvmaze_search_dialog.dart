@@ -129,6 +129,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                   child: imageUrl != null
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
+                          memCacheWidth: 200,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => const Center(
                             child: Icon(Icons.tv, color: Colors.white54, size: 32),

@@ -481,6 +481,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   if (posterUrl != null && posterUrl.isNotEmpty)
                     CachedNetworkImage(
                       imageUrl: posterUrl,
+                      memCacheWidth: 200,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
                         color: const Color(0xFF0D1117),
@@ -548,6 +549,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       children: [
                         // Provider badge
                         _GlassPill(
+                          isTelevision: widget.isTelevision,
                           color: providerInfo.$2,
                           child: Text(
                             providerInfo.$1,
@@ -562,6 +564,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                         const Spacer(),
                         // Favorite star
                         _GlassPill(
+                          isTelevision: widget.isTelevision,
                           child: const Icon(Icons.star_rounded,
                               size: 13, color: Color(0xFFFFD700)),
                         ),
@@ -688,15 +691,24 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                                 ],
                               ),
                               child: ClipOval(
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: 10, sigmaY: 10),
-                                  child: const Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 30,
-                                  ),
-                                ),
+                                child: widget.isTelevision
+                                  ? Container(
+                                      color: Colors.black.withValues(alpha: 0.6),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    )
+                                  : BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 10, sigmaY: 10),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    ),
                               ),
                             ),
                           ),
@@ -755,28 +767,33 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 class _GlassPill extends StatelessWidget {
   final Widget child;
   final Color? color;
+  final bool isTelevision;
 
-  const _GlassPill({required this.child, this.color});
+  const _GlassPill({required this.child, this.color, this.isTelevision = false});
 
   @override
   Widget build(BuildContext context) {
+    final container = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color?.withValues(alpha: 0.7) ??
+            Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 0.5,
+        ),
+      ),
+      child: child,
+    );
+
+    if (isTelevision) return container;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-          decoration: BoxDecoration(
-            color: color?.withValues(alpha: 0.7) ??
-                Colors.black.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.1),
-              width: 0.5,
-            ),
-          ),
-          child: child,
-        ),
+        child: container,
       ),
     );
   }

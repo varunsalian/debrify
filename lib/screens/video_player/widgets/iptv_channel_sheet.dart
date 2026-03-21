@@ -686,6 +686,7 @@ class _ChannelTile extends StatelessWidget {
       child: hasLogo
           ? CachedNetworkImage(
               imageUrl: channel.logoUrl!,
+              memCacheWidth: 120,
               fit: BoxFit.contain,
               placeholder: (_, __) => _buildLetterAvatar(),
               errorWidget: (_, __, ___) => _buildLetterAvatar(),

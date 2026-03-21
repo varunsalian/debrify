@@ -14406,183 +14406,164 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
+  static Widget _buildSectionDivider() => Column(
+    children: [
+      const SizedBox(height: 14),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+      ),
+      const SizedBox(height: 14),
+    ],
+  );
+
   Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
-        // Trakt Continue Watching - Movies
-        HomeTraktContinueWatchingSection(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          homeSection: HomeSection.traktContinueWatchingMovies,
-          contentType: 'movies',
-          onItemSelected: (selection) {
-            _handleCatalogItemSelected(selection, updateSearchText: true);
-          },
-          onQuickPlay: (selection) {
-            _handleQuickPlay(selection);
-          },
-          onBrowseShow: (show) => _browseTraktShow(show),
-          onRequestFocusAbove: () {
+      // Trakt Continue Watching - Movies
+      RepaintBoundary(child: HomeTraktContinueWatchingSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        homeSection: HomeSection.traktContinueWatchingMovies,
+        contentType: 'movies',
+        onItemSelected: (selection) {
+          _handleCatalogItemSelected(selection, updateSearchText: true);
+        },
+        onQuickPlay: (selection) {
+          _handleQuickPlay(selection);
+        },
+        onBrowseShow: (show) => _browseTraktShow(show),
+        onRequestFocusAbove: () {
+          _focusControlRow();
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingMovies);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
+      // Trakt Continue Watching - Shows
+      RepaintBoundary(child: HomeTraktContinueWatchingSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        homeSection: HomeSection.traktContinueWatchingShows,
+        contentType: 'episodes',
+        onItemSelected: (selection) {
+          _handleCatalogItemSelected(selection, updateSearchText: true);
+        },
+        onQuickPlay: (selection) {
+          _handleQuickPlay(selection);
+        },
+        onBrowseShow: (show) => _browseTraktShow(show),
+        onSelectSource: _handleSelectSource,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingShows);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingShows);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
+      // Playlist favorites section (horizontal scroll)
+      RepaintBoundary(child: HomeFavoritesSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.favorites);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          } else {
             _focusControlRow();
-          },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingMovies);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-        ),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-        ),
-        const SizedBox(height: 14),
-        // Trakt Continue Watching - Shows
-        HomeTraktContinueWatchingSection(
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.favorites);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
+      // IPTV favorites section (horizontal scroll)
+      RepaintBoundary(child: HomeIptvFavoritesSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.iptvFavorites);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.iptvFavorites);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+        onPlayChannel: _playIptvChannelFromHome,
+      )),
+      _buildSectionDivider(),
+      // Debrify TV favorites section (horizontal scroll)
+      RepaintBoundary(child: HomeDebrifyTvFavoritesSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.tvFavorites);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
+      // Stremio TV favorites section (horizontal scroll)
+      RepaintBoundary(child: HomeStremioTvFavoritesSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.stremioTvFavorites);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.stremioTvFavorites);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      if (!_hideProviderCards) ...[
+        _buildSectionDivider(),
+        // Debrid services section
+        RepaintBoundary(child: ProviderStatusCards(
           focusController: _homeFocusController,
           isTelevision: _isTelevision,
-          homeSection: HomeSection.traktContinueWatchingShows,
-          contentType: 'episodes',
-          onItemSelected: (selection) {
-            _handleCatalogItemSelected(selection, updateSearchText: true);
-          },
-          onQuickPlay: (selection) {
-            _handleQuickPlay(selection);
-          },
-          onBrowseShow: (show) => _browseTraktShow(show),
-          onSelectSource: _handleSelectSource,
+          onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
+          onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
+          onTapPikPak: () => MainPageBridge.switchTab?.call(6), // PikPak tab
           onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingShows);
+            final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
             if (prev != null) {
               _homeFocusController.focusSection(prev);
             }
           },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingShows);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-        ),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-        ),
-        const SizedBox(height: 14),
-        // Playlist favorites section (horizontal scroll)
-        HomeFavoritesSection(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.favorites);
-            if (prev != null) {
-              _homeFocusController.focusSection(prev);
-            } else {
-              _focusControlRow();
-            }
-          },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.favorites);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-        ),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-        ),
-        const SizedBox(height: 14),
-        // IPTV favorites section (horizontal scroll)
-        HomeIptvFavoritesSection(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.iptvFavorites);
-            if (prev != null) {
-              _homeFocusController.focusSection(prev);
-            }
-          },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.iptvFavorites);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-          onPlayChannel: _playIptvChannelFromHome,
-        ),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-        ),
-        const SizedBox(height: 14),
-        // Debrify TV favorites section (horizontal scroll)
-        HomeDebrifyTvFavoritesSection(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.tvFavorites);
-            if (prev != null) {
-              _homeFocusController.focusSection(prev);
-            }
-          },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.tvFavorites);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-        ),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-        ),
-        const SizedBox(height: 14),
-        // Stremio TV favorites section (horizontal scroll)
-        HomeStremioTvFavoritesSection(
-          focusController: _homeFocusController,
-          isTelevision: _isTelevision,
-          onRequestFocusAbove: () {
-            final prev = _homeFocusController.getPreviousSection(HomeSection.stremioTvFavorites);
-            if (prev != null) {
-              _homeFocusController.focusSection(prev);
-            }
-          },
-          onRequestFocusBelow: () {
-            final next = _homeFocusController.getNextSection(HomeSection.stremioTvFavorites);
-            if (next != null) {
-              _homeFocusController.focusSection(next);
-            }
-          },
-        ),
-        if (!_hideProviderCards) ...[
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
-          ),
-          const SizedBox(height: 14),
-          // Debrid services section
-          ProviderStatusCards(
-            focusController: _homeFocusController,
-            isTelevision: _isTelevision,
-            onTapRealDebrid: () => MainPageBridge.switchTab?.call(4), // RD tab
-            onTapTorbox: () => MainPageBridge.switchTab?.call(5), // Torbox tab
-            onTapPikPak: () => MainPageBridge.switchTab?.call(6), // PikPak tab
-            onRequestFocusAbove: () {
-              final prev = _homeFocusController.getPreviousSection(HomeSection.providers);
-              if (prev != null) {
-                _homeFocusController.focusSection(prev);
-              }
-            },
-          ),
-        ],
+        )),
+      ],
       ],
     );
   }

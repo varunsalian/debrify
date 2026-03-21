@@ -29,6 +29,7 @@ Widget _buildOttBackdropImage(String? imageUrl) {
   }
   return CachedNetworkImage(
     imageUrl: imageUrl,
+    memCacheWidth: 600,
     fit: BoxFit.cover,
     placeholder: (context, url) => Container(decoration: _placeholderGradient),
     errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),

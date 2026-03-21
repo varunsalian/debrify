@@ -1050,15 +1050,24 @@ class _HomeTraktContinueWatchingSectionState
                                 ],
                               ),
                               child: ClipOval(
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: 10, sigmaY: 10),
-                                  child: const Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 30,
-                                  ),
-                                ),
+                                child: widget.isTelevision
+                                  ? Container(
+                                      color: Colors.black.withValues(alpha: 0.6),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    )
+                                  : BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 10, sigmaY: 10),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    ),
                               ),
                             ),
                           ),
@@ -1081,6 +1090,7 @@ class _HomeTraktContinueWatchingSectionState
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: imageUrl,
+        memCacheWidth: 600,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: const Color(0xFF0D1117),

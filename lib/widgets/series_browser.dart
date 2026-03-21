@@ -710,6 +710,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                       child: episode.episodeInfo?.poster != null
                           ? CachedNetworkImage(
                               imageUrl: episode.episodeInfo!.poster!,
+                              memCacheWidth: 200,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 color: const Color(0xFF333333),

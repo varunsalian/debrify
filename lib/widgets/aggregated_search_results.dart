@@ -1570,6 +1570,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
     }
     return CachedNetworkImage(
       imageUrl: imageUrl,
+      memCacheWidth: 600,
       fit: BoxFit.cover,
       placeholder: (context, url) => Container(decoration: _placeholderGradient),
       errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),
@@ -1580,6 +1581,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
     if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: widget.item.poster!,
+        memCacheWidth: 200,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: colorScheme.surfaceContainerHighest,

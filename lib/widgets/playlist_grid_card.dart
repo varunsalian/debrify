@@ -477,6 +477,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
       child: posterUrl != null && posterUrl.isNotEmpty
           ? CachedNetworkImage(
               imageUrl: posterUrl,
+              memCacheWidth: 200,
               fit: BoxFit.cover,
               placeholder: (context, url) => Container(
                 decoration: const BoxDecoration(
@@ -712,6 +713,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
               child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: widget.posterUrl!,
+                      memCacheWidth: 120,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => _buildPosterPlaceholder(),
                       errorWidget: (context, url, error) => _buildPosterPlaceholder(),

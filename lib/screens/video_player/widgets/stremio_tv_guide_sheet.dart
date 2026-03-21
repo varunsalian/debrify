@@ -1165,6 +1165,7 @@ class _ChannelTile extends StatelessWidget {
             child: hasPoster
                 ? CachedNetworkImage(
                     imageUrl: channel.nowPlayingPoster!,
+                    memCacheWidth: 120,
                     fit: BoxFit.cover,
                     placeholder: (_, __) => _buildLetterAvatar(),
                     errorWidget: (_, __, ___) => _buildLetterAvatar(),

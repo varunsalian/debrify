@@ -399,34 +399,59 @@ class _HomeDebrifyTvFavoritesSectionState
                             // Channel number
                             ClipRRect(
                               borderRadius: BorderRadius.circular(6),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                    sigmaX: 8, sigmaY: 8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        _accentColor,
-                                        _accentColor
-                                            .withValues(alpha: 0.8),
-                                      ],
+                              child: widget.isTelevision
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          _accentColor,
+                                          _accentColor
+                                              .withValues(alpha: 0.8),
+                                        ],
+                                      ),
+                                      borderRadius:
+                                          BorderRadius.circular(6),
                                     ),
-                                    borderRadius:
-                                        BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'CH $channelNum',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
+                                    child: Text(
+                                      'CH $channelNum',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  )
+                                : BackdropFilter(
+                                    filter: ImageFilter.blur(
+                                        sigmaX: 8, sigmaY: 8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            _accentColor,
+                                            _accentColor
+                                                .withValues(alpha: 0.8),
+                                          ],
+                                        ),
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'CH $channelNum',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
                             ),
                             const Spacer(),
                             Icon(Icons.star_rounded,
@@ -509,15 +534,24 @@ class _HomeDebrifyTvFavoritesSectionState
                                 ),
                               ),
                               child: ClipOval(
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(
-                                      sigmaX: 8, sigmaY: 8),
-                                  child: const Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 24,
-                                  ),
-                                ),
+                                child: widget.isTelevision
+                                  ? Container(
+                                      color: Colors.black.withValues(alpha: 0.6),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    )
+                                  : BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 8, sigmaY: 8),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
                               ),
                             ),
                           ),

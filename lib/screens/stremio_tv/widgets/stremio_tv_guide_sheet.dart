@@ -177,6 +177,7 @@ class _GuideEntry extends StatelessWidget {
                   child: item.poster != null
                       ? CachedNetworkImage(
                           imageUrl: item.poster!,
+                          memCacheWidth: 120,
                           fit: BoxFit.cover,
                           placeholder: (_, __) => Container(
                             color: theme.colorScheme.surfaceContainerHighest,

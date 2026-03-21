@@ -361,6 +361,7 @@ class _HomeStremioTvFavoritesSectionState
                     child: nowPlaying?.item.poster != null
                         ? CachedNetworkImage(
                             imageUrl: nowPlaying!.item.poster!,
+                            memCacheWidth: 200,
                             fit: BoxFit.cover,
                             placeholder: (_, __) => Container(
                               color: theme
