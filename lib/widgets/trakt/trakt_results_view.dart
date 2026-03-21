@@ -3443,46 +3443,35 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     required bool isHighlighted,
     required VoidCallback onTap,
   }) {
-    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
-
     return GestureDetector(
       onTap: onTap,
       child: AnimatedScale(
-        scale: isHighlighted ? 1.05 : 1.0,
+        scale: isHighlighted ? 1.08 : 1.0,
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isHighlighted
-                  ? [color, darkColor]
-                  : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
-            ),
-            borderRadius: BorderRadius.circular(12),
+            color: isHighlighted
+                ? color
+                : Colors.black.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isHighlighted
-                  ? Colors.white.withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.15),
-              width: isHighlighted ? 2 : 1,
+                  ? color
+                  : color.withValues(alpha: 0.6),
+              width: 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
-                blurRadius: isHighlighted ? 16 : 8,
-                spreadRadius: isHighlighted ? 2 : 0,
-                offset: const Offset(0, 4),
-              ),
-              if (isHighlighted)
-                BoxShadow(
-                  color: color.withValues(alpha: 0.3),
-                  blurRadius: 24,
-                  spreadRadius: 4,
-                ),
-            ],
+            boxShadow: isHighlighted
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3490,26 +3479,26 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             children: [
               Icon(
                 icon,
-                size: 16,
-                color: Colors.white,
+                size: 15,
+                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

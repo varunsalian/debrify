@@ -1142,6 +1142,10 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
     widget.onFocusChange(focused);
   }
 
+  String _stripHtml(String text) {
+    return text.replaceAll(RegExp(r'<[^>]*>'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1151,31 +1155,73 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
       focusNode: widget.focusNode,
       onFocusChange: _handleFocusChange,
       onKeyEvent: _handleKeyEvent,
-      child: Material(
-        color: Colors.transparent,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Use vertical layout on narrow screens (< 500px)
-            final useVerticalLayout = constraints.maxWidth < 500;
-
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: widget.isFocused
-                      ? colorScheme.primary
-                      : colorScheme.outline.withOpacity(0.2),
-                  width: widget.isFocused ? 2 : 1,
-                ),
+      child: GestureDetector(
+        onTap: widget.onSources,
+        child: AnimatedScale(
+          scale: widget.isFocused ? 1.02 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: widget.isFocused
+                    ? Colors.white.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.06),
+                width: widget.isFocused ? 1.5 : 1,
               ),
-              child: useVerticalLayout
-                  ? _buildVerticalLayout(theme, colorScheme)
-                  : _buildHorizontalLayout(theme, colorScheme),
-            );
-          },
+              boxShadow: widget.isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        blurRadius: 16,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                children: [
+                  // Layer 1: Backdrop image
+                  Positioned.fill(
+                    child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
+                  ),
+                  // Layer 2: Dark gradient scrim
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.95),
+                            Colors.black.withValues(alpha: 0.8),
+                            Colors.black.withValues(alpha: 0.5),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Layer 3: Content
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final useVerticalLayout = constraints.maxWidth < 500;
+                        return useVerticalLayout
+                            ? _buildVerticalLayout(theme, colorScheme)
+                            : _buildHorizontalLayout(theme, colorScheme);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1184,13 +1230,14 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
   /// Horizontal layout for wide screens - thumbnail, details, and buttons in a row
   Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Thumbnail
+        // Poster
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            width: 70,
-            height: 100,
+            width: 80,
+            height: 120,
             child: _buildPoster(colorScheme),
           ),
         ),
@@ -1201,57 +1248,91 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Title
               Text(
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
+                  shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
-              // Metadata row
               _buildMetadataRow(theme, colorScheme),
+              if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: widget.item.genres!.take(3).map((genre) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                      ),
+                      child: Text(
+                        genre,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              if (widget.item.description != null &&
+                  widget.item.description!.isNotEmpty &&
+                  _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _stripHtml(widget.item.description!),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(width: 8),
         // Action buttons
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildActionButton(
-              icon: Icons.list_rounded,
-              label: 'Browse',
-              color: const Color(0xFF6366F1),
-              isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
-              onTap: widget.onSources,
-            ),
-            if (widget.showQuickPlay) ...[
-              const SizedBox(width: 6),
-              _buildActionButton(
-                icon: Icons.play_arrow_rounded,
-                label: 'Play',
-                color: const Color(0xFF10B981),
-                isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
-                onTap: widget.onQuickPlay,
-              ),
-            ],
-            if (widget.onTraktMenuAction != null) ...[
-              const SizedBox(width: 4),
-              buildTraktAddOnlyOverflowMenu(
-                isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
-                menuKey: _menuKey,
-                onSelected: (action) => widget.onTraktMenuAction?.call(action),
-                isMovie: widget.item.type == 'movie',
-                isSeries: widget.item.type == 'series',
-                hasBoundSource: widget.hasBoundSource,
-                isTraktAuthenticated: widget.isTraktAuthenticated,
-              ),
-            ],
-          ],
+        _buildActionButton(
+          icon: Icons.list_rounded,
+          label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
+          color: const Color(0xFF8B5CF6),
+          isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
+          onTap: widget.onSources,
         ),
+        if (widget.showQuickPlay) ...[
+          const SizedBox(width: 6),
+          _buildActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
+            color: const Color(0xFFED1C24),
+            isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
+            onTap: widget.onQuickPlay,
+          ),
+        ],
+        if (widget.onTraktMenuAction != null) ...[
+          const SizedBox(width: 4),
+          buildTraktAddOnlyOverflowMenu(
+            isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
+            menuKey: _menuKey,
+            onSelected: (action) => widget.onTraktMenuAction?.call(action),
+            isMovie: widget.item.type == 'movie',
+            isSeries: widget.item.type == 'series',
+            hasBoundSource: widget.hasBoundSource,
+            isTraktAuthenticated: widget.isTraktAuthenticated,
+          ),
+        ],
       ],
     );
   }
@@ -1262,11 +1343,9 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Top row: Thumbnail + Details
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -1276,38 +1355,75 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
               ),
             ),
             const SizedBox(width: 12),
-            // Details - takes remaining space
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Title - full width available
                   Text(
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  // Metadata row
                   _buildMetadataRow(theme, colorScheme),
+                  if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: widget.item.genres!.take(3).map((genre) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                          ),
+                          child: Text(
+                            genre,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        // Bottom row: Action buttons
+        if (widget.item.description != null &&
+            widget.item.description!.isNotEmpty &&
+            _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            _stripHtml(widget.item.description!),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 11,
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
-                label: 'Browse',
-                color: const Color(0xFF6366F1),
+                label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
+                color: const Color(0xFF8B5CF6),
                 isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
                 onTap: widget.onSources,
               ),
@@ -1318,7 +1434,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
-                  color: const Color(0xFF10B981),
+                  color: const Color(0xFFED1C24),
                   isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
@@ -1350,23 +1466,26 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
           const SizedBox(width: 8),
           Text(
             widget.item.year!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 12,
             ),
           ),
         ],
         if (widget.item.imdbRating != null) ...[
           const SizedBox(width: 8),
-          const Icon(
-            Icons.star,
+          Icon(
+            Icons.star_rounded,
             size: 14,
-            color: Colors.amber,
+            color: const Color(0xFFFBBF24),
           ),
           const SizedBox(width: 2),
           Text(
-            '${widget.item.imdbRating}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            widget.item.imdbRating!.toStringAsFixed(1),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -1381,71 +1500,79 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
     required bool isHighlighted,
     required VoidCallback onTap,
   }) {
-    // Darker shade for gradient effect
-    final darkColor = Color.lerp(color, Colors.black, 0.3)!;
-
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
+      child: AnimatedScale(
+        scale: isHighlighted ? 1.08 : 1.0,
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          // Solid gradient background - always visible
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isHighlighted
-                ? [color, darkColor]
-                : [color.withValues(alpha: 0.85), darkColor.withValues(alpha: 0.85)],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
             color: isHighlighted
-                ? Colors.white.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.15),
-            width: isHighlighted ? 2 : 1,
+                ? color
+                : Colors.black.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isHighlighted
+                  ? color
+                  : color.withValues(alpha: 0.6),
+              width: 1,
+            ),
+            boxShadow: isHighlighted
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: isHighlighted ? 0.6 : 0.3),
-              blurRadius: isHighlighted ? 16 : 8,
-              spreadRadius: isHighlighted ? 2 : 0,
-              offset: const Offset(0, 4),
-            ),
-            if (isHighlighted)
-              BoxShadow(
-                color: color.withValues(alpha: 0.3),
-                blurRadius: 24,
-                spreadRadius: 4,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
               ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  static const _placeholderGradient = BoxDecoration(
+    gradient: LinearGradient(colors: [Color(0xFF1A1A2E), Color(0xFF06080F)]),
+  );
+
+  Widget _buildBackdropImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(decoration: _placeholderGradient);
+    }
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => Container(decoration: _placeholderGradient),
+      errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),
     );
   }
 
@@ -1488,16 +1615,14 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
 
   Widget _buildTypeBadge() {
     final typeLabel = widget.item.type == 'movie' ? 'Movie' : widget.item.type == 'series' ? 'Series' : widget.item.type;
-    final color = widget.item.type == 'movie'
-        ? Colors.blue
-        : widget.item.type == 'series'
-            ? Colors.purple
-            : Colors.teal;
+    final color = widget.item.type == 'series'
+        ? const Color(0xFF34D399)
+        : const Color(0xFF60A5FA);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
