@@ -200,69 +200,69 @@ class _HomeStremioTvFavoritesSectionState
 
     final theme = Theme.of(context);
 
-    return Column(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Section header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
           child: Row(
             children: [
+              // Icon
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
+                  ),
+                  borderRadius: BorderRadius.circular(7),
                   boxShadow: [
                     BoxShadow(
-                      color:
-                          theme.colorScheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
+                      color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Icon(
-                  Icons.smart_display_rounded,
-                  size: 18,
-                  color: theme.colorScheme.primary,
+                child: const Center(
+                  child: Icon(Icons.smart_display_rounded, size: 15, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 12),
-              ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.tertiary,
-                  ],
-                ).createShader(bounds),
-                child: const Text(
-                  'Stremio TV',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
+              // Title
+              Text(
+                'Stremio TV',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.95),
+                  letterSpacing: -0.2,
                 ),
               ),
               const SizedBox(width: 10),
+              // Count badge
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${_favoriteChannels.length}',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: Colors.white.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -299,6 +299,7 @@ class _HomeStremioTvFavoritesSectionState
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
+                  clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
                     final channel = _favoriteChannels[index];
@@ -343,6 +344,7 @@ class _HomeStremioTvFavoritesSectionState
           ),
         ),
       ],
+    ),
     );
   }
 

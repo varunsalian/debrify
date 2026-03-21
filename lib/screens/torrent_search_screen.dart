@@ -14301,7 +14301,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         // Trakt Continue Watching - Shows
         HomeTraktContinueWatchingSection(
           focusController: _homeFocusController,
@@ -14329,7 +14329,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         // Playlist favorites section (horizontal scroll)
         HomeFavoritesSection(
           focusController: _homeFocusController,
@@ -14349,7 +14349,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         // IPTV favorites section (horizontal scroll)
         HomeIptvFavoritesSection(
           focusController: _homeFocusController,
@@ -14368,7 +14368,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
           onPlayChannel: _playIptvChannelFromHome,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         // Debrify TV favorites section (horizontal scroll)
         HomeDebrifyTvFavoritesSection(
           focusController: _homeFocusController,
@@ -14386,7 +14386,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         // Stremio TV favorites section (horizontal scroll)
         HomeStremioTvFavoritesSection(
           focusController: _homeFocusController,
@@ -14405,7 +14405,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
         ),
         if (!_hideProviderCards) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           // Debrid services section
           ProviderStatusCards(
             focusController: _homeFocusController,

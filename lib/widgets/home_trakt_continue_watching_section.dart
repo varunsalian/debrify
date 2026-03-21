@@ -557,7 +557,14 @@ class _HomeTraktContinueWatchingSectionState
     final isMovies = widget.contentType == 'movies';
     final title = isMovies ? 'Trakt Continue Watching - Movies' : 'Trakt Continue Watching - Shows';
 
-    return Column(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ── Section header ──
@@ -617,6 +624,7 @@ class _HomeTraktContinueWatchingSectionState
           ),
         ),
       ],
+    ),
     );
   }
 
@@ -624,7 +632,7 @@ class _HomeTraktContinueWatchingSectionState
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
       child: Row(
         children: [
           // Trakt "T" logo mark
@@ -683,23 +691,6 @@ class _HomeTraktContinueWatchingSectionState
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          const Spacer(),
-          // Subtle decorative line
-          Expanded(
-            flex: 3,
-            child: Container(
-              height: 1,
-              margin: const EdgeInsets.only(left: 16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    _accentColor.withValues(alpha: 0.3),
-                    _accentColor.withValues(alpha: 0.0),
-                  ],
-                ),
               ),
             ),
           ),

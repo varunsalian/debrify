@@ -288,7 +288,14 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ── Section header ──
@@ -351,12 +358,13 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           ),
         ),
       ],
+    ),
     );
   }
 
   Widget _buildSectionHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
       child: Row(
         children: [
           // Star icon
@@ -405,22 +413,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          const Spacer(),
-          Expanded(
-            flex: 3,
-            child: Container(
-              height: 1,
-              margin: const EdgeInsets.only(left: 16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    _accentColor.withValues(alpha: 0.3),
-                    _accentColor.withValues(alpha: 0.0),
-                  ],
-                ),
               ),
             ),
           ),

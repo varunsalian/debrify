@@ -195,67 +195,69 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Premium section header
+        // Section header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
           child: Row(
             children: [
-              // Glowing icon container
+              // Icon
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF14B8A6).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF14B8A6), Color(0xFF0D9488)],
+                  ),
+                  borderRadius: BorderRadius.circular(7),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF14B8A6).withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 0,
+                      color: const Color(0xFF14B8A6).withValues(alpha: 0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.live_tv_rounded,
-                  size: 18,
-                  color: Color(0xFF14B8A6),
+                child: const Center(
+                  child: Icon(Icons.live_tv_rounded, size: 15, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF14B8A6), Color(0xFF06B6D4)],
-                ).createShader(bounds),
-                child: const Text(
-                  'Live TV',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
+              // Title
+              Text(
+                'Live TV',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.95),
+                  letterSpacing: -0.2,
                 ),
               ),
               const SizedBox(width: 10),
-              // Item count badge
+              // Count badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${_favoriteChannels.length}',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: Colors.white.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -307,6 +309,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
           ),
         ),
       ],
+    ),
     );
   }
 
