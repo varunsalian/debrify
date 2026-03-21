@@ -246,27 +246,9 @@ class _HomeStremioTvFavoritesSectionState
           height: 115,
           child: Stack(
             children: [
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: const [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: [
-                      0.0,
-                      _canScrollLeft ? 0.03 : 0.0,
-                      _canScrollRight ? 0.97 : 1.0,
-                      1.0,
-                    ],
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: ListView.builder(
+              // Skip ShaderMask on TV for GPU performance
+              if (widget.isTelevision)
+                ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(left: 16),
@@ -284,8 +266,48 @@ class _HomeStremioTvFavoritesSectionState
                       onLongPress: () => _confirmRemoveFavorite(channel),
                     );
                   },
+                )
+              else
+                ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: const [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: [
+                        0.0,
+                        _canScrollLeft ? 0.03 : 0.0,
+                        _canScrollRight ? 0.97 : 1.0,
+                        1.0,
+                      ],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(left: 16),
+                    clipBehavior: Clip.none,
+                    itemCount: _favoriteChannels.length,
+                    itemBuilder: (context, index) {
+                      final channel = _favoriteChannels[index];
+                      final focusNode = index < _cardFocusNodes.length
+                          ? _cardFocusNodes[index]
+                          : null;
+                      return _buildChannelCard(
+                        channel,
+                        index: index,
+                        focusNode: focusNode,
+                        onLongPress: () => _confirmRemoveFavorite(channel),
+                      );
+                    },
+                  ),
                 ),
-              ),
               // Scroll indicators
               if (_canScrollLeft)
                 Positioned(

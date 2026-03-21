@@ -608,23 +608,9 @@ class _HomeTraktContinueWatchingSectionState
           height: rowHeight,
           child: Stack(
             children: [
-              // Edge fade
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: const [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.015, 0.985, 1.0],
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: ListView.builder(
+              // Edge fade (skip ShaderMask on TV for GPU performance)
+              if (widget.isTelevision)
+                ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding:
@@ -651,8 +637,52 @@ class _HomeTraktContinueWatchingSectionState
                       ),
                     );
                   },
+                )
+              else
+                ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: const [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.015, 0.985, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding:
+                        const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                    clipBehavior: Clip.none,
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      final progress = _progressMap[item.id];
+                      final epInfo = _episodeInfoMap[item.id];
+
+                      return Padding(
+                        padding: EdgeInsets.only(
+                            right: index < _items.length - 1 ? 16 : 0),
+                        child: _buildCard(
+                          item: item,
+                          progressPercent:
+                              progress != null ? progress / 100 : null,
+                          episodeInfo: epInfo,
+                          index: index,
+                          focusNode: index < _cardFocusNodes.length
+                              ? _cardFocusNodes[index]
+                              : null,
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -808,7 +838,7 @@ class _HomeTraktContinueWatchingSectionState
                     : Colors.white.withValues(alpha: 0.08),
                 width: isActive ? 1.5 : 0.5,
               ),
-              boxShadow: [
+              boxShadow: widget.isTelevision ? null : [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
                   blurRadius: isActive ? 30 : 16,

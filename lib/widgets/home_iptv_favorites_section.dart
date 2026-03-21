@@ -238,22 +238,9 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
           height: 115,
           child: Stack(
             children: [
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: const [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.02, 0.98, 1.0],
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: ListView.builder(
+              // Skip ShaderMask on TV for GPU performance
+              if (widget.isTelevision)
+                ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
@@ -271,8 +258,43 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                       ),
                     );
                   },
+                )
+              else
+                ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: const [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.02, 0.98, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                    clipBehavior: Clip.none,
+                    itemCount: _favoriteChannels.length,
+                    itemBuilder: (context, index) {
+                      final channel = _favoriteChannels[index];
+                      return Padding(
+                        padding: EdgeInsets.only(right: index < _favoriteChannels.length - 1 ? 12 : 0),
+                        child: _buildChannelCard(
+                          channel,
+                          index: index,
+                          focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+                          onLongPress: () => _confirmRemoveFavorite(channel),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -329,7 +351,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                 color: isActive ? const Color(0xFF14B8A6) : Colors.white.withValues(alpha: 0.08),
                 width: isActive ? 2 : 1,
               ),
-              boxShadow: isActive
+              boxShadow: widget.isTelevision ? null : (isActive
                   ? [
                       BoxShadow(
                         color: const Color(0xFF14B8A6).withValues(alpha: 0.4),
@@ -348,7 +370,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
-                    ],
+                    ]),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(11),

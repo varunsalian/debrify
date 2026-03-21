@@ -191,22 +191,9 @@ class _HomeDebrifyTvFavoritesSectionState
           height: 140,
           child: Stack(
             children: [
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: const [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.015, 0.985, 1.0],
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: ListView.builder(
+              // Skip ShaderMask on TV for GPU performance
+              if (widget.isTelevision)
+                ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding:
@@ -231,8 +218,50 @@ class _HomeDebrifyTvFavoritesSectionState
                       ),
                     );
                   },
+                )
+              else
+                ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: const [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.015, 0.985, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding:
+                        const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                    clipBehavior: Clip.none,
+                    itemCount: _favoriteChannels.length,
+                    itemBuilder: (context, index) {
+                      final channel = _favoriteChannels[index];
+                      return Padding(
+                        padding: EdgeInsets.only(
+                            right: index < _favoriteChannels.length - 1
+                                ? 14
+                                : 0),
+                        child: _buildChannelCard(
+                          channel,
+                          index: index,
+                          focusNode: index < _cardFocusNodes.length
+                              ? _cardFocusNodes[index]
+                              : null,
+                          onLongPress: () =>
+                              _confirmRemoveFavorite(channel),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -326,7 +355,7 @@ class _HomeDebrifyTvFavoritesSectionState
                     : Colors.white.withValues(alpha: 0.06),
                 width: isActive ? 2.0 : 1.0,
               ),
-              boxShadow: isActive
+              boxShadow: widget.isTelevision ? null : (isActive
                   ? [
                       BoxShadow(
                         color: _accentColor.withValues(alpha: 0.35),
@@ -345,7 +374,7 @@ class _HomeDebrifyTvFavoritesSectionState
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
-                    ],
+                    ]),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
