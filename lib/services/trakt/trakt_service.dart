@@ -666,6 +666,72 @@ class TraktService {
     }
   }
 
+  /// Fetch recently watched shows that have a next episode available.
+  /// Uses /users/me/history/episodes to find recently active shows,
+  /// then checks each for a next_episode via /shows/{id}/progress/watched.
+  /// Returns show items in playback-like format for merging with playback results.
+  Future<List<Map<String, dynamic>>> fetchRecentShowsWithNextEpisode({
+    Set<String> excludeImdbIds = const {},
+    int historyLimit = 30,
+  }) async {
+    // Fetch recent episode history
+    final response = await _authenticatedGet(
+      '/users/me/history/episodes?limit=$historyLimit&extended=full',
+    );
+    if (response == null || response.statusCode != 200) {
+      debugPrint('Trakt: fetchRecentHistory failed (${response?.statusCode})');
+      return [];
+    }
+
+    List<dynamic> history;
+    try {
+      history = jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchRecentHistory parse error: $e');
+      return [];
+    }
+
+    // Deduplicate to unique shows, keeping the first (most recent) occurrence
+    final seenShows = <String, Map<String, dynamic>>{};
+    for (final item in history) {
+      if (item is! Map<String, dynamic>) continue;
+      final show = item['show'] as Map<String, dynamic>?;
+      if (show == null) continue;
+      final ids = show['ids'] as Map<String, dynamic>?;
+      final imdbId = ids?['imdb'] as String?;
+      final traktId = ids?['trakt']?.toString();
+      final showKey = imdbId ?? traktId;
+      if (showKey == null) continue;
+      if (excludeImdbIds.contains(imdbId)) continue;
+      if (seenShows.containsKey(showKey)) continue;
+      seenShows[showKey] = show;
+    }
+
+    if (seenShows.isEmpty) return [];
+
+    debugPrint('Trakt: Checking ${seenShows.length} recent shows for next episode');
+
+    // Check each show for a next episode (in parallel)
+    final results = await Future.wait(
+      seenShows.entries.map((entry) async {
+        final show = entry.value;
+        final traktId = show['ids']?['trakt']?.toString() ?? entry.key;
+        final nextEp = await fetchNextEpisode(traktId);
+        return nextEp != null
+            ? {
+                'show': show,
+                'type': 'episode',
+                'episode': {'season': nextEp.season, 'number': nextEp.episode},
+              }
+            : null;
+      }),
+    );
+
+    final filtered = results.whereType<Map<String, dynamic>>().toList();
+    debugPrint('Trakt: ${filtered.length} recent shows have next episodes');
+    return filtered;
+  }
+
   // ============================================================================
   // Watch Progress Methods
   // ============================================================================

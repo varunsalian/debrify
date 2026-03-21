@@ -115,8 +115,31 @@ class _HomeTraktContinueWatchingSectionState
         return;
       }
 
-      final rawItems =
+      var rawItems =
           await _traktService.fetchPlaybackItems(widget.contentType);
+      if (!mounted) return;
+
+      // For shows: also find recently watched shows with next episode available
+      if (widget.contentType == 'episodes') {
+        final playbackImdbIds = <String>{};
+        for (final raw in rawItems) {
+          if (raw is! Map<String, dynamic>) continue;
+          final show = raw['show'] as Map<String, dynamic>?;
+          final ids = show?['ids'] as Map<String, dynamic>?;
+          final imdbId = ids?['imdb'] as String?;
+          if (imdbId != null) playbackImdbIds.add(imdbId);
+        }
+
+        final recentWithNext = await _traktService.fetchRecentShowsWithNextEpisode(
+          excludeImdbIds: playbackImdbIds,
+        );
+        if (!mounted) return;
+
+        if (recentWithNext.isNotEmpty) {
+          rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
+        }
+      }
+
       if (rawItems.isEmpty) {
         _finishEmpty();
         return;
@@ -125,6 +148,7 @@ class _HomeTraktContinueWatchingSectionState
       List<StremioMeta> items;
       Map<String, double> progressMap = {};
       Map<String, List<int>> playbackIds = {};
+      var episodeInfo = <String, ({int season, int episode, int? runtime})>{};
 
       if (widget.contentType == 'movies') {
         items = TraktItemTransformer.transformList(rawItems,
@@ -145,7 +169,6 @@ class _HomeTraktContinueWatchingSectionState
         }
       } else {
         items = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
-        final episodeInfo = <String, ({int season, int episode, int? runtime})>{};
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final progress = raw['progress'] as num?;
@@ -168,7 +191,6 @@ class _HomeTraktContinueWatchingSectionState
             );
           }
         }
-        _episodeInfoMap = episodeInfo;
       }
 
       if (!mounted) return;
@@ -176,6 +198,7 @@ class _HomeTraktContinueWatchingSectionState
         _items = items;
         _progressMap = progressMap;
         _playbackIds = playbackIds;
+        _episodeInfoMap = episodeInfo;
         _isLoading = false;
       });
       _ensureFocusNodes();

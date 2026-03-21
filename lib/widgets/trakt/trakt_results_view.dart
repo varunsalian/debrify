@@ -408,6 +408,30 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ? 'episodes'
             : 'movies';
         rawItems = await _traktService.fetchPlaybackItems(playbackType);
+        if (!mounted) return;
+
+        // For shows: also find recently watched shows with a next episode available
+        // (covers shows where last episode was fully watched but more episodes exist)
+        if (_selectedContentType == TraktContentType.shows) {
+          // Collect IMDB IDs already in playback to avoid duplicates
+          final playbackImdbIds = <String>{};
+          for (final raw in rawItems) {
+            if (raw is! Map<String, dynamic>) continue;
+            final show = raw['show'] as Map<String, dynamic>?;
+            final ids = show?['ids'] as Map<String, dynamic>?;
+            final imdbId = ids?['imdb'] as String?;
+            if (imdbId != null) playbackImdbIds.add(imdbId);
+          }
+
+          final recentWithNext = await _traktService.fetchRecentShowsWithNextEpisode(
+            excludeImdbIds: playbackImdbIds,
+          );
+          if (!mounted) return;
+
+          if (recentWithNext.isNotEmpty) {
+            rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
+          }
+        }
       } else {
         rawItems = await _traktService.fetchList(
           _selectedListType.apiValue,
@@ -701,7 +725,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
         if (success && mounted) _fetchItems();
       case TraktItemMenuAction.removeFromPlayback:
         final pbIds = _playbackIds[imdbId];
-        if (pbIds == null || pbIds.isEmpty) return;
+        if (pbIds == null || pbIds.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('No in-progress playback to remove — try marking the next episode as watched instead'),
+              duration: Duration(seconds: 3),
+            ));
+          }
+          return;
+        }
         actionLabel = 'Removed from Continue Watching';
         for (final pbId in pbIds) {
           final ok = await _traktService.removePlaybackItem(pbId);
