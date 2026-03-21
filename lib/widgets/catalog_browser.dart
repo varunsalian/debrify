@@ -137,13 +137,30 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
   void requestFocusOnFirstDropdown() {
-    _catalogDropdownFocusNode.requestFocus();
+    if (_selectedShow != null) {
+      // Episode mode: catalog dropdown is not in tree — focus season dropdown or back button
+      if (_episodeSeasons.isNotEmpty) {
+        _episodeSeasonDropdownFocusNode.requestFocus();
+      } else {
+        _episodeBackButtonFocusNode.requestFocus();
+      }
+    } else {
+      _catalogDropdownFocusNode.requestFocus();
+    }
   }
 
   /// Public method to request focus on the last focused content item
   /// Called from parent when returning from sidebar navigation
   /// Returns true if focus was restored to a content item, false otherwise
   bool requestFocusOnLastItem() {
+    // Episode mode: focus episode items
+    if (_selectedShow != null) {
+      if (_episodeFocusNodes.isNotEmpty) {
+        _episodeFocusNodes.first.requestFocus();
+        return true;
+      }
+      return false;
+    }
     if (_focusedContentIndex >= 0 && _focusedContentIndex < _contentFocusNodes.length) {
       _contentFocusNodes[_focusedContentIndex].requestFocus();
       return true;
@@ -194,6 +211,20 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _episodeSeasonDropdownFocusNode.onKeyEvent = _handleEpisodeSeasonDropdownKeyEvent;
   }
 
+  /// Navigate down from top dropdowns: if in episode mode, go to season dropdown; otherwise content items.
+  void _focusDownFromDropdowns() {
+    if (_selectedShow != null) {
+      // Episode mode: go to season dropdown (or back button if no seasons)
+      if (_episodeSeasons.isNotEmpty) {
+        _episodeSeasonDropdownFocusNode.requestFocus();
+      } else {
+        _episodeBackButtonFocusNode.requestFocus();
+      }
+    } else if (_contentFocusNodes.isNotEmpty) {
+      _contentFocusNodes[0].requestFocus();
+    }
+  }
+
   KeyEventResult _handleProviderDropdownKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     // Up arrow: navigate to Sources above
@@ -201,11 +232,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       widget.onRequestFocusAbove?.call();
       return KeyEventResult.handled;
     }
-    // Down arrow: navigate to first content item
+    // Down arrow: navigate to episode filter bar or first content item
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_contentFocusNodes.isNotEmpty) {
-        _contentFocusNodes[0].requestFocus();
-      }
+      _focusDownFromDropdowns();
       return KeyEventResult.handled;
     }
     // Right arrow: navigate to catalog dropdown
@@ -227,11 +256,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.handled;
     }
-    // Down arrow: navigate to first content item
+    // Down arrow: navigate to episode filter bar or first content item
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_contentFocusNodes.isNotEmpty) {
-        _contentFocusNodes[0].requestFocus();
-      }
+      _focusDownFromDropdowns();
       return KeyEventResult.handled;
     }
     // Right arrow: navigate to genre dropdown if available
@@ -256,11 +283,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       _catalogDropdownFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    // Down arrow: navigate to first content item
+    // Down arrow: navigate to episode filter bar or first content item
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_contentFocusNodes.isNotEmpty) {
-        _contentFocusNodes[0].requestFocus();
-      }
+      _focusDownFromDropdowns();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -1635,7 +1660,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       if (index > 0) {
         _episodeFocusNodes[index - 1].requestFocus();
       } else {
-        _episodeBackButtonFocusNode.requestFocus();
+        // First episode: go to season dropdown if available, else back button
+        if (_episodeSeasons.isNotEmpty) {
+          _episodeSeasonDropdownFocusNode.requestFocus();
+        } else {
+          _episodeBackButtonFocusNode.requestFocus();
+        }
       }
       return KeyEventResult.handled;
     }
@@ -1669,6 +1699,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               onFocusChange: (focused) => setState(() {}),
               onKeyEvent: (node, event) {
                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  widget.onRequestFocusAbove?.call();
+                  return KeyEventResult.handled;
+                }
                 if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
                   _episodeSeasonDropdownFocusNode.requestFocus();
                   return KeyEventResult.handled;
@@ -1743,6 +1777,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                   onDownArrow: _episodeFocusNodes.isNotEmpty
                       ? () => _episodeFocusNodes.first.requestFocus()
                       : null,
+                  onUpArrow: () => widget.onRequestFocusAbove?.call(),
                 );
               }),
             ],
@@ -1754,6 +1789,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   KeyEventResult _handleEpisodeSeasonDropdownKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      widget.onRequestFocusAbove?.call();
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (_episodeFocusNodes.isNotEmpty) {
         _episodeFocusNodes.first.requestFocus();
@@ -3044,6 +3083,7 @@ class _CatalogSelectSourceButton extends StatefulWidget {
   final VoidCallback onTap;
   final FocusNode? onLeftFocus;
   final VoidCallback? onDownArrow;
+  final VoidCallback? onUpArrow;
 
   const _CatalogSelectSourceButton({
     required this.hasBoundSource,
@@ -3051,6 +3091,7 @@ class _CatalogSelectSourceButton extends StatefulWidget {
     required this.onTap,
     this.onLeftFocus,
     this.onDownArrow,
+    this.onUpArrow,
   });
 
   @override
@@ -3078,6 +3119,10 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
             event.logicalKey == LogicalKeyboardKey.enter) {
           widget.onTap();
           return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          widget.onUpArrow?.call();
+          return widget.onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftFocus != null) {
           widget.onLeftFocus!.requestFocus();

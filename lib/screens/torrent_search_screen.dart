@@ -13426,7 +13426,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               return KeyEventResult.handled;
                             }
                             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                              _homeFocusController.focusFirstHomeSection();
+                              // Check if CatalogBrowser is visible
+                              final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
+                                  _selectedSource.addon != null &&
+                                  _selectedSource.addon!.supportsCatalogs &&
+                                  !_hasSearched &&
+                                  !_isLoading;
+                              if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
+                                _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+                              } else {
+                                _homeFocusController.focusFirstHomeSection();
+                              }
                               return KeyEventResult.handled;
                             }
                             if (event.logicalKey == LogicalKeyboardKey.enter ||
