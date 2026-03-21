@@ -1303,7 +1303,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
         // Bottom row: Action buttons
         Row(
           children: [
-            Expanded(
+            Flexible(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
                 label: 'Browse',
@@ -1314,7 +1314,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
             ),
             if (widget.showQuickPlay) ...[
               const SizedBox(width: 8),
-              Expanded(
+              Flexible(
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
                   label: 'Quick Play',
@@ -1430,13 +1430,17 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
               color: Colors.white,
             ),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
