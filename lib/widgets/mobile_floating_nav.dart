@@ -196,23 +196,15 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                     width: 220,
                     constraints: BoxConstraints(maxHeight: maxMenuHeight),
                     decoration: BoxDecoration(
-                      // Glassmorphic background
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.15),
-                          Colors.white.withValues(alpha: 0.05),
-                        ],
-                      ),
+                      color: Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        width: 1.5,
+                        color: Colors.white.withValues(alpha: 0.12),
+                        width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
+                          color: Colors.black.withValues(alpha: 0.4),
                           blurRadius: 30,
                           offset: const Offset(0, 10),
                           spreadRadius: -5,
@@ -252,14 +244,11 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                   scale: _scaleAnimation.value,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(22),
                       boxShadow: [
-                        // Subtle glow
                         BoxShadow(
-                          color: _isExpanded
-                              ? Colors.black.withValues(alpha: 0.2)
-                              : const Color(0xFF8B5CF6).withValues(alpha: 0.4 + 0.15 * pulseValue),
-                          blurRadius: 16 + 4 * pulseValue,
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 16,
                           offset: const Offset(0, 6),
                           spreadRadius: -2,
                         ),
@@ -271,26 +260,16 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
-                          height: 40,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: _isExpanded
-                                  ? [
-                                      Colors.white.withValues(alpha: 0.15),
-                                      Colors.white.withValues(alpha: 0.08),
-                                    ]
-                                  : [
-                                      const Color(0xFF8B5CF6),
-                                      const Color(0xFF6366F1),
-                                    ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
+                            color: _isExpanded
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: _isExpanded ? 0.2 : 0.25),
-                              width: 1.5,
+                              color: Colors.white.withValues(alpha: _isExpanded ? 0.25 : 0.15),
+                              width: 1,
                             ),
                           ),
                           child: Row(
@@ -305,10 +284,10 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                               // Text label
                               Text(
                                 _isExpanded ? 'Close' : 'Menu',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   letterSpacing: 0.3,
                                 ),
                               ),
