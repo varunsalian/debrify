@@ -6983,7 +6983,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         TvCompactButton(
                           onPressed: _isBusy ? null : _showQuickPlayDialog,
                           icon: Icons.play_arrow_rounded,
-                          label: 'Quick Play',
+                          label: 'Play',
                           backgroundColor: const Color(0xFFE50914),
                           focusNode: _quickPlayFocusNode,
                         ),
@@ -7050,7 +7050,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       TvCompactButton(
                         onPressed: _isBusy ? null : _showQuickPlayDialog,
                         icon: Icons.play_arrow_rounded,
-                        label: 'Quick Play',
+                        label: 'Play',
                         backgroundColor: const Color(0xFFE50914),
                         focusNode: _quickPlayFocusNode,
                       ),
@@ -8001,7 +8001,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   FilledButton.icon(
                     onPressed: _isBusy ? null : _showQuickPlayDialog,
                     icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Quick Play'),
+                    label: const Text('Play'),
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFE50914),
                       foregroundColor: Colors.white,

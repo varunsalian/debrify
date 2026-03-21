@@ -2678,7 +2678,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         const SizedBox(height: 8),
         Row(
           children: [
-            Flexible(
+            Expanded(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
                 label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
@@ -2689,7 +2689,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
             ),
             if (widget.showQuickPlay) ...[
               const SizedBox(width: 8),
-              Flexible(
+              Expanded(
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',

@@ -2188,7 +2188,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               const SizedBox(width: 6),
               _buildActionButton(
                 icon: Icons.play_arrow_rounded,
-                label: 'Quick Play',
+                label: 'Play',
                 color: const Color(0xFFB91C1C),
                 isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                 onTap: widget.onQuickPlay,
@@ -2272,7 +2272,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         // Bottom row: Action buttons
         Row(
           children: [
-            Flexible(
+            Expanded(
               child: _buildActionButton(
                 icon: Icons.list_rounded,
                 label: 'Browse',
@@ -2283,10 +2283,10 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
             ),
             if (widget.showQuickPlay) ...[
               const SizedBox(width: 8),
-              Flexible(
+              Expanded(
                 child: _buildActionButton(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Quick Play',
+                  label: 'Play',
                   color: const Color(0xFFB91C1C),
                   isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
