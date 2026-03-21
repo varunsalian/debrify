@@ -222,6 +222,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   SearchPhase _searchPhase = SearchPhase.idle;
   String _errorMessage = '';
   bool _hasSearched = false;
+  bool _showSearchField = false;
   int _activeSearchRequestId = 0;
   String? _apiKey;
   String? _torboxApiKey;
@@ -275,6 +276,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _hideProviderCards = false;
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
   final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
+  final FocusNode _searchToggleFocusNode = FocusNode(debugLabel: 'search_toggle');
 
   ImdbTitleResult? _selectedImdbTitle;
   bool _isSeries = false;
@@ -307,6 +309,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
       };
+
+  /// Safely focus the sources/control area — falls back to dropdown if sources not visible.
+  void _focusControlRow() {
+    final isSearchActive = _showSearchField || _hasSearched || _searchController.text.isNotEmpty;
+    if (isSearchActive) {
+      _providerAccordionFocusNode.requestFocus();
+    } else {
+      _sourceDropdownFocusNode.requestFocus();
+    }
+  }
+
+  /// Safely focus the search bar, auto-showing it if currently hidden.
+  void _focusSearchBar() {
+    final isSearchVisible = _showSearchField || _hasSearched || _searchController.text.isNotEmpty;
+    if (isSearchVisible) {
+      _searchFocusNode.requestFocus();
+    } else {
+      setState(() { _showSearchField = true; });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocusNode.requestFocus();
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -460,7 +485,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (_isSeries) {
         _seasonInputFocusNode.requestFocus();
       } else {
-        _searchFocusNode.requestFocus();
+        _focusSearchBar();
       }
       return KeyEventResult.handled;
     }
@@ -1087,12 +1112,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Ensure focus nodes exist for all engines
     _ensureEngineFocusNodes();
 
-    // Focus the search field after a short delay to ensure UI is ready
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        _searchFocusNode.requestFocus();
-      }
-    });
+    // Search field starts hidden; user opens it via the search button
 
     // Load default filters only if no preserved state (not returning from debrid folder)
     if (!_preservedState.hasState) {
@@ -1460,6 +1480,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Dispose Unified Search Source resources
     _sourceDropdownFocusNode.dispose();
     _clearButtonFocusNode.dispose();
+    _searchToggleFocusNode.dispose();
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -1539,7 +1560,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Fallback to search bar
-    _searchFocusNode.requestFocus();
+    _focusSearchBar();
   }
 
   Future<void> _searchTorrents(String query) async {
@@ -2173,19 +2194,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onChanged: _onSearchSourceChanged,
       focusNode: _sourceDropdownFocusNode,
       isTelevision: _isTelevision,
-      // Left arrow: go to TV sidebar (if available)
+      // Left arrow: go to search toggle button
       onLeftArrowPressed: () {
-        if (MainPageBridge.focusTvSidebar != null) {
-          MainPageBridge.focusTvSidebar!();
-        }
+        _searchToggleFocusNode.requestFocus();
       },
-      // Right arrow: go to Sources accordion
+      // Right arrow: go to Sources / control row
       onRightArrowPressed: () {
-        _providerAccordionFocusNode.requestFocus();
+        _focusControlRow();
       },
       // Up arrow: go to search bar
       onUpArrowPressed: () {
-        _searchFocusNode.requestFocus();
+        _focusSearchBar();
       },
       // Down arrow: go to content below (same as Sources accordion behavior)
       onDownArrowPressed: () {
@@ -3517,7 +3536,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
         event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      _searchFocusNode.requestFocus();
+      _focusSearchBar();
       return KeyEventResult.handled;
     }
 
@@ -3608,7 +3627,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
         event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      _searchFocusNode.requestFocus();
+      _focusSearchBar();
       return KeyEventResult.handled;
     }
 
@@ -3626,7 +3645,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Arrow Up -> Search field
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _searchFocusNode.requestFocus();
+      _focusSearchBar();
       return KeyEventResult.handled;
     }
 
@@ -3648,7 +3667,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Escape/Back -> Search field
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
-      _searchFocusNode.requestFocus();
+      _focusSearchBar();
       return KeyEventResult.handled;
     }
 
@@ -3857,6 +3876,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  /// Compact sources icon button for the OTT control bar.
+  Widget _buildCompactSourcesButton(BuildContext context) {
+    final keywordCount = _availableEngines
+        .where((e) => e.supportsKeywordSearch && (_engineStates[e.name] ?? false))
+        .length;
+    final imdbCount = _availableEngines
+        .where((e) => e.supportsImdbSearch && (_engineStates[e.name] ?? false))
+        .length;
+
+    return Focus(
+      focusNode: _providerAccordionFocusNode,
+      onFocusChange: (focused) {
+        _providerAccordionFocused.value = focused;
+      },
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _focusSearchBar();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _sourceDropdownFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _homeFocusController.focusFirstHomeSection();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          _showSourcesDialog(context);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _providerAccordionFocused,
+        builder: (context, isFocused, child) => GestureDetector(
+          onTap: () => _showSourcesDialog(context),
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: isFocused
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : const Color(0xFF141414),
+              borderRadius: BorderRadius.circular(20),
+              border: isFocused
+                  ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tune_rounded, size: 16, color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.5)),
+                const SizedBox(width: 6),
+                Text(
+                  '$keywordCount + $imdbCount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProvidersAccordion(BuildContext context) {
     // Count enabled engines by capability
     final keywordEngineCount = _availableEngines
@@ -3887,7 +3978,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
           // Handle Up arrow to go back to search bar
           if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            _searchFocusNode.requestFocus();
+            _focusSearchBar();
             return KeyEventResult.handled;
           }
 
@@ -4262,7 +4353,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // No results - focus search bar so user can try a different query
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _searchFocusNode.requestFocus();
+          _focusSearchBar();
         }
       });
     }
@@ -12950,7 +13041,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               if (_isSeries) {
                 _seasonInputFocusNode.requestFocus();
               } else {
-                _searchFocusNode.requestFocus();
+                _focusSearchBar();
               }
             },
             onDownArrowPressed: () {
@@ -12984,7 +13075,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               if (_isSeries) {
                 _seasonInputFocusNode.requestFocus();
               } else {
-                _searchFocusNode.requestFocus();
+                _focusSearchBar();
               }
             },
             onDownArrowPressed: () {
@@ -13190,184 +13281,216 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: Stack(
       children: [
         Container(
-          color: const Color(0xFF06080F),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF16162A),
+                Color(0xFF0C0C18),
+                Color(0xFF050508),
+              ],
+              stops: [0.0, 0.3, 1.0],
+            ),
+          ),
           child: SafeArea(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
               child: Column(
                 children: [
-                  // Search Box
-              Container(
-                margin: const EdgeInsets.all(8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.06),
-                  ),
-                ),
+                  // ── Controls ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // All modes now show search input
-                    if (true) ...[
-                    // Search Input + Advanced action
+                    // Collapsible search field
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      alignment: Alignment.topCenter,
+                      child: (_showSearchField || _hasSearched || _searchController.text.isNotEmpty)
+                          ? Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _SearchTextField(
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    searchMode: _searchMode,
+                                    selectedSource: _selectedSource,
+                                    isTelevision: _isTelevision,
+                                    selectedImdbTitle: _selectedImdbTitle,
+                                    isSeries: _isSeries,
+                                    seasonInputFocusNode: _seasonInputFocusNode,
+                                    onClearPressed: () {
+                                      _searchController.clear();
+                                      _seasonController.clear();
+                                      _episodeController.clear();
+                                      _activeSearchRequestId++;
+                                      setState(() {
+                                        _selectedImdbTitle = null;
+                                        _activeAdvancedSelection = null;
+                                        _isSeries = false;
+                                        _availableSeasons = null;
+                                        _selectedSeason = null;
+                                        _imdbControlsCollapsed = false;
+                                        _seriesControlsExpanded = false;
+                                        _hasSearched = false;
+                                        _showSearchField = false;
+                                        _isLoading = false;
+                                        _allTorrents = [];
+                                        _torrents = [];
+                                        _engineCounts = {};
+                                        _engineErrors = {};
+                                        _torrentMetadata = {};
+                                        _errorMessage = '';
+                                        _selectedEngineFilter = null;
+                                        _filters = const TorrentFilterState.empty();
+                                        _torboxCacheStatus = null;
+                                        _showingTorboxCachedOnly = false;
+                                        _sortBy = 'relevance';
+                                        _sortAscending = false;
+                                      });
+                                    },
+                                    onChanged: _handleSearchFieldChanged,
+                                    onSubmitted: (query) {
+                                      if (_selectedSource.type == SearchSourceType.all) {
+                                        if (query.isNotEmpty) {
+                                          setState(() {
+                                            _hasSearched = false;
+                                            _torrents = [];
+                                            _allTorrents = [];
+                                          });
+                                        }
+                                        return;
+                                      }
+                                      if (_selectedSource.type == SearchSourceType.trakt) {
+                                        setState(() {});
+                                        return;
+                                      }
+                                      if (_selectedSource.type == SearchSourceType.reddit) {
+                                        setState(() {});
+                                        return;
+                                      }
+                                      if (_selectedSource.type == SearchSourceType.keyword) {
+                                        _searchTorrents(query);
+                                      } else if (_searchMode == SearchMode.catalog) {
+                                        if (_selectedImdbTitle != null) {
+                                          _createAdvancedSelectionAndSearch();
+                                        }
+                                      }
+                                    },
+                                    onFocusChange: (focused) {
+                                      _searchFocused.value = focused;
+                                    },
+                                    enabled: _selectedSource.type != SearchSourceType.addon ||
+                                        (_selectedSource.addon?.hasSearchableCatalogs ?? false),
+                                    disabledTooltip: "This addon doesn't support search",
+                                    onDownArrowPressed: () {
+                                      _sourceDropdownFocusNode.requestFocus();
+                                    },
+                                    clearButtonFocusNode: _clearButtonFocusNode,
+                                    onRightArrowFromClearButton: () {
+                                      _sourceDropdownFocusNode.requestFocus();
+                                    },
+                                  ),
+                                  if (_searchMode == SearchMode.catalog) ...[
+                                    _buildImdbSelectionChip(),
+                                    _buildImdbTypeAndEpisodeControls(),
+                                  ],
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    // Control row — centered
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: _SearchTextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            searchMode: _searchMode,
-                            selectedSource: _selectedSource,
-                            isTelevision: _isTelevision,
-                            selectedImdbTitle: _selectedImdbTitle,
-                            isSeries: _isSeries,
-                            seasonInputFocusNode: _seasonInputFocusNode,
-                            onClearPressed: () {
-                              // Reset search input (controllers can be cleared outside setState)
-                              _searchController.clear();
-                              _seasonController.clear();
-                              _episodeController.clear();
-
-                              // Invalidate any pending search requests
-                              _activeSearchRequestId++;
-
-                              // Reset all state inside setState for proper UI rebuild
+                        // Search toggle with DPAD support
+                        Focus(
+                          focusNode: _searchToggleFocusNode,
+                          onFocusChange: (focused) => setState(() {}),
+                          onKeyEvent: (node, event) {
+                            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                            if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                              _sourceDropdownFocusNode.requestFocus();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                              if (_showSearchField || _hasSearched || _searchController.text.isNotEmpty) {
+                                _searchFocusNode.requestFocus();
+                              }
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                              _homeFocusController.focusFirstHomeSection();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey == LogicalKeyboardKey.select) {
                               setState(() {
-                                // IMDB state
-                                _selectedImdbTitle = null;
-                                _activeAdvancedSelection = null;
-                                _isSeries = false;
-                                _availableSeasons = null;
-                                _selectedSeason = null;
-                                _imdbControlsCollapsed = false;
-                                _seriesControlsExpanded = false;
-
-                                // Search results - back to initial state
-                                _hasSearched = false;
-                                _isLoading = false;
-                                _allTorrents = [];
-                                _torrents = [];
-                                _engineCounts = {};
-                                _engineErrors = {};
-                                _torrentMetadata = {};
-                                _errorMessage = '';
-                                _selectedEngineFilter = null;
-                                _filters = const TorrentFilterState.empty();
-                                _torboxCacheStatus = null;
-                                _showingTorboxCachedOnly = false;
-                                _sortBy = 'relevance';
-                                _sortAscending = false;
+                                _showSearchField = !_showSearchField;
                               });
-
-                              _searchFocusNode.requestFocus();
-                            },
-                            onChanged: _handleSearchFieldChanged,
-                            onSubmitted: (query) {
-                              // "All" mode: Just update state to show aggregated results
-                              // Don't trigger direct torrent search
-                              if (_selectedSource.type == SearchSourceType.all) {
-                                if (query.isNotEmpty) {
-                                  // Trigger rebuild to show AggregatedSearchResults
-                                  setState(() {
-                                    // Reset search state so AggregatedSearchResults shows
-                                    _hasSearched = false;
-                                    _torrents = [];
-                                    _allTorrents = [];
-                                  });
-                                }
-                                return;
-                              }
-
-                              // Trakt mode: Just update state to trigger TraktResultsView filter
-                              if (_selectedSource.type == SearchSourceType.trakt) {
-                                setState(() {});
-                                return;
-                              }
-
-                              // Reddit mode: Just update state to trigger RedditResultsView
-                              // The view handles its own search via searchQuery prop
-                              if (_selectedSource.type == SearchSourceType.reddit) {
-                                setState(() {
-                                  // Just trigger rebuild - RedditResultsView uses didUpdateWidget
+                              if (_showSearchField) {
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  _focusSearchBar();
                                 });
-                                return;
                               }
-
-                              // Keyword mode: Direct torrent search
-                              if (_selectedSource.type == SearchSourceType.keyword) {
-                                _searchTorrents(query);
-                              } else if (_searchMode == SearchMode.catalog) {
-                                // In catalog mode, re-search if a title is already selected
-                                if (_selectedImdbTitle != null) {
-                                  _createAdvancedSelectionAndSearch();
-                                }
-                                // If no title selected, catalog results are already visible
-                              }
-                            },
-                            onFocusChange: (focused) {
-                              _searchFocused.value = focused; // No setState needed!
-                            },
-                            // Disable search for addons that don't support it
-                            enabled: _selectedSource.type != SearchSourceType.addon ||
-                                (_selectedSource.addon?.hasSearchableCatalogs ?? false),
-                            disabledTooltip: "This addon doesn't support search",
-                            // Down arrow from search bar: go to dropdown/Sources row if visible, else to results
-                            onDownArrowPressed: () {
-                              // Dropdown/Sources row is visible when: !_hasSearched || _torrents.isEmpty
-                              final isSourcesRowVisible = !_hasSearched || _torrents.isEmpty;
-                              if (isSourcesRowVisible) {
-                                _sourceDropdownFocusNode.requestFocus();
-                              } else if (_cardFocusNodes.isNotEmpty) {
-                                // Focus first result card
-                                _cardFocusNodes.first.requestFocus();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _showSearchField = !_showSearchField;
+                              });
+                              if (_showSearchField) {
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  _focusSearchBar();
+                                });
                               }
                             },
-                            // Clear button focus node for DPAD navigation
-                            clearButtonFocusNode: _clearButtonFocusNode,
+                            child: Builder(
+                              builder: (context) {
+                                final isFocused = _searchToggleFocusNode.hasFocus;
+                                return Container(
+                                  height: 40,
+                                  width: 40,
+                                  decoration: BoxDecoration(
+                                    color: isFocused
+                                        ? Colors.white.withValues(alpha: 0.15)
+                                        : const Color(0xFF141414),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: isFocused
+                                        ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                                        : null,
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    size: 20,
+                                    color: (isFocused || _showSearchField || _hasSearched || _searchController.text.isNotEmpty)
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        // Source dropdown
+                        _buildSearchSourceSelector(),
+                        // Sources icon — only when search is active
+                        if (_showSearchField || _hasSearched || _searchController.text.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          _buildCompactSourcesButton(context),
+                        ],
                       ],
                     ),
-                    // IMDB Smart Search Mode UI components
-                    if (_searchMode == SearchMode.catalog) ...[
-                      // Active selection chip
-                      _buildImdbSelectionChip(),
-                      // Type selector and S/E inputs
-                      _buildImdbTypeAndEpisodeControls(),
-                    ],
-
-                    // Dropdown + Sources Row - hide after search to save space
-                    if (!_hasSearched || _torrents.isEmpty) ...[
-                      const SizedBox(height: 16),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          // On small screens (< 300px), use compact layout
-                          final isCompact = constraints.maxWidth < 300;
-                          return Row(
-                            children: [
-                              // Search source dropdown - flexible width
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: isCompact ? 100 : 140,
-                                  minWidth: 80,
-                                ),
-                                child: _buildSearchSourceSelector(),
-                              ),
-                              SizedBox(width: isCompact ? 8 : 12),
-                              // Sources accordion (expandable)
-                              Expanded(
-                                child: _buildProvidersAccordion(context),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                    ], // end else (non-browse mode)
                   ],
                 ),
               ),
@@ -13401,8 +13524,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _aggregatedKeywordFocusNode = focusNode;
                           },
                           onRequestFocusAbove: () {
-                            // Go back to Sources row (focuses Sources, left arrow goes to dropdown)
-                            _providerAccordionFocusNode.requestFocus();
+                            _focusControlRow();
                           },
                           onSelectSource: _handleSelectSource,
                           onBrowseSeriesEpisodes: _handleBrowseSeriesEpisodes,
@@ -13429,7 +13551,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           },
                           showQuickPlay: _defaultTorrentProvider != 'pikpak',
                           onRequestFocusAbove: () {
-                            _providerAccordionFocusNode.requestFocus();
+                            _focusControlRow();
                           },
                           onSelectSource: _handleSelectSource,
                           onEpisodeModeExited: _handleEpisodeModeExited,
@@ -13798,7 +13920,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                                 if (_isSeries) {
                                                   _seasonInputFocusNode.requestFocus();
                                                 } else {
-                                                  _searchFocusNode.requestFocus();
+                                                  _focusSearchBar();
                                                 }
                                                 return KeyEventResult.handled;
                                               }
@@ -13941,7 +14063,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             if (_isSeries) {
                                               _seasonInputFocusNode.requestFocus();
                                             } else {
-                                              _searchFocusNode.requestFocus();
+                                              _focusSearchBar();
                                             }
                                             return KeyEventResult.handled;
                                           }
@@ -13999,7 +14121,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             if (_isSeries) {
                                               _seasonInputFocusNode.requestFocus();
                                             } else {
-                                              _searchFocusNode.requestFocus();
+                                              _focusSearchBar();
                                             }
                                             return KeyEventResult.handled;
                                           }
@@ -14276,7 +14398,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Widget _buildHomeSection() {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
         // Trakt Continue Watching - Movies
         HomeTraktContinueWatchingSection(
@@ -14292,7 +14414,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
           onBrowseShow: (show) => _browseTraktShow(show),
           onRequestFocusAbove: () {
-            _providerAccordionFocusNode.requestFocus();
+            _focusControlRow();
           },
           onRequestFocusBelow: () {
             final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingMovies);
@@ -14301,7 +14423,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        const SizedBox(height: 14),
         // Trakt Continue Watching - Shows
         HomeTraktContinueWatchingSection(
           focusController: _homeFocusController,
@@ -14329,7 +14456,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        const SizedBox(height: 14),
         // Playlist favorites section (horizontal scroll)
         HomeFavoritesSection(
           focusController: _homeFocusController,
@@ -14339,7 +14471,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             if (prev != null) {
               _homeFocusController.focusSection(prev);
             } else {
-              _providerAccordionFocusNode.requestFocus();
+              _focusControlRow();
             }
           },
           onRequestFocusBelow: () {
@@ -14349,7 +14481,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        const SizedBox(height: 14),
         // IPTV favorites section (horizontal scroll)
         HomeIptvFavoritesSection(
           focusController: _homeFocusController,
@@ -14368,7 +14505,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
           onPlayChannel: _playIptvChannelFromHome,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        const SizedBox(height: 14),
         // Debrify TV favorites section (horizontal scroll)
         HomeDebrifyTvFavoritesSection(
           focusController: _homeFocusController,
@@ -14386,7 +14528,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             }
           },
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        const SizedBox(height: 14),
         // Stremio TV favorites section (horizontal scroll)
         HomeStremioTvFavoritesSection(
           focusController: _homeFocusController,
@@ -14405,7 +14552,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           },
         ),
         if (!_hideProviderCards) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+          ),
+          const SizedBox(height: 14),
           // Debrid services section
           ProviderStatusCards(
             focusController: _homeFocusController,
@@ -16325,22 +16477,7 @@ class _SearchTextFieldState extends State<_SearchTextField> {
     // Focus animation is handled by the border property changing
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: _isFocused
-            ? Border.all(
-                color: const Color(0xFF6366F1),
-                width: 1.6,
-              )
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withValues(
-              alpha: _isFocused ? 0.45 : 0.3,
-            ),
-            blurRadius: _isFocused ? 16 : 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
       ),
       // Key events are handled by focusNode.onKeyEvent set in initState
       child: Tooltip(
@@ -16358,22 +16495,18 @@ class _SearchTextFieldState extends State<_SearchTextField> {
             hintText: !widget.enabled
                 ? (widget.disabledTooltip ?? 'Search not available')
                 : widget.selectedSource.type == SearchSourceType.reddit
-                    ? 'Search Reddit Videos...'
+                    ? 'Search Reddit...'
                     : widget.searchMode == SearchMode.catalog
                         ? 'Search catalog...'
-                        : 'Search all engines...',
+                        : 'Search...',
             hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: widget.enabled ? 0.5 : 0.3),
+              color: Colors.white.withValues(alpha: widget.enabled ? 0.3 : 0.2),
             ),
             prefixIcon: Icon(
               widget.searchMode == SearchMode.catalog
                   ? Icons.auto_awesome_outlined
                   : Icons.search_rounded,
-              color: widget.enabled
-                  ? (widget.searchMode == SearchMode.catalog
-                      ? const Color(0xFF7C3AED)
-                      : const Color(0xFF6366F1))
-                  : Colors.white.withValues(alpha: 0.3),
+              color: Colors.white.withValues(alpha: widget.enabled ? 0.35 : 0.2),
             ),
             // Use ValueListenableBuilder to rebuild only the clear button, not entire TextField
             suffixIcon: ValueListenableBuilder<TextEditingValue>(
@@ -16416,15 +16549,15 @@ class _SearchTextFieldState extends State<_SearchTextField> {
                             ? BoxDecoration(
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: const Color(0xFF6366F1),
-                                  width: 2,
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  width: 1.5,
                                 ),
                               )
                             : null,
                         child: IconButton(
-                          icon: const Icon(
-                            Icons.clear_rounded,
-                            color: Color(0xFFEF4444),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
                           onPressed: widget.onClearPressed,
                         ),
@@ -16435,16 +16568,25 @@ class _SearchTextFieldState extends State<_SearchTextField> {
               },
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
             ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
+            ),
             filled: true,
-            fillColor: widget.enabled
-                ? Theme.of(context).colorScheme.surfaceContainerHigh
-                : Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
+            fillColor: Colors.white.withValues(alpha: 0.07),
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
+              horizontal: 16,
+              vertical: 14,
             ),
           ),
           onChanged: widget.enabled ? widget.onChanged : null,

@@ -555,23 +555,16 @@ class _HomeTraktContinueWatchingSectionState
     }
 
     final isMovies = widget.contentType == 'movies';
-    final title = isMovies ? 'Trakt Continue Watching - Movies' : 'Trakt Continue Watching - Shows';
+    final title = isMovies ? 'Continue Watching · Movies' : 'Continue Watching · Shows';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      child: Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(title),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
         // ── Horizontal card row ──
         SizedBox(
-          height: 195,
+          height: 270,
           child: Stack(
             children: [
               // Edge fade
@@ -594,7 +587,7 @@ class _HomeTraktContinueWatchingSectionState
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                   clipBehavior: Clip.none,
                   itemCount: _items.length,
                   itemBuilder: (context, index) {
@@ -623,7 +616,6 @@ class _HomeTraktContinueWatchingSectionState
           ),
         ),
       ],
-    ),
     );
   }
 
@@ -635,59 +627,30 @@ class _HomeTraktContinueWatchingSectionState
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
+            width: 4,
+            height: 4,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFED1C24), Color(0xFFBF1017)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: _accentColor.withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Text(
-                'T',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  height: 1.0,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.9),
-              letterSpacing: -0.2,
+              color: _accentColor,
+              shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(6),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.75),
+              letterSpacing: 0.3,
             ),
-            child: Text(
-              '${_items.length}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.4),
-              ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_items.length}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withValues(alpha: 0.3),
             ),
           ),
         ],
@@ -767,6 +730,9 @@ class _HomeTraktContinueWatchingSectionState
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
+        final isHero = index == 0;
+        final cardWidth = isHero ? 420.0 : 350.0;
+        final cardHeight = isHero ? 250.0 : 210.0;
 
         // Metadata
         final year = item.year ?? '';
@@ -783,40 +749,26 @@ class _HomeTraktContinueWatchingSectionState
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 290,
-            height: 175,
+            width: cardWidth,
+            height: cardHeight,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isActive
-                    ? _accentColor.withValues(alpha: 0.9)
-                    : Colors.white.withValues(alpha: 0.06),
-                width: isActive ? 2.0 : 1.0,
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: isActive ? 1.5 : 0.5,
               ),
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: _accentColor.withValues(alpha: 0.4),
-                        blurRadius: 24,
-                        spreadRadius: 0,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
+                  blurRadius: isActive ? 30 : 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
+              borderRadius: BorderRadius.circular(16),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -859,49 +811,35 @@ class _HomeTraktContinueWatchingSectionState
                     ),
                   ),
 
-                  // ── Top badges row ──
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    right: 10,
-                    child: Row(
-                      children: [
-                        // Type badge
-                        _GlassPill(
-                          child: Text(
-                            typeBadge,
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
+                  // ── Rating badge (top right) ──
+                  if (rating != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        const Spacer(),
-                        // Rating badge
-                        if (rating != null)
-                          _GlassPill(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.star_rounded,
-                                    size: 12, color: Color(0xFFFFD700)),
-                                const SizedBox(width: 3),
-                                Text(
-                                  rating.toStringAsFixed(1),
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star_rounded,
+                                size: 10, color: Color(0xFFFFD700)),
+                            const SizedBox(width: 2),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withValues(alpha: 0.8),
+                              ),
                             ),
-                          ),
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
 
                   // ── Bottom info area ──
                   Positioned(
@@ -916,8 +854,8 @@ class _HomeTraktContinueWatchingSectionState
                         Text(
                           item.name,
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                             color: Colors.white,
                             height: 1.2,
                             letterSpacing: -0.2,

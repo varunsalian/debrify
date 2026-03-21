@@ -287,9 +287,6 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return CompositedTransformTarget(
       link: _layerLink,
       child: Focus(
@@ -298,25 +295,15 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
         child: GestureDetector(
           onTap: _toggleDropdown,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isFocused
-                    ? colorScheme.primary
-                    : colorScheme.outline.withOpacity(0.3),
-                width: _isFocused ? 2 : 1,
-              ),
-              boxShadow: _isFocused
-                  ? [
-                      BoxShadow(
-                        color: colorScheme.primary.withOpacity(0.3),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ]
+              color: _isFocused
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : const Color(0xFF141414),
+              borderRadius: BorderRadius.circular(20),
+              border: _isFocused
+                  ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
                   : null,
             ),
             child: Row(
@@ -324,29 +311,34 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
               children: [
                 Icon(
                   widget.selectedOption.icon,
-                  size: 18,
-                  color: colorScheme.onSurface,
+                  size: 16,
+                  color: _isFocused
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.6),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     widget.selectedOption.label,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface,
+                    style: TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
+                      color: _isFocused
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.7),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 AnimatedRotation(
                   turns: _isExpanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: colorScheme.onSurfaceVariant,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                 ),
               ],

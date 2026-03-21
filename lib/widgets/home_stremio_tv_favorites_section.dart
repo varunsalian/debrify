@@ -198,74 +198,49 @@ class _HomeStremioTvFavoritesSectionState
       return const SizedBox.shrink();
     }
 
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      child: Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [theme.colorScheme.primary, theme.colorScheme.tertiary],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+          child: Builder(
+            builder: (context) {
+              final primary = Theme.of(context).colorScheme.primary;
+              return Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: primary,
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.smart_display_rounded, size: 16, color: Colors.white),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Stremio TV',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.9),
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${_favoriteChannels.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.4),
                   ),
-                ),
-              ),
-            ],
+                  const SizedBox(width: 8),
+                  Text(
+                    'Stremio TV',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.75),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_favoriteChannels.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         // Horizontal scrolling favorites
         SizedBox(
           height: 115,
@@ -294,7 +269,7 @@ class _HomeStremioTvFavoritesSectionState
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.only(left: 16),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
@@ -340,7 +315,6 @@ class _HomeStremioTvFavoritesSectionState
           ),
         ),
       ],
-    ),
     );
   }
 

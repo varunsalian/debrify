@@ -38,8 +38,6 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  static const _accentColor = Color(0xFF14B8A6);
-
   @override
   void initState() {
     super.initState();
@@ -197,73 +195,44 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      child: Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Section header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF14B8A6), Color(0xFF0D9488)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accentColor.withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.live_tv_rounded, size: 16, color: Colors.white),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Live TV',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.9),
-                  letterSpacing: -0.2,
+                width: 4,
+                height: 4,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF14B8A6),
+                  shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(6),
+              Text(
+                'Live TV',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.75),
+                  letterSpacing: 0.3,
                 ),
-                child: Text(
-                  '${_favoriteChannels.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.4),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_favoriteChannels.length}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.3),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         // Horizontal scrolling favorites with edge fade and scroll indicators
         SizedBox(
           height: 115,
@@ -287,7 +256,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                 child: ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
@@ -308,7 +277,6 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
           ),
         ),
       ],
-    ),
     );
   }
 

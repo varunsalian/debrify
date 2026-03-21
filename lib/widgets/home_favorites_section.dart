@@ -288,21 +288,14 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      child: Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
         // ── Horizontal card row ──
         SizedBox(
-          height: 195,
+          height: 230,
           child: Stack(
             children: [
               ShaderMask(
@@ -324,7 +317,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteItems.length,
                   itemBuilder: (context, index) {
@@ -357,7 +350,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           ),
         ),
       ],
-    ),
     );
   }
 
@@ -367,51 +359,30 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       child: Row(
         children: [
           Container(
-            width: 30,
-            height: 30,
+            width: 4,
+            height: 4,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFFFD700), Color(0xFFF59E0B)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: _accentColor.withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(Icons.star_rounded, size: 16, color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Favorites',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.9),
-              letterSpacing: -0.2,
+              color: _accentColor,
+              shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(6),
+          Text(
+            'Favorites',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.75),
+              letterSpacing: 0.3,
             ),
-            child: Text(
-              '${_favoriteItems.length}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.4),
-              ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_favoriteItems.length}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withValues(alpha: 0.3),
             ),
           ),
         ],
@@ -474,39 +445,26 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: 290,
-            height: 175,
+            width: 350,
+            height: 210,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isActive
-                    ? _accentColor.withValues(alpha: 0.9)
-                    : Colors.white.withValues(alpha: 0.06),
-                width: isActive ? 2.0 : 1.0,
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: isActive ? 1.5 : 0.5,
               ),
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: _accentColor.withValues(alpha: 0.35),
-                        blurRadius: 24,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
+                  blurRadius: isActive ? 30 : 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
+              borderRadius: BorderRadius.circular(16),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
