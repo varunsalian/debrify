@@ -550,12 +550,48 @@ class _HomeTraktContinueWatchingSectionState
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _items.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     final isMovies = widget.contentType == 'movies';
     final title = isMovies ? 'Continue Watching · Movies (Trakt)' : 'Continue Watching · Shows (Trakt)';
+
+    if (_isLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(title),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 60,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Loading...',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.25),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_items.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

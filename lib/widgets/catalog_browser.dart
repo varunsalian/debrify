@@ -134,10 +134,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   final FocusNode _episodeBackButtonFocusNode = FocusNode(debugLabel: 'catalog-ep-back');
   final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(debugLabel: 'catalog-ep-season');
 
-  /// Public method to request focus on the first dropdown (provider dropdown)
+  /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
   void requestFocusOnFirstDropdown() {
-    _providerDropdownFocusNode.requestFocus();
+    _catalogDropdownFocusNode.requestFocus();
   }
 
   /// Public method to request focus on the last focused content item
@@ -223,9 +223,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       widget.onRequestFocusAbove?.call();
       return KeyEventResult.handled;
     }
-    // Left arrow: navigate to provider dropdown
+    // Left arrow: no left target (provider dropdown removed)
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _providerDropdownFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
     // Down arrow: navigate to first content item
@@ -642,8 +641,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     // List navigation (up/down only)
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (index == 0) {
-        // Move to provider dropdown (first dropdown in the row)
-        _providerDropdownFocusNode.requestFocus();
+        // Move to catalog dropdown (first dropdown in the row)
+        _catalogDropdownFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
       if (index > 0 && index - 1 < _contentFocusNodes.length) {
@@ -744,9 +743,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           if (isNarrow) {
             return Column(
               children: [
-                // Provider dropdown - full width
-                _buildProviderDropdown(),
-                const SizedBox(height: 8),
                 // Catalog dropdown - full width
                 _buildCatalogDropdown(),
                 // Genre dropdown (if supported)
@@ -761,11 +757,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           // Wide screens - horizontal row
           return Row(
             children: [
-              // Provider dropdown
-              Expanded(
-                child: _buildProviderDropdown(),
-              ),
-              const SizedBox(width: 12),
               // Catalog dropdown
               Expanded(
                 child: _buildCatalogDropdown(),
