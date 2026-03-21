@@ -555,7 +555,7 @@ class _HomeTraktContinueWatchingSectionState
     }
 
     final isMovies = widget.contentType == 'movies';
-    final title = isMovies ? 'Continue Watching · Movies' : 'Continue Watching · Shows';
+    final title = isMovies ? 'Continue Watching · Movies (Trakt)' : 'Continue Watching · Shows (Trakt)';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
