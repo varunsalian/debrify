@@ -9,6 +9,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/series_source_service.dart';
+import '../services/storage_service.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
 /// Displays aggregated search results from all catalog sources
@@ -47,6 +48,10 @@ class AggregatedSearchResults extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta)? onSelectSource;
 
+  /// Callback when user wants to browse a series with episode drill-down
+  /// Passes the show and its source addon so the parent can switch to that addon's CatalogBrowser
+  final void Function(StremioMeta show, StremioAddon addon)? onBrowseSeriesEpisodes;
+
   const AggregatedSearchResults({
     super.key,
     required this.query,
@@ -58,6 +63,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
     this.onSelectSource,
+    this.onBrowseSeriesEpisodes,
   });
 
   @override
@@ -320,6 +326,15 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   }
 
   void _onItemSelected(StremioMeta item) {
+    // For series, try episode drill-down if source addon supports meta
+    if (item.type == 'series' &&
+        item.sourceAddon != null &&
+        item.sourceAddon!.supportsMeta &&
+        widget.onBrowseSeriesEpisodes != null) {
+      widget.onBrowseSeriesEpisodes!(item, item.sourceAddon!);
+      return;
+    }
+
     final selection = AdvancedSearchSelection(
       imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
@@ -331,12 +346,41 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     widget.onItemSelected?.call(selection);
   }
 
-  void _onQuickPlay(StremioMeta item) {
+  void _onQuickPlay(StremioMeta item) async {
+    int? season;
+    int? episode;
+
+    // For series, look up last played episode to determine S/E
+    if (item.type == 'series') {
+      final imdbId = item.effectiveImdbId;
+      if (imdbId != null) {
+        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        if (!mounted) return;
+        if (lastPlayed != null) {
+          season = lastPlayed['season'] as int?;
+          episode = lastPlayed['episode'] as int?;
+        }
+      }
+      // Fallback to title-based lookup
+      if (season == null || episode == null) {
+        final byTitle = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
+        if (!mounted) return;
+        if (byTitle != null) {
+          season = byTitle['season'] as int?;
+          episode = byTitle['episode'] as int?;
+        }
+      }
+      season ??= 1;
+      episode ??= 1;
+    }
+
     final selection = AdvancedSearchSelection(
       imdbId: item.effectiveImdbId ?? item.id,
       isSeries: item.type == 'series',
       title: item.name,
       year: item.year,
+      season: season,
+      episode: episode,
       contentType: item.type,
       posterUrl: item.poster,
     );

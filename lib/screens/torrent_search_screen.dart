@@ -284,6 +284,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Back navigation state - track where user came from before searching
   bool _cameFromCatalogBrowse = false;
   String _previousSearchQuery = ''; // The query text before catalog selection
+  SearchSourceOption? _sourceBeforeEpisodeDrillDown; // Source to return to when exiting episode mode from aggregated search
   final TextEditingController _seasonController = TextEditingController();
   final TextEditingController _episodeController = TextEditingController();
 
@@ -1277,6 +1278,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Handles selection of a search source from the dropdown
   void _onSearchSourceChanged(SearchSourceOption source) {
+    // Clear episode drill-down return state when source changes
+    // (prevents auto-returning to "All" if user manually switches source)
+    _sourceBeforeEpisodeDrillDown = null;
+
     setState(() {
       _selectedSource = source;
 
@@ -2410,6 +2415,56 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       posterUrl: show.poster,
     );
 
+    _handleCatalogItemSelected(selection, updateSearchText: true);
+  }
+
+  /// Switch from aggregated search to a specific addon's CatalogBrowser with episode drill-down.
+  void _handleBrowseSeriesEpisodes(StremioMeta show, StremioAddon addon) {
+    // Find the matching SearchSourceOption for this addon
+    final addonOption = _availableSourceOptions.cast<SearchSourceOption?>().firstWhere(
+      (opt) => opt?.type == SearchSourceType.addon && opt?.addon?.baseUrl == addon.baseUrl,
+      orElse: () => null,
+    );
+
+    if (addonOption == null) {
+      // Addon not in source options — fall back to direct search
+      _onItemSelected(show);
+      return;
+    }
+
+    // Save current source so we can return to it when exiting episode mode
+    final previousSource = _selectedSource;
+
+    // Switch to that addon's CatalogBrowser
+    _onSearchSourceChanged(addonOption);
+
+    // Set after _onSearchSourceChanged (which clears it to prevent loops)
+    _sourceBeforeEpisodeDrillDown = previousSource;
+
+    // Enter episode mode after the CatalogBrowser rebuilds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _catalogBrowserKey.currentState?.enterEpisodeModeForShow(show);
+    });
+  }
+
+  /// Called when user exits episode mode in CatalogBrowser — return to previous source if applicable.
+  void _handleEpisodeModeExited() {
+    final previousSource = _sourceBeforeEpisodeDrillDown;
+    if (previousSource == null) return;
+
+    _sourceBeforeEpisodeDrillDown = null;
+    _onSearchSourceChanged(previousSource);
+  }
+
+  void _onItemSelected(StremioMeta item) {
+    final selection = AdvancedSearchSelection(
+      imdbId: item.effectiveImdbId ?? item.id,
+      isSeries: item.type == 'series',
+      title: item.name,
+      year: item.year,
+      contentType: item.type,
+      posterUrl: item.poster,
+    );
     _handleCatalogItemSelected(selection, updateSearchText: true);
   }
 
@@ -13323,10 +13378,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   children: [
                     // Catalog views - kept alive with Offstage to preserve scroll position
                     // "All" mode with query - aggregated search results (wrapped in Offstage for stable tree)
-                    if (_selectedSource.type == SearchSourceType.all)
+                    if (_selectedSource.type == SearchSourceType.all || _sourceBeforeEpisodeDrillDown != null)
                       Offstage(
                         key: const ValueKey('aggregated_offstage'),
-                        offstage: _searchController.text.isEmpty || _hasSearched || _isLoading,
+                        offstage: _selectedSource.type != SearchSourceType.all || _searchController.text.isEmpty || _hasSearched || _isLoading,
                         child: AggregatedSearchResults(
                           key: _aggregatedResultsKey,
                           // Freeze query while offstage to prevent reload/scroll reset
@@ -13350,6 +13405,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _providerAccordionFocusNode.requestFocus();
                           },
                           onSelectSource: _handleSelectSource,
+                          onBrowseSeriesEpisodes: _handleBrowseSeriesEpisodes,
                         ),
                       ),
 
@@ -13376,6 +13432,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _providerAccordionFocusNode.requestFocus();
                           },
                           onSelectSource: _handleSelectSource,
+                          onEpisodeModeExited: _handleEpisodeModeExited,
                         ),
                       ),
 

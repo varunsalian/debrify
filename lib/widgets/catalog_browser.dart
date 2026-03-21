@@ -52,6 +52,9 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Callback when user exits episode drill-down mode (back button)
+  final VoidCallback? onEpisodeModeExited;
+
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
@@ -62,6 +65,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onRequestFocusAbove,
     this.defaultCatalogId,
     this.onSelectSource,
+    this.onEpisodeModeExited,
   });
 
   @override
@@ -117,6 +121,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   Map<String, List<SeriesSource>> _boundSources = {};
 
   // Episode drill-down mode
+  StremioMeta? _pendingEpisodeShow; // Deferred until _loadAddons completes
   int _episodeModeGeneration = 0;
   StremioMeta? _selectedShow;
   List<TraktSeason> _episodeSeasons = [];
@@ -149,6 +154,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       return true;
     }
     return false;
+  }
+
+  /// Public: enter episode drill-down for a show (called from parent when switching from aggregated search)
+  /// If _selectedAddon is not yet loaded (async), defers until _loadAddons completes.
+  void enterEpisodeModeForShow(StremioMeta show) {
+    if (_selectedAddon != null) {
+      _enterEpisodeMode(show);
+    } else {
+      _pendingEpisodeShow = show;
+    }
   }
 
   /// Check if content list has any items that can receive focus
@@ -361,6 +376,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               _selectedCatalog = defaultCatalog ?? _selectedAddon!.catalogs.first;
               _loadContent();
             }
+          }
+
+          // Consume pending episode drill-down (deferred from enterEpisodeModeForShow)
+          final pending = _pendingEpisodeShow;
+          if (pending != null && _selectedAddon != null) {
+            _pendingEpisodeShow = null;
+            // Schedule after setState completes
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _enterEpisodeMode(pending);
+            });
           }
         });
       }
@@ -1413,7 +1438,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
   void _fallbackToDirectSearch(StremioMeta show) {
     if (!mounted) return;
-    _exitEpisodeMode();
+    _exitEpisodeModeInternal();
     final selection = AdvancedSearchSelection(
       imdbId: show.effectiveImdbId ?? show.id,
       isSeries: true,
@@ -1527,7 +1552,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
   }
 
+  /// Exit episode mode and notify parent (used by back button, PopScope, addon switch)
   void _exitEpisodeMode() {
+    _exitEpisodeModeInternal();
+    widget.onEpisodeModeExited?.call();
+  }
+
+  /// Exit episode mode without notifying parent (used by _fallbackToDirectSearch
+  /// which dispatches onItemSelected instead)
+  void _exitEpisodeModeInternal() {
     for (final node in _episodeFocusNodes) {
       node.dispose();
     }

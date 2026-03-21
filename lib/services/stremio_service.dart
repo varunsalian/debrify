@@ -1165,20 +1165,32 @@ class StremioService {
     // Flatten and deduplicate by ID (supports any ID format - IMDB, TV channels, etc.)
     final Map<String, StremioMeta> uniqueResults = {};
 
-    for (final results in allResults) {
-      for (final meta in results) {
+    for (int i = 0; i < allResults.length; i++) {
+      final addon = searchableCatalogs[i].addon;
+      for (final meta in allResults[i]) {
         // Skip results without valid ID
         if (meta.id.isEmpty) continue;
 
+        // Tag with source addon (prefer addon that supports meta for series drill-down)
+        final tagged = meta.sourceAddon == null ? meta.withSourceAddon(addon) : meta;
+
         final existing = uniqueResults[meta.id];
         if (existing == null) {
-          uniqueResults[meta.id] = meta;
+          uniqueResults[meta.id] = tagged;
         } else {
           // Keep the one with better metadata (prefer one with poster and rating)
           final existingScore = _metadataScore(existing);
-          final newScore = _metadataScore(meta);
+          final newScore = _metadataScore(tagged);
           if (newScore > existingScore) {
-            uniqueResults[meta.id] = meta;
+            // Use richer metadata but preserve meta-supporting addon for episode drill-down
+            final bestAddon = (!addon.supportsMeta && existing.sourceAddon?.supportsMeta == true)
+                ? existing.sourceAddon!
+                : addon;
+            uniqueResults[meta.id] = tagged.withSourceAddon(bestAddon);
+          } else if (existing.sourceAddon != null && !existing.sourceAddon!.supportsMeta &&
+                     addon.supportsMeta) {
+            // Keep existing metadata but upgrade to addon that supports meta
+            uniqueResults[meta.id] = existing.withSourceAddon(addon);
           }
         }
       }

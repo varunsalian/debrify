@@ -163,6 +163,9 @@ class StremioMeta {
   /// Genres
   final List<String>? genres;
 
+  /// The addon this result came from (set during aggregated search)
+  final StremioAddon? sourceAddon;
+
   const StremioMeta({
     required this.id,
     this.imdbId,
@@ -174,7 +177,23 @@ class StremioMeta {
     this.year,
     this.imdbRating,
     this.genres,
+    this.sourceAddon,
   });
+
+  /// Create a copy with a source addon attached.
+  StremioMeta withSourceAddon(StremioAddon addon) => StremioMeta(
+    id: id,
+    imdbId: imdbId,
+    type: type,
+    name: name,
+    poster: poster,
+    background: background,
+    description: description,
+    year: year,
+    imdbRating: imdbRating,
+    genres: genres,
+    sourceAddon: addon,
+  );
 
   factory StremioMeta.fromJson(Map<String, dynamic> json) {
     // Handle rating - can be string or number
