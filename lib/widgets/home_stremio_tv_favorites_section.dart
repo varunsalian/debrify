@@ -498,11 +498,16 @@ class _HomeStremioTvFavoritesSectionState
           }
           return KeyEventResult.ignored;
         },
-        child: AnimatedScale(
-          scale: focusNode.hasFocus ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          child: card,
-        ),
+        child: widget.isTelevision
+          ? Transform.scale(
+              scale: focusNode.hasFocus ? 1.05 : 1.0,
+              child: card,
+            )
+          : AnimatedScale(
+              scale: focusNode.hasFocus ? 1.05 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: card,
+            ),
       );
     }
 

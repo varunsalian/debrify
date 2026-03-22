@@ -325,19 +325,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.06 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            width: 170,
-            height: 95,
-            decoration: BoxDecoration(
+        final cardDecoration = BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -371,8 +359,35 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                         offset: const Offset(0, 3),
                       ),
                     ]),
-            ),
-            child: ClipRRect(
+            );
+
+        final playOverlayChild = Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                          ),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF14B8A6),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF14B8A6).withValues(alpha: 0.5),
+                                    blurRadius: 12,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        );
+
+        final cardContent = ClipRRect(
               borderRadius: BorderRadius.circular(11),
               child: Stack(
                 children: [
@@ -499,40 +514,49 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                   // Play overlay on focus
                   if (isActive)
                     Positioned.fill(
-                      child: AnimatedOpacity(
-                        opacity: isActive ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.3),
+                      child: widget.isTelevision
+                        ? playOverlayChild
+                        : AnimatedOpacity(
+                            opacity: isActive ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: playOverlayChild,
                           ),
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF14B8A6),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF14B8A6).withValues(alpha: 0.5),
-                                    blurRadius: 12,
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                 ],
               ),
-            ),
-          ),
+            );
+
+        final containerChild = widget.isTelevision
+            ? Container(
+                width: 170,
+                height: 95,
+                decoration: cardDecoration,
+                child: cardContent,
+              )
+            : AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                width: 170,
+                height: 95,
+                decoration: cardDecoration,
+                child: cardContent,
+              );
+
+        if (widget.isTelevision) {
+          return Transform.scale(
+            scale: isActive ? 1.06 : 1.0,
+            child: containerChild,
+          );
+        }
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.06 : 1.0),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: containerChild,
         );
       },
     );
@@ -654,35 +678,41 @@ enum _ScrollDirection { left, right }
 class _ScrollIndicator extends StatelessWidget {
   final _ScrollDirection direction;
   final Color accentColor;
+  final bool isTelevision;
 
   const _ScrollIndicator({
     required this.direction,
     required this.accentColor,
+    this.isTelevision = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isLeft = direction == _ScrollDirection.left;
 
-    return IgnorePointer(
-      child: AnimatedOpacity(
-        opacity: 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          width: 28,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-              end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-              colors: [
-                const Color(0xFF0F0F1A).withValues(alpha: 0.9),
-                Colors.transparent,
-              ],
-            ),
-          ),
-          child: const SizedBox.shrink(),
+    final child = Container(
+      width: 28,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+          end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+          colors: [
+            const Color(0xFF0F0F1A).withValues(alpha: 0.9),
+            Colors.transparent,
+          ],
         ),
       ),
+      child: const SizedBox.shrink(),
+    );
+
+    return IgnorePointer(
+      child: isTelevision
+        ? child
+        : AnimatedOpacity(
+            opacity: 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: child,
+          ),
     );
   }
 }

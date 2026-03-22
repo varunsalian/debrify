@@ -244,6 +244,7 @@ class _HomeTraktContinueWatchingSectionState
       color: color,
       onTap: onTap,
       autofocus: autofocus,
+      isTelevision: widget.isTelevision,
     );
   }
 
@@ -819,34 +820,7 @@ class _HomeTraktContinueWatchingSectionState
         final genres = item.genres;
         final typeBadge = item.type == 'series' ? 'SERIES' : 'MOVIE';
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          builder: (context, scale, child) =>
-              Transform.scale(scale: scale, child: child),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            width: cardWidth,
-            height: cardHeight,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isActive
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.08),
-                width: isActive ? 1.5 : 0.5,
-              ),
-              boxShadow: widget.isTelevision ? null : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
-                  blurRadius: isActive ? 30 : 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
+        final cardContent = ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Stack(
                 fit: StackFit.expand,
@@ -1045,51 +1019,85 @@ class _HomeTraktContinueWatchingSectionState
 
                   // ── Play overlay on hover/focus ──
                   Positioned.fill(
-                    child: AnimatedOpacity(
-                      opacity: isActive ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        child: Center(
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(
-                                begin: 0.85, end: isActive ? 1.0 : 0.85),
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOutBack,
-                            builder: (context, scale, child) =>
-                                Transform.scale(
-                                    scale: scale, child: child),
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color:
-                                    Colors.white.withValues(alpha: 0.15),
-                                border: Border.all(
-                                  color:
-                                      Colors.white.withValues(alpha: 0.4),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black
-                                        .withValues(alpha: 0.4),
-                                    blurRadius: 16,
+                    child: widget.isTelevision
+                      ? Opacity(
+                          opacity: isActive ? 1.0 : 0.0,
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            child: Center(
+                              child: Transform.scale(
+                                scale: isActive ? 1.0 : 0.85,
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.15),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.4),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.4),
+                                        blurRadius: 16,
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: widget.isTelevision
-                                  ? Container(
+                                  child: ClipOval(
+                                    child: Container(
                                       color: Colors.black.withValues(alpha: 0.6),
                                       child: const Icon(
                                         Icons.play_arrow_rounded,
                                         color: Colors.white,
                                         size: 30,
                                       ),
-                                    )
-                                  : BackdropFilter(
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : AnimatedOpacity(
+                          opacity: isActive ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            child: Center(
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween(
+                                    begin: 0.85, end: isActive ? 1.0 : 0.85),
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutBack,
+                                builder: (context, scale, child) =>
+                                    Transform.scale(
+                                        scale: scale, child: child),
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.15),
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.4),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.4),
+                                        blurRadius: 16,
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(
+                                    child: BackdropFilter(
                                       filter: ImageFilter.blur(
                                           sigmaX: 10, sigmaY: 10),
                                       child: const Icon(
@@ -1098,16 +1106,59 @@ class _HomeTraktContinueWatchingSectionState
                                         size: 30,
                                       ),
                                     ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
                   ),
                 ],
               ),
+            );
+
+        final cardDecoration = BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isActive
+                ? Colors.white.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.08),
+            width: isActive ? 1.5 : 0.5,
+          ),
+          boxShadow: widget.isTelevision ? null : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
+              blurRadius: isActive ? 30 : 16,
+              offset: const Offset(0, 8),
             ),
+          ],
+        );
+
+        if (widget.isTelevision) {
+          return Transform.scale(
+            scale: isActive ? 1.05 : 1.0,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
+              decoration: cardDecoration,
+              child: cardContent,
+            ),
+          );
+        }
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            width: cardWidth,
+            height: cardHeight,
+            decoration: cardDecoration,
+            child: cardContent,
           ),
         );
       },
@@ -1350,6 +1401,7 @@ class _MenuItem extends StatefulWidget {
   final Color color;
   final VoidCallback onTap;
   final bool autofocus;
+  final bool isTelevision;
 
   const _MenuItem({
     required this.icon,
@@ -1358,6 +1410,7 @@ class _MenuItem extends StatefulWidget {
     required this.color,
     required this.onTap,
     this.autofocus = false,
+    this.isTelevision = false,
   });
 
   @override
@@ -1375,14 +1428,46 @@ class _MenuItemState extends State<_MenuItem> {
       onTap: widget.onTap,
       onFocusChange: (focused) => setState(() => _focused = focused),
       borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
+      child: widget.isTelevision
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(widget.icon, size: 18, color: widget.color),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 2),
+                      Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        : AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
           children: [
             Container(
               width: 36,

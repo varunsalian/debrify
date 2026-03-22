@@ -476,7 +476,259 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
-        return TweenAnimationBuilder<double>(
+        return widget.isTelevision
+          ? Transform.scale(
+              scale: isActive ? 1.05 : 1.0,
+              child: Builder(
+            builder: (context) {
+              final sw = MediaQuery.of(context).size.width;
+              final isMobile = sw < 600;
+              return Container(
+            width: isMobile ? sw * 0.7 : 350,
+            height: isMobile ? 155.0 : 210,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isActive
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: isActive ? 1.5 : 0.5,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // ── Poster image ──
+                  if (posterUrl != null && posterUrl.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: posterUrl,
+                      memCacheWidth: 200,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: const Color(0xFF0D1117),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) =>
+                          _buildPlaceholder(title),
+                    )
+                  else
+                    _buildPlaceholder(title),
+
+                  // ── Cinematic gradient ──
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.1),
+                            Colors.black.withValues(alpha: 0.75),
+                            Colors.black.withValues(alpha: 0.95),
+                          ],
+                          stops: const [0.0, 0.3, 0.65, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Left vignette
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.3),
+                            Colors.transparent,
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.3, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ── Top badges ──
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    right: 10,
+                    child: Row(
+                      children: [
+                        // Provider badge
+                        _GlassPill(
+                          isTelevision: widget.isTelevision,
+                          color: providerInfo.$2,
+                          child: Text(
+                            providerInfo.$1,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        // Favorite star
+                        _GlassPill(
+                          isTelevision: widget.isTelevision,
+                          child: const Icon(Icons.star_rounded,
+                              size: 13, color: Color(0xFFFFD700)),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Bottom info ──
+                  Positioned(
+                    bottom: progressPercent != null ? 5 : 12,
+                    left: 12,
+                    right: 12,
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        height: 1.2,
+                        letterSpacing: -0.2,
+                        shadows: [
+                          Shadow(color: Colors.black, blurRadius: 8),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  // ── Progress bar ──
+                  if (progressPercent != null)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: SizedBox(
+                        height: 3.5,
+                        child: Stack(
+                          children: [
+                            Container(
+                                color:
+                                    Colors.white.withValues(alpha: 0.1)),
+                            FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progressPercent,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFFD700),
+                                      Color(0xFFFFA500),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _accentColor
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, -1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // ── Loading overlay ──
+                  if (isPlaying)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        child: Center(
+                          child: SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  _accentColor),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // ── Play overlay ──
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: isActive && !isPlaying ? 1.0 : 0.0,
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        child: Center(
+                          child: Transform.scale(
+                            scale: isActive ? 1.0 : 0.85,
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white
+                                    .withValues(alpha: 0.15),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.4),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withValues(alpha: 0.4),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: Container(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+            },
+          ),
+            )
+          : TweenAnimationBuilder<double>(
           tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,

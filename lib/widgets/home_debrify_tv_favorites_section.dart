@@ -336,18 +336,7 @@ class _HomeDebrifyTvFavoritesSectionState
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          builder: (context, scale, child) =>
-              Transform.scale(scale: scale, child: child),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            width: 220,
-            height: 120,
-            decoration: BoxDecoration(
+        final cardDecoration = BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isActive
@@ -375,8 +364,49 @@ class _HomeDebrifyTvFavoritesSectionState
                         offset: const Offset(0, 4),
                       ),
                     ]),
-            ),
-            child: ClipRRect(
+            );
+
+        final playOverlayChild = Container(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          child: Center(
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white
+                                    .withValues(alpha: 0.15),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.35),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: widget.isTelevision
+                                  ? Container(
+                                      color: Colors.black.withValues(alpha: 0.6),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    )
+                                  : BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                          sigmaX: 8, sigmaY: 8),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                    ),
+                              ),
+                            ),
+                          ),
+                        );
+
+        final cardContent = ClipRRect(
               borderRadius: BorderRadius.circular(isActive ? 12.5 : 13),
               child: Stack(
                 fit: StackFit.expand,
@@ -543,54 +573,48 @@ class _HomeDebrifyTvFavoritesSectionState
                   // ── Play overlay ──
                   if (isActive)
                     Positioned.fill(
-                      child: AnimatedOpacity(
-                        opacity: 1.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          child: Center(
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white
-                                    .withValues(alpha: 0.15),
-                                border: Border.all(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.35),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: ClipOval(
-                                child: widget.isTelevision
-                                  ? Container(
-                                      color: Colors.black.withValues(alpha: 0.6),
-                                      child: const Icon(
-                                        Icons.play_arrow_rounded,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                    )
-                                  : BackdropFilter(
-                                      filter: ImageFilter.blur(
-                                          sigmaX: 8, sigmaY: 8),
-                                      child: const Icon(
-                                        Icons.play_arrow_rounded,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                    ),
-                              ),
-                            ),
+                      child: widget.isTelevision
+                        ? playOverlayChild
+                        : AnimatedOpacity(
+                            opacity: 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: playOverlayChild,
                           ),
-                        ),
-                      ),
                     ),
                 ],
               ),
-            ),
-          ),
+            );
+
+        final containerChild = widget.isTelevision
+            ? Container(
+                width: 220,
+                height: 120,
+                decoration: cardDecoration,
+                child: cardContent,
+              )
+            : AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                width: 220,
+                height: 120,
+                decoration: cardDecoration,
+                child: cardContent,
+              );
+
+        if (widget.isTelevision) {
+          return Transform.scale(
+            scale: isActive ? 1.05 : 1.0,
+            child: containerChild,
+          );
+        }
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
+          child: containerChild,
         );
       },
     );
