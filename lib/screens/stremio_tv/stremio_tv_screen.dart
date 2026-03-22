@@ -65,7 +65,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Mix salt (0-9, cycles on shuffle button)
   int _mixSalt = 0;
 
-  // Header menu button
+  // Header buttons
+  final FocusNode _searchBtnFocusNode = FocusNode(debugLabel: 'searchBtn');
   final FocusNode _menuFocusNode = FocusNode(debugLabel: 'menuBtn');
   final FocusNode _submenuFocusNode = FocusNode(debugLabel: 'localCatalogs');
   final MenuController _menuController = MenuController();
@@ -101,11 +102,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Register TV sidebar focus handler (tab index 9 = Stremio TV)
     _tvContentFocusHandler = () {
-      if (_showSearchField) {
-        _searchFocusNode.requestFocus();
-      } else {
-        _menuFocusNode.requestFocus();
-      }
+      _searchBtnFocusNode.requestFocus();
     };
     MainPageBridge.registerTvContentFocusHandler(9, _tvContentFocusHandler!);
 
@@ -135,6 +132,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchBtnFocusNode.dispose();
     _menuFocusNode.dispose();
     _submenuFocusNode.dispose();
     _searchController.dispose();
@@ -1738,19 +1736,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         (selection.baseOffset == 0 && selection.extentOffset == 0);
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      // Focus first channel row
-      final filtered = _filteredChannels;
-      if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
-        final firstIdx = _channels.indexOf(filtered.first);
-        if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-          _rowFocusNodes[firstIdx].requestFocus();
-        }
-      }
+      // Focus search/settings button row
+      _searchBtnFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _menuFocusNode.requestFocus();
+      // Search bar is at the top — nothing above it
       return KeyEventResult.handled;
     }
 
@@ -1776,7 +1768,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       // Hide search field on back when empty
       if (_showSearchField) {
         setState(() => _showSearchField = false);
-        _menuFocusNode.requestFocus();
+        _searchBtnFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
     }
@@ -1870,30 +1862,81 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               // Search toggle button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _showSearchField = !_showSearchField;
-                                  });
-                                  if (_showSearchField) {
-                                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                                      _searchFocusNode.requestFocus();
-                                    });
+                              Focus(
+                                focusNode: _searchBtnFocusNode,
+                                onKeyEvent: (node, event) {
+                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                    _menuFocusNode.requestFocus();
+                                    return KeyEventResult.handled;
                                   }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                    MainPageBridge.focusTvSidebar?.call();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                    if (_showSearchField) {
+                                      _searchFocusNode.requestFocus();
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                    final filtered = _filteredChannels;
+                                    if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
+                                      final firstIdx = _channels.indexOf(filtered.first);
+                                      if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+                                        _rowFocusNodes[firstIdx].requestFocus();
+                                      }
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.select ||
+                                      event.logicalKey == LogicalKeyboardKey.enter) {
+                                    setState(() {
+                                      _showSearchField = !_showSearchField;
+                                    });
+                                    if (_showSearchField) {
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        _searchFocusNode.requestFocus();
+                                      });
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
                                 },
-                                child: Container(
-                                  height: 40,
-                                  width: 40,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF141414),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Icon(
-                                    Icons.search_rounded,
-                                    size: 20,
-                                    color: (_showSearchField || _searchQuery.isNotEmpty)
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.5),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _showSearchField = !_showSearchField;
+                                    });
+                                    if (_showSearchField) {
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        _searchFocusNode.requestFocus();
+                                      });
+                                    }
+                                  },
+                                  child: ListenableBuilder(
+                                    listenable: _searchBtnFocusNode,
+                                    builder: (context, _) => Container(
+                                      height: 40,
+                                      width: 40,
+                                      decoration: BoxDecoration(
+                                        color: _searchBtnFocusNode.hasFocus
+                                            ? Colors.white.withValues(alpha: 0.15)
+                                            : const Color(0xFF141414),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: _searchBtnFocusNode.hasFocus
+                                            ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                                            : null,
+                                      ),
+                                      child: Icon(
+                                        Icons.search_rounded,
+                                        size: 20,
+                                        color: (_searchBtnFocusNode.hasFocus || _showSearchField || _searchQuery.isNotEmpty)
+                                            ? Colors.white
+                                            : Colors.white.withValues(alpha: 0.5),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1912,24 +1955,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     }
                                     return KeyEventResult.ignored;
                                   }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
-                                      event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                                    if (_showSearchField) {
+                                      _searchFocusNode.requestFocus();
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
                                     return KeyEventResult.handled;
                                   }
                                   if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                    MainPageBridge.focusTvSidebar?.call();
+                                    _searchBtnFocusNode.requestFocus();
                                     return KeyEventResult.handled;
                                   }
                                   if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                    if (_showSearchField) {
-                                      _searchFocusNode.requestFocus();
-                                    } else {
-                                      final filtered = _filteredChannels;
-                                      if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
-                                        final firstIdx = _channels.indexOf(filtered.first);
-                                        if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-                                          _rowFocusNodes[firstIdx].requestFocus();
-                                        }
+                                    final filtered = _filteredChannels;
+                                    if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
+                                      final firstIdx = _channels.indexOf(filtered.first);
+                                      if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+                                        _rowFocusNodes[firstIdx].requestFocus();
                                       }
                                     }
                                     return KeyEventResult.handled;
@@ -2124,8 +2168,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     onLeftPress:
                                         MainPageBridge.focusTvSidebar,
                                     onUpPress: index == 0
-                                        ? () => _searchFocusNode
-                                            .requestFocus()
+                                        ? () {
+                                            _searchBtnFocusNode.requestFocus();
+                                          }
                                         : null,
                                     displayProgress: cappedProgress,
                                   );
