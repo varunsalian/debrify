@@ -296,15 +296,14 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
           onTap: _toggleDropdown,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             decoration: BoxDecoration(
-              color: _isFocused
-                  ? Colors.white.withValues(alpha: 0.15)
-                  : const Color(0xFF141414),
-              borderRadius: BorderRadius.circular(20),
-              border: _isFocused
-                  ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
-                  : null,
+              color: Colors.white.withValues(alpha: _isFocused ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: _isFocused ? 0.4 : 0.2),
+                width: 1,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -312,33 +311,30 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
                 Icon(
                   widget.selectedOption.icon,
                   size: 16,
-                  color: _isFocused
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.6),
+                  color: Colors.white.withValues(alpha: 0.9),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     widget.selectedOption.label,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: _isFocused
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      letterSpacing: 0.3,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _isExpanded ? 0.5 : 0,
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
                     Icons.keyboard_arrow_down,
                     size: 18,
-                    color: Colors.white.withValues(alpha: 0.35),
+                    color: Colors.white.withValues(alpha: 0.4),
                   ),
                 ),
               ],
