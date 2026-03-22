@@ -224,12 +224,20 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
                     _removeOverlay();
                     setState(() => _isExpanded = false);
                     widget.onChanged(option);
-                    _focusNode.requestFocus();
+                    if (widget.isTelevision) {
+                      _focusNode.requestFocus();
+                    } else {
+                      _focusNode.unfocus();
+                    }
                   },
                   onClose: () {
                     _removeOverlay();
                     setState(() => _isExpanded = false);
-                    _focusNode.requestFocus();
+                    if (widget.isTelevision) {
+                      _focusNode.requestFocus();
+                    } else {
+                      _focusNode.unfocus();
+                    }
                   },
                   onLeftArrowPressed: () {
                     _removeOverlay();
