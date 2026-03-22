@@ -13280,20 +13280,69 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       },
       child: Stack(
       children: [
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF16162A),
-                Color(0xFF0C0C18),
-                Color(0xFF050508),
-              ],
-              stops: [0.0, 0.3, 1.0],
+        // Base gradient background
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF16162A),
+                  Color(0xFF0C0C18),
+                  Color(0xFF050508),
+                ],
+                stops: [0.0, 0.3, 1.0],
+              ),
             ),
           ),
-          child: SafeArea(
+        ),
+        // Top-left purple-blue ambient glow
+        Positioned(
+          top: -80,
+          left: -60,
+          child: IgnorePointer(
+            child: Container(
+              width: 320,
+              height: 320,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF6366F1).withValues(alpha: 0.12),
+                    const Color(0xFF6366F1).withValues(alpha: 0.04),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Bottom-right teal ambient glow
+        Positioned(
+          bottom: -60,
+          right: -40,
+          child: IgnorePointer(
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF10B981).withValues(alpha: 0.08),
+                    const Color(0xFF10B981).withValues(alpha: 0.02),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Main content
+        SafeArea(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
               child: Column(
@@ -14245,7 +14294,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ],
           ),
         ),
-      ),
         ),
         // Bulk Add Button or Selection Mode Bar
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
