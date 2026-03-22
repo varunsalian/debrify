@@ -25,7 +25,6 @@ class StremioTvNowPlayingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final item = nowPlaying.item;
-    final theme = Theme.of(context);
 
     return Row(
       children: [
@@ -33,8 +32,8 @@ class StremioTvNowPlayingCard extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            width: 60,
-            height: 85,
+            width: 56,
+            height: 80,
             child: ImageFiltered(
               imageFilter: hideDetails
                   ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
@@ -45,22 +44,34 @@ class StremioTvNowPlayingCard extends StatelessWidget {
                       memCacheWidth: 200,
                       fit: BoxFit.cover,
                       placeholder: (_, __) => Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Center(
-                          child: Icon(Icons.movie_rounded, size: 24),
+                        color: Colors.white.withValues(alpha: 0.05),
+                        child: Center(
+                          child: Icon(
+                            Icons.movie_rounded,
+                            size: 20,
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
                         ),
                       ),
                       errorWidget: (_, __, ___) => Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Center(
-                          child: Icon(Icons.broken_image_rounded, size: 24),
+                        color: Colors.white.withValues(alpha: 0.05),
+                        child: Center(
+                          child: Icon(
+                            Icons.broken_image_rounded,
+                            size: 20,
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
                         ),
                       ),
                     )
                   : Container(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      child: const Center(
-                        child: Icon(Icons.movie_rounded, size: 24),
+                      color: Colors.white.withValues(alpha: 0.05),
+                      child: Center(
+                        child: Icon(
+                          Icons.movie_rounded,
+                          size: 20,
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
                       ),
                     ),
             ),
@@ -75,38 +86,43 @@ class StremioTvNowPlayingCard extends StatelessWidget {
             children: [
               Text(
                 hideDetails ? _buildTeaserTitle(item.type) : item.name,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
                   fontStyle: hideDetails ? FontStyle.italic : null,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               if (hideDetails)
                 Text(
                   'Press play to find out!',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                 )
               else
-                _buildMetaRow(item, theme),
+                _buildMetaRow(item),
               if (!hideDetails &&
                   item.description != null &&
                   item.description!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   item.description!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.35),
+                    height: 1.3,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
               const SizedBox(height: 6),
-              _buildProgressBar(theme),
+              _buildProgressBar(),
             ],
           ),
         ),
@@ -117,7 +133,6 @@ class StremioTvNowPlayingCard extends StatelessWidget {
   String _buildTeaserTitle(String type) {
     final genre = channelGenre;
     if (genre != null && genre.isNotEmpty) {
-      // "An Action movie awaits..." / "A Comedy series awaits..."
       final article = 'aeiouAEIOU'.contains(genre[0]) ? 'An' : 'A';
       final kind = type == 'series' ? 'series' : 'film';
       return '$article $genre $kind awaits...';
@@ -125,7 +140,7 @@ class StremioTvNowPlayingCard extends StatelessWidget {
     return type == 'series' ? 'A Series awaits...' : 'A Movie awaits...';
   }
 
-  Widget _buildMetaRow(StremioMeta item, ThemeData theme) {
+  Widget _buildMetaRow(StremioMeta item) {
     final parts = <String>[];
     if (item.year != null) parts.add(item.year!);
     if (item.imdbRating != null) parts.add('${item.imdbRating}');
@@ -136,14 +151,15 @@ class StremioTvNowPlayingCard extends StatelessWidget {
     return Row(
       children: [
         if (item.imdbRating != null) ...[
-          Icon(Icons.star_rounded, size: 14, color: Colors.amber.shade600),
+          Icon(Icons.star_rounded, size: 12, color: Colors.amber.shade600),
           const SizedBox(width: 2),
         ],
         Flexible(
           child: Text(
             parts.join(' \u00B7 '),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withValues(alpha: 0.45),
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -153,7 +169,7 @@ class StremioTvNowPlayingCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressBar(ThemeData theme) {
+  Widget _buildProgressBar() {
     final progress = displayProgress ?? nowPlaying.progress;
     return Row(
       children: [
@@ -162,10 +178,10 @@ class StremioTvNowPlayingCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 4,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                theme.colorScheme.primary,
+              minHeight: 3,
+              backgroundColor: Colors.white.withValues(alpha: 0.06),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF6366F1),
               ),
             ),
           ),
@@ -173,8 +189,9 @@ class StremioTvNowPlayingCard extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           nowPlaying.progressText,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.white.withValues(alpha: 0.35),
           ),
         ),
       ],
