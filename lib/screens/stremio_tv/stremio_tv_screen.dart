@@ -74,6 +74,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
+  bool _showSearchField = false;
 
   // Lazy loading: track channels currently being fetched to avoid duplicates
   final Set<String> _loadingChannelIds = {};
@@ -100,7 +101,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Register TV sidebar focus handler (tab index 9 = Stremio TV)
     _tvContentFocusHandler = () {
-      _searchFocusNode.requestFocus();
+      if (_showSearchField) {
+        _searchFocusNode.requestFocus();
+      } else {
+        _menuFocusNode.requestFocus();
+      }
     };
     MainPageBridge.registerTvContentFocusHandler(9, _tvContentFocusHandler!);
 
@@ -1768,6 +1773,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _searchController.clear();
         return KeyEventResult.handled;
       }
+      // Hide search field on back when empty
+      if (_showSearchField) {
+        setState(() => _showSearchField = false);
+        _menuFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
     }
 
     return KeyEventResult.ignored;
@@ -1786,197 +1797,245 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
                   children: [
-                    // Header
+                    // Controls row — search + settings centered
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-                      child: Row(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.smart_display_rounded,
-                            color: theme.colorScheme.primary,
-                            size: 20,
+                          // Collapsible search field
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                            alignment: Alignment.topCenter,
+                            child: _showSearchField
+                                ? Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: TextField(
+                                      controller: _searchController,
+                                      focusNode: _searchFocusNode,
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: InputDecoration(
+                                        hintText: 'Search channels...',
+                                        hintStyle: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.3),
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.search_rounded,
+                                          color: Colors.white.withValues(alpha: 0.35),
+                                        ),
+                                        suffixIcon: _searchQuery.isNotEmpty
+                                            ? IconButton(
+                                                icon: Icon(
+                                                  Icons.close_rounded,
+                                                  color: Colors.white.withValues(alpha: 0.5),
+                                                ),
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  setState(() {
+                                                    _showSearchField = false;
+                                                  });
+                                                },
+                                              )
+                                            : null,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: BorderSide(
+                                            color: Colors.white.withValues(alpha: 0.15),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.white.withValues(alpha: 0.07),
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 14,
+                                        ),
+                                      ),
+                                      textInputAction: TextInputAction.search,
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Stremio TV',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              color: theme.colorScheme.primaryContainer,
-                            ),
-                            child: Text(
-                              _searchQuery.isNotEmpty
-                                  ? '${_filteredChannels.length}/${_channels.length} channels'
-                                  : '${_channels.length} channels',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          Focus(
-                            focusNode: _menuFocusNode,
-                            onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                              // When menu is open, handle back to close; let menu overlay handle the rest
-                              if (_menuController.isOpen) {
-                                if (event.logicalKey == LogicalKeyboardKey.escape ||
-                                    event.logicalKey == LogicalKeyboardKey.goBack) {
-                                  _menuController.close();
-                                  _menuFocusNode.requestFocus();
-                                  return KeyEventResult.handled;
-                                }
-                                // Menu items live in a separate FocusScope overlay —
-                                // return ignored so they can handle their own DPAD events
-                                return KeyEventResult.ignored;
-                              }
-                              if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
-                                  event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                MainPageBridge.focusTvSidebar?.call();
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                _searchFocusNode.requestFocus();
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey == LogicalKeyboardKey.select ||
-                                  event.logicalKey == LogicalKeyboardKey.enter) {
-                                _menuController.open();
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                            child: ListenableBuilder(
-                              listenable: _menuFocusNode,
-                              builder: (context, child) => Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: _menuFocusNode.hasFocus
-                                      ? theme.colorScheme.primaryContainer
-                                      : null,
-                                  border: _menuFocusNode.hasFocus
-                                      ? Border.all(
-                                          color: theme.colorScheme.primary,
-                                          width: 2,
-                                        )
-                                      : null,
-                                ),
-                                child: MenuAnchor(
-                                  controller: _menuController,
-                                  menuChildren: [
-                                    MenuItemButton(
-                                      autofocus: true,
-                                      leadingIcon: const Icon(Icons.shuffle_rounded),
-                                      onPressed: () {
-                                        setState(() => _mixSalt = (_mixSalt + 1) % 10);
-                                      },
-                                      child: Text('Shuffle (Mix ${_mixSalt + 1})'),
-                                    ),
-                                    MenuItemButton(
-                                      leadingIcon: const Icon(Icons.refresh_rounded),
-                                      onPressed: _refreshing ? null : () => _refresh(),
-                                      child: const Text('Refresh'),
-                                    ),
-                                    MenuItemButton(
-                                      leadingIcon: const Icon(Icons.tune_rounded),
-                                      onPressed: () => _openChannelFilter(),
-                                      child: const Text('Filter channels'),
-                                    ),
-                                    SubmenuButton(
-                                      focusNode: _submenuFocusNode,
-                                      leadingIcon: const Icon(Icons.playlist_add_rounded),
-                                      menuChildren: [
-                                        _submenuItem(
-                                          autofocus: true,
-                                          icon: Icons.list_rounded,
-                                          label: 'Manage',
-                                          onPressed: _openLocalCatalogs,
-                                        ),
-                                        _submenuItem(
-                                          icon: Icons.file_upload_outlined,
-                                          label: 'From File',
-                                          onPressed: _importFromFile,
-                                        ),
-                                        _submenuItem(
-                                          icon: Icons.link_rounded,
-                                          label: 'From URL',
-                                          onPressed: _importFromUrl,
-                                        ),
-                                        _submenuItem(
-                                          icon: Icons.data_object_rounded,
-                                          label: 'Paste JSON',
-                                          onPressed: _importFromJson,
-                                        ),
-                                        _submenuItem(
-                                          icon: Icons.source_rounded,
-                                          label: 'From Repository',
-                                          onPressed: _importFromRepo,
-                                        ),
-                                        _submenuItem(
-                                          icon: Icons.movie_filter_rounded,
-                                          label: 'From Trakt',
-                                          onPressed: _importFromTrakt,
-                                        ),
-                                      ],
-                                      child: const Text('Import'),
-                                    ),
-                                  ],
-                                  builder: (context, controller, child) =>
-                                      IconButton(
-                                    icon: const Icon(Icons.more_vert_rounded),
-                                    tooltip: 'Options',
-                                    onPressed: () {
-                                      if (controller.isOpen) {
-                                        controller.close();
-                                      } else {
-                                        controller.open();
-                                      }
-                                    },
+                          // Centered search + settings buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Search toggle button
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _showSearchField = !_showSearchField;
+                                  });
+                                  if (_showSearchField) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      _searchFocusNode.requestFocus();
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  height: 40,
+                                  width: 40,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF141414),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    size: 20,
+                                    color: (_showSearchField || _searchQuery.isNotEmpty)
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 10),
+                              // Settings/options button
+                              Focus(
+                                focusNode: _menuFocusNode,
+                                onKeyEvent: (node, event) {
+                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                                  if (_menuController.isOpen) {
+                                    if (event.logicalKey == LogicalKeyboardKey.escape ||
+                                        event.logicalKey == LogicalKeyboardKey.goBack) {
+                                      _menuController.close();
+                                      _menuFocusNode.requestFocus();
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+                                      event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                                    MainPageBridge.focusTvSidebar?.call();
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                                    if (_showSearchField) {
+                                      _searchFocusNode.requestFocus();
+                                    } else {
+                                      final filtered = _filteredChannels;
+                                      if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
+                                        final firstIdx = _channels.indexOf(filtered.first);
+                                        if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+                                          _rowFocusNodes[firstIdx].requestFocus();
+                                        }
+                                      }
+                                    }
+                                    return KeyEventResult.handled;
+                                  }
+                                  if (event.logicalKey == LogicalKeyboardKey.select ||
+                                      event.logicalKey == LogicalKeyboardKey.enter) {
+                                    _menuController.open();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: ListenableBuilder(
+                                  listenable: _menuFocusNode,
+                                  builder: (context, child) => MenuAnchor(
+                                    controller: _menuController,
+                                    menuChildren: [
+                                      MenuItemButton(
+                                        autofocus: true,
+                                        leadingIcon: const Icon(Icons.shuffle_rounded),
+                                        onPressed: () {
+                                          setState(() => _mixSalt = (_mixSalt + 1) % 10);
+                                        },
+                                        child: Text('Shuffle (Mix ${_mixSalt + 1})'),
+                                      ),
+                                      MenuItemButton(
+                                        leadingIcon: const Icon(Icons.refresh_rounded),
+                                        onPressed: _refreshing ? null : () => _refresh(),
+                                        child: const Text('Refresh'),
+                                      ),
+                                      MenuItemButton(
+                                        leadingIcon: const Icon(Icons.tune_rounded),
+                                        onPressed: () => _openChannelFilter(),
+                                        child: const Text('Filter channels'),
+                                      ),
+                                      SubmenuButton(
+                                        focusNode: _submenuFocusNode,
+                                        leadingIcon: const Icon(Icons.playlist_add_rounded),
+                                        menuChildren: [
+                                          _submenuItem(
+                                            autofocus: true,
+                                            icon: Icons.list_rounded,
+                                            label: 'Manage',
+                                            onPressed: _openLocalCatalogs,
+                                          ),
+                                          _submenuItem(
+                                            icon: Icons.file_upload_outlined,
+                                            label: 'From File',
+                                            onPressed: _importFromFile,
+                                          ),
+                                          _submenuItem(
+                                            icon: Icons.link_rounded,
+                                            label: 'From URL',
+                                            onPressed: _importFromUrl,
+                                          ),
+                                          _submenuItem(
+                                            icon: Icons.data_object_rounded,
+                                            label: 'Paste JSON',
+                                            onPressed: _importFromJson,
+                                          ),
+                                          _submenuItem(
+                                            icon: Icons.source_rounded,
+                                            label: 'From Repository',
+                                            onPressed: _importFromRepo,
+                                          ),
+                                          _submenuItem(
+                                            icon: Icons.movie_filter_rounded,
+                                            label: 'From Trakt',
+                                            onPressed: _importFromTrakt,
+                                          ),
+                                        ],
+                                        child: const Text('Import'),
+                                      ),
+                                    ],
+                                    builder: (context, controller, child) => Container(
+                                      height: 40,
+                                      width: 40,
+                                      decoration: BoxDecoration(
+                                        color: _menuFocusNode.hasFocus
+                                            ? Colors.white.withValues(alpha: 0.15)
+                                            : const Color(0xFF141414),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: _menuFocusNode.hasFocus
+                                            ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                                            : null,
+                                      ),
+                                      child: IconButton(
+                                        icon: const Icon(Icons.settings_rounded, size: 20),
+                                        padding: EdgeInsets.zero,
+                                        color: _menuFocusNode.hasFocus
+                                            ? Colors.white
+                                            : Colors.white.withValues(alpha: 0.5),
+                                        onPressed: () {
+                                          if (controller.isOpen) {
+                                            controller.close();
+                                          } else {
+                                            controller.open();
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ),
-                    // Search box
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        decoration: InputDecoration(
-                          hintText: 'Search channels...',
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 20),
-                                  onPressed: _searchController.clear,
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        textInputAction: TextInputAction.search,
                       ),
                     ),
                     // Channel list
