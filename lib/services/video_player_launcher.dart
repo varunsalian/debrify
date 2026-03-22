@@ -1384,8 +1384,14 @@ class VideoPlayerLauncher {
           _traktLastScrobbleAction = 'start';
           TraktService.instance.scrobbleStart(imdbId, traktProgress, season: season, episode: episode);
         } else if (!isPlaying && !completed && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'pause' && _traktLastScrobbleAction != 'stop') {
-          _traktLastScrobbleAction = 'pause';
-          TraktService.instance.scrobblePause(imdbId, traktProgress, season: season, episode: episode);
+          // Trakt rejects pause when progress > 80% — send stop instead
+          if (traktProgress > 80) {
+            _traktLastScrobbleAction = 'stop';
+            TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
+          } else {
+            _traktLastScrobbleAction = 'pause';
+            TraktService.instance.scrobblePause(imdbId, traktProgress, season: season, episode: episode);
+          }
         }
       }
 

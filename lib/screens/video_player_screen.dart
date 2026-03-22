@@ -552,11 +552,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _traktScrobble(String action) {
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
-    if (_traktLastScrobbleAction == action) return;
-    _traktLastScrobbleAction = action;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
     final se = _traktSeasonEpisode();
+    // Trakt rejects pause when progress > 80% — send stop instead
+    if (action == 'pause' && progress > 80) {
+      action = 'stop';
+    }
+    if (_traktLastScrobbleAction == action) return;
+    _traktLastScrobbleAction = action;
     switch (action) {
       case 'start':
         TraktService.instance.scrobbleStart(imdbId, progress,
