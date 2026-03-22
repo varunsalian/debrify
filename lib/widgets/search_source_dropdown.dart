@@ -179,9 +179,15 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
   OverlayEntry _createOverlayEntry() {
     final renderBox = context.findRenderObject() as RenderBox;
     final size = renderBox.size;
+    final triggerPos = renderBox.localToGlobal(Offset.zero);
+    final screenWidth = MediaQuery.of(context).size.width;
     // Minimum width for dropdown to prevent text wrapping
-    const double minDropdownWidth = 220;
-    final dropdownWidth = size.width < minDropdownWidth ? minDropdownWidth : size.width;
+    const double minDropdownWidth = 240;
+    final maxAvailableWidth = screenWidth - 16; // 8px margin each side
+    final dropdownWidth = minDropdownWidth.clamp(0.0, maxAvailableWidth);
+    // Offset to prevent overflowing right edge (8px margin)
+    final rightEdge = triggerPos.dx + dropdownWidth;
+    final dx = rightEdge > screenWidth - 8 ? -(rightEdge - screenWidth + 8) : 0.0;
 
     return OverlayEntry(
       builder: (context) => Stack(
@@ -198,17 +204,18 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
               child: const ColoredBox(color: Colors.transparent),
             ),
           ),
-          // The actual dropdown menu (aligned to left edge of trigger)
+          // The actual dropdown menu
           Positioned(
             width: dropdownWidth,
             child: CompositedTransformFollower(
               link: _layerLink,
               showWhenUnlinked: false,
-              offset: Offset(0, size.height + 4),
+              offset: Offset(dx, size.height + 4),
               child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(12),
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                elevation: 16,
+                shadowColor: Colors.black.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(16),
+                color: const Color(0xFF141420),
                 child: _DropdownMenu(
                   options: widget.options,
                   selectedOption: widget.selectedOption,
@@ -464,15 +471,28 @@ class _DropdownMenuState extends State<_DropdownMenu> {
   /// Build a section header widget
   Widget _buildSectionHeader(ThemeData theme, ColorScheme colorScheme, String label) {
     return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 6),
-      child: Text(
-        label.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-          fontSize: 10,
-        ),
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 14, bottom: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 12,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.35),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              fontSize: 10,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -494,17 +514,25 @@ class _DropdownMenuState extends State<_DropdownMenu> {
     // Use FocusScope to trap focus within the dropdown
     return FocusScope(
       autofocus: true,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 300),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 320),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+        ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: ListView.builder(
           shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           itemCount: widget.options.length,
           itemBuilder: (context, index) {
             final option = widget.options[index];
             final isSelected = option == widget.selectedOption;
+            final isFocusedItem = _focusedIndex == index;
 
             // Check if this is the first addon to show Stremio section header
             final showStremioHeader = firstAddonIndex != null && index == firstAddonIndex;
@@ -537,27 +565,39 @@ class _DropdownMenuState extends State<_DropdownMenu> {
                   onKeyEvent: (node, event) => _handleItemKeyEvent(node, event, index),
                   child: InkWell(
                     onTap: () => widget.onSelected(option),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                       decoration: BoxDecoration(
-                        color: _focusedIndex == index
-                            ? colorScheme.primary.withValues(alpha: 0.2)
+                        color: isFocusedItem
+                            ? Colors.white.withValues(alpha: 0.12)
                             : isSelected
-                                ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                                : null,
-                        border: _focusedIndex == index
-                            ? Border.all(color: colorScheme.primary, width: 2)
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        border: isFocusedItem
+                            ? Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1)
                             : null,
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            option.icon,
-                            size: 20,
-                            color: isSelected
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant,
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.white.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              option.icon,
+                              size: 16,
+                              color: isSelected
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.5),
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -566,11 +606,14 @@ class _DropdownMenuState extends State<_DropdownMenu> {
                               children: [
                                 Text(
                                   option.label,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurface,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 14,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
-                                        : FontWeight.normal,
+                                        : FontWeight.w400,
                                   ),
                                 ),
                                 if (option.type == SearchSourceType.addon &&
@@ -579,18 +622,27 @@ class _DropdownMenuState extends State<_DropdownMenu> {
                                     option.addon!.supportsCatalogs
                                         ? '${option.addon!.catalogs.length} catalog${option.addon!.catalogs.length != 1 ? 's' : ''}'
                                         : 'Search only',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.35),
+                                      fontSize: 12,
                                     ),
                                   ),
                               ],
                             ),
                           ),
                           if (isSelected)
-                            Icon(
-                              Icons.check,
-                              size: 20,
-                              color: colorScheme.primary,
+                            Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_rounded,
+                                size: 14,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
                             ),
                         ],
                       ),
