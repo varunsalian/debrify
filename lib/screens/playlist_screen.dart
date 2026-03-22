@@ -40,8 +40,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   // Search state
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _searchBarFocusNode = FocusNode();
   final ValueNotifier<String> _searchQuery = ValueNotifier<String>('');
   Timer? _searchDebouncer;
+  bool _showSearchField = false;
 
   // Favorites state
   Set<String> _favoriteKeys = {};
@@ -64,6 +66,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     // Search controller listener with debounce
     _searchController.addListener(_onSearchChanged);
+
+    // Search bar DPAD key handler
+    _searchBarFocusNode.onKeyEvent = _handleSearchBarKeyEvent;
 
     // Register playlist item playback handler
     MainPageBridge.playPlaylistItem = _playItem;
@@ -110,6 +115,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _searchBarFocusNode.dispose();
     _searchQuery.dispose();
     _searchDebouncer?.cancel();
     super.dispose();
@@ -120,6 +126,50 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _searchDebouncer = Timer(const Duration(milliseconds: 100), () {
       _searchQuery.value = _searchController.text.toLowerCase().trim();
     });
+  }
+
+  KeyEventResult _handleSearchBarKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final text = _searchController.text;
+    final selection = _searchController.selection;
+    final isAtStart = !selection.isValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _searchFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (text.isEmpty || isAtStart) {
+        MainPageBridge.focusTvSidebar?.call();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.goBack) {
+      if (text.isNotEmpty) {
+        _searchController.clear();
+        return KeyEventResult.handled;
+      }
+      if (_showSearchField) {
+        setState(() => _showSearchField = false);
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Future<void> _init() async {
@@ -1752,21 +1802,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
 
   // Show search dialog
-  void _showSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => _SearchDialog(
-        initialQuery: _searchController.text,
-        onSearch: (query) {
-          _searchController.text = query;
-          _searchQuery.value = query.toLowerCase().trim();
-        },
-        onClear: () {
-          _searchController.clear();
-          _searchQuery.value = '';
-        },
-      ),
-    );
+  void _toggleSearchField() {
+    setState(() {
+      _showSearchField = !_showSearchField;
+    });
+    if (_showSearchField) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchBarFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -1788,16 +1832,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           if (_allItems.isEmpty) {
             return Column(
               children: [
-                // Search button row - for TV DPAD focus
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _buildSearchButton(''),
-                    ],
-                  ),
-                ),
+                _buildSearchArea(''),
                 Expanded(child: _buildEmptyState()),
               ],
             );
@@ -1810,7 +1845,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               final allItems = _getAllItemsSection(query);
 
               if (allItems.isEmpty && favoriteItems.isEmpty) {
-                return _buildNoResultsState(query);
+                return Column(
+                  children: [
+                    _buildSearchArea(query),
+                    Expanded(child: _buildNoResultsState(query)),
+                  ],
+                );
               }
 
               return FocusTraversalGroup(
@@ -1825,17 +1865,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     ),
                     cacheExtent: 500.0,
                     slivers: [
-                      // Search button row - navigable via DPAD
+                      // Search area - inline bar + toggle button
                       SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              _buildSearchButton(query),
-                            ],
-                          ),
-                        ),
+                        child: _buildSearchArea(query),
                       ),
 
                       // Favorites Section
@@ -1926,56 +1958,120 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
-  Widget _buildSearchButton(String currentQuery) {
+  Widget _buildSearchArea(String currentQuery) {
     final hasActiveSearch = currentQuery.isNotEmpty;
 
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Column(
+        children: [
+          // Inline search bar (toggled)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: _showSearchField
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchBarFocusNode,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Search...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: Colors.white.withValues(alpha: 0.35),
+                        ),
+                        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _searchController,
+                          builder: (context, value, _) {
+                            if (value.text.isEmpty) return const SizedBox.shrink();
+                            return IconButton(
+                              icon: Icon(
+                                Icons.close_rounded,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                              },
+                            );
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.07),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          // Search toggle button (centered)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildSearchButton(hasActiveSearch),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchButton(bool hasActiveSearch) {
     return Focus(
       focusNode: _searchFocusNode,
-      autofocus: true, // Search button gets initial focus
+      autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          // Handle left arrow - go to last card in Favorites/All Items, then sidebar
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            // Try favorites section last item first
-            if (_favoritesSectionKey.currentState != null &&
-                _favoritesSectionKey.currentState!.hasItems) {
-              if (_favoritesSectionKey.currentState!.requestFocusOnLastItem()) {
-                return KeyEventResult.handled;
-              }
-            }
-            // Try all items section last item
-            if (_allItemsSectionKey.currentState != null &&
-                _allItemsSectionKey.currentState!.hasItems) {
-              if (_allItemsSectionKey.currentState!.requestFocusOnLastItem()) {
-                return KeyEventResult.handled;
-              }
-            }
-            // Fallback to sidebar
-            if (MainPageBridge.focusTvSidebar != null) {
-              MainPageBridge.focusTvSidebar!();
-              return KeyEventResult.handled;
-            }
+            MainPageBridge.focusTvSidebar?.call();
+            return KeyEventResult.handled;
           }
-          // Handle down arrow - go to first card in Favorites, then All Items
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            if (_showSearchField) {
+              _searchBarFocusNode.requestFocus();
+            }
+            return KeyEventResult.handled;
+          }
           if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            // Try favorites section first item
             if (_favoritesSectionKey.currentState != null &&
                 _favoritesSectionKey.currentState!.hasItems) {
               if (_favoritesSectionKey.currentState!.requestFocusOnFirstItem()) {
                 return KeyEventResult.handled;
               }
             }
-            // Try all items section first item
             if (_allItemsSectionKey.currentState != null &&
                 _allItemsSectionKey.currentState!.hasItems) {
               if (_allItemsSectionKey.currentState!.requestFocusOnFirstItem()) {
                 return KeyEventResult.handled;
               }
             }
+            return KeyEventResult.handled;
           }
           if (event.logicalKey == LogicalKeyboardKey.select ||
               event.logicalKey == LogicalKeyboardKey.enter) {
-            _showSearchDialog();
+            _toggleSearchField();
             return KeyEventResult.handled;
           }
         }
@@ -1985,72 +2081,25 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         builder: (context) {
           final isFocused = Focus.of(context).hasFocus;
           return GestureDetector(
-            onTap: _showSearchDialog,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: EdgeInsets.symmetric(
-                horizontal: hasActiveSearch ? 12 : 10,
-                vertical: 10,
-              ),
+            onTap: _toggleSearchField,
+            child: Container(
+              height: 40,
+              width: 40,
               decoration: BoxDecoration(
-                color: hasActiveSearch
-                    ? const Color(0xFF6366F1).withValues(alpha: 0.2)
-                    : const Color(0xFF1E293B).withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(hasActiveSearch ? 20 : 12),
-                border: Border.all(
-                  color: isFocused
-                      ? const Color(0xFF6366F1)
-                      : hasActiveSearch
-                          ? const Color(0xFF6366F1).withValues(alpha: 0.5)
-                          : Colors.white.withValues(alpha: 0.1),
-                  width: isFocused ? 2 : 1,
-                ),
-                boxShadow: isFocused ? [
-                  BoxShadow(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    spreadRadius: 1,
-                  ),
-                ] : null,
+                color: isFocused
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : const Color(0xFF141414),
+                borderRadius: BorderRadius.circular(20),
+                border: isFocused
+                    ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                    : null,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    color: hasActiveSearch
-                        ? const Color(0xFF6366F1)
-                        : Colors.white.withValues(alpha: 0.7),
-                    size: 20,
-                  ),
-                  if (hasActiveSearch) ...[
-                    const SizedBox(width: 8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 120),
-                      child: Text(
-                        currentQuery,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () {
-                        _searchController.clear();
-                        _searchQuery.value = '';
-                      },
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: Colors.white.withValues(alpha: 0.6),
-                        size: 16,
-                      ),
-                    ),
-                  ],
-                ],
+              child: Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: (isFocused || hasActiveSearch || _showSearchField)
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.5),
               ),
             ),
           );
@@ -2139,195 +2188,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 }
 
 /// Search dialog for playlist search - TV optimized
-class _SearchDialog extends StatefulWidget {
-  final String initialQuery;
-  final void Function(String query) onSearch;
-  final VoidCallback onClear;
-
-  const _SearchDialog({
-    required this.initialQuery,
-    required this.onSearch,
-    required this.onClear,
-  });
-
-  @override
-  State<_SearchDialog> createState() => _SearchDialogState();
-}
-
-class _SearchDialogState extends State<_SearchDialog> {
-  late TextEditingController _controller;
-  late FocusNode _textFieldFocusNode;
-  late FocusNode _searchButtonFocusNode;
-  late FocusNode _clearButtonFocusNode;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialQuery);
-    _textFieldFocusNode = FocusNode();
-    _searchButtonFocusNode = FocusNode();
-    _clearButtonFocusNode = FocusNode();
-
-    // Auto-focus text field
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _textFieldFocusNode.requestFocus();
-    });
-  }
-
-  // Handle DPAD navigation from TextField to buttons
-  KeyEventResult _handleTextFieldKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      // Down arrow: move to buttons
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        if (widget.initialQuery.isNotEmpty) {
-          _clearButtonFocusNode.requestFocus();
-        } else {
-          _searchButtonFocusNode.requestFocus();
-        }
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _textFieldFocusNode.dispose();
-    _searchButtonFocusNode.dispose();
-    _clearButtonFocusNode.dispose();
-    super.dispose();
-  }
-
-  void _performSearch() {
-    widget.onSearch(_controller.text);
-    Navigator.of(context).pop();
-  }
-
-  void _performClear() {
-    _controller.clear();
-    widget.onClear();
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title
-            Row(
-              children: [
-                const Icon(
-                  Icons.search_rounded,
-                  color: Color(0xFF6366F1),
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Search Playlist',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Search field with DPAD navigation
-            Focus(
-              onKeyEvent: _handleTextFieldKey,
-              child: TextField(
-                controller: _controller,
-                focusNode: _textFieldFocusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                cursorColor: const Color(0xFF6366F1),
-                onSubmitted: (_) => _performSearch(),
-                decoration: InputDecoration(
-                hintText: 'Enter search term...',
-                hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                ),
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6366F1),
-                    width: 2,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-              ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Action buttons with DPAD navigation
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Clear button
-                if (widget.initialQuery.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: _DialogButton(
-                      focusNode: _clearButtonFocusNode,
-                      label: 'Clear',
-                      icon: Icons.clear_all_rounded,
-                      onPressed: _performClear,
-                      onUpPressed: () => _textFieldFocusNode.requestFocus(),
-                      isSecondary: true,
-                    ),
-                  ),
-                // Search button
-                _DialogButton(
-                  focusNode: _searchButtonFocusNode,
-                  label: 'Search',
-                  icon: Icons.search_rounded,
-                  onPressed: _performSearch,
-                  onUpPressed: () => _textFieldFocusNode.requestFocus(),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Custom focus traversal policy that prevents focus from escaping upward to navbar
 class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with DirectionalFocusTraversalPolicyMixin {
   @override
@@ -2356,89 +2216,6 @@ class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with Directiona
       if (yDiff != 0) return yDiff;
       return aRect.left.compareTo(bRect.left);
     });
-  }
-}
-
-/// TV-optimized button for dialog with DPAD navigation
-class _DialogButton extends StatelessWidget {
-  final FocusNode focusNode;
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final VoidCallback? onUpPressed;
-  final bool isSecondary;
-
-  const _DialogButton({
-    required this.focusNode,
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.onUpPressed,
-    this.isSecondary = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: focusNode,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
-            onPressed();
-            return KeyEventResult.handled;
-          }
-          // Up arrow: navigate back to text field
-          if (event.logicalKey == LogicalKeyboardKey.arrowUp && onUpPressed != null) {
-            onUpPressed!();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return GestureDetector(
-            onTap: onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: isFocused
-                    ? (isSecondary ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF6366F1))
-                    : (isSecondary ? Colors.transparent : const Color(0xFF6366F1).withValues(alpha: 0.8)),
-                borderRadius: BorderRadius.circular(10),
-                border: isSecondary
-                    ? Border.all(
-                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.3),
-                        width: isFocused ? 2 : 1,
-                      )
-                    : Border.all(
-                        color: isFocused ? Colors.white : Colors.transparent,
-                        width: 2,
-                      ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }
 
