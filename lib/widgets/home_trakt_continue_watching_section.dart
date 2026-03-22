@@ -604,7 +604,7 @@ class _HomeTraktContinueWatchingSectionState
           builder: (context, constraints) {
             final screenWidth = MediaQuery.of(context).size.width;
             final isMobile = screenWidth < 600;
-            final rowHeight = isMobile ? 200.0 : 270.0;
+            final rowHeight = isMobile ? 200.0 : 220.0;
             return SizedBox(
           height: rowHeight,
           child: Stack(
@@ -796,6 +796,8 @@ class _HomeTraktContinueWatchingSectionState
       scrollController: _scrollController,
       onUpPressed: widget.onRequestFocusAbove,
       onDownPressed: widget.onRequestFocusBelow,
+      allFocusNodes: _cardFocusNodes,
+      isTelevision: widget.isTelevision,
       onFocusChanged: (focused, idx) {
         if (focused) {
           widget.focusController
@@ -809,10 +811,10 @@ class _HomeTraktContinueWatchingSectionState
         final isHero = index == 0;
         final cardWidth = isMobile
             ? (isHero ? screenWidth * 0.82 : screenWidth * 0.7)
-            : (isHero ? 420.0 : 350.0);
+            : (isHero ? 350.0 : 280.0);
         final cardHeight = isMobile
             ? (isHero ? 180.0 : 155.0)
-            : (isHero ? 250.0 : 210.0);
+            : (isHero ? 200.0 : 170.0);
 
         // Metadata
         final year = item.year ?? '';
@@ -1276,6 +1278,8 @@ class _TraktCardWithFocus extends StatefulWidget {
   final VoidCallback? onDownPressed;
   final void Function(bool focused, int index)? onFocusChanged;
   final Widget Function(bool isFocused, bool isHovered) child;
+  final List<FocusNode>? allFocusNodes;
+  final bool isTelevision;
 
   const _TraktCardWithFocus({
     required this.onTap,
@@ -1287,6 +1291,8 @@ class _TraktCardWithFocus extends StatefulWidget {
     this.onUpPressed,
     this.onDownPressed,
     this.onFocusChanged,
+    this.allFocusNodes,
+    this.isTelevision = false,
   });
 
   @override
@@ -1309,7 +1315,7 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
+            duration: widget.isTelevision ? Duration.zero : const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
         }
@@ -1333,8 +1339,22 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
         widget.onDownPressed?.call();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index > 0) {
+            widget.allFocusNodes![widget.index - 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index < widget.allFocusNodes!.length - 1) {
+            widget.allFocusNodes![widget.index + 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       }
     }

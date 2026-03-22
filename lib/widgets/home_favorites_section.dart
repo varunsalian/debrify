@@ -95,6 +95,12 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
             _favoriteItems = [];
             _isLoading = false;
           });
+          _ensureFocusNodes();
+          widget.focusController?.registerSection(
+            HomeSection.favorites,
+            hasItems: false,
+            focusNodes: [],
+          );
         }
         return;
       }
@@ -298,7 +304,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           builder: (context) {
             final isMobile = MediaQuery.of(context).size.width < 600;
             return SizedBox(
-          height: isMobile ? 180.0 : 230.0,
+          height: isMobile ? 180.0 : 190.0,
           child: Stack(
             children: [
               // Skip ShaderMask on TV for GPU performance
@@ -467,6 +473,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       scrollController: _scrollController,
       onUpPressed: widget.onRequestFocusAbove,
       onDownPressed: widget.onRequestFocusBelow,
+      allFocusNodes: _cardFocusNodes,
+      isTelevision: widget.isTelevision,
       onFocusChanged: (focused, idx) {
         if (focused) {
           widget.focusController
@@ -484,8 +492,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
               final sw = MediaQuery.of(context).size.width;
               final isMobile = sw < 600;
               return Container(
-            width: isMobile ? sw * 0.7 : 350,
-            height: isMobile ? 155.0 : 210,
+            width: isMobile ? sw * 0.7 : 280,
+            height: isMobile ? 155.0 : 170,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -741,8 +749,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
               return AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: isMobile ? sw * 0.7 : 350,
-            height: isMobile ? 155.0 : 210,
+            width: isMobile ? sw * 0.7 : 280,
+            height: isMobile ? 155.0 : 170,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -1100,6 +1108,8 @@ class _FavoriteCardWithFocus extends StatefulWidget {
   final VoidCallback? onDownPressed;
   final void Function(bool focused, int index)? onFocusChanged;
   final Widget Function(bool isFocused, bool isHovered) child;
+  final List<FocusNode>? allFocusNodes;
+  final bool isTelevision;
 
   const _FavoriteCardWithFocus({
     required this.onTap,
@@ -1113,6 +1123,8 @@ class _FavoriteCardWithFocus extends StatefulWidget {
     this.onUpPressed,
     this.onDownPressed,
     this.onFocusChanged,
+    this.allFocusNodes,
+    this.isTelevision = false,
   });
 
   @override
@@ -1135,7 +1147,7 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
+            duration: widget.isTelevision ? Duration.zero : const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
         }
@@ -1159,8 +1171,22 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
         widget.onDownPressed?.call();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index > 0) {
+            widget.allFocusNodes![widget.index - 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index < widget.allFocusNodes!.length - 1) {
+            widget.allFocusNodes![widget.index + 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       }
     }

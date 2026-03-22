@@ -322,6 +322,8 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
           widget.focusController?.saveLastFocusedIndex(HomeSection.iptvFavorites, idx);
         }
       },
+      allFocusNodes: _cardFocusNodes,
+      isTelevision: widget.isTelevision,
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
 
@@ -575,6 +577,8 @@ class _ChannelCardWithFocus extends StatefulWidget {
   final VoidCallback? onDownPressed;
   final void Function(bool focused, int index)? onFocusChanged;
   final Widget Function(bool isFocused, bool isHovered) child;
+  final List<FocusNode>? allFocusNodes;
+  final bool isTelevision;
 
   const _ChannelCardWithFocus({
     required this.onTap,
@@ -587,6 +591,8 @@ class _ChannelCardWithFocus extends StatefulWidget {
     this.onUpPressed,
     this.onDownPressed,
     this.onFocusChanged,
+    this.allFocusNodes,
+    this.isTelevision = false,
   });
 
   @override
@@ -610,7 +616,7 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
+            duration: widget.isTelevision ? Duration.zero : const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
         }
@@ -640,9 +646,24 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
         return KeyEventResult.handled;
       }
 
-      // Arrow Left/Right - let Flutter's directional focus handle it
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      // Arrow Left - explicit focus on TV, default traversal otherwise
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index > 0) {
+            widget.allFocusNodes![widget.index - 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      // Arrow Right - explicit focus on TV, default traversal otherwise
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index < widget.allFocusNodes!.length - 1) {
+            widget.allFocusNodes![widget.index + 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       }
     }

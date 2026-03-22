@@ -14408,12 +14408,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   static Widget _buildSectionDivider() => Column(
     children: [
-      const SizedBox(height: 14),
+      const SizedBox(height: 10),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.04)),
+        child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.08)),
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 10),
     ],
   );
 

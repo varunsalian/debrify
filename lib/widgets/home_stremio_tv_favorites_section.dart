@@ -456,15 +456,23 @@ class _HomeStremioTvFavoritesSectionState
               HomeSection.stremioTvFavorites,
               index,
             );
-            // Scroll to make visible
-            if (_scrollController.hasClients) {
-              final offset = index * 158.0; // 150 width + 8 margin
-              _scrollController.animateTo(
-                offset.clamp(0, _scrollController.position.maxScrollExtent),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-              );
-            }
+            // Scroll to make visible (post-frame to ensure layout is complete)
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                final offset = index * 158.0; // 150 width + 8 margin
+                if (widget.isTelevision) {
+                  _scrollController.jumpTo(
+                    offset.clamp(0, _scrollController.position.maxScrollExtent),
+                  );
+                } else {
+                  _scrollController.animateTo(
+                    offset.clamp(0, _scrollController.position.maxScrollExtent),
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  );
+                }
+              }
+            });
           }
           setState(() {});
         },
@@ -479,16 +487,16 @@ class _HomeStremioTvFavoritesSectionState
               return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              if (index > 0 && _cardFocusNodes.length > index - 1) {
+              if (index > 0 && index - 1 < _cardFocusNodes.length) {
                 _cardFocusNodes[index - 1].requestFocus();
-                return KeyEventResult.handled;
               }
+              return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
               if (index < _cardFocusNodes.length - 1) {
                 _cardFocusNodes[index + 1].requestFocus();
-                return KeyEventResult.handled;
               }
+              return KeyEventResult.handled;
             }
             if (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter) {
