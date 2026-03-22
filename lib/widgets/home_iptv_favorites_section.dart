@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/iptv_playlist.dart';
 import '../services/storage_service.dart';
+import '../services/main_page_bridge.dart';
 import 'home_focus_controller.dart';
 
 /// Horizontal scrollable IPTV channel favorites section for the home screen
@@ -651,6 +652,8 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
         if (widget.isTelevision && widget.allFocusNodes != null) {
           if (widget.index > 0) {
             widget.allFocusNodes![widget.index - 1].requestFocus();
+          } else {
+            MainPageBridge.focusTvSidebar?.call();
           }
           return KeyEventResult.handled;
         }

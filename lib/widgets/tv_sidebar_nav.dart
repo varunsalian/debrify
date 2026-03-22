@@ -35,7 +35,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
   late Animation<double> _expandAnimation;
 
   // Dimensions
-  static const double _collapsedWidth = 72.0;
+  static const double _collapsedWidth = 48.0;
   static const double _expandedWidth = 240.0;
 
   // Delay for page transition before focusing content (ms)
@@ -223,29 +223,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
         return Container(
           width: width,
           decoration: BoxDecoration(
-            // Gradient background - more visible when expanded
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                Color.lerp(
-                  const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  const Color(0xFF0F172A),
-                  _expandAnimation.value,
-                )!,
-                Color.lerp(
-                  const Color(0xFF0F172A).withValues(alpha: 0.7),
-                  const Color(0xFF0F172A).withValues(alpha: 0.95),
-                  _expandAnimation.value,
-                )!,
-                Colors.transparent,
-              ],
-              stops: const [0.0, 0.85, 1.0],
-            ),
-            // Subtle right border when expanded
+            color: const Color(0xFF0A0A14),
             border: Border(
               right: BorderSide(
-                color: Colors.white.withValues(alpha: 0.05 * _expandAnimation.value),
+                color: Colors.white.withValues(alpha: 0.06),
                 width: 1,
               ),
             ),
@@ -263,12 +244,22 @@ class TvSidebarNavState extends State<TvSidebarNav>
               // App branding at top
               _buildBranding(),
 
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  color: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+
               const SizedBox(height: 8),
 
               // Navigation items
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   itemCount: widget.items.length,
                   itemBuilder: (context, index) {
                     final item = widget.items[index];
@@ -302,55 +293,48 @@ class TvSidebarNavState extends State<TvSidebarNav>
     return AnimatedBuilder(
       animation: _expandAnimation,
       builder: (context, child) {
-        return Padding(
+        final expanded = _expandAnimation.value;
+        return Container(
           padding: EdgeInsets.fromLTRB(
-            12 + (8 * _expandAnimation.value),
-            8,
+            expanded > 0.5 ? 16 : 0,
             12,
-            16,
+            12,
+            12,
           ),
           child: Row(
+            mainAxisAlignment: expanded > 0.5 ? MainAxisAlignment.start : MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Debrify App Icon
               Container(
-                width: 40,
-                height: 40,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   child: Image.asset(
                     'assets/app_icon.png',
-                    width: 40,
-                    height: 40,
+                    width: 32,
+                    height: 32,
                     fit: BoxFit.contain,
                   ),
                 ),
               ),
-              // App name (visible when expanded)
               ClipRect(
                 child: SizedBox(
-                  width: 140 * _expandAnimation.value,
+                  width: 130 * expanded,
                   child: Opacity(
-                    opacity: _expandAnimation.value,
+                    opacity: expanded,
                     child: const Padding(
-                      padding: EdgeInsets.only(left: 12),
+                      padding: EdgeInsets.only(left: 10),
                       child: Text(
                         'Debrify',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
                         ),
                         overflow: TextOverflow.clip,
                         softWrap: false,
@@ -449,56 +433,45 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
               scale: _scaleAnimation.value,
               alignment: Alignment.centerLeft,
               child: Container(
-                height: 52,
+                height: 48,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  // Background color
+                  borderRadius: BorderRadius.circular(10),
                   color: widget.isFocused
-                      ? const Color(0xFF6366F1).withValues(alpha: 0.25)
+                      ? Colors.white.withValues(alpha: 0.12)
                       : widget.isSelected
-                          ? Colors.white.withValues(alpha: 0.08)
+                          ? Colors.white.withValues(alpha: 0.06)
                           : Colors.transparent,
-                  // Border for focused item
-                  border: widget.isFocused
-                      ? Border.all(
-                          color: const Color(0xFF6366F1),
-                          width: 2,
-                        )
-                      : null,
-                  // Glow effect when focused
-                  boxShadow: widget.isFocused
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(
-                              alpha: 0.4 * _glowAnimation.value,
-                            ),
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : null,
                 ),
                 child: child,
               ),
             );
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
+              mainAxisAlignment: widget.isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
               children: [
-                // Icon container
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(
-                    widget.item.icon,
-                    color: widget.isFocused
-                        ? Colors.white
-                        : widget.isSelected
-                            ? const Color(0xFF6366F1)
-                            : Colors.white.withValues(alpha: 0.6),
-                    size: 22,
+                // Selected indicator bar
+                if (widget.isExpanded)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 3,
+                    height: widget.isSelected ? 20 : 0,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(2),
+                      color: const Color(0xFF6366F1),
+                    ),
                   ),
+                // Icon
+                Icon(
+                  widget.item.icon,
+                  color: widget.isFocused
+                      ? Colors.white
+                      : widget.isSelected
+                          ? const Color(0xFF818CF8)
+                          : Colors.white.withValues(alpha: 0.4),
+                  size: 20,
                 ),
                 // Label (visible when expanded)
                 AnimatedBuilder(
@@ -521,13 +494,13 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
                                       color: widget.isFocused
                                           ? Colors.white
                                           : widget.isSelected
-                                              ? Colors.white
-                                              : Colors.white.withValues(alpha: 0.7),
-                                      fontSize: 15,
+                                              ? Colors.white.withValues(alpha: 0.95)
+                                              : Colors.white.withValues(alpha: 0.45),
+                                      fontSize: 14,
                                       fontWeight: widget.isSelected || widget.isFocused
                                           ? FontWeight.w600
-                                          : FontWeight.w500,
-                                      letterSpacing: 0.2,
+                                          : FontWeight.w400,
+                                      letterSpacing: 0.1,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.clip,

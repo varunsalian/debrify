@@ -709,6 +709,8 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
         if (widget.isTelevision && widget.allFocusNodes != null) {
           if (widget.index > 0) {
             widget.allFocusNodes![widget.index - 1].requestFocus();
+          } else {
+            MainPageBridge.focusTvSidebar?.call();
           }
           return KeyEventResult.handled;
         }

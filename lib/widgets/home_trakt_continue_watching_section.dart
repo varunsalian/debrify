@@ -8,6 +8,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
 import '../services/series_source_service.dart';
+import '../services/main_page_bridge.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
@@ -1343,6 +1344,8 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
         if (widget.isTelevision && widget.allFocusNodes != null) {
           if (widget.index > 0) {
             widget.allFocusNodes![widget.index - 1].requestFocus();
+          } else {
+            MainPageBridge.focusTvSidebar?.call();
           }
           return KeyEventResult.handled;
         }

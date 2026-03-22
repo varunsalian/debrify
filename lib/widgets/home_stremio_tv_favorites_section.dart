@@ -489,6 +489,8 @@ class _HomeStremioTvFavoritesSectionState
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               if (index > 0 && index - 1 < _cardFocusNodes.length) {
                 _cardFocusNodes[index - 1].requestFocus();
+              } else if (index == 0) {
+                MainPageBridge.focusTvSidebar?.call();
               }
               return KeyEventResult.handled;
             }
