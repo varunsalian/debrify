@@ -213,6 +213,7 @@ class MediaStoreDownloadService : Service() {
 					if (uri == null) {
 						notifyTask(state, "Failed to create destination", indeterminate = true, completed = false)
 						ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
+						states.remove(state.taskId)
 						break
 					}
 					state.uri = uri
@@ -276,13 +277,7 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(state.taskId)
 					notificationManager.cancel(taskNotificationId(state.taskId))
-					if (states.isEmpty()) {
-						stopForeground(STOP_FOREGROUND_REMOVE)
-						notificationManager.cancel(SERVICE_NOTIFICATION_ID)
-						stopSelfSafely()
-					} else {
-						updateSummaryNotification()
-					}
+					checkIfIdleAndStop()
 					break
 				} else if (resp !in 200..206) {
 					throw IllegalStateException("HTTP $resp for $url")
@@ -399,13 +394,7 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(state.taskId)
 					notificationManager.cancel(taskNotificationId(state.taskId))
-					if (states.isEmpty()) {
-						stopForeground(STOP_FOREGROUND_REMOVE)
-						notificationManager.cancel(SERVICE_NOTIFICATION_ID)
-						stopSelfSafely()
-					} else {
-						updateSummaryNotification()
-					}
+					checkIfIdleAndStop()
 				} else {
 					notifyTask(state, "Paused", indeterminate = false, completed = false)
 					updateSummaryNotification()
@@ -425,6 +414,8 @@ class MediaStoreDownloadService : Service() {
 						"subDir" to state.subDir,
 						"url" to state.url,
 					))
+					states.remove(state.taskId)
+					checkIfIdleAndStop()
 					break
 				}
 				
@@ -441,6 +432,17 @@ class MediaStoreDownloadService : Service() {
 			}
 		}
 		state.running = false
+		checkIfIdleAndStop()
+	}
+
+	private fun checkIfIdleAndStop() {
+		if (states.isEmpty()) {
+			stopForeground(STOP_FOREGROUND_REMOVE)
+			notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+			stopSelfSafely()
+		} else {
+			updateSummaryNotification()
+		}
 	}
 
 	private fun stopSelfSafely() {

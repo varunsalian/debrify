@@ -1017,16 +1017,42 @@ class DownloadService {
                 final retried = await _handlePikPakFailedRetry(recId);
                 if (!retried) {
                   // If we are on mobile, it might be a handoff glitch (e.g. 5G -> 4G socket reset)
-                  // Treat as paused and nudge auto-resume instead of hard failing.
+                  // Treat as paused and nudge auto-resume instead of hard failing, with a cap.
                   if (nowNet == ConnectivityResult.mobile) {
-                    debugPrint('ANDR ERR mobile handoff? (net=${nowNet.name}) → paused for auto-resume');
-                    AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
-                    _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
-                    if (recId != null) _upsertRecord(recId, {'state': 'paused'});
-                    
-                    // Nudge auto-resume by adding to pending resume list
-                    if (!_pendingResumeAndroid.contains(taskId)) {
-                      _pendingResumeAndroid.add(taskId);
+                    final rec = recId != null ? _records[recId] : null;
+                    final metaStr = rec?['meta'] as String?;
+                    int handoffAttempt = 0;
+                    if (metaStr != null && metaStr.isNotEmpty) {
+                      try {
+                        final m = jsonDecode(metaStr);
+                        handoffAttempt = (m['_handoffAttempt'] as num? ?? 0).toInt();
+                      } catch (_) {}
+                    }
+
+                    if (handoffAttempt < 5) {
+                      debugPrint('ANDR ERR mobile handoff? (net=${nowNet.name}, attempt ${handoffAttempt + 1}) → paused for auto-resume');
+                      AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+                      _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+                      
+                      if (recId != null) {
+                        try {
+                          final m = metaStr != null && metaStr.isNotEmpty ? jsonDecode(metaStr) : {};
+                          m['_handoffAttempt'] = handoffAttempt + 1;
+                          _upsertRecord(recId, {'state': 'paused', 'meta': jsonEncode(m)});
+                        } catch (_) {
+                          _upsertRecord(recId, {'state': 'paused'});
+                        }
+                      }
+                      
+                      // Nudge auto-resume by adding to pending resume list
+                      if (!_pendingResumeAndroid.contains(taskId)) {
+                        _pendingResumeAndroid.add(taskId);
+                      }
+                    } else {
+                      debugPrint('ANDR ERR mobile handoff max retries exceeded → failed');
+                      AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+                      _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+                      if (recId != null) _upsertRecord(recId, {'state': 'failed'});
                     }
                   } else {
                     // Not mobile or PikPak - mark as failed
@@ -1216,7 +1242,9 @@ class DownloadService {
 
     filename = _sanitizeName(filename);
 
-    // Use torrent name for folder if provided
+    // Use torrent name for folder if provided. 
+    // If no torrentName is provided, we drop files directly into the downloads root 
+    // to avoid the "directory instead of file" issues for single-file downloads.
     String? folder;
     if (torrentName != null && torrentName.trim().isNotEmpty) {
       folder = _sanitizeName(torrentName.trim());
@@ -1230,10 +1258,11 @@ class DownloadService {
       await d.create(recursive: true);
     }
 
-    // Check for filename conflict and increment if needed using file(1).ext format
+    // Check for filename conflict and increment if needed using file(1).ext format.
+    // Cap at 1000 iterations to prevent infinite loops in edge cases.
     String finalFilename = filename;
     int counter = 1;
-    while (await File(path.join(dir, finalFilename)).exists()) {
+    while (await File(path.join(dir, finalFilename)).exists() && counter < 1000) {
       final dot = filename.lastIndexOf('.');
       if (dot > 0) {
         final base = filename.substring(0, dot);
