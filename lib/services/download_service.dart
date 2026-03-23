@@ -1016,11 +1016,25 @@ class DownloadService {
               unawaited(() async {
                 final retried = await _handlePikPakFailedRetry(recId);
                 if (!retried) {
-                  // Not PikPak or max retries exceeded - mark as failed
-                  debugPrint('ANDR ERR net=${nowNet.name} → failed');
-                  AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
-                  _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
-                  if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                  // If we are on mobile, it might be a handoff glitch (e.g. 5G -> 4G socket reset)
+                  // Treat as paused and nudge auto-resume instead of hard failing.
+                  if (nowNet == ConnectivityResult.mobile) {
+                    debugPrint('ANDR ERR mobile handoff? (net=${nowNet.name}) → paused for auto-resume');
+                    AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+                    _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+                    if (recId != null) _upsertRecord(recId, {'state': 'paused'});
+                    
+                    // Nudge auto-resume by adding to pending resume list
+                    if (!_pendingResumeAndroid.contains(taskId)) {
+                      _pendingResumeAndroid.add(taskId);
+                    }
+                  } else {
+                    // Not mobile or PikPak - mark as failed
+                    debugPrint('ANDR ERR net=${nowNet.name} → failed');
+                    AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+                    _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+                    if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                  }
                 }
                 _reevaluateQueue();
               }());
@@ -1202,26 +1216,36 @@ class DownloadService {
 
     filename = _sanitizeName(filename);
 
-    // Use torrent name for folder if provided, otherwise use base name of file
-    String folder;
+    // Use torrent name for folder if provided
+    String? folder;
     if (torrentName != null && torrentName.trim().isNotEmpty) {
       folder = _sanitizeName(torrentName.trim());
-    } else {
-      // Make a folder from base name (without extension)
-      final int dot = filename.lastIndexOf('.');
-      final String baseName = dot > 0 ? filename.substring(0, dot) : filename;
-      folder = _sanitizeName(baseName);
     }
 
     // Place under downloads/<folder>
     final String downloadsRoot = await _appDownloadsSubdir();
-    final String dir = path.join(downloadsRoot, folder);
+    final String dir = folder != null ? path.join(downloadsRoot, folder) : downloadsRoot;
     final Directory d = Directory(dir);
     if (!await d.exists()) {
       await d.create(recursive: true);
     }
 
-    return (dir, filename);
+    // Check for filename conflict and increment if needed using file(1).ext format
+    String finalFilename = filename;
+    int counter = 1;
+    while (File(path.join(dir, finalFilename)).existsSync()) {
+      final dot = filename.lastIndexOf('.');
+      if (dot > 0) {
+        final base = filename.substring(0, dot);
+        final ext = filename.substring(dot);
+        finalFilename = '$base($counter)$ext';
+      } else {
+        finalFilename = '$filename($counter)';
+      }
+      counter++;
+    }
+
+    return (dir, finalFilename);
   }
 
   Future<DownloadEntry> enqueueDownload({

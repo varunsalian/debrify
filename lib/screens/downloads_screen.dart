@@ -2721,9 +2721,12 @@ class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScree
         title: Text(title),
         actions: [
           IconButton(
-            onPressed: _refresh,
+            onPressed: () async {
+              await DownloadService.instance.retryAllFailed();
+              await _refresh();
+            },
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
+            tooltip: 'Retry failed',
           ),
         ],
       ),
