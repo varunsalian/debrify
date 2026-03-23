@@ -428,7 +428,7 @@ class MediaStoreDownloadService : Service() {
 					break
 				}
 				
-				val delay = (2000L * retryCount).coerceAtMost(30000L)
+				val delay = (1000L * (1L shl (retryCount - 1))).coerceIn(2000L, 30000L)
 				notifyTask(state, "Retrying ($retryCount/$maxRetries)...", indeterminate = true, completed = false)
 				try { Thread.sleep(delay) } catch (_: Exception) {}
 				// continue to retry connection

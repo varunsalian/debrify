@@ -1233,7 +1233,7 @@ class DownloadService {
     // Check for filename conflict and increment if needed using file(1).ext format
     String finalFilename = filename;
     int counter = 1;
-    while (File(path.join(dir, finalFilename)).existsSync()) {
+    while (await File(path.join(dir, finalFilename)).exists()) {
       final dot = filename.lastIndexOf('.');
       if (dot > 0) {
         final base = filename.substring(0, dot);
