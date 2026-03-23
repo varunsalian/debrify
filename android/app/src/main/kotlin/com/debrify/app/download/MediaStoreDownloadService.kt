@@ -277,7 +277,6 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(state.taskId)
 					notificationManager.cancel(taskNotificationId(state.taskId))
-					checkIfIdleAndStop()
 					break
 				} else if (resp !in 200..206) {
 					throw IllegalStateException("HTTP $resp for $url")
@@ -394,10 +393,8 @@ class MediaStoreDownloadService : Service() {
 					))
 					states.remove(state.taskId)
 					notificationManager.cancel(taskNotificationId(state.taskId))
-					checkIfIdleAndStop()
 				} else {
 					notifyTask(state, "Paused", indeterminate = false, completed = false)
-					updateSummaryNotification()
 				}
 				break // Success or pause exit
 			} catch (e: Exception) {
@@ -415,12 +412,12 @@ class MediaStoreDownloadService : Service() {
 						"url" to state.url,
 					))
 					states.remove(state.taskId)
-					checkIfIdleAndStop()
 					break
 				}
 				
 				val delay = (1000L * (1L shl (retryCount - 1))).coerceIn(2000L, 30000L)
 				notifyTask(state, "Retrying ($retryCount/$maxRetries)...", indeterminate = true, completed = false)
+				// Safe to sleep here as startOrResume is always called within a dedicated background Thread
 				try { Thread.sleep(delay) } catch (_: Exception) {}
 				// continue to retry connection
 			} finally {

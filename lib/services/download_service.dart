@@ -989,7 +989,21 @@ class DownloadService {
             if (uri.isNotEmpty) {
               _lastFileByTaskId[taskId] = (uri, mime);
             }
-            if (recId != null) _upsertRecord(recId, {'state': 'complete'});
+            if (recId != null) {
+              final rec = _records[recId];
+              final metaStr = rec?['meta'] as String?;
+              if (metaStr != null && metaStr.contains('_handoffAttempt')) {
+                try {
+                  final m = jsonDecode(metaStr);
+                  m.remove('_handoffAttempt');
+                  _upsertRecord(recId, {'state': 'complete', 'meta': jsonEncode(m)});
+                } catch (_) {
+                  _upsertRecord(recId, {'state': 'complete'});
+                }
+              } else {
+                _upsertRecord(recId, {'state': 'complete'});
+              }
+            }
             _reevaluateQueue();
             break;
           case 'error':
