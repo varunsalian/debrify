@@ -678,7 +678,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.infohash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+        traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -2308,6 +2308,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       contentType: _selectedImdbTitle!.contentType,
       posterUrl: _selectedImdbTitle!.posterUrl,
       traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+      traktSource: _activeAdvancedSelection?.traktSource ?? false,
     );
 
     debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}');
@@ -3081,7 +3082,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentType: selection.contentType,
         contentSeason: selection.season,
         contentEpisode: selection.episode,
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt || selection.traktProgressPercent != null,
+        traktScrobble: selection.traktSource,
         traktProgressPercent: selection.traktProgressPercent,
         rdTorrentId: rdTorrentId,
         torboxTorrentId: torboxTorrentId,
@@ -7449,7 +7450,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               stremioSources: _torrents,
               stremioCurrentSourceIndex: 0,
               resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-              traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+              traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
               traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
             ),
           );
@@ -7572,7 +7573,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: 0,
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+        traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -10156,7 +10157,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-            traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+            traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
@@ -10295,7 +10296,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         stremioSources: _torrents,
         stremioCurrentSourceIndex: _findTorrentIndex(torrent.hash),
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-        traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+        traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
       ),
     );
@@ -11459,7 +11460,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             stremioSources: _torrents,
             stremioCurrentSourceIndex: 0,
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-            traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+            traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
           ),
         );
@@ -11963,7 +11964,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           stremioSources: _torrents,
           stremioCurrentSourceIndex: 0,
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
-          traktScrobble: _selectedSource.type == SearchSourceType.trakt || _activeAdvancedSelection?.traktProgressPercent != null,
+          traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
           traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
         ),
       );

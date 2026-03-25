@@ -11,6 +11,8 @@ class AdvancedSearchSelection {
   final String? posterUrl;
   /// Trakt watch progress (0-100) for resuming playback from Trakt
   final double? traktProgressPercent;
+  /// Whether this selection originated from Trakt (continue watching, watchlist, etc.)
+  final bool traktSource;
 
   const AdvancedSearchSelection({
     required this.imdbId,
@@ -22,6 +24,7 @@ class AdvancedSearchSelection {
     this.contentType,
     this.posterUrl,
     this.traktProgressPercent,
+    this.traktSource = false,
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)

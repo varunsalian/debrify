@@ -34,6 +34,7 @@ String? _traktLastScrobbleAction;
 double _traktLastKnownProgress = 0.0;
 int? _traktLastKnownSeason;
 int? _traktLastKnownEpisode;
+Timer? _traktHeartbeatTimer;
 
 final Map<String, String> _resolvedStreamCache = <String, String>{};
 final Map<String, String> _redirectCache = <String, String>{};
@@ -816,6 +817,8 @@ class VideoPlayerLauncher {
     }
 
     // Reset Trakt scrobble state for clean session
+    _traktHeartbeatTimer?.cancel();
+    _traktHeartbeatTimer = null;
     _traktLastScrobbleAction = null;
     _traktLastKnownProgress = 0.0;
     _traktLastKnownSeason = null;
@@ -1370,6 +1373,8 @@ class VideoPlayerLauncher {
         if (_traktLastKnownSeason != null && _traktLastKnownEpisode != null &&
             (season != _traktLastKnownSeason || episode != _traktLastKnownEpisode) &&
             _traktLastScrobbleAction != 'stop') {
+          _traktHeartbeatTimer?.cancel();
+          _traktHeartbeatTimer = null;
           TraktService.instance.scrobbleStop(imdbId, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
           _traktLastScrobbleAction = 'stop';
         }
@@ -1377,14 +1382,48 @@ class VideoPlayerLauncher {
         _traktLastKnownProgress = traktProgress;
         _traktLastKnownSeason = season;
         _traktLastKnownEpisode = episode;
+        // Recover session if stopped at >80% and user sought back under 80%
+        if (_traktLastScrobbleAction == 'stop' && isPlaying && traktProgress <= 80 && !completed) {
+          _traktLastScrobbleAction = null;
+        }
         if (completed && _traktLastScrobbleAction != 'stop') {
           _traktLastScrobbleAction = 'stop';
+          _traktHeartbeatTimer?.cancel();
+          _traktHeartbeatTimer = null;
           TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
-        } else if (isPlaying && _traktLastScrobbleAction != 'start') {
-          _traktLastScrobbleAction = 'start';
-          TraktService.instance.scrobbleStart(imdbId, traktProgress, season: season, episode: episode);
+        } else if (isPlaying && _traktLastScrobbleAction != 'start' && _traktLastScrobbleAction != 'stop') {
+          // Trakt rejects start above 80% — send stop instead, no heartbeat needed
+          if (traktProgress > 80) {
+            _traktLastScrobbleAction = 'stop';
+            TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
+          } else {
+            _traktLastScrobbleAction = 'start';
+            TraktService.instance.scrobbleStart(imdbId, traktProgress, season: season, episode: episode);
+            // Start heartbeat timer to checkpoint progress every 2 minutes
+            _traktHeartbeatTimer?.cancel();
+            _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+              if (payload.imdbId == null) return;
+              // Trakt rejects start/pause above 80% — send stop and end heartbeat
+              if (_traktLastKnownProgress > 80) {
+                _traktLastScrobbleAction = 'stop';
+                TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress,
+                    season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
+                debugPrint('Trakt: Heartbeat stop at ${_traktLastKnownProgress.toStringAsFixed(1)}% (>80%)');
+                _traktHeartbeatTimer?.cancel();
+                _traktHeartbeatTimer = null;
+                return;
+              }
+              // Use latest known progress/season/episode
+              _traktLastScrobbleAction = 'start';
+              TraktService.instance.scrobbleStart(payload.imdbId!, _traktLastKnownProgress,
+                  season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
+              debugPrint('Trakt: Heartbeat scrobble at ${_traktLastKnownProgress.toStringAsFixed(1)}%');
+            });
+          }
         } else if (!isPlaying && !completed && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'pause' && _traktLastScrobbleAction != 'stop') {
           // Trakt rejects pause when progress > 80% — send stop instead
+          _traktHeartbeatTimer?.cancel();
+          _traktHeartbeatTimer = null;
           if (traktProgress > 80) {
             _traktLastScrobbleAction = 'stop';
             TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
@@ -1520,6 +1559,8 @@ class VideoPlayerLauncher {
       'VideoPlayerLauncher: Android TV playback finished for "${payload.title}"',
     );
     // Final Trakt scrobble stop on playback exit
+    _traktHeartbeatTimer?.cancel();
+    _traktHeartbeatTimer = null;
     if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != 'stop') {
       TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
     }

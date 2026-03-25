@@ -430,6 +430,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _traktScrobbleEnabled = false;
   bool _traktProgressApplied = false;
   String? _traktLastScrobbleAction;
+  Timer? _traktHeartbeatTimer;
 
   Duration? _randomStartOffset(Duration duration) {
     final num clampedPercent =
@@ -523,6 +524,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // If player started playing before auth resolved, scrobble start now
     if (_traktScrobbleEnabled && _isPlaying && _duration > Duration.zero) {
       _traktScrobble('start');
+      if (_traktLastScrobbleAction == 'start') {
+        _startTraktHeartbeat();
+      }
     }
   }
 
@@ -555,8 +559,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
     final se = _traktSeasonEpisode();
-    // Trakt rejects pause when progress > 80% — send stop instead
-    if (action == 'pause' && progress > 80) {
+    // Trakt rejects start/pause when progress > 80% — send stop instead
+    if ((action == 'start' || action == 'pause') && progress > 80) {
       action = 'stop';
     }
     if (_traktLastScrobbleAction == action) return;
@@ -577,16 +581,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Start periodic heartbeat to checkpoint progress to Trakt every 2 minutes.
+  void _startTraktHeartbeat() {
+    _traktHeartbeatTimer?.cancel();
+    _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
+      if (!_isPlaying || _duration.inMilliseconds <= 0) return;
+      final imdbId = widget.contentImdbId!;
+      final progress = _traktProgress();
+      final se = _traktSeasonEpisode();
+      // Trakt rejects start/pause above 80% — send stop and end heartbeat
+      if (progress > 80) {
+        _traktLastScrobbleAction = 'stop';
+        TraktService.instance.scrobbleStop(imdbId, progress,
+            season: se.season, episode: se.episode);
+        debugPrint('Trakt: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)');
+        _stopTraktHeartbeat();
+        return;
+      }
+      // Force-send start (bypass dedup) to keep session alive and checkpoint progress
+      _traktLastScrobbleAction = 'start';
+      TraktService.instance.scrobbleStart(imdbId, progress,
+          season: se.season, episode: se.episode);
+      debugPrint('Trakt: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%');
+    });
+  }
+
+  void _stopTraktHeartbeat() {
+    _traktHeartbeatTimer?.cancel();
+    _traktHeartbeatTimer = null;
+  }
+
   /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
   void _traktScrobbleSeek(Duration seekTarget) {
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
     final progress = (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(0.0, 100.0);
-    _traktLastScrobbleAction = 'start';
     final se = _traktSeasonEpisode();
-    TraktService.instance.scrobbleStart(imdbId, progress,
-        season: se.season, episode: se.episode);
+    // Trakt rejects start above 80% — send stop instead
+    if (progress > 80) {
+      _traktLastScrobbleAction = 'stop';
+      TraktService.instance.scrobbleStop(imdbId, progress,
+          season: se.season, episode: se.episode);
+      _stopTraktHeartbeat();
+    } else {
+      _traktLastScrobbleAction = 'start';
+      TraktService.instance.scrobbleStart(imdbId, progress,
+          season: se.season, episode: se.episode);
+      _startTraktHeartbeat();
+    }
   }
 
   void _maybeSeekToTraktProgress() {
@@ -830,8 +874,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Trakt scrobble on play/pause
       if (p && _duration > Duration.zero) {
         _traktScrobble('start');
+        // Only start heartbeat if scrobble wasn't converted to stop (>80%)
+        if (_traktLastScrobbleAction == 'start') {
+          _startTraktHeartbeat();
+        }
       } else if (!p && wasPlaying && !_isTransitioning && _traktLastScrobbleAction != 'stop') {
         _traktScrobble('pause');
+        _stopTraktHeartbeat();
       }
       if (p && _transitionRunning) {
         // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
@@ -983,6 +1032,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _onPlaybackEnded() async {
     // Scrobble stop to Trakt when movie finishes
+    _stopTraktHeartbeat();
     _traktScrobble('stop');
 
     // Mark the current episode as finished if it's a series
@@ -2139,6 +2189,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
 
     // Scrobble stop for the current episode before switching
+    _stopTraktHeartbeat();
     _traktScrobble('stop');
 
     await _saveResume();
@@ -2886,6 +2937,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void dispose() {
     // Scrobble stop to Trakt when user exits player
+    _stopTraktHeartbeat();
     _traktScrobble('stop');
 
     // Save the current state before disposing

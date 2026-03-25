@@ -611,6 +611,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       contentType: item.type,
       posterUrl: item.poster,
       traktProgressPercent: _traktProgressForItem(item),
+      traktSource: true,
     );
     widget.onItemSelected(selection);
   }
@@ -654,6 +655,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
         contentType: item.type,
         posterUrl: item.poster,
         traktProgressPercent: traktProgress,
+        traktSource: true,
       );
       if (widget.onQuickPlay != null) {
         widget.onQuickPlay!(selection);
@@ -1383,6 +1385,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       contentType: show.type,
       posterUrl: show.poster,
       traktProgressPercent: _episodeWatchProgress['${episode.season}-${episode.number}'],
+      traktSource: true,
     );
     widget.onItemSelected(selection);
   }
@@ -1400,6 +1403,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       contentType: show.type,
       posterUrl: show.poster,
       traktProgressPercent: _episodeWatchProgress['${episode.season}-${episode.number}'],
+      traktSource: true,
     );
     if (widget.onQuickPlay != null) {
       widget.onQuickPlay!(selection);

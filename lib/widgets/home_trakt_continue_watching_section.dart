@@ -474,6 +474,7 @@ class _HomeTraktContinueWatchingSectionState
       contentType: item.type,
       posterUrl: item.poster,
       traktProgressPercent: progress,
+      traktSource: true,
     );
     widget.onItemSelected?.call(selection);
   }
@@ -516,6 +517,7 @@ class _HomeTraktContinueWatchingSectionState
       contentType: item.type,
       posterUrl: item.poster,
       traktProgressPercent: traktProgress,
+      traktSource: true,
     );
     if (widget.onQuickPlay != null) {
       widget.onQuickPlay!(selection);
