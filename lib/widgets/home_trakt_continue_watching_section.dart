@@ -528,18 +528,23 @@ class _HomeTraktContinueWatchingSectionState
 
   Future<void> _removePlayback(StremioMeta item) async {
     final imdbId = item.imdbId ?? item.id;
-    final ids = _playbackIds[imdbId];
-    if (ids == null || ids.isEmpty) return;
+    final type = item.type ?? 'movie';
+    bool anySuccess = false;
 
     // Remove all playback entries for this item
-    bool anySuccess = false;
-    for (final pbId in ids) {
-      final ok = await _traktService.removePlaybackItem(pbId);
-      if (ok) anySuccess = true;
+    final ids = _playbackIds[imdbId];
+    if (ids != null && ids.isNotEmpty) {
+      for (final pbId in ids) {
+        final ok = await _traktService.removePlaybackItem(pbId);
+        if (ok) anySuccess = true;
+      }
     }
 
+    // Also remove from watch history so it doesn't reappear via "Up Next"
+    final historyRemoved = await _traktService.removeFromHistory(imdbId, type);
+    if (historyRemoved) anySuccess = true;
+
     if (anySuccess && mounted) {
-      // Reload the list
       _loadItems();
     }
   }
