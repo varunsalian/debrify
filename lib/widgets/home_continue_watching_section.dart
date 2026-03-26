@@ -311,8 +311,22 @@ class _HomeContinueWatchingSectionState
             widget.onItemSelected?.call(withEpisode);
           }
         } else {
-          // No episode history — fall through to browse
-          widget.onItemSelected?.call(selection);
+          // No episode history — default to S1E1
+          final withEpisode = AdvancedSearchSelection(
+            imdbId: selection.imdbId,
+            isSeries: true,
+            title: selection.title,
+            year: selection.year,
+            contentType: selection.contentType,
+            posterUrl: selection.posterUrl,
+            season: 1,
+            episode: 1,
+          );
+          if (widget.onQuickPlay != null) {
+            widget.onQuickPlay!(withEpisode);
+          } else {
+            widget.onItemSelected?.call(withEpisode);
+          }
         }
       } else {
         if (widget.onQuickPlay != null) {
