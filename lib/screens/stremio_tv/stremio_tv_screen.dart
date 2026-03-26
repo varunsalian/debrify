@@ -753,6 +753,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 title: _currentPlayTitle ?? item.name,
                 startAtPercent: _currentSlotProgress,
                 contentImdbId: item.effectiveImdbId,
+                contentTitle: item.name,
                 contentType: item.type,
                 stremioSources: playableSources,
                 stremioCurrentSourceIndex: result.$2,
@@ -785,6 +786,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           title: _currentPlayTitle ?? item.name,
           startAtPercent: _currentSlotProgress,
           contentImdbId: item.effectiveImdbId,
+          contentTitle: item.name,
           contentType: item.type,
           stremioSources: playableSources,
           stremioCurrentSourceIndex: firstPlayableIndex,
@@ -976,6 +978,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         subtitle: torrent.source,
         startAtPercent: _currentSlotProgress,
         contentImdbId: item.effectiveImdbId,
+        contentTitle: item.name,
         contentType: item.type,
       ),
     );
@@ -1104,6 +1107,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             title: _currentPlayTitle ?? item.name,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
+            contentTitle: item.name,
             contentType: item.type,
           ),
         );
@@ -1205,6 +1209,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             title: _currentPlayTitle ?? item.name,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
+            contentTitle: item.name,
             contentType: item.type,
           ),
         );
@@ -1291,6 +1296,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             title: title,
             startAtPercent: _currentSlotProgress,
             contentImdbId: item.effectiveImdbId,
+            contentTitle: item.name,
             contentType: item.type,
             playlist: [
               PlaylistEntry(

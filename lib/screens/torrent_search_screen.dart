@@ -53,6 +53,7 @@ import '../widgets/home_favorites_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
 import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
+import '../widgets/home_continue_watching_section.dart';
 import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
@@ -680,6 +681,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
         traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+        contentTitle: _activeAdvancedSelection?.title,
+        posterUrl: _activeAdvancedSelection?.posterUrl,
+        contentYear: _activeAdvancedSelection?.year,
+        addonId: _selectedSource.addon?.id,
       ),
     );
   }
@@ -3084,6 +3089,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentEpisode: selection.episode,
         traktScrobble: selection.traktSource,
         traktProgressPercent: selection.traktProgressPercent,
+        contentTitle: selection.title,
+        posterUrl: selection.posterUrl,
+        contentYear: selection.year,
+        addonId: _selectedSource.addon?.id,
         rdTorrentId: rdTorrentId,
         torboxTorrentId: torboxTorrentId,
         pikpakCollectionId: pikpakCollectionId,
@@ -7452,6 +7461,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               resolveSourceToPlaylist: _createSourcePlaylistResolver(),
               traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
               traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+              contentTitle: _activeAdvancedSelection?.title,
+              posterUrl: _activeAdvancedSelection?.posterUrl,
+              contentYear: _activeAdvancedSelection?.year,
+              addonId: _selectedSource.addon?.id,
             ),
           );
         }
@@ -7575,6 +7588,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
         traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+        contentTitle: _activeAdvancedSelection?.title,
+        posterUrl: _activeAdvancedSelection?.posterUrl,
+        contentYear: _activeAdvancedSelection?.year,
+        addonId: _selectedSource.addon?.id,
       ),
     );
   }
@@ -10159,6 +10176,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
             traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+            contentTitle: _activeAdvancedSelection?.title,
+            posterUrl: _activeAdvancedSelection?.posterUrl,
+            contentYear: _activeAdvancedSelection?.year,
+            addonId: _selectedSource.addon?.id,
           ),
         );
       } catch (e) {
@@ -10298,6 +10319,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
         traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+        contentTitle: _activeAdvancedSelection?.title,
+        posterUrl: _activeAdvancedSelection?.posterUrl,
+        contentYear: _activeAdvancedSelection?.year,
+        addonId: _selectedSource.addon?.id,
       ),
     );
   }
@@ -11462,6 +11487,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
             traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+            contentTitle: _activeAdvancedSelection?.title,
+            posterUrl: _activeAdvancedSelection?.posterUrl,
+            contentYear: _activeAdvancedSelection?.year,
+            addonId: _selectedSource.addon?.id,
           ),
         );
       } else {
@@ -11966,6 +11995,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
           traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
           traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+          contentTitle: _activeAdvancedSelection?.title,
+          posterUrl: _activeAdvancedSelection?.posterUrl,
+          contentYear: _activeAdvancedSelection?.year,
+          addonId: _selectedSource.addon?.id,
         ),
       );
     } catch (e) {
@@ -14470,6 +14503,63 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
+      // Continue Watching (local progress)
+      RepaintBoundary(child: HomeContinueWatchingSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onItemSelected: (selection) {
+          _handleCatalogItemSelected(selection, updateSearchText: true);
+        },
+        onQuickPlay: (selection) {
+          _handleQuickPlay(selection);
+        },
+        onBrowseEpisodes: (selection, addonId) {
+          final meta = StremioMeta.fromJson({
+            'id': selection.imdbId,
+            'name': selection.title,
+            'type': selection.contentType ?? 'series',
+            'year': selection.year,
+            'poster': selection.posterUrl,
+          });
+          // Prefer the addon that was used for playback, fallback to first catalog addon
+          SearchSourceOption? addonOption;
+          if (addonId != null) {
+            addonOption = _availableSourceOptions.cast<SearchSourceOption?>().firstWhere(
+              (o) => o?.type == SearchSourceType.addon && o?.addon?.id == addonId,
+              orElse: () => null,
+            );
+          }
+          addonOption ??= _availableSourceOptions.cast<SearchSourceOption?>().firstWhere(
+            (o) => o?.type == SearchSourceType.addon && o?.addon?.supportsCatalogs == true,
+            orElse: () => null,
+          );
+          if (addonOption?.addon != null) {
+            _handleBrowseSeriesEpisodes(meta, addonOption!.addon!);
+          } else {
+            _handleCatalogItemSelected(selection, updateSearchText: true);
+          }
+        },
+        onSelectSource: (selection) {
+          final meta = StremioMeta.fromJson({
+            'id': selection.imdbId,
+            'name': selection.title,
+            'type': selection.contentType ?? 'series',
+            'year': selection.year,
+            'poster': selection.posterUrl,
+          });
+          _handleSelectSource(meta);
+        },
+        onRequestFocusAbove: () {
+          _focusControlRow();
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.continueWatching);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
       // Trakt Continue Watching - Movies
       RepaintBoundary(child: HomeTraktContinueWatchingSection(
         focusController: _homeFocusController,
@@ -14484,7 +14574,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         },
         onBrowseShow: (show) => _browseTraktShow(show),
         onRequestFocusAbove: () {
-          _focusControlRow();
+          final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingMovies);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          } else {
+            _focusControlRow();
+          }
         },
         onRequestFocusBelow: () {
           final next = _homeFocusController.getNextSection(HomeSection.traktContinueWatchingMovies);

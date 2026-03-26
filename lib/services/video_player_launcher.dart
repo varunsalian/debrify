@@ -205,6 +205,11 @@ class VideoPlayerLaunchArgs {
   final bool traktScrobble;
   // Trakt progress: resume fallback when no local resume exists (0-100)
   final double? traktProgressPercent;
+  // Continue watching metadata (for home screen section)
+  final String? contentTitle; // Clean display name (IMDB title)
+  final String? posterUrl;
+  final String? contentYear;
+  final String? addonId; // Stremio addon used for playback
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
@@ -249,6 +254,10 @@ class VideoPlayerLaunchArgs {
     this.stremioTvChannelSwitchProvider,
     this.traktScrobble = false,
     this.traktProgressPercent,
+    this.contentTitle,
+    this.posterUrl,
+    this.contentYear,
+    this.addonId,
   });
 
   VideoPlayerScreen toWidget() {
@@ -326,6 +335,19 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> push(BuildContext context, VideoPlayerLaunchArgs args) async {
+    // Save to continue watching (fire-and-forget, non-blocking)
+    // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
+    if (args.contentImdbId != null && args.contentType != null && !args.traktScrobble && args.stremioTvChannels == null) {
+      StorageService.saveContinueWatchingItem(
+        imdbId: args.contentImdbId!,
+        title: args.contentTitle ?? args.title,
+        contentType: args.contentType!,
+        posterUrl: args.posterUrl,
+        year: args.contentYear,
+        addonId: args.addonId,
+      );
+    }
+
     // Log playlist entries to trace relativePath
     if (args.playlist != null && args.playlist!.isNotEmpty) {
       debugPrint('🚀 VideoPlayerLauncher.push: Launching with ${args.playlist!.length} entries');
@@ -1477,6 +1499,7 @@ class VideoPlayerLauncher {
             durationMs: durationMs,
             speed: speed,
             aspect: aspect,
+            imdbId: payload.imdbId,
           );
         }
 
@@ -1505,6 +1528,7 @@ class VideoPlayerLauncher {
         durationMs: durationMs,
         speed: speed,
         aspect: aspect,
+        imdbId: payload.imdbId,
       );
 
       if (payload.contentType == _PlaybackContentType.single) {

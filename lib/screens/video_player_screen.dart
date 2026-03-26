@@ -3292,6 +3292,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 					durationMs: dur.inMilliseconds,
 					speed: _playbackSpeed,
 					aspect: aspectStr,
+					imdbId: widget.contentImdbId,
 				);
 
 				// ALSO save in collection format for playlist progress tracking
@@ -3332,6 +3333,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             durationMs: dur.inMilliseconds,
             speed: _playbackSpeed,
             aspect: aspectStr,
+            imdbId: widget.contentImdbId,
           );
         }
       }

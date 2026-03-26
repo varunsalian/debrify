@@ -31,6 +31,7 @@ class StorageService {
       'battery_opt_status_v1'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
+  static const String _continueWatchingKey = 'continue_watching_v1';
   static const String _defaultTorrentsCsvEnabledKey =
       'default_torrents_csv_enabled';
   static const String _defaultPirateBayEnabledKey =
@@ -508,6 +509,76 @@ class StorageService {
     await prefs.setInt(_maxSolidTorrentsResultsKey, clampedValue);
   }
 
+  // ── Continue Watching (recently watched items for home screen) ──────────
+
+  /// Get all continue watching items, sorted by most recent first.
+  static Future<List<Map<String, dynamic>>> getContinueWatchingItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_continueWatchingKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final List<dynamic> list = jsonDecode(raw);
+      final items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
+      items.sort((a, b) => ((b['updatedAt'] as int?) ?? 0).compareTo((a['updatedAt'] as int?) ?? 0));
+      return items;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Add or update a continue watching entry.
+  /// Deduplicates by IMDB ID — updates existing entry if found.
+  static Future<void> saveContinueWatchingItem({
+    required String imdbId,
+    required String title,
+    required String contentType,
+    String? posterUrl,
+    String? addonId,
+    String? year,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_continueWatchingKey);
+    List<Map<String, dynamic>> items = [];
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final List<dynamic> list = jsonDecode(raw);
+        items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (_) {}
+    }
+
+    // Remove existing entry with same IMDB ID
+    items.removeWhere((e) => e['imdbId'] == imdbId);
+
+    // Add at front
+    items.insert(0, {
+      'imdbId': imdbId,
+      'title': title,
+      'contentType': contentType,
+      'posterUrl': posterUrl,
+      'addonId': addonId,
+      'year': year,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+
+    // Keep max 50 items
+    if (items.length > 50) items = items.sublist(0, 50);
+
+    await prefs.setString(_continueWatchingKey, jsonEncode(items));
+  }
+
+  /// Remove a continue watching entry by IMDB ID.
+  static Future<void> removeContinueWatchingItem(String imdbId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_continueWatchingKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final List<dynamic> list = jsonDecode(raw);
+      final items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
+      items.removeWhere((e) => e['imdbId'] == imdbId);
+      await prefs.setString(_continueWatchingKey, jsonEncode(items));
+    } catch (_) {}
+  }
+
   // Enhanced Playback State methods
   static Future<Map<String, dynamic>> _getPlaybackStateMap() async {
     final prefs = await SharedPreferences.getInstance();
@@ -827,6 +898,7 @@ class StorageService {
     required int durationMs,
     double speed = 1.0,
     String aspect = 'contain',
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -841,6 +913,7 @@ class StorageService {
       'speed': speed,
       'aspect': aspect,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      if (imdbId != null) 'imdbId': imdbId,
     };
 
     await _savePlaybackStateMap(map);
@@ -858,6 +931,25 @@ class StorageService {
     if (videoData == null || videoData['type'] != 'video') return null;
 
     return videoData as Map<String, dynamic>;
+  }
+
+  /// Get video playback state by IMDB ID (scans all video entries, returns most recent).
+  static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(String imdbId) async {
+    final map = await _getPlaybackStateMap();
+    Map<String, dynamic>? best;
+    int bestUpdatedAt = -1;
+    for (final entry in map.values) {
+      if (entry is Map<String, dynamic> &&
+          entry['type'] == 'video' &&
+          entry['imdbId'] == imdbId) {
+        final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
+        if (updatedAt > bestUpdatedAt) {
+          bestUpdatedAt = updatedAt;
+          best = entry;
+        }
+      }
+    }
+    return best;
   }
 
   /// Get the last played episode for a series
