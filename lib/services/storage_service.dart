@@ -2737,6 +2737,16 @@ class StorageService {
   }
 
   // Trakt Settings
+  static Future<bool> getTraktSyncCatalogItems() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('trakt_sync_catalog_items') ?? false;
+  }
+
+  static Future<void> setTraktSyncCatalogItems(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('trakt_sync_catalog_items', value);
+  }
+
   static Future<String?> getTraktAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_traktAccessTokenKey);

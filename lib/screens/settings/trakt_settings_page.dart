@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
 
 class TraktSettingsPage extends StatefulWidget {
@@ -18,6 +19,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _username;
+  bool _syncCatalogItems = false;
 
   // Device code flow
   String? _userCode;
@@ -44,12 +46,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   Future<void> _loadSettings() async {
     final isAuth = await TraktService.instance.isAuthenticated();
     final username = await TraktService.instance.getUsername();
+    final syncCatalog = await StorageService.getTraktSyncCatalogItems();
 
     if (!mounted) return;
 
     setState(() {
       _isConnected = isAuth;
       _username = username;
+      _syncCatalogItems = syncCatalog;
       _loading = false;
     });
   }
@@ -276,6 +280,26 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
               ),
             ),
           ),
+
+          // Sync Catalog Items toggle (only when connected)
+          if (_isConnected) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: SwitchListTile(
+                title: const Text('Sync Catalog Items'),
+                subtitle: const Text(
+                  'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                value: _syncCatalogItems,
+                onChanged: (value) {
+                  setState(() => _syncCatalogItems = value);
+                  StorageService.setTraktSyncCatalogItems(value);
+                },
+                activeColor: const Color(0xFFED1C24),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 

@@ -334,7 +334,68 @@ class VideoPlayerLauncher {
     return nameWithoutExt.hashCode.toString();
   }
 
-  static Future<void> push(BuildContext context, VideoPlayerLaunchArgs args) async {
+  static Future<void> push(BuildContext context, VideoPlayerLaunchArgs originalArgs) async {
+    // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
+    var args = originalArgs;
+    if (!args.traktScrobble && args.contentImdbId != null && args.stremioTvChannels == null) {
+      final results = await Future.wait([
+        StorageService.getTraktSyncCatalogItems(),
+        TraktService.instance.isAuthenticated(),
+      ]);
+      final syncCatalog = results[0] as bool;
+      final isAuth = results[1] as bool;
+      if (syncCatalog && isAuth) {
+          args = VideoPlayerLaunchArgs(
+            videoUrl: args.videoUrl,
+            title: args.title,
+            subtitle: args.subtitle,
+            playlist: args.playlist,
+            startIndex: args.startIndex,
+            rdTorrentId: args.rdTorrentId,
+            torboxTorrentId: args.torboxTorrentId,
+            pikpakCollectionId: args.pikpakCollectionId,
+            requestMagicNext: args.requestMagicNext,
+            requestNextChannel: args.requestNextChannel,
+            startFromRandom: args.startFromRandom,
+            randomStartMaxPercent: args.randomStartMaxPercent,
+            startAtPercent: args.startAtPercent,
+            hideSeekbar: args.hideSeekbar,
+            showChannelName: args.showChannelName,
+            channelName: args.channelName,
+            channelNumber: args.channelNumber,
+            showVideoTitle: args.showVideoTitle,
+            hideOptions: args.hideOptions,
+            hideBackButton: args.hideBackButton,
+            isAndroidTvOverride: args.isAndroidTvOverride,
+            disableAutoResume: args.disableAutoResume,
+            viewMode: args.viewMode,
+            contentImdbId: args.contentImdbId,
+            contentType: args.contentType,
+            contentSeason: args.contentSeason,
+            contentEpisode: args.contentEpisode,
+            iptvChannels: args.iptvChannels,
+            iptvStartIndex: args.iptvStartIndex,
+            stremioSources: args.stremioSources,
+            stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
+            resolveStremioSource: args.resolveStremioSource,
+            resolveSourceToPlaylist: args.resolveSourceToPlaylist,
+            stremioTvChannels: args.stremioTvChannels,
+            stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
+            stremioTvRotationMinutes: args.stremioTvRotationMinutes,
+            stremioTvSeriesRotationMinutes: args.stremioTvSeriesRotationMinutes,
+            stremioTvMixSalt: args.stremioTvMixSalt,
+            stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
+            stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
+            traktScrobble: true,
+            traktProgressPercent: args.traktProgressPercent,
+            contentTitle: args.contentTitle,
+            posterUrl: args.posterUrl,
+            contentYear: args.contentYear,
+            addonId: args.addonId,
+          );
+      }
+    }
+
     // Save to continue watching (fire-and-forget, non-blocking)
     // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
     if (args.contentImdbId != null && args.contentType != null && !args.traktScrobble && args.stremioTvChannels == null) {
