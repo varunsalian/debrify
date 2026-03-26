@@ -2864,8 +2864,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     debugPrint('TorrentSearchScreen: Quick Play triggered for ${selection.title}');
 
     // Check if a bound source exists for this item (series or movie)
-    final played = await _tryPlayFromBoundSource(selection);
-    if (played) return; // Played from bound source, skip normal search
+    // Show loading overlay while resolving bound source
+    final prefetchedSources = await SeriesSourceService.getSources(selection.imdbId);
+    if (prefetchedSources.isNotEmpty && mounted) {
+      bool dialogOpen = true;
+      _showQuickPlayLoading(selection.title, onDismissed: () => dialogOpen = false);
+      final played = await _tryPlayFromBoundSource(selection, silent: true, prefetchedSources: prefetchedSources);
+      if (dialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (played) return;
+    }
 
     // Set quick play pending state
     setState(() {
@@ -2879,10 +2888,69 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // The search completion handler will check _quickPlayPending and auto-play
   }
 
+  void _showQuickPlayLoading(String title, {VoidCallback? onDismissed}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black54,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141824),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.none,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Loading from saved source...',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      ),
+    ).whenComplete(() => onDismissed?.call());
+  }
+
   /// Try to play from bound sources (series: finds the right episode; movies: picks the largest file).
   /// Returns true if playback was initiated, false if should fall back to normal search.
-  Future<bool> _tryPlayFromBoundSource(AdvancedSearchSelection selection) async {
-    final sources = await SeriesSourceService.getSources(selection.imdbId);
+  /// When [silent] is true, the UI is not switched to the search screen during resolution.
+  Future<bool> _tryPlayFromBoundSource(AdvancedSearchSelection selection, {bool silent = false, List<SeriesSource>? prefetchedSources}) async {
+    final sources = prefetchedSources ?? await SeriesSourceService.getSources(selection.imdbId);
     if (sources.isEmpty) return false;
 
     debugPrint('TorrentSearchScreen: Found ${sources.length} bound source(s) for ${selection.title}');
@@ -2893,13 +2961,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     try {
-      // Show loading indicator
-      setState(() {
-        _isLoading = true;
-        _searchPhase = SearchPhase.searching;
-        _hasSearched = true;
-        _activeAdvancedSelection = selection;
-      });
+      // Show loading indicator (skip in silent mode to keep home screen visible)
+      if (!silent) {
+        setState(() {
+          _isLoading = true;
+          _searchPhase = SearchPhase.searching;
+          _hasSearched = true;
+          _activeAdvancedSelection = selection;
+        });
+      }
 
       // Try each source in priority order until one has the episode
       for (int i = 0; i < sources.length; i++) {
@@ -2930,13 +3000,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       // None of the sources had the episode
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       }
       return false;
     } catch (e) {
       debugPrint('TorrentSearchScreen: Failed to play from bound sources: $e');
-      if (mounted) setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
+      if (mounted && !silent) setState(() { _isLoading = false; _hasSearched = false; _searchPhase = SearchPhase.idle; });
       return false; // Fall back to normal search
     }
   }
