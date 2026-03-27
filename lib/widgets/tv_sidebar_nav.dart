@@ -88,6 +88,15 @@ class TvSidebarNavState extends State<TvSidebarNav>
         _hasSidebarFocus = true;
       });
       _expandController.forward();
+      // Auto-scroll to keep focused item visible
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (index < _focusNodes.length) {
+          final ctx = _focusNodes[index].context;
+          if (ctx != null) {
+            Scrollable.ensureVisible(ctx, duration: Duration.zero, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+          }
+        }
+      });
     } else {
       // Check if ANY sidebar item still has focus
       final anySidebarFocused = _focusNodes.any((node) => node.hasFocus);
