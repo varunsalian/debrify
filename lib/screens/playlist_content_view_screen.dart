@@ -2226,12 +2226,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Calculate approximate position
-    // Each episode card is roughly 180px (desktop) or 300px (mobile) + 16px padding
+    // Each episode card is roughly 155px (desktop) or 120px (mobile) + 16px padding
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     final estimatedItemHeight = isMobile
-        ? 316.0
-        : 196.0; // card height + padding
+        ? 136.0
+        : 171.0; // card height + padding
     final targetOffset = episodeIndex * estimatedItemHeight;
 
     // Ensure we don't scroll beyond the max extent
@@ -2422,7 +2422,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
-  /// Build mobile vertical layout (thumbnail top, info bottom)
+  /// Build mobile layout — compact horizontal row with thumbnail left, info right (Trakt-style)
   Widget _buildMobileEpisodeCard(
     SeriesEpisode episode,
     double progress,
@@ -2430,356 +2430,179 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Thumbnail section with 16:9 aspect ratio
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Episode thumbnail or placeholder
-              if (hasMetadata && episodeInfo!.poster != null)
-                Image.network(
-                  episodeInfo.poster!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildThumbnailPlaceholder(episode);
-                  },
-                )
-              else
-                _buildThumbnailPlaceholder(episode),
-
-              // Apply semi-transparent overlay for watched episodes
-              if (isFinished)
-                Container(
-                  color: Colors.black.withValues(alpha: 0.6),
-                ),
-
-              // Play button overlay
-              Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    shape: BoxShape.circle,
-                  ),
-                  padding: const EdgeInsets.all(16),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                ),
-              ),
-
-              // Top left: Episode number badge
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0xFF6366F1),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    episode.seasonEpisodeString,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Top right: Mark as watched button
-              Positioned(
-                top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: () => _toggleWatchedState(episode),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isFinished
-                        ? const Color(0xFF4CAF50)
-                        : Colors.white.withValues(alpha: 0.3),
-                      border: Border.all(
-                        color: isFinished
-                          ? const Color(0xFF4CAF50)
-                          : Colors.white.withValues(alpha: 0.8),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      isFinished ? Icons.check : Icons.circle_outlined,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-
-              // IMDB rating badge (moved to accommodate watched button)
-              if (hasMetadata && episodeInfo!.rating != null)
-                Positioned(
-                  top: 8,
-                  right: 52, // Positioned to the left of the watched button
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5C518),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.star, color: Colors.black, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          episodeInfo.rating!.toStringAsFixed(1),
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Watch status badge (bottom left corner)
-              if (progress > 0.0)
-                Positioned(
-                  bottom: 8,
-                  left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isFinished
-                          ? const Color(0xFF059669)
-                          : const Color(0xFF6366F1),
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isFinished
-                              ? Icons.check_circle
-                              : Icons.play_circle_filled,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isFinished
-                              ? 'WATCHED'
-                              : '${(progress * 100).round()}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-
-        // Info section below thumbnail
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Episode title with status chip
-              Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left: Compact thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 130,
+              height: 75,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Expanded(
-                    child: Text(
-                      episode.displayTitle,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  if (hasMetadata && episodeInfo!.poster != null)
+                    Image.network(
+                      episodeInfo.poster!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildThumbnailPlaceholder(episode);
+                      },
+                    )
+                  else
+                    _buildThumbnailPlaceholder(episode),
+
+                  if (isFinished)
+                    Container(
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
+
+                  // Play button
+                  Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
-                  if (progress > 0.0) ...[
-                    const SizedBox(width: 8),
-                    Container(
+
+                  // Episode badge (top left)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
+                        horizontal: 5,
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: isFinished
-                            ? const Color(0xFF059669).withValues(alpha: 0.2)
-                            : const Color(0xFF6366F1).withValues(alpha: 0.2),
-                        border: Border.all(
-                          color: isFinished
-                              ? const Color(0xFF059669)
-                              : const Color(0xFF6366F1),
-                          width: 1,
-                        ),
+                        color: Colors.black.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        isFinished ? 'WATCHED' : 'WATCHING',
-                        style: TextStyle(
-                          color: isFinished
-                              ? const Color(0xFF059669)
-                              : const Color(0xFF6366F1),
+                        episode.seasonEpisodeString,
+                        style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                  ],
+                  ),
+
+                  // Thin progress bar at bottom
+                  if (progress > 0.0)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  isFinished
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFF6366F1),
+                                  isFinished
+                                      ? const Color(0xFF059669).withValues(alpha: 0.7)
+                                      : const Color(0xFF6366F1).withValues(alpha: 0.7),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
-              const SizedBox(height: 8),
-
-              // Watch progress info
-              if (progress > 0.0 && !isFinished)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.history,
-                        size: 14,
-                        color: const Color(0xFF6366F1),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${(progress * 100).round()}% watched',
-                        style: const TextStyle(
-                          color: Color(0xFF6366F1),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Runtime and Air date
-              if (hasMetadata)
-                Row(
-                  children: [
-                    if (episodeInfo!.runtime != null) ...[
-                      const Icon(
-                        Icons.schedule,
-                        size: 14,
-                        color: Colors.white60,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${episodeInfo.runtime} min',
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                    if (episodeInfo.runtime != null &&
-                        episodeInfo.airDate != null)
-                      const Text(
-                        '  •  ',
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                    if (episodeInfo.airDate != null) ...[
-                      const Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: Colors.white60,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        episodeInfo.airDate!,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              const SizedBox(height: 8),
-
-              // Description
-              if (hasMetadata && episodeInfo!.plot != null)
-                Text(
-                  episodeInfo.plot!,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                ),
-            ],
-          ),
-        ),
-
-        // Progress bar at the bottom
-        if (progress > 0.0)
-          SizedBox(
-            height: 6,
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.black.withValues(alpha: 0.3),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isFinished ? const Color(0xFF059669) : const Color(0xFF6366F1),
-              ),
-              minHeight: 6,
             ),
           ),
-      ],
+
+          const SizedBox(width: 12),
+
+          // Middle: Episode info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  episode.displayTitle,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                _buildEpisodeMetadataRow(episode, episodeInfo, progress, isFinished),
+                if (hasMetadata && episodeInfo!.plot != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    episodeInfo.plot!,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Right: Watched button
+          GestureDetector(
+            onTap: () => _toggleWatchedState(episode),
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isFinished
+                    ? const Color(0xFF4CAF50)
+                    : Colors.white.withValues(alpha: 0.15),
+                border: Border.all(
+                  color: isFinished
+                      ? const Color(0xFF4CAF50)
+                      : Colors.white.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                isFinished ? Icons.check : Icons.circle_outlined,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  /// Build desktop horizontal layout (thumbnail left, info right)
+  /// Build desktop horizontal layout (thumbnail left, info right) — Trakt-style
   Widget _buildDesktopEpisodeCard(
     SeriesEpisode episode,
     double progress,
@@ -2787,371 +2610,257 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
-    return Column(
-      children: [
-        // Main content - horizontal layout
-        SizedBox(
-          height: 180,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left: Thumbnail with overlays
-              SizedBox(
-                width: 240,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Episode thumbnail or placeholder
-                    if (hasMetadata && episodeInfo!.poster != null)
-                      Image.network(
-                        episodeInfo.poster!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildThumbnailPlaceholder(episode);
-                        },
-                      )
-                    else
-                      _buildThumbnailPlaceholder(episode),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left: Compact thumbnail with progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 240,
+              height: 135,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasMetadata && episodeInfo!.poster != null)
+                    Image.network(
+                      episodeInfo.poster!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildThumbnailPlaceholder(episode);
+                      },
+                    )
+                  else
+                    _buildThumbnailPlaceholder(episode),
 
-                    // Apply semi-transparent overlay for watched episodes
-                    if (isFinished)
-                      Container(
+                  // Dim overlay for watched episodes
+                  if (isFinished)
+                    Container(
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
+
+                  // Play button overlay
+                  Center(
+                    child: Container(
+                      decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
                       ),
+                      padding: const EdgeInsets.all(12),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
 
-                    // Play button overlay
-                    Center(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: const Icon(
-                          Icons.play_arrow,
+                  // Episode number badge (top left)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        episode.seasonEpisodeString,
+                        style: const TextStyle(
                           color: Colors.white,
-                          size: 40,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
+                  ),
 
-                    // Top left: Episode number badge
+                  // Thin progress bar at bottom of thumbnail
+                  if (progress > 0.0)
                     Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: const Color(0xFF6366F1),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          episode.seasonEpisodeString,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Top right: Mark as watched button
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: GestureDetector(
-                        onTap: () => _toggleWatchedState(episode),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isFinished
-                              ? const Color(0xFF4CAF50)
-                              : Colors.white.withValues(alpha: 0.3),
-                            border: Border.all(
-                              color: isFinished
-                                ? const Color(0xFF4CAF50)
-                                : Colors.white.withValues(alpha: 0.8),
-                              width: 2,
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  isFinished
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFF6366F1),
+                                  isFinished
+                                      ? const Color(0xFF059669).withValues(alpha: 0.7)
+                                      : const Color(0xFF6366F1).withValues(alpha: 0.7),
+                                ],
+                              ),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            isFinished ? Icons.check : Icons.circle_outlined,
-                            color: Colors.white,
-                            size: 24,
                           ),
                         ),
                       ),
                     ),
+                ],
+              ),
+            ),
+          ),
 
-                    // IMDB rating badge (moved to accommodate watched button)
-                    if (hasMetadata && episodeInfo?.rating != null)
-                      Positioned(
-                        top: 8,
-                        right: 60, // Positioned to the left of the watched button
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF5C518),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.star,
-                                color: Colors.black,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                episodeInfo!.rating!.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+          const SizedBox(width: 14),
 
-                    // Watch status badge (bottom left corner)
-                    if (progress > 0.0)
-                      Positioned(
-                        bottom: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isFinished
-                                ? const Color(0xFF059669)
-                                : const Color(0xFF6366F1),
-                            borderRadius: BorderRadius.circular(6),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isFinished
-                                    ? Icons.check_circle
-                                    : Icons.play_circle_filled,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                isFinished
-                                    ? 'WATCHED'
-                                    : '${(progress * 100).round()}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+          // Middle: Episode info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Episode title
+                Text(
+                  episode.displayTitle,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                const SizedBox(height: 4),
+
+                // Metadata row — episode badge, runtime, air date, rating, watch status
+                _buildEpisodeMetadataRow(episode, episodeInfo, progress, isFinished),
+
+                // Description
+                if (hasMetadata && episodeInfo!.plot != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    episodeInfo.plot!,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Right: Mark as watched button
+          GestureDetector(
+            onTap: () => _toggleWatchedState(episode),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isFinished
+                    ? const Color(0xFF4CAF50)
+                    : Colors.white.withValues(alpha: 0.15),
+                border: Border.all(
+                  color: isFinished
+                      ? const Color(0xFF4CAF50)
+                      : Colors.white.withValues(alpha: 0.4),
+                  width: 1.5,
                 ),
               ),
+              child: Icon(
+                isFinished ? Icons.check : Icons.circle_outlined,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              // Right: Episode info
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Episode title with status chip
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              episode.displayTitle,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (progress > 0.0) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isFinished
-                                    ? const Color(
-                                        0xFF059669,
-                                      ).withValues(alpha: 0.2)
-                                    : const Color(
-                                        0xFF6366F1,
-                                      ).withValues(alpha: 0.2),
-                                border: Border.all(
-                                  color: isFinished
-                                      ? const Color(0xFF059669)
-                                      : const Color(0xFF6366F1),
-                                  width: 1,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                isFinished ? 'WATCHED' : 'WATCHING',
-                                style: TextStyle(
-                                  color: isFinished
-                                      ? const Color(0xFF059669)
-                                      : const Color(0xFF6366F1),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Watch progress info
-                      if (progress > 0.0 && !isFinished)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.history,
-                                size: 14,
-                                color: const Color(0xFF6366F1),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${(progress * 100).round()}% watched',
-                                style: const TextStyle(
-                                  color: Color(0xFF6366F1),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // Runtime and Air date
-                      if (hasMetadata)
-                        Row(
-                          children: [
-                            if (episodeInfo!.runtime != null) ...[
-                              const Icon(
-                                Icons.schedule,
-                                size: 14,
-                                color: Colors.white60,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${episodeInfo!.runtime} min',
-                                style: const TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                            if (episodeInfo!.runtime != null &&
-                                episodeInfo!.airDate != null)
-                              const Text(
-                                '  •  ',
-                                style: TextStyle(color: Colors.white60),
-                              ),
-                            if (episodeInfo!.airDate != null) ...[
-                              const Icon(
-                                Icons.calendar_today,
-                                size: 14,
-                                color: Colors.white60,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                episodeInfo!.airDate!,
-                                style: const TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      const SizedBox(height: 8),
-
-                      // Description
-                      if (hasMetadata && episodeInfo!.plot != null)
-                        Expanded(
-                          child: Text(
-                            episodeInfo.plot!,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                              height: 1.4,
-                            ),
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )
-                      else
-                        const Spacer(),
-                    ],
-                  ),
+  /// Build compact metadata row (Trakt-style) for episode cards
+  Widget _buildEpisodeMetadataRow(
+    SeriesEpisode episode,
+    EpisodeInfo? episodeInfo,
+    double progress,
+    bool isFinished,
+  ) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (episodeInfo?.runtime != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.schedule, size: 12, color: Colors.white54),
+              const SizedBox(width: 3),
+              Text(
+                '${episodeInfo!.runtime} min',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
                 ),
               ),
             ],
           ),
-        ),
-
-        // Progress bar at the bottom
-        if (progress > 0.0)
-          SizedBox(
-            height: 6,
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.black.withValues(alpha: 0.3),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isFinished ? const Color(0xFF059669) : const Color(0xFF6366F1),
+        if (episodeInfo?.runtime != null && episodeInfo?.airDate != null)
+          Text(
+            '•',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.3),
+              fontSize: 11,
+            ),
+          ),
+        if (episodeInfo?.airDate != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.calendar_today, size: 12, color: Colors.white54),
+              const SizedBox(width: 3),
+              Text(
+                episodeInfo!.airDate!,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
+                ),
               ),
-              minHeight: 6,
+            ],
+          ),
+        if (episodeInfo?.rating != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+              const SizedBox(width: 2),
+              Text(
+                episodeInfo!.rating!.toStringAsFixed(1),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        if (progress > 0.0)
+          Text(
+            isFinished ? 'Watched' : '${(progress * 100).round()}%',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 11,
             ),
           ),
       ],

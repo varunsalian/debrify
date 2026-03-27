@@ -19,6 +19,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _listFocusNode = FocusNode();
+  final ScrollController _listScrollController = ScrollController();
 
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
@@ -43,6 +44,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _listFocusNode.dispose();
+    _listScrollController.dispose();
     super.dispose();
   }
 
@@ -81,6 +83,36 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
 
   void _selectShow(Map<String, dynamic> show) {
     Navigator.of(context).pop(show);
+  }
+
+  void _scrollToSelectedItem() {
+    if (!_listScrollController.hasClients || _selectedIndex < 0) return;
+    // Each item is roughly 144px (120px poster + 12px padding top/bottom) + 8px separator
+    const estimatedItemHeight = 152.0;
+    final targetOffset = _selectedIndex * estimatedItemHeight;
+    final maxScroll = _listScrollController.position.maxScrollExtent;
+    final viewportHeight = _listScrollController.position.viewportDimension;
+
+    // Only scroll if the item is outside the visible area
+    final currentScroll = _listScrollController.offset;
+    final itemTop = targetOffset;
+    final itemBottom = targetOffset + estimatedItemHeight;
+
+    if (itemBottom > currentScroll + viewportHeight) {
+      // Item is below viewport — scroll down
+      _listScrollController.animateTo(
+        (itemBottom - viewportHeight).clamp(0.0, maxScroll),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    } else if (itemTop < currentScroll) {
+      // Item is above viewport — scroll up
+      _listScrollController.animateTo(
+        itemTop.clamp(0.0, maxScroll),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Widget _buildShowTile(Map<String, dynamic> show, int index, bool isSelected) {
@@ -428,6 +460,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                                           }
                                         }
                                       });
+                                      // Scroll to keep selected item visible
+                                      _scrollToSelectedItem();
                                       return null;
                                     },
                                   ),
@@ -444,6 +478,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                                   focusNode: _listFocusNode,
                                   autofocus: _searchResults.isNotEmpty,
                                   child: ListView.separated(
+                                    controller: _listScrollController,
                                     itemCount: _searchResults.length,
                                     separatorBuilder: (context, index) => const SizedBox(height: 8),
                                     itemBuilder: (context, index) {
