@@ -170,8 +170,8 @@ String _getDedupeKey(Map<String, dynamic> item) {
     return '$provider|${title.toLowerCase()}';
   }
 
-  // Force horizontal layout for any screen > 600 (tablets and TVs)
-  bool _isTV(double screenWidth) => screenWidth > 600;
+  // Always use horizontal scroll layout (matching home screen)
+  bool _isHorizontalLayout(double screenWidth) => true;
 
   (int, double) _getGridParams(double screenWidth) {
     if (screenWidth > 900) {
@@ -195,8 +195,6 @@ String _getDedupeKey(Map<String, dynamic> item) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        final isTV = _isTV(availableWidth);
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -205,10 +203,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
               _buildSectionHeader(),
               const SizedBox(height: 16),
             ],
-            if (isTV)
-              _buildHorizontalRow(availableWidth)
-            else
-              _buildGrid(availableWidth),
+            _buildHorizontalRow(availableWidth),
           ],
         );
       },
@@ -292,11 +287,12 @@ String _getDedupeKey(Map<String, dynamic> item) {
     );
   }
 
-  /// TV layout: Horizontal scrolling row with landscape cards
+  /// Horizontal scrolling row with landscape cards (matching home screen)
   Widget _buildHorizontalRow(double screenWidth) {
-    // Card dimensions - landscape ratio matching home screen Continue Watching
-    const double cardWidth = 320;
-    const double cardHeight = 195;
+    // Card dimensions - responsive, matching home screen Continue Watching
+    final bool isMobile = screenWidth < 600;
+    final double cardWidth = isMobile ? screenWidth * 0.80 : 320;
+    final double cardHeight = isMobile ? 180 : 195;
 
     return SizedBox(
       height: cardHeight + 35, // Extra space for scale animation overflow + shadows
