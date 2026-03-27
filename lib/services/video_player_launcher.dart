@@ -393,6 +393,8 @@ class VideoPlayerLauncher {
             contentYear: args.contentYear,
             addonId: args.addonId,
           );
+          // Clean up any existing local Continue Watching entry (Trakt tracks it now)
+          StorageService.removeContinueWatchingItem(args.contentImdbId!);
       }
     }
 
