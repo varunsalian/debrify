@@ -1816,7 +1816,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: FutureBuilder<void>(
         future: _initFuture,
         builder: (context, snapshot) {

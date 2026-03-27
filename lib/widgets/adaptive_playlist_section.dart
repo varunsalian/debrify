@@ -175,15 +175,13 @@ String _getDedupeKey(Map<String, dynamic> item) {
 
   (int, double) _getGridParams(double screenWidth) {
     if (screenWidth > 900) {
-      return (5, 0.68);
+      return (4, 1.65);
     } else if (screenWidth > 600) {
-      return (4, 0.72);
+      return (3, 1.6);
     } else if (screenWidth > 500) {
-      // Larger phones/small tablets: 3 columns
-      return (3, 0.62);
+      return (2, 1.55);
     } else {
-      // Standard phones: 2 columns with taller cards for better visibility
-      return (2, 0.58);
+      return (2, 1.5);
     }
   }
 
@@ -294,11 +292,11 @@ String _getDedupeKey(Map<String, dynamic> item) {
     );
   }
 
-  /// TV layout: Horizontal scrolling row with Netflix-style cards
+  /// TV layout: Horizontal scrolling row with landscape cards
   Widget _buildHorizontalRow(double screenWidth) {
-    // Card dimensions - balanced size for TV viewing
-    const double cardWidth = 165;
-    const double cardHeight = 230; // ~2:3 aspect ratio (Netflix poster style)
+    // Card dimensions - landscape ratio matching home screen Continue Watching
+    const double cardWidth = 320;
+    const double cardHeight = 195;
 
     return SizedBox(
       height: cardHeight + 35, // Extra space for scale animation overflow + shadows
@@ -423,7 +421,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
     // Guard against scroll controller not being attached
     if (!_scrollController.hasClients) return;
 
-    const double cardWidth = 165; // Match card dimensions
+    const double cardWidth = 320; // Match card dimensions
     const double spacing = 18;
     const double padding = 20;
 
