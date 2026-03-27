@@ -2226,12 +2226,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Calculate approximate position
-    // Each episode card is roughly 155px (desktop) or 120px (mobile) + 16px padding
+    // Each episode card is roughly 108px (desktop) or 100px (mobile) + 16px padding
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
     final estimatedItemHeight = isMobile
-        ? 136.0
-        : 171.0; // card height + padding
+        ? 116.0
+        : 124.0; // card height + padding
     final targetOffset = episodeIndex * estimatedItemHeight;
 
     // Ensure we don't scroll beyond the max extent
@@ -2354,13 +2354,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           return Stack(
             children: [
               Card(
-                color: const Color(0xFF1E293B),
+                color: isFocused
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.03),
                 clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: isFocused
-                      ? const BorderSide(color: Colors.white, width: 2)
-                      : BorderSide.none,
+                  side: BorderSide(
+                    color: isFocused
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.06),
+                    width: isFocused ? 1.5 : 1,
+                  ),
                 ),
                 child: InkWell(
                   onTap: _isAndroidTv ? null : () => _playEpisode(episode),
@@ -2430,6 +2435,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
+    final epNum = episode.seriesInfo.episode;
+    final titlePrefix = epNum != null ? 'E${epNum.toString().padLeft(2, '0')} - ' : '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: Row(
@@ -2439,8 +2447,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: SizedBox(
-              width: 130,
-              height: 75,
+              width: 120,
+              height: 68,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -2459,46 +2467,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     Container(
                       color: Colors.black.withValues(alpha: 0.6),
                     ),
-
-                  // Play button
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-
-                  // Episode badge (top left)
-                  Positioned(
-                    top: 4,
-                    left: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        episode.seasonEpisodeString,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
 
                   // Thin progress bar at bottom
                   if (progress > 0.0)
@@ -2542,9 +2510,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  episode.displayTitle,
+                  '$titlePrefix${episode.displayTitle}',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
@@ -2610,17 +2578,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
+    final epNum = episode.seriesInfo.episode;
+    final titlePrefix = epNum != null ? 'E${epNum.toString().padLeft(2, '0')} - ' : '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Left: Compact thumbnail with progress bar
+          // Left: Compact thumbnail
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: SizedBox(
-              width: 240,
-              height: 135,
+              width: 155,
+              height: 88,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -2640,46 +2611,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     Container(
                       color: Colors.black.withValues(alpha: 0.6),
                     ),
-
-                  // Play button overlay
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-
-                  // Episode number badge (top left)
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        episode.seasonEpisodeString,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
 
                   // Thin progress bar at bottom of thumbnail
                   if (progress > 0.0)
@@ -2722,11 +2653,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Episode title
+                // Episode title with E## prefix
                 Text(
-                  episode.displayTitle,
+                  '$titlePrefix${episode.displayTitle}',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
@@ -2736,7 +2667,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
                 const SizedBox(height: 4),
 
-                // Metadata row — episode badge, runtime, air date, rating, watch status
+                // Metadata row — S01E01 badge, air date, runtime, rating, watch status
                 _buildEpisodeMetadataRow(episode, episodeInfo, progress, isFinished),
 
                 // Description
@@ -2746,7 +2677,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     episodeInfo.plot!,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.45),
-                      fontSize: 12,
+                      fontSize: 11,
                       height: 1.4,
                     ),
                     maxLines: 2,
@@ -2789,6 +2720,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
+  /// Format air date from "YYYY-MM-DD" to "Mon DD, YYYY" (e.g. "Feb 10, 2023")
+  String _formatAirDate(String airDate) {
+    try {
+      final date = DateTime.parse(airDate);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    } catch (_) {
+      return airDate;
+    }
+  }
+
   /// Build compact metadata row (Trakt-style) for episode cards
   Widget _buildEpisodeMetadataRow(
     SeriesEpisode episode,
@@ -2796,48 +2739,45 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     double progress,
     bool isFinished,
   ) {
+    final seString = episode.seasonEpisodeString;
+
     return Wrap(
       spacing: 6,
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        if (episodeInfo?.runtime != null)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.schedule, size: 12, color: Colors.white54),
-              const SizedBox(width: 3),
-              Text(
-                '${episodeInfo!.runtime} min',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                ),
+        // Green S01E01 badge
+        if (seString.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF34D399).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              seString,
+              style: const TextStyle(
+                color: Color(0xFF34D399),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
-        if (episodeInfo?.runtime != null && episodeInfo?.airDate != null)
-          Text(
-            '•',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
-              fontSize: 11,
             ),
           ),
         if (episodeInfo?.airDate != null)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.calendar_today, size: 12, color: Colors.white54),
-              const SizedBox(width: 3),
-              Text(
-                episodeInfo!.airDate!,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                ),
-              ),
-            ],
+          Text(
+            _formatAirDate(episodeInfo!.airDate!),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+            ),
+          ),
+        if (episodeInfo?.runtime != null)
+          Text(
+            '${episodeInfo!.runtime} min',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+            ),
           ),
         if (episodeInfo?.rating != null)
           Row(
