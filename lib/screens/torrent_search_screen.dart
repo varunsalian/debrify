@@ -17058,36 +17058,51 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Dialog(
-      backgroundColor: const Color(0xFF1E293B),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 300),
-        child: FocusTraversalGroup(
-          policy: OrderedTraversalPolicy(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 340),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B0F1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 40,
+                spreadRadius: 8,
+              ),
+            ],
+          ),
+          child: FocusTraversalGroup(
+            policy: OrderedTraversalPolicy(),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Add to',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.add_rounded, color: Color(0xFF818CF8), size: 18),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Choose provider',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
 
                 // Provider options
                 ...widget.providers.asMap().entries.map((entry) {
@@ -17107,52 +17122,43 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                       }
                       return KeyEventResult.ignored;
                     },
-                    child: Material(
-                      color: isFocused
-                          ? Colors.white.withValues(alpha: 0.1)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: () => _selectProvider(provider.id),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            children: [
-                              Icon(
-                                provider.icon,
-                                color: provider.color,
-                                size: 22,
+                    child: InkWell(
+                      onTap: () => _selectProvider(provider.id),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isFocused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: provider.color.withValues(alpha: isFocused ? 0.25 : 0.15),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  provider.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
+                              child: Icon(provider.icon, size: 18, color: provider.color),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                provider.name,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   );
                 }),
 
-                // Divider
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    height: 1,
-                  ),
-                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
 
-                // "Always use this" checkbox
+                // "Remember my choice" toggle
                 Focus(
                   focusNode: _checkboxFocusNode,
                   onKeyEvent: (node, event) {
@@ -17160,66 +17166,55 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                         (event.logicalKey == LogicalKeyboardKey.select ||
                             event.logicalKey == LogicalKeyboardKey.enter ||
                             event.logicalKey == LogicalKeyboardKey.space)) {
-                      setState(() {
-                        _alwaysUseThis = !_alwaysUseThis;
-                      });
+                      setState(() => _alwaysUseThis = !_alwaysUseThis);
                       return KeyEventResult.handled;
                     }
                     return KeyEventResult.ignored;
                   },
-                  child: Material(
-                    color: _checkboxFocused
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _alwaysUseThis = !_alwaysUseThis;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
+                  child: InkWell(
+                    onTap: () => setState(() => _alwaysUseThis = !_alwaysUseThis),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: _checkboxFocused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: _alwaysUseThis
+                                  ? const Color(0xFF6366F1)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
                                 color: _alwaysUseThis
-                                    ? theme.colorScheme.primary
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: _alwaysUseThis
-                                      ? theme.colorScheme.primary
-                                      : Colors.white.withValues(alpha: 0.4),
-                                  width: 2,
-                                ),
-                              ),
-                              child: _alwaysUseThis
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      color: Colors.white,
-                                      size: 14,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 14),
-                            Text(
-                              'Remember my choice',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 14,
+                                    ? const Color(0xFF6366F1)
+                                    : Colors.white.withValues(alpha: 0.25),
+                                width: 1.5,
                               ),
                             ),
-                          ],
-                        ),
+                            child: _alwaysUseThis
+                                ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                                : null,
+                          ),
+                          const SizedBox(width: 14),
+                          Text(
+                            'Remember my choice',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
