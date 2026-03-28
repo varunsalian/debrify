@@ -159,6 +159,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // Home screen DPAD navigation controller
   late final HomeFocusController _homeFocusController;
+  final GlobalKey<HomeFavoritesSectionState> _homeFavoritesKey = GlobalKey();
+  final GlobalKey<HomePlaylistSectionState> _homePlaylistKey = GlobalKey();
 
   final FocusNode _sortDropdownFocusNode = FocusNode();
   final FocusNode _sortDirectionFocusNode = FocusNode();
@@ -14690,8 +14692,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _buildSectionDivider(),
       // Playlist favorites section (horizontal scroll)
       RepaintBoundary(child: HomeFavoritesSection(
+        key: _homeFavoritesKey,
         focusController: _homeFocusController,
         isTelevision: _isTelevision,
+        onChanged: () => _homePlaylistKey.currentState?.reload(),
         onRequestFocusAbove: () {
           final prev = _homeFocusController.getPreviousSection(HomeSection.favorites);
           if (prev != null) {
@@ -14710,8 +14714,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _buildSectionDivider(),
       // Playlist section (horizontal scroll)
       RepaintBoundary(child: HomePlaylistSection(
+        key: _homePlaylistKey,
         focusController: _homeFocusController,
         isTelevision: _isTelevision,
+        onChanged: () => _homeFavoritesKey.currentState?.reload(),
         onRequestFocusAbove: () {
           final prev = _homeFocusController.getPreviousSection(HomeSection.playlist);
           if (prev != null) {

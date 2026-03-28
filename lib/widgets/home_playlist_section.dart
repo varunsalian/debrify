@@ -16,6 +16,7 @@ class HomePlaylistSection extends StatefulWidget {
   final VoidCallback? onRequestFocusAbove;
   final VoidCallback? onRequestFocusBelow;
   final bool isTelevision;
+  final VoidCallback? onChanged;
 
   const HomePlaylistSection({
     super.key,
@@ -23,13 +24,14 @@ class HomePlaylistSection extends StatefulWidget {
     this.onRequestFocusAbove,
     this.onRequestFocusBelow,
     this.isTelevision = false,
+    this.onChanged,
   });
 
   @override
-  State<HomePlaylistSection> createState() => _HomePlaylistSectionState();
+  State<HomePlaylistSection> createState() => HomePlaylistSectionState();
 }
 
-class _HomePlaylistSectionState extends State<HomePlaylistSection> {
+class HomePlaylistSectionState extends State<HomePlaylistSection> {
   List<Map<String, dynamic>> _items = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
   Set<String> _favoriteKeys = {};
@@ -40,6 +42,8 @@ class _HomePlaylistSectionState extends State<HomePlaylistSection> {
   final ScrollController _scrollController = ScrollController();
 
   static const _accentColor = Color(0xFFED1C24);
+
+  void reload() => _loadItems();
 
   @override
   void initState() {
@@ -231,6 +235,7 @@ class _HomePlaylistSectionState extends State<HomePlaylistSection> {
         await StorageService.setPlaylistItemFavorited(item, !isFavorited);
         HapticFeedback.mediumImpact();
         _loadItems();
+        widget.onChanged?.call();
         break;
       case 'clear_progress':
         final title = (item['title'] as String?) ?? '';
@@ -272,6 +277,7 @@ class _HomePlaylistSectionState extends State<HomePlaylistSection> {
       await StorageService.removePlaylistItemByKey(dedupeKey);
       HapticFeedback.mediumImpact();
       _loadItems();
+      widget.onChanged?.call();
     }
   }
 

@@ -15,6 +15,7 @@ class HomeFavoritesSection extends StatefulWidget {
   final VoidCallback? onRequestFocusAbove;
   final VoidCallback? onRequestFocusBelow;
   final bool isTelevision;
+  final VoidCallback? onChanged;
 
   const HomeFavoritesSection({
     super.key,
@@ -22,13 +23,14 @@ class HomeFavoritesSection extends StatefulWidget {
     this.onRequestFocusAbove,
     this.onRequestFocusBelow,
     this.isTelevision = false,
+    this.onChanged,
   });
 
   @override
-  State<HomeFavoritesSection> createState() => _HomeFavoritesSectionState();
+  State<HomeFavoritesSection> createState() => HomeFavoritesSectionState();
 }
 
-class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
+class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   List<Map<String, dynamic>> _favoriteItems = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
   bool _isLoading = true;
@@ -41,6 +43,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   bool _canScrollRight = false;
 
   static const _accentColor = Color(0xFFED1C24);
+
+  void reload() => _loadFavorites();
 
   @override
   void initState() {
@@ -182,6 +186,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       await StorageService.setPlaylistItemFavorited(item, false);
       HapticFeedback.mediumImpact();
       _loadFavorites();
+      widget.onChanged?.call();
     }
   }
 
