@@ -54,8 +54,10 @@ class HomeFocusController extends ChangeNotifier {
   /// Focus nodes for each section's cards
   final Map<HomeSection, List<FocusNode>> _sectionFocusNodes = {};
 
-  /// Focus node for the sources accordion (set by parent)
-  FocusNode? sourcesAccordionFocusNode;
+  /// Callback to focus the sources/search control row (set by parent).
+  /// Replaces a direct FocusNode reference because the target widget
+  /// is conditionally mounted and requestFocus() would silently no-op.
+  VoidCallback? onFocusSources;
 
   /// Get the currently focused section
   HomeSection get currentSection => _currentSection;
@@ -120,7 +122,7 @@ class HomeFocusController extends ChangeNotifier {
   /// Optionally specify which index to focus (defaults to last focused)
   void focusSection(HomeSection section, {int? index}) {
     if (section == HomeSection.sources) {
-      sourcesAccordionFocusNode?.requestFocus();
+      onFocusSources?.call();
       _currentSection = section;
       notifyListeners();
       return;

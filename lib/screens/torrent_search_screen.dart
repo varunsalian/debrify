@@ -324,6 +324,48 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Focus the first interactive element below the search/source bar.
+  /// Used by both the search bar and source dropdown DPAD down handlers.
+  void _focusBelowSourceBar() {
+    final isAggregatedVisible = _selectedSource.type == SearchSourceType.all &&
+        _searchController.text.isNotEmpty &&
+        !_hasSearched &&
+        !_isLoading;
+
+    if (isAggregatedVisible && _aggregatedResultsKey.currentState != null) {
+      _aggregatedResultsKey.currentState!.requestFocusOnKeywordCard();
+      return;
+    }
+
+    final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
+        _selectedSource.addon != null &&
+        _selectedSource.addon!.supportsCatalogs &&
+        !_hasSearched &&
+        !_isLoading;
+
+    if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
+      _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
+      return;
+    }
+
+    if (_selectedSource.type == SearchSourceType.trakt && _traktResultsKey.currentState != null) {
+      _traktResultsKey.currentState!.focusFirstFilter();
+      return;
+    }
+
+    if (_selectedSource.type == SearchSourceType.iptv && _iptvResultsKey.currentState != null) {
+      _iptvResultsKey.currentState!.focusFirstFilter();
+      return;
+    }
+
+    if (_selectedSource.type == SearchSourceType.reddit && _redditResultsKey.currentState != null) {
+      _redditResultsKey.currentState!.focusFirstFilter();
+      return;
+    }
+
+    _homeFocusController.focusFirstHomeSection();
+  }
+
   /// Safely focus the search bar, auto-showing it if currently hidden.
   void _focusSearchBar() {
     final isSearchVisible = _showSearchField || _hasSearched || _searchController.text.isNotEmpty;
@@ -343,7 +385,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Initialize home screen DPAD navigation controller
     _homeFocusController = HomeFocusController();
-    _homeFocusController.sourcesAccordionFocusNode = _providerAccordionFocusNode;
+    _homeFocusController.onFocusSources = _focusControlRow;
 
     // Expose post-torrent action handler via bridge for deep links
     MainPageBridge.handleRealDebridResult = (result, torrentName, apiKey) async {
@@ -2215,51 +2257,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _focusSearchBar();
       },
       // Down arrow: go to content below (same as Sources accordion behavior)
-      onDownArrowPressed: () {
-        // Check if AggregatedSearchResults is visible
-        final isAggregatedVisible = _selectedSource.type == SearchSourceType.all &&
-            _searchController.text.isNotEmpty &&
-            !_hasSearched &&
-            !_isLoading;
-
-        if (isAggregatedVisible && _aggregatedResultsKey.currentState != null) {
-          // Focus keyword card ("Tap to search") - it's always present when aggregated results are visible
-          _aggregatedResultsKey.currentState!.requestFocusOnKeywordCard();
-          return;
-        }
-
-        // Check if CatalogBrowser is visible
-        final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
-            _selectedSource.addon != null &&
-            _selectedSource.addon!.supportsCatalogs &&
-            !_hasSearched &&
-            !_isLoading;
-
-        if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
-          _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
-          return;
-        }
-
-        // Check if Trakt is visible
-        if (_selectedSource.type == SearchSourceType.trakt && _traktResultsKey.currentState != null) {
-          _traktResultsKey.currentState!.focusFirstFilter();
-          return;
-        }
-
-        // Check if IPTV is visible
-        if (_selectedSource.type == SearchSourceType.iptv && _iptvResultsKey.currentState != null) {
-          _iptvResultsKey.currentState!.focusFirstFilter();
-          return;
-        }
-
-        // Check if Reddit is visible
-        if (_selectedSource.type == SearchSourceType.reddit && _redditResultsKey.currentState != null) {
-          _redditResultsKey.currentState!.focusFirstFilter();
-          return;
-        }
-
-        _homeFocusController.focusFirstHomeSection();
-      },
+      onDownArrowPressed: _focusBelowSourceBar,
     );
   }
 
@@ -13582,17 +13580,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               return KeyEventResult.handled;
                             }
                             if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                              // Check if CatalogBrowser is visible
-                              final isCatalogBrowserVisible = _selectedSource.type == SearchSourceType.addon &&
-                                  _selectedSource.addon != null &&
-                                  _selectedSource.addon!.supportsCatalogs &&
-                                  !_hasSearched &&
-                                  !_isLoading;
-                              if (isCatalogBrowserVisible && _catalogBrowserKey.currentState != null) {
-                                _catalogBrowserKey.currentState!.requestFocusOnFirstDropdown();
-                              } else {
-                                _homeFocusController.focusFirstHomeSection();
-                              }
+                              _focusBelowSourceBar();
                               return KeyEventResult.handled;
                             }
                             if (event.logicalKey == LogicalKeyboardKey.enter ||
