@@ -221,38 +221,44 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       borderWidth = 1;
     }
 
+    final animatedContainer = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: borderColor,
+          width: borderWidth,
+        ),
+        boxShadow: _isFocused
+            ? [
+                BoxShadow(
+                  color: _qualityColor.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: _buildMainRow(),
+      ),
+    );
+
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: _handleKeyEvent,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: borderColor,
-              width: borderWidth,
+      // On TV, DPAD center fires both key events and semantic taps,
+      // causing double-fire. Use key handler only on TV.
+      child: widget.isTelevision
+          ? animatedContainer
+          : GestureDetector(
+              onTap: widget.onTap,
+              onLongPress: widget.onLongPress,
+              child: animatedContainer,
             ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: _qualityColor.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(11),
-            child: _buildMainRow(),
-          ),
-        ),
-      ),
     );
   }
 
