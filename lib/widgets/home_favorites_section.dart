@@ -40,7 +40,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  static const _accentColor = Color(0xFFFFD700);
+  static const _accentColor = Color(0xFFED1C24);
 
   @override
   void initState() {
@@ -189,45 +189,69 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     String tapAction = await StorageService.getHomeFavoritesTapAction();
     if (tapAction == 'choose') {
       if (!mounted) return;
+      final title = (item['title'] as String?) ?? 'Unknown';
       final choice = await showDialog<String>(
         context: context,
-        builder: (context) => SimpleDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+        builder: (context) => Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 380),
+              decoration: BoxDecoration(
+                color: const Color(0xFF141824),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                  _FavMenuItem(
+                    icon: Icons.play_circle_filled_rounded,
+                    label: 'Play',
+                    subtitle: 'Start playback',
+                    color: const Color(0xFF10B981),
+                    onTap: () => Navigator.pop(context, 'play'),
+                    autofocus: true,
+                    isTelevision: widget.isTelevision,
+                  ),
+                  _FavMenuItem(
+                    icon: Icons.folder_open_rounded,
+                    label: 'View Files',
+                    subtitle: 'Browse folder contents',
+                    color: const Color(0xFF818CF8),
+                    onTap: () => Navigator.pop(context, 'view_files'),
+                    isTelevision: widget.isTelevision,
+                  ),
+                  Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                  _FavMenuItem(
+                    icon: Icons.heart_broken_rounded,
+                    label: 'Remove from Favorites',
+                    subtitle: 'Remove from your favorites list',
+                    color: const Color(0xFFEF4444),
+                    onTap: () => Navigator.pop(context, 'remove'),
+                    isTelevision: widget.isTelevision,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, 'play'),
-              child: const Row(
-                children: [
-                  Icon(Icons.play_arrow_rounded, size: 20),
-                  SizedBox(width: 12),
-                  Text('Play'),
-                ],
-              ),
-            ),
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, 'view_files'),
-              child: const Row(
-                children: [
-                  Icon(Icons.folder_open_rounded, size: 20),
-                  SizedBox(width: 12),
-                  Text('View Files'),
-                ],
-              ),
-            ),
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, 'remove'),
-              child: const Row(
-                children: [
-                  Icon(Icons.favorite_border_rounded, size: 20),
-                  SizedBox(width: 12),
-                  Text('Remove from Favorites'),
-                ],
-              ),
-            ),
-          ],
         ),
       );
       if (choice == null || !mounted) return;
@@ -657,8 +681,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [
-                                      Color(0xFFFFD700),
-                                      Color(0xFFFFA500),
+                                      Color(0xFFED1C24),
+                                      Color(0xFFFF4D4D),
                                     ],
                                   ),
                                   boxShadow: [
@@ -937,8 +961,8 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [
-                                      Color(0xFFFFD700),
-                                      Color(0xFFFFA500),
+                                      Color(0xFFED1C24),
+                                      Color(0xFFFF4D4D),
                                     ],
                                   ),
                                   boxShadow: [
@@ -1205,6 +1229,112 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Menu item for favorites action dialog ─────────────────────────────────────
+
+class _FavMenuItem extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool autofocus;
+  final bool isTelevision;
+
+  const _FavMenuItem({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.autofocus = false,
+    this.isTelevision = false,
+  });
+
+  @override
+  State<_FavMenuItem> createState() => _FavMenuItemState();
+}
+
+class _FavMenuItemState extends State<_FavMenuItem> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(widget.icon, size: 18, color: widget.color),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return InkWell(
+      autofocus: widget.autofocus,
+      canRequestFocus: true,
+      onTap: widget.onTap,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      borderRadius: BorderRadius.circular(8),
+      child: widget.isTelevision
+          ? content
+          : AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(widget.icon, size: 18, color: widget.color),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
