@@ -1301,7 +1301,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
     final navItems = [
-      for (final index in visibleIndices) NavItem(_icons[index], _titles[index], tag: index == 9 ? 'BETA' : null),
+      for (final index in visibleIndices) NavItem(_icons[index], _titles[index]),
     ];
     final navBadges = List<int>.filled(navItems.length, 0);
     final selectedNavIndex = visibleIndices.indexOf(_selectedIndex);
