@@ -138,7 +138,8 @@ class TraktService {
 
   /// Poll for a device token using the device code.
   /// Returns null on success (tokens stored), or an error string:
-  /// "authorization_pending", "slow_down", "expired_token", "access_denied", "error".
+  /// "authorization_pending", "slow_down", "expired_token", "access_denied",
+  /// "network_error" (transient — safe to retry), or "error" (fatal).
   Future<String?> pollDeviceToken(String deviceCode) async {
     try {
       final response = await http.post(
@@ -165,11 +166,18 @@ class TraktService {
         return data['error'] as String? ?? 'error';
       }
 
+      // Rate limited — treat as slow_down so polling backs off
+      if (response.statusCode == 429) {
+        debugPrint('Trakt: Device token poll rate limited (429)');
+        return 'slow_down';
+      }
+
       debugPrint('Trakt: Device token poll failed (${response.statusCode}): ${response.body}');
       return 'error';
     } catch (e) {
-      debugPrint('Trakt: Device token poll error: $e');
-      return 'error';
+      // Network timeout, socket exception, etc. — transient, safe to retry
+      debugPrint('Trakt: Device token poll network error: $e');
+      return 'network_error';
     }
   }
 

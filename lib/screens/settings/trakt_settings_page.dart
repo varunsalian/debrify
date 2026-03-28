@@ -120,6 +120,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
 
     switch (error) {
       case 'authorization_pending':
+      case 'network_error':
+        // Transient — keep polling, the timer will fire again
         break;
       case 'slow_down':
         _pollInterval += 5;
