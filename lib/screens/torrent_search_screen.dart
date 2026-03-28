@@ -48,6 +48,7 @@ import '../widgets/catalog_browser.dart';
 import '../widgets/search_source_dropdown.dart';
 import '../widgets/aggregated_search_results.dart';
 import '../widgets/torrent_result_row.dart';
+import '../widgets/debrid_loading_overlay.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
 import '../widgets/home_playlist_section.dart';
@@ -8279,78 +8280,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // Show loading dialog
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
-      transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween(begin: 0.95, end: 1.0).animate(curved),
-            child: Dialog(
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.download_rounded,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 32,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Adding to Real Debrid...',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      torrentName,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 5,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 20),
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    // Show loading overlay
+    DebridLoadingOverlay.showRealDebrid(context, torrentName);
 
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$infohash';
@@ -9328,62 +9259,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _showTorboxLoadingDialog(String torrentName) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF7C3AED).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.flash_on_rounded,
-                    color: Color(0xFFDB2777),
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Adding to Torbox...',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  torrentName,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 20),
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDB2777)),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    DebridLoadingOverlay.showTorbox(context, torrentName);
   }
 
   Future<TorboxTorrent?> _fetchTorboxTorrentById(
