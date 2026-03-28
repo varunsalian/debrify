@@ -266,17 +266,6 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
     return IntrinsicHeight(
       child: Row(
         children: [
-          // Quality accent bar
-          Container(
-            width: 4,
-            decoration: BoxDecoration(
-              color: _qualityColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-              ),
-            ),
-          ),
 
           // Content
           Expanded(
