@@ -91,125 +91,133 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSummaries() async {
-    setState(() {
-      _loading = true;
-    });
-
-    bool rdConnected = false;
-    String rdStatus = 'Not connected';
-    String rdCaption = 'Tap to connect';
-
-    final rdKey = await StorageService.getApiKey();
-    if (rdKey != null && rdKey.isNotEmpty) {
-      rdConnected = true;
-      await AccountService.refreshUserInfo();
-      final user = AccountService.currentUser;
-      if (user != null) {
-        final expiry = _tryParseDate(user.expiration);
-        final bool isPremium = user.isPremium;
-        final bool active =
-            isPremium && (expiry == null || expiry.isAfter(DateTime.now()));
-        rdStatus = active ? 'Active' : 'Inactive';
-        if (active && expiry != null) {
-          rdCaption = 'Expires ${_formatDate(expiry)}';
-        } else if (active) {
-          rdCaption = 'Premium account';
-        } else if (isPremium && expiry != null) {
-          rdCaption = 'Expired ${_formatDate(expiry)}';
-        } else {
-          rdCaption = 'Premium not active';
-        }
-      } else {
-        rdStatus = 'Inactive';
-        rdCaption = 'Tap to view account';
-      }
-    }
-
-    bool torConnected = false;
-    String torStatus = 'Not connected';
-    String torCaption = 'Tap to connect';
-
-    final torboxKey = await StorageService.getTorboxApiKey();
-    if (torboxKey != null && torboxKey.isNotEmpty) {
-      torConnected = true;
-      await TorboxAccountService.refreshUserInfo();
-      final torboxUser = TorboxAccountService.currentUser;
-      if (torboxUser != null) {
-        final expiry = torboxUser.premiumExpiresAt;
-        final bool active = torboxUser.hasActiveSubscription;
-        torStatus = active ? 'Active' : 'Inactive';
-        if (active && expiry != null) {
-          torCaption = 'Expires ${_formatDate(expiry)}';
-        } else if (active) {
-          torCaption = 'Premium account';
-        } else if (expiry != null && expiry.isBefore(DateTime.now())) {
-          torCaption = 'Expired ${_formatDate(expiry)}';
-        } else {
-          torCaption = 'Premium not active';
-        }
-      } else {
-        torStatus = 'Inactive';
-        torCaption = 'Plan status unavailable';
-      }
-    }
-
-    bool pikpakConnected = false;
-    String pikpakStatus = 'Not connected';
-    String pikpakCaption = 'Tap to connect';
-
-    final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
-    if (pikpakAuth) {
-      pikpakConnected = true;
-      pikpakStatus = 'Active';
-      pikpakCaption = 'Logged in';
-    }
-
-    bool traktConnected = false;
-    String traktStatus = 'Not connected';
-    String traktCaption = 'Tap to connect';
-
-    final traktToken = await StorageService.getTraktAccessToken();
-    if (traktToken != null && traktToken.isNotEmpty) {
-      final traktExpiry = await StorageService.getTraktTokenExpiry();
-      final traktExpired = traktExpiry != null &&
-          DateTime.now().millisecondsSinceEpoch >= traktExpiry;
-      if (!traktExpired) {
-        traktConnected = true;
-        traktStatus = 'Active';
-        final traktUsername = await StorageService.getTraktUsername();
-        traktCaption = traktUsername != null ? 'Logged in as $traktUsername' : 'Logged in';
-      } else {
-        traktStatus = 'Expired';
-        traktCaption = 'Tap to reconnect';
-      }
-    }
-
-    // Load app version
-    final packageInfo = await PackageInfo.fromPlatform();
-    final appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
-
-    // Check if running on Android TV
-    final isAndroidTv = await AndroidNativeDownloader.isTelevision();
+    // Phase 1: Load cached/local state instantly (no network)
+    final results = await Future.wait([
+      StorageService.getApiKey(),
+      StorageService.getTorboxApiKey(),
+      PikPakApiService.instance.isAuthenticated(),
+      StorageService.getTraktAccessToken(),
+      StorageService.getTraktTokenExpiry(),
+      StorageService.getTraktUsername(),
+      PackageInfo.fromPlatform(),
+      AndroidNativeDownloader.isTelevision(),
+    ]);
 
     if (!mounted) return;
 
-    setState(() {
-      _realDebridConnected = rdConnected;
-      _realDebridStatus = rdStatus;
-      _realDebridCaption = rdCaption;
-      _torboxConnected = torConnected;
-      _torboxStatus = torStatus;
-      _torboxCaption = torCaption;
-      _pikpakConnected = pikpakConnected;
-      _pikpakStatus = pikpakStatus;
-      _pikpakCaption = pikpakCaption;
-      _traktConnected = traktConnected;
-      _traktStatus = traktStatus;
-      _traktCaption = traktCaption;
-      _appVersion = appVersion;
-      _isAndroidTv = isAndroidTv;
-      _loading = false;
-    });
+    final rdKey = results[0] as String?;
+    final torboxKey = results[1] as String?;
+    final pikpakAuth = results[2] as bool;
+    final traktToken = results[3] as String?;
+    final traktExpiry = results[4] as int?;
+    final traktUsername = results[5] as String?;
+    final packageInfo = results[6] as PackageInfo;
+    final isAndroidTv = results[7] as bool;
+
+    // Set initial state from cached data
+    final rdConnected = rdKey != null && rdKey.isNotEmpty;
+    final torConnected = torboxKey != null && torboxKey.isNotEmpty;
+
+    // Use cached account info if available
+    if (rdConnected) {
+      final user = AccountService.currentUser;
+      _realDebridConnected = true;
+      if (user != null) {
+        _applyRdUserInfo(user);
+      } else {
+        _realDebridStatus = 'Connected';
+        _realDebridCaption = 'Loading account info...';
+      }
+    }
+
+    if (torConnected) {
+      final torboxUser = TorboxAccountService.currentUser;
+      _torboxConnected = true;
+      if (torboxUser != null) {
+        _applyTorboxUserInfo(torboxUser);
+      } else {
+        _torboxStatus = 'Connected';
+        _torboxCaption = 'Loading account info...';
+      }
+    }
+
+    if (pikpakAuth) {
+      _pikpakConnected = true;
+      _pikpakStatus = 'Active';
+      _pikpakCaption = 'Logged in';
+    }
+
+    if (traktToken != null && traktToken.isNotEmpty) {
+      final traktExpired = traktExpiry != null &&
+          DateTime.now().millisecondsSinceEpoch >= traktExpiry;
+      if (!traktExpired) {
+        _traktConnected = true;
+        _traktStatus = 'Active';
+        _traktCaption = traktUsername != null ? 'Logged in as $traktUsername' : 'Logged in';
+      } else {
+        _traktStatus = 'Expired';
+        _traktCaption = 'Tap to reconnect';
+      }
+    }
+
+    _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
+    _isAndroidTv = isAndroidTv;
+    _loading = false;
+
+    setState(() {});
+
+    // Phase 2: Refresh account info from network in background
+    if (rdConnected) {
+      AccountService.refreshUserInfo().then((_) {
+        if (!mounted) return;
+        final user = AccountService.currentUser;
+        if (user != null) {
+          setState(() => _applyRdUserInfo(user));
+        }
+      });
+    }
+
+    if (torConnected) {
+      TorboxAccountService.refreshUserInfo().then((_) {
+        if (!mounted) return;
+        final torboxUser = TorboxAccountService.currentUser;
+        if (torboxUser != null) {
+          setState(() => _applyTorboxUserInfo(torboxUser));
+        }
+      });
+    }
+  }
+
+  void _applyRdUserInfo(dynamic user) {
+    final expiry = _tryParseDate(user.expiration);
+    final bool isPremium = user.isPremium;
+    final bool active =
+        isPremium && (expiry == null || expiry.isAfter(DateTime.now()));
+    _realDebridStatus = active ? 'Active' : 'Inactive';
+    if (active && expiry != null) {
+      _realDebridCaption = 'Expires ${_formatDate(expiry)}';
+    } else if (active) {
+      _realDebridCaption = 'Premium account';
+    } else if (isPremium && expiry != null) {
+      _realDebridCaption = 'Expired ${_formatDate(expiry)}';
+    } else {
+      _realDebridCaption = 'Premium not active';
+    }
+  }
+
+  void _applyTorboxUserInfo(dynamic torboxUser) {
+    final expiry = torboxUser.premiumExpiresAt;
+    final bool active = torboxUser.hasActiveSubscription;
+    _torboxStatus = active ? 'Active' : 'Inactive';
+    if (active && expiry != null) {
+      _torboxCaption = 'Expires ${_formatDate(expiry)}';
+    } else if (active) {
+      _torboxCaption = 'Premium account';
+    } else if (expiry != null && expiry.isBefore(DateTime.now())) {
+      _torboxCaption = 'Expired ${_formatDate(expiry)}';
+    } else {
+      _torboxCaption = 'Premium not active';
+    }
   }
 
   @override
