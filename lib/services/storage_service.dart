@@ -3200,6 +3200,35 @@ class StorageService {
     return null;
   }
 
+  /// Get all poster overrides as a map of item unique key → poster URL.
+  /// Reads and parses the overrides blob once for batch lookups.
+  static Future<Map<String, String>> getAllPlaylistPosterOverrides() async {
+    final prefs = await SharedPreferences.getInstance();
+    final overridesJson = prefs.getString(_playlistPosterOverridesKey);
+    if (overridesJson == null) return {};
+
+    try {
+      final overrides = jsonDecode(overridesJson) as Map<String, dynamic>;
+      final result = <String, String>{};
+      for (final entry in overrides.entries) {
+        if (entry.value is Map<String, dynamic>) {
+          final posterUrl = (entry.value as Map<String, dynamic>)['posterUrl'] as String?;
+          if (posterUrl != null && posterUrl.isNotEmpty) {
+            result[entry.key] = posterUrl;
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error reading playlist poster overrides: $e');
+      return {};
+    }
+  }
+
+  /// Get the unique key for a playlist item (public accessor for batch lookups)
+  static String getPlaylistItemUniqueKey(Map<String, dynamic> item) =>
+      _getPlaylistItemUniqueKey(item);
+
   /// Clear poster URL override for a playlist item
   static Future<void> clearPlaylistPosterOverride(Map<String, dynamic> playlistItem) async {
     final prefs = await SharedPreferences.getInstance();

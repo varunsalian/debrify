@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
+import '../services/playlist_player_service.dart';
 import '../screens/playlist_content_view_screen.dart';
 import 'home_focus_controller.dart';
 
@@ -113,11 +114,12 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         }
       }
 
+      final posterOverrides = await StorageService.getAllPlaylistPosterOverrides();
       for (var item in favorites) {
-        final posterOverride =
-            await StorageService.getPlaylistPosterOverride(item);
-        if (posterOverride != null && posterOverride.isNotEmpty) {
-          item['posterUrl'] = posterOverride;
+        final key = StorageService.getPlaylistItemUniqueKey(item);
+        final override = posterOverrides[key];
+        if (override != null && override.isNotEmpty) {
+          item['posterUrl'] = override;
         }
       }
 
@@ -248,17 +250,10 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
     }
 
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-
-    if (MainPageBridge.playPlaylistItem == null) {
-      MainPageBridge.notifyPlaylistItemToAutoPlay(item);
-      MainPageBridge.switchTab?.call(1);
-      return;
-    }
-
     setState(() => _playingItemKey = dedupeKey);
 
     try {
-      await MainPageBridge.playPlaylistItem!(item);
+      await PlaylistPlayerService.play(context, item);
     } catch (e) {
       debugPrint('Error playing item: $e');
       if (mounted) {
@@ -275,14 +270,14 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
   // ── Provider info ─────────────────────────────────────────────────────────
 
-  (String badge, Color color) _providerInfo(String provider) {
+  (String badge, Color color, String name) _providerInfo(String provider) {
     switch (provider.toLowerCase()) {
       case 'torbox':
-        return ('TB', const Color(0xFF3B82F6));
+        return ('TB', const Color(0xFF3B82F6), 'Torbox');
       case 'pikpak':
-        return ('PP', const Color(0xFFF59E0B));
+        return ('PP', const Color(0xFFF59E0B), 'PikPak');
       default:
-        return ('RD', const Color(0xFF10B981));
+        return ('RD', const Color(0xFF10B981), 'Real-Debrid');
     }
   }
 
@@ -304,7 +299,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
           builder: (context) {
             final isMobile = MediaQuery.of(context).size.width < 600;
             return SizedBox(
-          height: isMobile ? 180.0 : 190.0,
+          height: isMobile ? 200.0 : 220.0,
           child: Stack(
             children: [
               // Skip ShaderMask on TV for GPU performance
@@ -483,6 +478,7 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
       },
       child: (isFocused, isHovered) {
         final isActive = isFocused || isHovered;
+        final isHero = index == 0;
 
         return widget.isTelevision
           ? Transform.scale(
@@ -492,8 +488,12 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
               final sw = MediaQuery.of(context).size.width;
               final isMobile = sw < 600;
               return Container(
-            width: isMobile ? sw * 0.7 : 280,
-            height: isMobile ? 155.0 : 170,
+            width: isMobile
+                ? (isHero ? sw * 0.82 : sw * 0.7)
+                : (isHero ? 350 : 280),
+            height: isMobile
+                ? (isHero ? 180.0 : 155.0)
+                : (isHero ? 200.0 : 170),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -571,57 +571,69 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                     ),
                   ),
 
-                  // ── Top badges ──
+                  // ── Badge (top right) ──
                   Positioned(
-                    top: 10,
-                    left: 10,
-                    right: 10,
-                    child: Row(
-                      children: [
-                        // Provider badge
-                        _GlassPill(
-                          isTelevision: widget.isTelevision,
-                          color: providerInfo.$2,
-                          child: Text(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              size: 10, color: Color(0xFFFFD700)),
+                          const SizedBox(width: 2),
+                          Text(
                             providerInfo.$1,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.8),
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        // Favorite star
-                        _GlassPill(
-                          isTelevision: widget.isTelevision,
-                          child: const Icon(Icons.star_rounded,
-                              size: 13, color: Color(0xFFFFD700)),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
-                  // ── Bottom info ──
+                  // ── Bottom info area ──
                   Positioned(
                     bottom: progressPercent != null ? 5 : 12,
                     left: 12,
                     right: 12,
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.2,
-                        letterSpacing: -0.2,
-                        shadows: [
-                          Shadow(color: Colors.black, blurRadius: 8),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.2,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 8),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          providerInfo.$3,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -749,8 +761,12 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
               return AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic,
-            width: isMobile ? sw * 0.7 : 280,
-            height: isMobile ? 155.0 : 170,
+            width: isMobile
+                ? (isHero ? sw * 0.82 : sw * 0.7)
+                : (isHero ? 350 : 280),
+            height: isMobile
+                ? (isHero ? 180.0 : 155.0)
+                : (isHero ? 200.0 : 170),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -835,57 +851,69 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                     ),
                   ),
 
-                  // ── Top badges ──
+                  // ── Badge (top right) ──
                   Positioned(
-                    top: 10,
-                    left: 10,
-                    right: 10,
-                    child: Row(
-                      children: [
-                        // Provider badge
-                        _GlassPill(
-                          isTelevision: widget.isTelevision,
-                          color: providerInfo.$2,
-                          child: Text(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              size: 10, color: Color(0xFFFFD700)),
+                          const SizedBox(width: 2),
+                          Text(
                             providerInfo.$1,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.8),
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        // Favorite star
-                        _GlassPill(
-                          isTelevision: widget.isTelevision,
-                          child: const Icon(Icons.star_rounded,
-                              size: 13, color: Color(0xFFFFD700)),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
-                  // ── Bottom info ──
+                  // ── Bottom info area ──
                   Positioned(
                     bottom: progressPercent != null ? 5 : 12,
                     left: 12,
                     right: 12,
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.2,
-                        letterSpacing: -0.2,
-                        shadows: [
-                          Shadow(color: Colors.black, blurRadius: 8),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.2,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 8),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          providerInfo.$3,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -1057,43 +1085,6 @@ class _HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 }
 
-// ── Glass pill badge ──────────────────────────────────────────────────────────
-
-class _GlassPill extends StatelessWidget {
-  final Widget child;
-  final Color? color;
-  final bool isTelevision;
-
-  const _GlassPill({required this.child, this.color, this.isTelevision = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final container = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color?.withValues(alpha: 0.7) ??
-            Colors.black.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 0.5,
-        ),
-      ),
-      child: child,
-    );
-
-    if (isTelevision) return container;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: container,
-      ),
-    );
-  }
-}
-
 // ── Focus-aware card wrapper (DPAD/TV) ────────────────────────────────────────
 
 class _FavoriteCardWithFocus extends StatefulWidget {
@@ -1213,38 +1204,6 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
             child: widget.child(_isFocused, _isHovered),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Scroll indicator ──────────────────────────────────────────────────────────
-
-enum _ScrollDirection { left, right }
-
-class _ScrollIndicator extends StatelessWidget {
-  final _ScrollDirection direction;
-
-  const _ScrollIndicator({required this.direction});
-
-  @override
-  Widget build(BuildContext context) {
-    final isLeft = direction == _ScrollDirection.left;
-
-    return IgnorePointer(
-      child: Container(
-        width: 36,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-            end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-            colors: [
-              const Color(0xFF0F0F1A).withValues(alpha: 0.95),
-              Colors.transparent,
-            ],
-          ),
-        ),
-        child: const SizedBox.shrink(),
       ),
     );
   }

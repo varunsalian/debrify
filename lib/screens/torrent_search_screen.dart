@@ -50,6 +50,7 @@ import '../widgets/aggregated_search_results.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/provider_status_cards.dart';
 import '../widgets/home_favorites_section.dart';
+import '../widgets/home_playlist_section.dart';
 import '../widgets/home_debrify_tv_favorites_section.dart';
 import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
@@ -14701,6 +14702,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         },
         onRequestFocusBelow: () {
           final next = _homeFocusController.getNextSection(HomeSection.favorites);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+      )),
+      _buildSectionDivider(),
+      // Playlist section (horizontal scroll)
+      RepaintBoundary(child: HomePlaylistSection(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.playlist);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          } else {
+            _focusControlRow();
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.playlist);
           if (next != null) {
             _homeFocusController.focusSection(next);
           }

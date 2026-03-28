@@ -27,6 +27,7 @@ import 'widgets/premium_nav_bar.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'widgets/premium_top_nav.dart';
 import 'services/main_page_bridge.dart';
+import 'services/playlist_player_service.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
@@ -1118,25 +1119,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return;
     }
 
-    // Navigate to playlist tab
-    setState(() {
-      _selectedIndex = 1; // Playlist tab (index 1, not 2)
-    });
-
-    // Wait for UI to settle and playlist screen to be built
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    // Wait a bit more for the screen to fully initialize
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    // Use the exact same playback logic as clicking a playlist card
-    final playHandler = MainPageBridge.playPlaylistItem;
-    if (playHandler != null) {
-      await playHandler(playlistItem);
-    } else {
-      // As a fallback, store the item to be played
-      MainPageBridge.notifyPlaylistItemToAutoPlay(playlistItem);
-    }
+    await PlaylistPlayerService.play(context, playlistItem);
+    // Dismiss overlay after play returns (covers early-exit error paths
+    // where notifyPlayerLaunching is never called)
+    if (mounted) _hideAutoLaunchOverlay();
   }
 
   void _hideAutoLaunchOverlay() {
@@ -1247,7 +1233,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
-      final indices = <int>[0, 1, 3, 9]; // Torrent, Playlist, Debrify TV, Stremio TV
+      final indices = <int>[0, 3, 9]; // Torrent, Debrify TV, Stremio TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
@@ -1272,7 +1258,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[0, 1, 2, 3, 9];
+    final indices = <int>[0, 2, 3, 9];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
