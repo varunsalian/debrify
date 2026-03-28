@@ -1233,7 +1233,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
-      final indices = <int>[0, 3, 9]; // Torrent, Debrify TV, Stremio TV
+      final indices = <int>[0, 2, 3, 9]; // Torrent, Downloads, Debrify TV, Stremio TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
