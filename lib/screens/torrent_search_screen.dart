@@ -10677,193 +10677,154 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         await showDialog(
           context: context,
           builder: (ctx) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 24,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
+            return Center(
+              child: Material(
+                color: Colors.transparent,
                 child: Container(
-                  color: const Color(0xFF0F172A),
+                  constraints: const BoxConstraints(maxWidth: 380),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B0F1A),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(height: 12),
-                      Container(
-                        width: 42,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: 32,
+                              height: 32,
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF6366F1),
-                                    Color(0xFF8B5CF6),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(16),
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.cloud_download_rounded,
-                                color: Colors.white,
-                              ),
+                              child: const Icon(Icons.check_rounded, color: Color(0xFF10B981), size: 18),
                             ),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    torrentName,
-                                    maxLines: 5,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
                                     links.length == 1
-                                        ? 'Ready to unrestrict and stream/download.'
-                                        : '${links.length} files available in this torrent.',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                      fontSize: 12,
-                                    ),
+                                        ? 'Ready to stream'
+                                        : '${links.length} files ready',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Added to Real-Debrid',
+                                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
                                   ),
                                 ],
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white54,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const Divider(height: 1, color: Color(0xFF1E293B)),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _DebridActionTile(
-                                icon: Icons.open_in_new,
-                                color: const Color(0xFFF59E0B),
-                                title: 'Open',
-                                subtitle: isRarArchive
-                                    ? 'Not available for RAR archives (not extracted by Real-Debrid)'
-                                    : 'View this torrent in Real-Debrid tab',
-                                enabled: !isRarArchive,
-                                autofocus: !isRarArchive,
-                                onTap: () {
-                                  Navigator.of(ctx).pop();
-                                  _restoreFocusToCard(index);
-                                  // Create RDTorrent object and open it in Real-Debrid tab
-                                  final rdTorrent = RDTorrent(
-                                    id: result['torrentId'].toString(),
-                                    filename: torrentName,
-                                    hash: '',
-                                    bytes: 0,
-                                    host: '',
-                                    split: 0,
-                                    progress: 0,
-                                    status: '',
-                                    added: DateTime.now().toIso8601String(),
-                                    links: links.map((e) => e.toString()).toList(),
-                                  );
-                                  MainPageBridge.openDebridOptions?.call(rdTorrent);
-                                },
-                              ),
-                              _DebridActionTile(
-                                icon: Icons.play_circle_rounded,
-                                color: const Color(0xFF60A5FA),
-                                title: 'Play now',
-                                subtitle: hasAnyVideo
-                                    ? 'Unrestrict and open instantly in the built-in player.'
-                                    : 'Available for video torrents only.',
-                                enabled: hasAnyVideo,
-                                autofocus: isRarArchive && hasAnyVideo,
-                                onTap: () async {
-                                  // Don't pop - let dialog stay so it's visible when user returns from player
-                                  await _playFromResult(
-                                    links: links,
-                                    files: files,
-                                    updatedInfo: updatedInfo,
-                                    torrentName: torrentName,
-                                    fileSelection: fileSelection,
-                                    torrentId: result['torrentId']?.toString(),
-                                  );
-                                },
-                              ),
-                              _DebridActionTile(
-                                icon: Icons.download_rounded,
-                                color: const Color(0xFF4ADE80),
-                                title: 'Download to device',
-                                subtitle: isRarArchive
-                                    ? 'Downloads the RAR archive to your device'
-                                    : 'Downloads the files to your device',
-                                enabled: true,
-                                onTap: () async {
-                                  Navigator.of(ctx).pop();
-                                  _restoreFocusToCard(index);
-                                  // RAR archives: always download the single link directly
-                                  if (isRarArchive) {
-                                    _downloadFile(downloadLink, torrentName);
-                                  } else if (hasAnyVideo) {
-                                    if (links.length == 1) {
-                                      _downloadFile(downloadLink, torrentName);
-                                    } else {
-                                      // Show file selection dialog for multiple video files
-                                      await _showRealDebridFileSelection(
-                                        result: result,
-                                        torrentName: torrentName,
-                                        apiKey: apiKey,
-                                      );
-                                    }
-                                  } else {
-                                    if (links.length > 1) {
-                                      _showDownloadSelectionDialog(links, torrentName);
-                                    } else {
-                                      _downloadFile(downloadLink, torrentName);
-                                    }
-                                  }
-                                },
-                              ),
-                              _DebridActionTile(
-                                icon: Icons.playlist_add_rounded,
-                                color: const Color(0xFFA855F7),
-                                title: 'Add to playlist',
-                                subtitle: hasAnyVideo
-                                    ? 'Keep this torrent handy in your Debrify playlist.'
-                                    : 'Available for video torrents only.',
-                                enabled: hasAnyVideo,
-                                onTap: () async {
-                                  Navigator.of(ctx).pop();
-                                  _restoreFocusToCard(index);
-                                  if (!hasAnyVideo) return;
-                                  if (links.length == 1) {
+                      Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                      _DebridActionTile(
+                        icon: Icons.launch_rounded,
+                        color: const Color(0xFFFBBF24),
+                        title: 'Open',
+                        subtitle: isRarArchive
+                            ? 'Not available for RAR archives'
+                            : 'View in Real-Debrid tab',
+                        enabled: !isRarArchive,
+                        autofocus: !isRarArchive,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          _restoreFocusToCard(index);
+                          final rdTorrent = RDTorrent(
+                            id: result['torrentId'].toString(),
+                            filename: torrentName,
+                            hash: '',
+                            bytes: 0,
+                            host: '',
+                            split: 0,
+                            progress: 0,
+                            status: '',
+                            added: DateTime.now().toIso8601String(),
+                            links: links.map((e) => e.toString()).toList(),
+                          );
+                          MainPageBridge.openDebridOptions?.call(rdTorrent);
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.play_arrow_rounded,
+                        color: const Color(0xFF34D399),
+                        title: 'Play now',
+                        subtitle: hasAnyVideo
+                            ? 'Stream in the built-in player'
+                            : 'No video files found',
+                        enabled: hasAnyVideo,
+                        autofocus: isRarArchive && hasAnyVideo,
+                        onTap: () async {
+                          await _playFromResult(
+                            links: links,
+                            files: files,
+                            updatedInfo: updatedInfo,
+                            torrentName: torrentName,
+                            fileSelection: fileSelection,
+                            torrentId: result['torrentId']?.toString(),
+                          );
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.file_download_outlined,
+                        color: const Color(0xFF60A5FA),
+                        title: 'Download to device',
+                        subtitle: isRarArchive
+                            ? 'Download the RAR archive'
+                            : 'Save files to your device',
+                        enabled: true,
+                        onTap: () async {
+                          Navigator.of(ctx).pop();
+                          _restoreFocusToCard(index);
+                          if (isRarArchive) {
+                            _downloadFile(downloadLink, torrentName);
+                          } else if (hasAnyVideo) {
+                            if (links.length == 1) {
+                              _downloadFile(downloadLink, torrentName);
+                            } else {
+                              await _showRealDebridFileSelection(
+                                result: result,
+                                torrentName: torrentName,
+                                apiKey: apiKey,
+                              );
+                            }
+                          } else {
+                            if (links.length > 1) {
+                              _showDownloadSelectionDialog(links, torrentName);
+                            } else {
+                              _downloadFile(downloadLink, torrentName);
+                            }
+                          }
+                        },
+                      ),
+                      _DebridActionTile(
+                        icon: Icons.bookmark_add_outlined,
+                        color: const Color(0xFFA78BFA),
+                        title: 'Add to playlist',
+                        subtitle: hasAnyVideo
+                            ? 'Save for quick access later'
+                            : 'No video files found',
+                        enabled: hasAnyVideo,
+                        onTap: () async {
+                          Navigator.of(ctx).pop();
+                          _restoreFocusToCard(index);
+                          if (!hasAnyVideo) return;
+                          if (links.length == 1) {
                                     String finalTitle = torrentName;
                                     try {
                                       final torrentId = result['torrentId']?.toString();
@@ -10932,37 +10893,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   }
                                 },
                               ),
-                              _DebridActionTile(
-                                icon: Icons.connected_tv,
-                                color: const Color(0xFF10B981),
-                                title: 'Add to channel',
-                                subtitle: 'Cache this torrent in a Debrify TV channel.',
-                                enabled: true,
-                                onTap: () {
-                                  Navigator.of(ctx).pop();
-                                  _restoreFocusToCard(index);
-                                  final keyword = _searchController.text.trim();
-                                  if (index >= 0 && index < _torrents.length) {
-                                    _addTorrentToChannel(_torrents[index], keyword);
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () {
-                          DialogTapGuard.markKeyAction();
+                      Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                      _DebridActionTile(
+                        icon: Icons.live_tv_rounded,
+                        color: const Color(0xFFF472B6),
+                        title: 'Add to channel',
+                        subtitle: 'Cache in a Debrify TV channel',
+                        enabled: true,
+                        onTap: () {
                           Navigator.of(ctx).pop();
                           _restoreFocusToCard(index);
+                          final keyword = _searchController.text.trim();
+                          if (index >= 0 && index < _torrents.length) {
+                            _addTorrentToChannel(_torrents[index], keyword);
+                          }
                         },
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.white54),
-                        ),
                       ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -16171,105 +16118,45 @@ class _DebridActionTileState extends State<_DebridActionTile> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Focus(
-      autofocus: widget.autofocus,
-      onFocusChange: (focused) {
-        debugPrint('[DebridActionTile "${widget.title}"] Focus changed: $_focused -> $focused');
-        if (mounted) {
-          setState(() {
-            _focused = focused;
-          });
-        }
-      },
-      onKeyEvent: (node, event) {
-        // DEBUG: Log all key events on action tiles
-        debugPrint('[DebridActionTile "${widget.title}"] KeyEvent: ${event.runtimeType} - ${event.logicalKey.keyLabel}');
-
-        if (widget.enabled &&
-            event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          debugPrint('[DebridActionTile "${widget.title}"] EXECUTING onTap via KeyDownEvent');
-          DialogTapGuard.markKeyAction(); // Prevent tap event from activating underlying widget
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
+    return Opacity(
+      opacity: widget.enabled ? 1.0 : 0.35,
       child: InkWell(
-        onTap: widget.enabled ? () {
-          debugPrint('[DebridActionTile "${widget.title}"] EXECUTING onTap via touch/click');
-          widget.onTap();
-        } : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Opacity(
-          opacity: widget.enabled ? 1.0 : 0.45,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111827),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _focused
-                    ? widget.color
-                    : const Color(0xFF1F2937),
-                width: _focused ? 2 : 1,
-              ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withValues(alpha: _focused ? 0.3 : 0.14),
-                blurRadius: _focused ? 20 : 16,
-                offset: const Offset(0, 10),
-              ),
-            ],
+        autofocus: widget.autofocus,
+        canRequestFocus: widget.enabled,
+        onTap: widget.enabled ? widget.onTap : null,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [widget.color, widget.color.withValues(alpha: 0.6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
+                  color: widget.color.withValues(alpha: _focused ? 0.25 : 0.15),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(widget.icon, color: Colors.white, size: 22),
+                child: Icon(widget.icon, size: 18, color: widget.color),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      widget.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        height: 1.22,
-                      ),
-                    ),
+                    Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white54),
             ],
           ),
         ),
-      ),
       ),
     );
   }
