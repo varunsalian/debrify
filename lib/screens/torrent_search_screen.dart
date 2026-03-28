@@ -4891,12 +4891,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final pikpak = PikPakApiService.instance;
 
-      // Show loading dialog with progress
       String? fileId;
       String? taskId;
-      int progress = 0;
       bool cancelled = false;
-      bool showingTimeoutOptions = false;
       final startTime = DateTime.now();
 
       // Get parent folder ID (restricted folder or root)
@@ -4970,156 +4967,41 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final torrent = _findTorrentByInfohash(infohash, torrentName);
 
-      // Show loading dialog and start polling
-      bool pollingStarted = false;
-
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              // Start polling only once
-              if (!pollingStarted && !cancelled) {
-                pollingStarted = true;
-                _pollPikPakStatus(
-                  fileId!,
-                  taskId,
-                  torrentName,
-                  torrent,
-                  dialogContext,
-                  setDialogState,
-                  startTime,
-                  (p) {
-                    if (mounted) setDialogState(() => progress = p);
-                  },
-                  () => cancelled,
-                  (show) {
-                    if (mounted) setDialogState(() => showingTimeoutOptions = show);
-                  },
-                  forcePlay: forcePlay,
-                );
-              }
-
-              final elapsed = DateTime.now().difference(startTime);
-              final showTakingLonger = elapsed.inSeconds > 30 && !showingTimeoutOptions;
-
-              return AlertDialog(
-                backgroundColor: const Color(0xFF0F172A),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFAA00).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.cloud_sync, color: Color(0xFFFFAA00), size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Processing on PikPak',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      torrentName,
-                      maxLines: 5,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (!showingTimeoutOptions) ...[
-                      LinearProgressIndicator(
-                        value: progress > 0 ? progress / 100 : null,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFAA00)),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        progress > 0 ? 'Downloading: $progress%' : 'Checking status...',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (showTakingLonger) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Taking longer than expected...',
-                          style: TextStyle(
-                            color: Colors.orange.withValues(alpha: 0.8),
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ] else ...[
-                      const Text(
-                        'This torrent is taking a while. What would you like to do?',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ],
-                ),
-                actions: showingTimeoutOptions
-                    ? [
-                        TextButton(
-                          autofocus: true,
-                          onPressed: () {
-                            DialogTapGuard.markKeyAction();
-                            setDialogState(() {
-                              showingTimeoutOptions = false;
-                            });
-                          },
-                          child: const Text('Keep Waiting'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            DialogTapGuard.markKeyAction();
-                            cancelled = true;
-                            Navigator.of(dialogContext).pop();
-                            _showPikPakSnack('You can find it in PikPak Files later');
-                          },
-                          child: const Text('View Later'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            DialogTapGuard.markKeyAction();
-                            cancelled = true;
-                            Navigator.of(dialogContext).pop();
-                          },
-                          style: TextButton.styleFrom(foregroundColor: Colors.red.shade400),
-                          child: const Text('Cancel'),
-                        ),
-                      ]
-                    : [
-                        TextButton(
-                          autofocus: true,
-                          onPressed: () {
-                            DialogTapGuard.markKeyAction();
-                            cancelled = true;
-                            Navigator.of(dialogContext).pop();
-                            _showPikPakSnack('Added to PikPak. You can find it in PikPak Files.');
-                          },
-                          child: const Text('Run in Background'),
-                        ),
-                      ],
-              );
-            },
-          );
+      // Show loading overlay and start polling
+      late final PikPakOverlayHandle handle;
+      handle = DebridLoadingOverlay.showPikPak(
+        context,
+        torrentName,
+        onDismissed: (result) {
+          if (result == 'background') {
+            cancelled = true;
+            _showPikPakSnack('Added to PikPak. You can find it in PikPak Files.');
+          } else if (result == 'view_later') {
+            cancelled = true;
+            _showPikPakSnack('You can find it in PikPak Files later');
+          } else if (result == 'cancel') {
+            cancelled = true;
+          }
+          handle.dispose();
         },
+      );
+
+      // Start polling (non-blocking) — polling calls Navigator.pop on completion/error
+      _pollPikPakStatus(
+        fileId!,
+        taskId,
+        torrentName,
+        torrent,
+        context,
+        (fn) {},
+        startTime,
+        (p) {
+          handle.updateProgress(p);
+          if (p > 0) handle.setStatus('Downloading: $p%');
+        },
+        () => cancelled,
+        (show) => handle.setTimeoutOptions(show),
+        forcePlay: forcePlay,
       );
     } catch (e) {
       print('Error sending to PikPak: $e');
