@@ -363,6 +363,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
+    if (_hasSearched) {
+      if (_cameFromCatalogBrowse) {
+        _backButtonFocusNode.requestFocus();
+      } else if (_directProviderCounts.isNotEmpty) {
+        _directDropdownFocusNode.requestFocus();
+      } else if (_torrentProviderCounts.isNotEmpty) {
+        _torrentDropdownFocusNode.requestFocus();
+      } else {
+        _sortDropdownFocusNode.requestFocus();
+      }
+      return;
+    }
+
     _homeFocusController.focusFirstHomeSection();
   }
 
