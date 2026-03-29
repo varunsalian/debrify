@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 
 class AnimatedPremiumBackground extends StatefulWidget {
   final Widget child;
-  const AnimatedPremiumBackground({super.key, required this.child});
+  final bool isTelevision;
+  const AnimatedPremiumBackground({super.key, required this.child, this.isTelevision = false});
 
   @override
   State<AnimatedPremiumBackground> createState() => _AnimatedPremiumBackgroundState();
@@ -11,35 +12,51 @@ class AnimatedPremiumBackground extends StatefulWidget {
 
 class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
     with TickerProviderStateMixin {
-  late final AnimationController _gradientCtrl;
-  late final AnimationController _noiseCtrl;
+  AnimationController? _gradientCtrl;
+  AnimationController? _noiseCtrl;
 
   @override
   void initState() {
     super.initState();
-    _gradientCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12), // Reduced from 18s for better performance
-    )..repeat(reverse: true);
-    _noiseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 20), // Reduced from 30s for better performance
-    )..repeat();
+    if (!widget.isTelevision) {
+      _gradientCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 12),
+      )..repeat(reverse: true);
+      _noiseCtrl = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 20),
+      )..repeat();
+    }
   }
 
   @override
   void dispose() {
-    _gradientCtrl.dispose();
-    _noiseCtrl.dispose();
+    _gradientCtrl?.dispose();
+    _noiseCtrl?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // TV: static gradient, no animations, no CustomPaint, no blur
+    if (widget.isTelevision) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment(-1, -1),
+            end: Alignment(1, 1),
+            colors: [Color(0xFF040610), Color(0xFF0A0E1A), Color(0xFF0E1230)],
+          ),
+        ),
+        child: widget.child,
+      );
+    }
+
     return AnimatedBuilder(
-      animation: Listenable.merge([_gradientCtrl, _noiseCtrl]),
+      animation: Listenable.merge([_gradientCtrl!, _noiseCtrl!]),
       builder: (context, _) {
-        final t = _gradientCtrl.value;
+        final t = _gradientCtrl!.value;
         final colors = _lerpGradient(t);
         return Container(
           decoration: BoxDecoration(
@@ -69,7 +86,7 @@ class _AnimatedPremiumBackgroundState extends State<AnimatedPremiumBackground>
               // Floating particles - optimized with RepaintBoundary
               RepaintBoundary(
                 child: CustomPaint(
-                  painter: _ParticlesPainter(_noiseCtrl.value),
+                  painter: _ParticlesPainter(_noiseCtrl!.value),
                 ),
               ),
               // Blur frosted overlay for content contrast

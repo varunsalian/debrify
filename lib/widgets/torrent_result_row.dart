@@ -221,31 +221,43 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       borderWidth = 1;
     }
 
-    final animatedContainer = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: borderColor,
-          width: borderWidth,
-        ),
-        boxShadow: _isFocused
-            ? [
-                BoxShadow(
-                  color: _qualityColor.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
+    final containerDecoration = BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: borderColor,
+        width: borderWidth,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
-        child: _buildMainRow(),
-      ),
+      boxShadow: widget.isTelevision || !_isFocused
+          ? null
+          : [
+              BoxShadow(
+                color: _qualityColor.withValues(alpha: 0.3),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
     );
+
+    final Widget animatedContainer;
+    if (widget.isTelevision) {
+      animatedContainer = Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        clipBehavior: Clip.hardEdge,
+        decoration: containerDecoration,
+        child: _buildMainRow(),
+      );
+    } else {
+      animatedContainer = AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: containerDecoration,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: _buildMainRow(),
+        ),
+      );
+    }
 
     return Focus(
       focusNode: widget.focusNode,

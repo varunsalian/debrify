@@ -695,7 +695,8 @@ class _HomeContinueWatchingSectionState
                   ),
                 ),
               ),
-              // Left vignette
+              // Left vignette (skip on TV for GPU perf)
+              if (!widget.isTelevision)
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -748,13 +749,13 @@ class _HomeContinueWatchingSectionState
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                         height: 1.2,
                         letterSpacing: -0.2,
-                        shadows: [
+                        shadows: widget.isTelevision ? null : const [
                           Shadow(color: Colors.black, blurRadius: 8),
                         ],
                       ),
@@ -840,21 +841,18 @@ class _HomeContinueWatchingSectionState
                 ),
 
               // Play overlay on hover/focus
+              if (widget.isTelevision && isActive)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    child: Center(
+                      child: _buildPlayButton(),
+                    ),
+                  ),
+                )
+              else if (!widget.isTelevision)
               Positioned.fill(
-                child: widget.isTelevision
-                    ? Opacity(
-                        opacity: isActive ? 1.0 : 0.0,
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          child: Center(
-                            child: Transform.scale(
-                              scale: isActive ? 1.0 : 0.85,
-                              child: _buildPlayButton(),
-                            ),
-                          ),
-                        ),
-                      )
-                    : AnimatedOpacity(
+                child: AnimatedOpacity(
                         opacity: isActive ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
                         child: Container(

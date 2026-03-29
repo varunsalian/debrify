@@ -9781,23 +9781,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return Center(
           child: Material(
             color: Colors.transparent,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
+            child: Builder(
+              builder: (context) {
+                final dialogContainer = Container(
                   width: 340,
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B).withOpacity(0.85),
+                    color: Color.fromRGBO(30, 41, 59, _isTelevision ? 1.0 : 0.85),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       width: 1,
                     ),
-                    boxShadow: [
+                    boxShadow: _isTelevision ? null : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 20,
                         spreadRadius: 5,
                       ),
@@ -9882,8 +9880,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                     ],
                   ),
-                ),
-              ),
+                );
+                if (_isTelevision) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: dialogContainer,
+                  );
+                }
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: dialogContainer,
+                  ),
+                );
+              },
             ),
           ),
         );
@@ -13701,6 +13712,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                         offstage: _hasSearched || _isLoading,
                         child: CatalogBrowser(
                           key: _catalogBrowserKey,
+                          isTelevision: _isTelevision,
                           filterAddon: _selectedSource.addon,
                           defaultCatalogId: _defaultCatalogId,
                           // Freeze searchQuery while offstage to prevent reload/scroll reset
@@ -13809,6 +13821,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       return SearchLoadingAnimation(
                         phase: _searchPhase,
                         isSeries: _isSeries,
+                        isTelevision: _isTelevision,
                       );
                     }
 

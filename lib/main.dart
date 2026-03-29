@@ -1363,6 +1363,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             }
           },
           child: AnimatedPremiumBackground(
+            isTelevision: _isAndroidTv,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 // Show floating nav on mobile (narrow screens), but not on TV

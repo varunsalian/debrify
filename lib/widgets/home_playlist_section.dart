@@ -551,7 +551,8 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
                         ),
                       ),
                     ),
-                    // Left vignette
+                    // Left vignette (skip on TV for GPU perf)
+                    if (!widget.isTelevision)
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -611,13 +612,13 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
                         children: [
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                               height: 1.2,
                               letterSpacing: -0.2,
-                              shadows: [
+                              shadows: widget.isTelevision ? null : const [
                                 Shadow(color: Colors.black, blurRadius: 8),
                               ],
                             ),

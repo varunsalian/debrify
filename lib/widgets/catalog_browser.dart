@@ -58,6 +58,9 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user exits episode drill-down mode (back button)
   final VoidCallback? onEpisodeModeExited;
 
+  /// Whether running on Android TV (disables animations, shadows, clips for GPU perf)
+  final bool isTelevision;
+
   const CatalogBrowser({
     super.key,
     this.onItemSelected,
@@ -70,6 +73,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onSelectSource,
     this.onSearchPacks,
     this.onEpisodeModeExited,
+    this.isTelevision = false,
   });
 
   @override
@@ -1977,6 +1981,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           padding: const EdgeInsets.only(bottom: 8),
           child: _CatalogItemCard(
             item: item,
+            isTelevision: widget.isTelevision,
             focusNode: index < _contentFocusNodes.length
                 ? _contentFocusNodes[index]
                 : null,
@@ -2012,6 +2017,7 @@ class _CatalogItemCard extends StatefulWidget {
   final void Function(TraktItemMenuAction action)? onTraktMenuAction;
   final bool hasBoundSource;
   final bool isTraktAuthenticated;
+  final bool isTelevision;
 
   const _CatalogItemCard({
     required this.item,
@@ -2023,6 +2029,7 @@ class _CatalogItemCard extends StatefulWidget {
     this.onTraktMenuAction,
     this.hasBoundSource = false,
     this.isTraktAuthenticated = false,
+    this.isTelevision = false,
   });
 
   @override
@@ -2110,7 +2117,54 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
         onTap: widget.onSources,
-        child: AnimatedScale(
+        child: widget.isTelevision
+          ? Container(
+              clipBehavior: Clip.hardEdge,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _isFocused
+                      ? Colors.white.withValues(alpha: 0.35)
+                      : Colors.white.withValues(alpha: 0.06),
+                  width: _isFocused ? 1.5 : 1,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.95),
+                            Colors.black.withValues(alpha: 0.8),
+                            Colors.black.withValues(alpha: 0.5),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final useVerticalLayout = constraints.maxWidth < 500;
+                        return useVerticalLayout
+                            ? _buildVerticalLayout(theme, colorScheme)
+                            : _buildHorizontalLayout(theme, colorScheme);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : AnimatedScale(
           scale: _isFocused ? 1.02 : 1.0,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
@@ -2200,7 +2254,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
+                  shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -2310,7 +2364,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
-                      shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
+                      shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

@@ -422,21 +422,32 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                 ),
               ),
               const SizedBox(width: 12),
-              // Gradient title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                ).createShader(bounds),
-                child: const Text(
+              // Gradient title (plain text on TV)
+              if (widget.isTelevision)
+                const Text(
                   'Services',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: Color(0xFF8B5CF6),
                     letterSpacing: -0.3,
                   ),
+                )
+              else
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'Services',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
                 ),
-              ),
               const SizedBox(width: 10),
               // Connected count badge
               Container(
@@ -496,25 +507,11 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
           ),
         ),
         const SizedBox(height: 8),
-        // Horizontal scrolling provider cards with edge fade
+        // Horizontal scrolling provider cards with edge fade (plain on TV)
         SizedBox(
           height: 110,
-          child: ShaderMask(
-            shaderCallback: (Rect bounds) {
-              return LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: const [
-                  Colors.transparent,
-                  Colors.white,
-                  Colors.white,
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.02, 0.98, 1.0],
-              ).createShader(bounds);
-            },
-            blendMode: BlendMode.dstIn,
-            child: ListView.builder(
+          child: widget.isTelevision
+            ? ListView.builder(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -526,8 +523,36 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                   child: configuredProviders[index],
                 );
               },
+            )
+            : ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: const [
+                    Colors.transparent,
+                    Colors.white,
+                    Colors.white,
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.02, 0.98, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: ListView.builder(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                clipBehavior: Clip.none,
+                itemCount: configuredProviders.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: EdgeInsets.only(right: index < configuredProviders.length - 1 ? 12 : 0),
+                    child: configuredProviders[index],
+                  );
+                },
+              ),
             ),
-          ),
         ),
       ],
     );
@@ -694,55 +719,47 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                 ? const Color(0xFFF59E0B)
                 : const Color(0xFF10B981);
 
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            width: 155,
-            height: 90,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1A1A2E),
-                  color.withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isActive ? color : Colors.white.withValues(alpha: 0.08),
-                width: isActive ? 2 : 1,
-              ),
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.4),
-                        blurRadius: 16,
-                        spreadRadius: 1,
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
+        final cardDecoration = BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF1A1A2E),
+              color.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isActive ? color : Colors.white.withValues(alpha: 0.08),
+            width: isActive ? 2 : 1,
+          ),
+          boxShadow: widget.isTelevision ? null : (isActive
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]),
+        );
+
+        final cardContent = Container(
+          width: 155,
+          height: 90,
+          clipBehavior: Clip.hardEdge,
+          decoration: cardDecoration,
               child: Stack(
                 children: [
                   // Subtle radial gradient background
@@ -898,8 +915,20 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                   ),
                 ],
               ),
-            ),
-          ),
+        );
+
+        // On TV: no scale animation; on mobile: animate scale on focus
+        if (widget.isTelevision) {
+          return cardContent;
+        }
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
+          builder: (context, scale, child) {
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: cardContent,
         );
       },
     );

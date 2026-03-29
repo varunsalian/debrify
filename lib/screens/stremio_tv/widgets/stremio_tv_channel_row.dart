@@ -182,20 +182,24 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                         child: SizedBox(
                           width: 85,
                           height: 128,
-                          child: ImageFiltered(
-                            imageFilter: widget.hideNowPlaying
-                                ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
-                                : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                            child: posterUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: posterUrl,
-                                    memCacheWidth: 300,
-                                    fit: BoxFit.cover,
-                                    placeholder: (_, __) => _posterPlaceholder(),
-                                    errorWidget: (_, __, ___) =>
-                                        _posterPlaceholder(),
-                                  )
-                                : _posterPlaceholder(),
+                          child: Builder(
+                            builder: (context) {
+                              final image = posterUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: posterUrl,
+                                      memCacheWidth: 300,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => _posterPlaceholder(),
+                                      errorWidget: (_, __, ___) =>
+                                          _posterPlaceholder(),
+                                    )
+                                  : _posterPlaceholder();
+                              if (!widget.hideNowPlaying) return image;
+                              return ImageFiltered(
+                                imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                child: image,
+                              );
+                            },
                           ),
                         ),
                       )
@@ -413,11 +417,9 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                         child: SizedBox(
                           width: 50,
                           height: 72,
-                          child: ImageFiltered(
-                            imageFilter: widget.hideNowPlaying
-                                ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
-                                : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                            child: posterUrl != null
+                          child: Builder(
+                            builder: (context) {
+                              final image = posterUrl != null
                                 ? CachedNetworkImage(
                                     imageUrl: posterUrl,
                                     memCacheWidth: 150,
@@ -425,7 +427,13 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                                     errorWidget: (_, __, ___) =>
                                         _posterPlaceholder(),
                                   )
-                                : _posterPlaceholder(),
+                                : _posterPlaceholder();
+                              if (!widget.hideNowPlaying) return image;
+                              return ImageFiltered(
+                                imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                child: image,
+                              );
+                            },
                           ),
                         ),
                       ),

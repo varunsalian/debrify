@@ -916,6 +916,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                             : null,
                         hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
                         isTraktAuthenticated: _isTraktAuthenticated,
+                        isTelevision: widget.isTelevision,
                       ),
                     ),
                   );
@@ -1071,6 +1072,7 @@ class _CatalogResultCard extends StatefulWidget {
   final void Function(TraktItemMenuAction action)? onTraktMenuAction;
   final bool hasBoundSource;
   final bool isTraktAuthenticated;
+  final bool isTelevision;
 
   const _CatalogResultCard({
     required this.item,
@@ -1084,6 +1086,7 @@ class _CatalogResultCard extends StatefulWidget {
     this.onTraktMenuAction,
     this.hasBoundSource = false,
     this.isTraktAuthenticated = false,
+    this.isTelevision = false,
   });
 
   @override
@@ -1162,71 +1165,90 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
       onKeyEvent: _handleKeyEvent,
       child: GestureDetector(
         onTap: widget.onSources,
-        child: AnimatedScale(
-          scale: widget.isFocused ? 1.02 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+        child: _buildCardWrapper(theme, colorScheme),
+      ),
+    );
+  }
+
+  Widget _buildCardWrapper(ThemeData theme, ColorScheme colorScheme) {
+    final cardStack = Stack(
+      children: [
+        Positioned.fill(
+          child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
+        ),
+        Positioned.fill(
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: widget.isFocused
-                    ? Colors.white.withValues(alpha: 0.35)
-                    : Colors.white.withValues(alpha: 0.06),
-                width: widget.isFocused ? 1.5 : 1,
-              ),
-              boxShadow: widget.isFocused
-                  ? [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        blurRadius: 16,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Stack(
-                children: [
-                  // Layer 1: Backdrop image
-                  Positioned.fill(
-                    child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
-                  ),
-                  // Layer 2: Dark gradient scrim
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.95),
-                            Colors.black.withValues(alpha: 0.8),
-                            Colors.black.withValues(alpha: 0.5),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Layer 3: Content
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final useVerticalLayout = constraints.maxWidth < 500;
-                        return useVerticalLayout
-                            ? _buildVerticalLayout(theme, colorScheme)
-                            : _buildHorizontalLayout(theme, colorScheme);
-                      },
-                    ),
-                  ),
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black.withValues(alpha: 0.95),
+                  Colors.black.withValues(alpha: 0.8),
+                  Colors.black.withValues(alpha: 0.5),
                 ],
+                stops: const [0.0, 0.5, 1.0],
               ),
             ),
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final useVerticalLayout = constraints.maxWidth < 500;
+              return useVerticalLayout
+                  ? _buildVerticalLayout(theme, colorScheme)
+                  : _buildHorizontalLayout(theme, colorScheme);
+            },
+          ),
+        ),
+      ],
+    );
+
+    if (widget.isTelevision) {
+      return Container(
+        clipBehavior: Clip.hardEdge,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: widget.isFocused
+                ? Colors.white.withValues(alpha: 0.35)
+                : Colors.white.withValues(alpha: 0.06),
+            width: widget.isFocused ? 1.5 : 1,
+          ),
+        ),
+        child: cardStack,
+      );
+    }
+
+    return AnimatedScale(
+      scale: widget.isFocused ? 1.02 : 1.0,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: widget.isFocused
+                ? Colors.white.withValues(alpha: 0.35)
+                : Colors.white.withValues(alpha: 0.06),
+            width: widget.isFocused ? 1.5 : 1,
+          ),
+          boxShadow: widget.isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    blurRadius: 16,
+                    spreadRadius: 0,
+                  ),
+                ]
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: cardStack,
         ),
       ),
     );
@@ -1257,7 +1279,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
+                  shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -1369,7 +1391,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
-                      shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
+                      shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

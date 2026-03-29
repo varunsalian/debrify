@@ -34,16 +34,35 @@ class StremioTvNowPlayingCard extends StatelessWidget {
           child: SizedBox(
             width: 56,
             height: 80,
-            child: ImageFiltered(
-              imageFilter: hideDetails
-                  ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
-                  : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-              child: item.poster != null
-                  ? CachedNetworkImage(
-                      imageUrl: item.poster!,
-                      memCacheWidth: 200,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
+            child: Builder(
+              builder: (context) {
+                final image = item.poster != null
+                    ? CachedNetworkImage(
+                        imageUrl: item.poster!,
+                        memCacheWidth: 200,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          child: Center(
+                            child: Icon(
+                              Icons.movie_rounded,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          child: Center(
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              size: 20,
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Container(
                         color: Colors.white.withValues(alpha: 0.05),
                         child: Center(
                           child: Icon(
@@ -52,28 +71,13 @@ class StremioTvNowPlayingCard extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.2),
                           ),
                         ),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        child: Center(
-                          child: Icon(
-                            Icons.broken_image_rounded,
-                            size: 20,
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                        ),
-                      ),
-                    )
-                  : Container(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      child: Center(
-                        child: Icon(
-                          Icons.movie_rounded,
-                          size: 20,
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                    ),
+                      );
+                if (!hideDetails) return image;
+                return ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: image,
+                );
+              },
             ),
           ),
         ),

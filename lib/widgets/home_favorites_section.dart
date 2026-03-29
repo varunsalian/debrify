@@ -582,7 +582,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       ),
                     ),
                   ),
-                  // Left vignette
+                  // Left vignette (skip on TV for GPU perf)
+                  if (!widget.isTelevision)
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -640,13 +641,13 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                             height: 1.2,
                             letterSpacing: -0.2,
-                            shadows: [
+                            shadows: widget.isTelevision ? null : const [
                               Shadow(color: Colors.black, blurRadius: 8),
                             ],
                           ),
@@ -726,42 +727,31 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                     ),
 
                   // ── Play overlay ──
+                  if (isActive && !isPlaying)
                   Positioned.fill(
-                    child: Opacity(
-                      opacity: isActive && !isPlaying ? 1.0 : 0.0,
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        child: Center(
-                          child: Transform.scale(
-                            scale: isActive ? 1.0 : 0.85,
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white
-                                    .withValues(alpha: 0.15),
-                                border: Border.all(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.4),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black
-                                        .withValues(alpha: 0.4),
-                                    blurRadius: 16,
-                                  ),
-                                ],
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      child: Center(
+                        child: Transform.scale(
+                          scale: 1.0,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.15),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                width: 1.5,
                               ),
-                              child: ClipOval(
-                                child: Container(
-                                  color: Colors.black.withValues(alpha: 0.6),
-                                  child: const Icon(
-                                    Icons.play_arrow_rounded,
-                                    color: Colors.white,
-                                    size: 30,
-                                  ),
+                            ),
+                            child: ClipOval(
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 30,
                                 ),
                               ),
                             ),
@@ -862,7 +852,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       ),
                     ),
                   ),
-                  // Left vignette
+                  // Left vignette (skip on TV for GPU perf)
+                  if (!widget.isTelevision)
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -920,13 +911,13 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                             height: 1.2,
                             letterSpacing: -0.2,
-                            shadows: [
+                            shadows: widget.isTelevision ? null : const [
                               Shadow(color: Colors.black, blurRadius: 8),
                             ],
                           ),

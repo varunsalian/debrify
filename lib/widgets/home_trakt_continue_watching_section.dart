@@ -868,7 +868,8 @@ class _HomeTraktContinueWatchingSectionState
                       ),
                     ),
                   ),
-                  // Left vignette
+                  // Left vignette (skip on TV for GPU perf)
+                  if (!widget.isTelevision)
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -928,13 +929,13 @@ class _HomeTraktContinueWatchingSectionState
                         // Title
                         Text(
                           item.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                             height: 1.2,
                             letterSpacing: -0.2,
-                            shadows: [
+                            shadows: widget.isTelevision ? null : const [
                               Shadow(color: Colors.black, blurRadius: 8),
                             ],
                           ),
@@ -1040,51 +1041,39 @@ class _HomeTraktContinueWatchingSectionState
                     ),
 
                   // ── Play overlay on hover/focus ──
-                  Positioned.fill(
-                    child: widget.isTelevision
-                      ? Opacity(
-                          opacity: isActive ? 1.0 : 0.0,
+                  if (widget.isTelevision && isActive)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        child: Center(
                           child: Container(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            child: Center(
-                              child: Transform.scale(
-                                scale: isActive ? 1.0 : 0.85,
-                                child: Container(
-                                  width: 52,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.15),
-                                    border: Border.all(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.4),
-                                      width: 1.5,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.4),
-                                        blurRadius: 16,
-                                      ),
-                                    ],
-                                  ),
-                                  child: ClipOval(
-                                    child: Container(
-                                      color: Colors.black.withValues(alpha: 0.6),
-                                      child: const Icon(
-                                        Icons.play_arrow_rounded,
-                                        color: Colors.white,
-                                        size: 30,
-                                      ),
-                                    ),
-                                  ),
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.15),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 30,
                                 ),
                               ),
                             ),
                           ),
-                        )
-                      : AnimatedOpacity(
+                        ),
+                      ),
+                    )
+                  else if (!widget.isTelevision)
+                    Positioned.fill(
+                      child: AnimatedOpacity(
                           opacity: isActive ? 1.0 : 0.0,
                           duration: const Duration(milliseconds: 200),
                           child: Container(

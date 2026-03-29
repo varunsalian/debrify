@@ -88,12 +88,14 @@ class SearchLoadingAnimation extends StatefulWidget {
   final SearchPhase phase;
   final int? sourceCount;
   final bool isSeries;
+  final bool isTelevision;
 
   const SearchLoadingAnimation({
     super.key,
     required this.phase,
     this.sourceCount,
     this.isSeries = false,
+    this.isTelevision = false,
   });
 
   @override
@@ -293,22 +295,28 @@ class _SearchLoadingAnimationState extends State<SearchLoadingAnimation>
                                 widget.phase == SearchPhase.checkingCache
                             ? _rotateAnimation.value
                             : 0,
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF6366F1),
-                              Color(0xFF8B5CF6),
-                              Color(0xFFA855F7),
-                            ],
-                          ).createShader(bounds),
-                          child: Icon(
-                            widget.phase.icon,
-                            size: iconSize,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: widget.isTelevision
+                          ? Icon(
+                              widget.phase.icon,
+                              size: iconSize,
+                              color: const Color(0xFF8B5CF6),
+                            )
+                          : ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF6366F1),
+                                  Color(0xFF8B5CF6),
+                                  Color(0xFFA855F7),
+                                ],
+                              ).createShader(bounds),
+                              child: Icon(
+                                widget.phase.icon,
+                                size: iconSize,
+                                color: Colors.white,
+                              ),
+                            ),
                       ),
                     ),
                   ),
@@ -398,15 +406,15 @@ class _SearchLoadingAnimationState extends State<SearchLoadingAnimation>
                       )
                     : null,
                 color: isActive ? null : const Color(0xFF374151),
-                boxShadow: isCurrent
-                    ? [
+                boxShadow: widget.isTelevision || !isCurrent
+                    ? null
+                    : [
                         BoxShadow(
                           color: const Color(0xFF6366F1).withValues(alpha: 0.5),
                           blurRadius: 8,
                           spreadRadius: 1,
                         ),
-                      ]
-                    : null,
+                      ],
               ),
             ),
             if (index < steps.length - 1)

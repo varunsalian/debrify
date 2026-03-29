@@ -394,16 +394,15 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
               borderRadius: BorderRadius.circular(11),
               child: Stack(
                 children: [
-                  // Background logo with blur effect
-                  if (channel.logoUrl != null && channel.logoUrl!.isNotEmpty)
+                  // Background logo (skip on TV — Opacity widget forces compositing layer)
+                  if (!widget.isTelevision && channel.logoUrl != null && channel.logoUrl!.isNotEmpty)
                     Positioned.fill(
-                      child: Opacity(
-                        opacity: 0.15,
-                        child: Image.network(
-                          channel.logoUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                        ),
+                      child: Image.network(
+                        channel.logoUrl!,
+                        fit: BoxFit.cover,
+                        color: Colors.white.withValues(alpha: 0.15),
+                        colorBlendMode: BlendMode.modulate,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                       ),
                     ),
                   // Gradient overlay
