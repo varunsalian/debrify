@@ -1646,9 +1646,11 @@ class VideoPlayerLauncher {
       'VideoPlayerLauncher: Android TV playback finished for "${payload.title}"',
     );
     // Final Trakt scrobble stop on playback exit
+    // Skip if last action was 'stop' (already stopped) or 'pause' (pause already
+    // created the playback entry — sending stop would create a duplicate)
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = null;
-    if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != 'stop') {
+    if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != 'stop' && _traktLastScrobbleAction != 'pause') {
       TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
     }
     _traktLastScrobbleAction = null;
