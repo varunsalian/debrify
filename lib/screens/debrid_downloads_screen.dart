@@ -2868,77 +2868,46 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 children: [
                   if (isFolder) ...[
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildTorrentActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
-                        onPressed: () => _navigateIntoFolder(node),
-                        icon: const Icon(Icons.folder_open, size: 18),
-                        label: const Text('Open'),
-                        style: FilledButton.styleFrom().copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        icon: Icons.folder_open,
+                        label: 'Open',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: () => _navigateIntoFolder(node),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _playFolder(node),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.green.shade700,
-                        ).copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                      child: _buildTorrentActionButton(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _playFolder(node),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ] else if (isVideo) ...[
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildTorrentActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
-                        onPressed: () => _playFile(node),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                        style: FilledButton.styleFrom().copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _playFile(node),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ] else ...[
-                    // Non-video files get a Download button
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildTorrentActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
-                        onPressed: () => _downloadFile(node),
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Download'),
-                        style: FilledButton.styleFrom().copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        icon: Icons.download_rounded,
+                        label: 'Download',
+                        color: const Color(0xFF3B82F6),
+                        onTap: () => _downloadFile(node),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -3655,6 +3624,69 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  Widget _buildTorrentActionButton({
+    FocusNode? focusNode,
+    bool autofocus = false,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      autofocus: autofocus,
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isFocused ? color : color.withValues(alpha: 0.6),
+                  width: isFocused ? 1.5 : 1,
+                ),
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          spreadRadius: 0,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildTorrentCard(RDTorrent torrent, int index) {
     final isSelected = _selectedTorrentIds.contains(torrent.id);
     final theme = Theme.of(context);
@@ -3750,40 +3782,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton.icon(
+                    child: _buildTorrentActionButton(
                       focusNode: index == 0 ? _firstItemFocusNode : null,
                       autofocus: index == 0,
-                      onPressed: () => _navigateIntoTorrent(torrent),
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      label: const Text('Open'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                      ).copyWith(
-                        side: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.focused)) {
-                            return const BorderSide(color: Colors.white, width: 3);
-                          }
-                          return null;
-                        }),
-                      ),
+                      icon: Icons.folder_open,
+                      label: 'Open',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: () => _navigateIntoTorrent(torrent),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _handlePlayMultiFileTorrent(torrent),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                      ).copyWith(
-                        side: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.focused)) {
-                            return const BorderSide(color: Colors.white, width: 3);
-                          }
-                          return null;
-                        }),
-                      ),
+                    child: _buildTorrentActionButton(
+                      icon: Icons.play_arrow_rounded,
+                      label: 'Play',
+                      color: const Color(0xFF22C55E),
+                      onTap: () => _handlePlayMultiFileTorrent(torrent),
                     ),
                   ),
                   const SizedBox(width: 8),
