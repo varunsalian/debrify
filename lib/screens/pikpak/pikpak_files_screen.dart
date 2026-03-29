@@ -2222,6 +2222,69 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     return const SizedBox.shrink();
   }
 
+  Widget _buildActionButton({
+    FocusNode? focusNode,
+    bool autofocus = false,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      autofocus: autofocus,
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isFocused ? color : Colors.black.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isFocused ? color : color.withValues(alpha: 0.6),
+                  width: isFocused ? 1.5 : 1,
+                ),
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          spreadRadius: 0,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildFileCard(Map<String, dynamic> file, int index) {
     final name = file['name'] ?? 'Unknown';
     final size = file['size'];
@@ -2365,78 +2428,46 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   if (isVirtualFolder) ...[
                     // Virtual Season folder - just open it
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
                         autofocus: index == 0,
-                        onPressed: () => _navigateIntoVirtualFolder(file),
-                        icon: const Icon(Icons.folder_open, size: 18),
-                        label: const Text('Open'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.purple.shade700,
-                        ).copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        icon: Icons.folder_open,
+                        label: 'Open',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: () => _navigateIntoVirtualFolder(file),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ] else if (isFolder) ...[
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
-                        autofocus: index == 0, // Auto-focus first item's button
-                        onPressed: () => _navigateIntoFolder(file['id'], name),
-                        icon: const Icon(Icons.folder_open, size: 18),
-                        label: const Text('Open'),
-                        style: FilledButton.styleFrom().copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        autofocus: index == 0,
+                        icon: Icons.folder_open,
+                        label: 'Open',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: () => _navigateIntoFolder(file['id'], name),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => _playFolder(file),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.green.shade700,
-                        ).copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                      child: _buildActionButton(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _playFolder(file),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ] else if (isVideo && isComplete) ...[
                     Expanded(
-                      child: FilledButton.icon(
+                      child: _buildActionButton(
                         focusNode: index == 0 ? _firstItemFocusNode : null,
-                        autofocus: index == 0, // Auto-focus first item's button
-                        onPressed: () => _playFile(file),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play'),
-                        style: FilledButton.styleFrom().copyWith(
-                          side: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.focused)) {
-                              return const BorderSide(color: Colors.white, width: 3);
-                            }
-                            return null;
-                          }),
-                        ),
+                        autofocus: index == 0,
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _playFile(file),
                       ),
                     ),
                     const SizedBox(width: 8),
