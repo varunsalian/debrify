@@ -88,12 +88,15 @@ class TvSidebarNavState extends State<TvSidebarNav>
         _hasSidebarFocus = true;
       });
       _expandController.forward();
-      // Auto-scroll to keep focused item visible
+      // Auto-scroll to keep focused item visible (both up and down)
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (index < _focusNodes.length) {
           final ctx = _focusNodes[index].context;
           if (ctx != null) {
-            Scrollable.ensureVisible(ctx, duration: Duration.zero, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+            final scrollable = Scrollable.maybeOf(ctx);
+            if (scrollable != null && scrollable.position.maxScrollExtent > 0) {
+              Scrollable.ensureVisible(ctx, duration: Duration.zero, alignment: 0.3);
+            }
           }
         }
       });

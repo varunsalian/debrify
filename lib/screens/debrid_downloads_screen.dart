@@ -3646,6 +3646,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Focus(
       focusNode: focusNode,
       autofocus: autofocus,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter)) {
+          onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: Builder(
         builder: (context) {
           final isFocused = Focus.of(context).hasFocus;
