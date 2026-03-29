@@ -243,6 +243,9 @@ class TraktService {
 
   Future<bool> _scrobble(String path, String imdbId, double progress,
       {int? season, int? episode}) async {
+    // Treat 0 as null — Kotlin TV player sends 0 for movies instead of null
+    if (season != null && season <= 0) season = null;
+    if (episode != null && episode <= 0) episode = null;
     // Refuse to scrobble if only one of season/episode is set — would send
     // a movie body with a show IMDB ID, corrupting Trakt history.
     if ((season == null) != (episode == null)) {
