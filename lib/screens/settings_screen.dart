@@ -632,18 +632,21 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Home Page',
                 subtitle: 'Default view when app opens',
                 onTap: onOpenHomePageSettings,
+                iconColor: const Color(0xFF6366F1),
               ),
               _SettingsTile(
                 icon: Icons.open_in_new_rounded,
                 title: 'Player Settings',
                 subtitle: 'Configure preferred video player',
                 onTap: onOpenExternalPlayerSettings,
+                iconColor: const Color(0xFF8B5CF6),
               ),
               _SettingsTile(
                 icon: Icons.rocket_launch_rounded,
                 title: 'Startup',
                 subtitle: 'Decide what happens on app launch',
                 onTap: onOpenStartupSettings,
+                iconColor: const Color(0xFFF59E0B),
               ),
               // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
               // Only show on desktop platforms
@@ -654,6 +657,7 @@ class _SettingsLayout extends StatelessWidget {
                   title: 'Remote Control',
                   subtitle: 'Control Debrify TV from your phone',
                   onTap: () async => onOpenRemoteControl(),
+                  iconColor: const Color(0xFF06B6D4),
                 ),
             ],
           ),
@@ -667,24 +671,28 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Search Settings',
                 subtitle: 'Engines, filters, and sorting',
                 onTap: onOpenTorrentSettings,
+                iconColor: const Color(0xFF3B82F6),
               ),
               _SettingsTile(
                 icon: Icons.filter_list_rounded,
                 title: 'Filter Settings',
                 subtitle: 'Default quality, source, and language filters',
                 onTap: onOpenFilterSettings,
+                iconColor: const Color(0xFF10B981),
               ),
               _SettingsTile(
                 icon: Icons.cloud_sync_rounded,
                 title: 'Provider Settings',
                 subtitle: 'Default provider for adding torrents',
                 onTap: onOpenProviderSettings,
+                iconColor: const Color(0xFF8B5CF6),
               ),
               _SettingsTile(
                 icon: Icons.bolt_rounded,
                 title: 'Quick Play Settings',
                 subtitle: 'Configure quick play for torrent search',
                 onTap: onOpenQuickPlaySettings,
+                iconColor: const Color(0xFFF59E0B),
               ),
             ],
           ),
@@ -698,12 +706,14 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Debrify TV Settings',
                 subtitle: 'Limits, channels, and playback configuration',
                 onTap: onOpenDebrifyTvSettings,
+                iconColor: const Color(0xFFE11D48),
               ),
               _SettingsTile(
                 icon: Icons.smart_display_rounded,
                 title: 'Stremio TV Settings',
                 subtitle: 'Rotation interval and channel preferences',
                 onTap: onOpenStremioTvSettings,
+                iconColor: const Color(0xFF06B6D4),
               ),
             ],
           ),
@@ -717,12 +727,14 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Clear Download Data',
                 subtitle: 'Remove queue history and in-progress entries',
                 onTap: onClearDownloads,
+                iconColor: const Color(0xFFF59E0B),
               ),
               _SettingsTile(
                 icon: Icons.play_circle_rounded,
                 title: 'Clear Playback Data',
                 subtitle: 'Reset resume points and playback sessions',
                 onTap: onClearPlayback,
+                iconColor: const Color(0xFF8B5CF6),
               ),
             ],
           ),
@@ -737,6 +749,7 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Reset Debrify',
                 subtitle: 'Remove connections, preferences, and caches',
                 onTap: onDangerAction,
+                iconColor: const Color(0xFFEF4444),
               ),
             ],
           ),
@@ -750,18 +763,21 @@ class _SettingsLayout extends StatelessWidget {
                 title: 'Reddit Community',
                 subtitle: 'r/debrify - Questions, tips, and discussion',
                 onTap: () => launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
+                iconColor: const Color(0xFFFF4500),
               ),
               _SettingsTile(
                 icon: Icons.chat_rounded,
                 title: 'Discord',
                 subtitle: 'Join for help, updates, and discussion',
                 onTap: () => launchUrl(Uri.parse('https://discord.gg/nay3FVtAp')),
+                iconColor: const Color(0xFF5865F2),
               ),
               _SettingsTile(
                 icon: Icons.code_rounded,
                 title: 'GitHub',
                 subtitle: 'Source code and contributions',
                 onTap: () => launchUrl(Uri.parse('https://github.com/varunsalian/debrify')),
+                iconColor: const Color(0xFF10B981),
               ),
               _InfoTile(
                 icon: Icons.info_outline_rounded,
@@ -785,18 +801,41 @@ class _SettingsHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: const Icon(Icons.settings, color: Colors.white, size: 24),
+            child: const Icon(Icons.settings_rounded, color: Colors.white, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -807,15 +846,14 @@ class _SettingsHeader extends StatelessWidget {
                   'Settings',
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Manage connections and clean up your library.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(
-                      alpha: 0.7,
-                    ),
+                    color: Colors.white.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -904,6 +942,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
             // Grid layout (wide):
             // [RD]      [Torbox]
             // [PikPak]  [Reddit]
+            // [IPTV]    [Trakt]
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -949,7 +988,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? _pikpakFocusNode : null,
                     upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
-                    downNeighbor: wide ? null : _iptvFocusNode,
+                    downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
                   ),
                 ),
                 // Row 3: IPTV (left), Trakt (right)
@@ -1074,79 +1113,114 @@ class _ConnectionCard extends StatelessWidget {
 
         return KeyEventResult.ignored;
       },
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          focusNode: focusNode,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+          ),
           borderRadius: BorderRadius.circular(18),
-          onTap: () async {
-            await info.onTap();
-          },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(info.icon, color: theme.colorScheme.primary),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            focusNode: focusNode,
+            borderRadius: BorderRadius.circular(18),
+            onTap: () async {
+              await info.onTap();
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: info.connected && active
+                            ? [const Color(0xFF059669), const Color(0xFF10B981)]
+                            : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (info.connected && active
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF6366F1))
+                              .withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(info.icon, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            info.title,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                info.title,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
+                            Container(
+                              height: 8,
+                              width: 8,
+                              decoration: BoxDecoration(
+                                color: indicatorColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: indicatorColor.withValues(alpha: 0.5),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          info.status,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: info.connected
+                                ? (active ? const Color(0xFF34D399) : Colors.red)
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        Container(
-                          height: 8,
-                          width: 8,
-                          decoration: BoxDecoration(
-                            color: indicatorColor,
-                            shape: BoxShape.circle,
+                        const SizedBox(height: 2),
+                        Text(
+                          info.caption,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.45),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      info.status,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: info.connected
-                            ? (active ? Colors.green : Colors.red)
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      info.caption,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.chevron_right_rounded,
+                      color: Colors.white.withValues(alpha: 0.3)),
+                ],
               ),
-              const SizedBox(width: 12),
-              const Icon(Icons.chevron_right_rounded),
-            ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -1175,29 +1249,42 @@ class _SettingsSection extends StatelessWidget {
             title,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-              color: accentColor ?? theme.colorScheme.onSurface,
+              letterSpacing: 0.3,
+              color: accentColor ?? Colors.white.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 12),
         ],
-        Material(
-          color: theme.colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(18),
-          child: Column(
-            children: [
-              for (int i = 0; i < children.length; i++) ...[
-                if (i != 0)
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: theme.colorScheme.outlineVariant.withValues(
-                      alpha: 0.35,
+        Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            child: Column(
+              children: [
+                for (int i = 0; i < children.length; i++) ...[
+                  if (i != 0)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 56,
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
-                  ),
-                children[i],
+                  children[i],
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -1211,6 +1298,7 @@ class _SettingsTile extends StatelessWidget {
   final String subtitle;
   final Future<void> Function() onTap;
   final String? tag;
+  final Color iconColor;
 
   const _SettingsTile({
     required this.icon,
@@ -1218,6 +1306,7 @@ class _SettingsTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.tag,
+    this.iconColor = const Color(0xFF6366F1),
   });
 
   @override
@@ -1235,10 +1324,10 @@ class _SettingsTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                color: iconColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: theme.colorScheme.primary),
+              child: Icon(icon, color: iconColor, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1257,12 +1346,12 @@ class _SettingsTile extends StatelessWidget {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                            horizontal: 8,
+                            vertical: 3,
                           ),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.tertiary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             tag!,
@@ -1280,13 +1369,14 @@ class _SettingsTile extends StatelessWidget {
                   Text(
                     subtitle,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: Colors.white.withValues(alpha: 0.45),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded),
+            Icon(Icons.chevron_right_rounded,
+                color: Colors.white.withValues(alpha: 0.3)),
           ],
         ),
       ),
@@ -1315,10 +1405,10 @@ class _InfoTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: theme.colorScheme.primary),
+            child: Icon(icon, color: const Color(0xFF818CF8), size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1329,10 +1419,18 @@ class _InfoTile extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              value,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -1372,8 +1470,15 @@ class _SkeletonHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1399,8 +1504,15 @@ class _SkeletonSection extends StatelessWidget {
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+            ),
             borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
           ),
           child: Column(
             children: const [

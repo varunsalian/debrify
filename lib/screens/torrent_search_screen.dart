@@ -157,6 +157,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final ScrollController _resultsScrollController = ScrollController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _providerAccordionFocusNode = FocusNode();
+  final FocusNode _providerChipFocusNode = FocusNode(debugLabel: 'provider_chip');
 
   // Home screen DPAD navigation controller
   late final HomeFocusController _homeFocusController;
@@ -526,9 +527,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   KeyEventResult _handleSortDropdownKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    // Left arrow: go to torrent/direct dropdown or back button
+    // Left arrow: go to provider chip (large screens), or torrent/direct dropdown, or back button
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_torrentProviderCounts.isNotEmpty) {
+      if (_multipleServicesEnabled && MediaQuery.of(context).size.width >= 500) {
+        _providerChipFocusNode.requestFocus();
+      } else if (_torrentProviderCounts.isNotEmpty) {
         _torrentDropdownFocusNode.requestFocus();
       } else if (_directProviderCounts.isNotEmpty) {
         _directDropdownFocusNode.requestFocus();
@@ -1533,6 +1536,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _resultsScrollController.dispose();
     _searchFocusNode.dispose();
     _providerAccordionFocusNode.dispose();
+    _providerChipFocusNode.dispose();
     _homeFocusController.dispose();
     _sortDropdownFocusNode.dispose();
     _sortDirectionFocusNode.dispose();
@@ -4053,6 +4057,239 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  _ProviderOption? get _activeProviderOption {
+    final p = _defaultTorrentProvider;
+    if (p == 'torbox' && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      return const _ProviderOption(id: 'torbox', name: 'TB', icon: Icons.flash_on_rounded, color: Color(0xFF7C3AED));
+    }
+    if (p == 'debrid' && _realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      return const _ProviderOption(id: 'debrid', name: 'RD', icon: Icons.cloud_rounded, color: Color(0xFFE50914));
+    }
+    if (p == 'pikpak' && _pikpakEnabled) {
+      return const _ProviderOption(id: 'pikpak', name: 'PP', icon: Icons.folder_rounded, color: Color(0xFF0088CC));
+    }
+    // No valid default — pick first available
+    if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      return const _ProviderOption(id: 'debrid', name: 'RD', icon: Icons.cloud_rounded, color: Color(0xFFE50914));
+    }
+    if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      return const _ProviderOption(id: 'torbox', name: 'TB', icon: Icons.flash_on_rounded, color: Color(0xFF7C3AED));
+    }
+    if (_pikpakEnabled) {
+      return const _ProviderOption(id: 'pikpak', name: 'PP', icon: Icons.folder_rounded, color: Color(0xFF0088CC));
+    }
+    return null;
+  }
+
+  List<_ProviderOption> get _availableProviders {
+    final list = <_ProviderOption>[];
+    if (_realDebridIntegrationEnabled && _apiKey != null && _apiKey!.isNotEmpty) {
+      list.add(const _ProviderOption(id: 'debrid', name: 'RD', icon: Icons.cloud_rounded, color: Color(0xFFE50914)));
+    }
+    if (_torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+      list.add(const _ProviderOption(id: 'torbox', name: 'TB', icon: Icons.flash_on_rounded, color: Color(0xFF7C3AED)));
+    }
+    if (_pikpakEnabled) {
+      list.add(const _ProviderOption(id: 'pikpak', name: 'PP', icon: Icons.folder_rounded, color: Color(0xFF0088CC)));
+    }
+    return list;
+  }
+
+  void _showProviderSwitchMenu() async {
+    final providers = _availableProviders;
+    final active = _activeProviderOption;
+    final focusNodes = List.generate(providers.length, (i) => FocusNode(debugLabel: 'prov-menu-$i'));
+
+    // Auto-focus active provider after dialog opens (one-time)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (focusNodes.isNotEmpty) {
+        final activeIdx = active != null ? providers.indexWhere((p) => p.id == active.id) : 0;
+        focusNodes[activeIdx.clamp(0, focusNodes.length - 1)].requestFocus();
+      }
+    });
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        int focusedIdx = -1;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B0F1A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 30, spreadRadius: 4),
+                    ],
+                  ),
+                  child: FocusTraversalGroup(
+                    policy: OrderedTraversalPolicy(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                          child: Text(
+                            'Provider',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                        ...providers.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final p = entry.value;
+                          final isActive = active != null && p.id == active.id;
+                          final isFocused = focusedIdx == i;
+                          return Focus(
+                            focusNode: focusNodes[i],
+                            onFocusChange: (f) {
+                              if (f) setDialogState(() => focusedIdx = i);
+                            },
+                            onKeyEvent: (node, event) {
+                              if (event is KeyDownEvent &&
+                                  (event.logicalKey == LogicalKeyboardKey.enter ||
+                                      event.logicalKey == LogicalKeyboardKey.select)) {
+                                Navigator.of(context).pop(p.id);
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).pop(p.id),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isFocused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(p.icon, size: 16, color: p.color),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      p.id == 'debrid' ? 'Real-Debrid' : p.id == 'torbox' ? 'TorBox' : 'PikPak',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.9)),
+                                    ),
+                                    const Spacer(),
+                                    if (isActive)
+                                      Icon(Icons.check_rounded, size: 16, color: p.color),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    for (final n in focusNodes) { n.dispose(); }
+
+    if (result != null && result != active?.id) {
+      await StorageService.setDefaultTorrentProvider(result);
+      if (mounted) {
+        setState(() {
+          _defaultTorrentProvider = result;
+        });
+      }
+    }
+  }
+
+  Widget _buildProviderChip() {
+    final active = _activeProviderOption;
+    if (active == null) return const SizedBox.shrink();
+
+    return Focus(
+      focusNode: _providerChipFocusNode,
+      onFocusChange: (focused) => setState(() {}),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          // Navigate to stream type filters or back button
+          if (_torrentProviderCounts.isNotEmpty) {
+            _torrentDropdownFocusNode.requestFocus();
+          } else if (_directProviderCounts.isNotEmpty) {
+            _directDropdownFocusNode.requestFocus();
+          } else if (_cameFromCatalogBrowse) {
+            _backButtonFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _sortDropdownFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _focusSearchBar();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          if (_cardFocusNodes.isNotEmpty) {
+            _cardFocusNodes[0].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          _showProviderSwitchMenu();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: _showProviderSwitchMenu,
+        child: Builder(
+          builder: (context) {
+            final isFocused = _providerChipFocusNode.hasFocus;
+            return Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: isFocused
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: isFocused
+                    ? Border.all(color: const Color(0xFF3B82F6), width: 1.5)
+                    : Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(active.icon, size: 13, color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.7)),
+                  const SizedBox(width: 4),
+                  Text(
+                    active.name,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.unfold_more_rounded, size: 12, color: isFocused ? Colors.white.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.4)),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -6958,7 +7195,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'play':
         if (hasVideo) {
-          await _playPikPakVideos(videoFiles, torrentName);
+          await _playPikPakVideos(videoFiles, torrentName, infohash: torrent.infohash);
           // Refresh bound sources after movie play so "Edit Source" appears
           if (_activeAdvancedSelection?.contentType == 'movie') {
             _traktResultsKey.currentState?.refreshBoundSources();
@@ -7089,7 +7326,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             onTap: () {
                               Navigator.of(ctx).pop();
                               _restoreFocusToCard(-1, torrent);
-                              _playPikPakVideos(videoFiles, torrentName);
+                              _playPikPakVideos(videoFiles, torrentName, infohash: torrent.infohash);
                             },
                           ),
                           _DebridActionTile(
@@ -7393,7 +7630,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  Future<void> _playPikPakVideos(List<Map<String, dynamic>> videoFiles, String torrentName) async {
+  Future<void> _playPikPakVideos(List<Map<String, dynamic>> videoFiles, String torrentName, {String? infohash}) async {
     if (videoFiles.isEmpty) return;
 
     final pikpak = PikPakApiService.instance;
@@ -7439,7 +7676,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               contentSeason: _activeAdvancedSelection?.season,
               contentEpisode: _activeAdvancedSelection?.episode,
               stremioSources: _torrents,
-              stremioCurrentSourceIndex: 0,
+              stremioCurrentSourceIndex: infohash != null ? _findTorrentIndex(infohash) : 0,
               resolveSourceToPlaylist: _createSourcePlaylistResolver(),
               traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
               traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
@@ -7566,7 +7803,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentSeason: _activeAdvancedSelection?.season,
         contentEpisode: _activeAdvancedSelection?.episode,
         stremioSources: _torrents,
-        stremioCurrentSourceIndex: 0,
+        stremioCurrentSourceIndex: infohash != null ? _findTorrentIndex(infohash) : 0,
         resolveSourceToPlaylist: _createSourcePlaylistResolver(),
         traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
         traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
@@ -8211,7 +8448,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       // Handle post-torrent action
-      await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay);
+      await _handlePostTorrentAction(result, torrentName, apiKey, index, forcePlay: forcePlay, infohash: infohash);
     } on TorrentNotCachedException catch (e) {
       // Close loading dialog
       if (mounted && Navigator.of(context).canPop()) {
@@ -8772,7 +9009,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       Navigator.of(context).pop();
 
       // Handle post-torrent action
-      await _handlePostTorrentAction(result, torrentName, apiKey, index);
+      await _handlePostTorrentAction(result, torrentName, apiKey, index, infohash: infohash);
     } on TorrentNotCachedException catch (e) {
       // Close loading dialog
       if (mounted && Navigator.of(context).canPop()) {
@@ -10513,6 +10750,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String apiKey,
     int index, {
     bool forcePlay = false,
+    String? infohash,
   }) async {
     // Override to 'play' for Quick Play
     final postAction = forcePlay ? 'play' : await StorageService.getPostTorrentAction();
@@ -10792,6 +11030,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             torrentName: torrentName,
                             fileSelection: fileSelection,
                             torrentId: result['torrentId']?.toString(),
+                            infohash: infohash,
                           );
                         },
                       ),
@@ -10941,6 +11180,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torrentName: torrentName,
           fileSelection: fileSelection,
           torrentId: result['torrentId']?.toString(),
+          infohash: infohash,
         );
         // Refresh bound sources after movie play so "Edit Source" appears
         if (_activeAdvancedSelection?.contentType == 'movie') {
@@ -11226,6 +11466,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required String torrentName,
     required String fileSelection,
     String? torrentId,
+    String? infohash,
   }) async {
     final String? apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) return;
@@ -11239,6 +11480,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         apiKey,
         0,
         torrentId,
+        infohash: infohash,
       );
       return;
     }
@@ -11287,7 +11529,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             contentSeason: _activeAdvancedSelection?.season,
             contentEpisode: _activeAdvancedSelection?.episode,
             stremioSources: _torrents,
-            stremioCurrentSourceIndex: 0,
+            stremioCurrentSourceIndex: infohash != null ? _findTorrentIndex(infohash) : 0,
             resolveSourceToPlaylist: _createSourcePlaylistResolver(),
             traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
             traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
@@ -11370,8 +11612,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String torrentName,
     String apiKey,
     int index,
-    String? torrentId,
-  ) async {
+    String? torrentId, {
+    String? infohash,
+  }) async {
     try {
       // Show loading dialog
       showDialog(
@@ -11795,7 +12038,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           contentSeason: _activeAdvancedSelection?.season,
           contentEpisode: _activeAdvancedSelection?.episode,
           stremioSources: _torrents,
-          stremioCurrentSourceIndex: 0,
+          stremioCurrentSourceIndex: infohash != null ? _findTorrentIndex(infohash) : 0,
           resolveSourceToPlaylist: _createSourcePlaylistResolver(),
           traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
           traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
@@ -12874,7 +13117,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 : null,
             onRightArrowPressed: hasTorrentProviders
                 ? () => _torrentDropdownFocusNode.requestFocus()
-                : () => _sortDropdownFocusNode.requestFocus(),
+                : (_multipleServicesEnabled && MediaQuery.of(context).size.width >= 500
+                    ? () => _providerChipFocusNode.requestFocus()
+                    : () => _sortDropdownFocusNode.requestFocus()),
             onUpArrowPressed: () {
               if (_isSeries) {
                 _seasonInputFocusNode.requestFocus();
@@ -12908,7 +13153,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 : (_cameFromCatalogBrowse
                     ? () => _backButtonFocusNode.requestFocus()
                     : null),
-            onRightArrowPressed: () => _sortDropdownFocusNode.requestFocus(),
+            onRightArrowPressed: () {
+              if (_multipleServicesEnabled && MediaQuery.of(context).size.width >= 500) {
+                _providerChipFocusNode.requestFocus();
+              } else {
+                _sortDropdownFocusNode.requestFocus();
+              }
+            },
             onUpArrowPressed: () {
               if (_isSeries) {
                 _seasonInputFocusNode.requestFocus();
@@ -13882,6 +14133,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             style: TextStyle(fontSize: 10, color: Color(0xFF10B981)),
                                           ),
                                         ),
+                                      // Provider chip (large screens only)
+                                      if (_multipleServicesEnabled && MediaQuery.of(context).size.width >= 500)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 6),
+                                          child: _buildProviderChip(),
+                                        ),
                                       const Spacer(),
                                       // Sort dropdown with arrow key navigation
                                       // Using Shortcuts widget to handle arrow keys without blocking DropdownButton's Enter key handling
@@ -14123,6 +14380,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ),
         ),
         ),
+        // Provider FAB — small screens only, above the bulk-select FAB
+        if (_torrents.isNotEmpty && !_isTelevision && _multipleServicesEnabled && !_isSelectionMode && MediaQuery.of(context).size.width < 500)
+          Positioned(
+            left: 16,
+            bottom: 62 + MediaQuery.of(context).padding.bottom,
+            child: GestureDetector(
+              onTap: _showProviderSwitchMenu,
+              child: Builder(
+                builder: (context) {
+                  final active = _activeProviderOption;
+                  return Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF334155),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        active?.name ?? 'RD',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
         // Bulk Add Button or Selection Mode Bar
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
           _isSelectionMode
@@ -14133,7 +14427,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   child: GestureDetector(
                     onTap: _enterSelectionMode,
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         color: const Color(0xFF334155),
                         shape: BoxShape.circle,
@@ -14145,7 +14440,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       child: const Icon(
                         Icons.checklist_rounded,
                         color: Colors.white,
-                        size: 20,
+                        size: 16,
                       ),
                     ),
                   ),
