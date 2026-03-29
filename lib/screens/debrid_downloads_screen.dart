@@ -128,12 +128,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
-  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'rd-first-item');
+  late final FocusNode _firstItemFocusNode;
   final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'rd-delete-btn');
+  final FocusNode _viewSelectorFocusNode = FocusNode(debugLabel: 'rd-view-selector');
   List<FocusNode> _selectionFocusNodes = [];
 
   // Flag to focus first item after data loads (set by TV content focus handler)
   bool _shouldFocusOnLoad = false;
+
+  // Torrent list search state
+  bool _isTorrentSearchActive = false;
+  final TextEditingController _torrentSearchController = TextEditingController();
+  List<RDTorrent> _allTorrentsForSearch = [];
+  bool _isLoadingSearch = false;
+  String _torrentSearchQuery = '';
 
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
@@ -146,6 +154,42 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Initialize first item focus node with DPAD up handler
+    _firstItemFocusNode = FocusNode(
+      debugLabel: 'rd-first-item',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (_isTorrentSearchActive) {
+            _torrentSearchFocusNode.requestFocus();
+          } else {
+            _viewSelectorFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    // Initialize torrent search focus node with DPAD key handler
+    _torrentSearchFocusNode = FocusNode(
+      debugLabel: 'rd-torrent-search',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _viewSelectorFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          _firstItemFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
     _checkIfTelevision();
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
@@ -289,6 +333,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
     _searchClearFocusNode.dispose();
+    _viewSelectorFocusNode.dispose();
+    _torrentSearchController.dispose();
+    _torrentSearchFocusNode.dispose();
+    _torrentSearchClearFocusNode.dispose();
 
     super.dispose();
   }
@@ -473,6 +521,78 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         });
       }
     }
+  }
+
+  // Torrent list search methods
+
+  void _toggleTorrentSearch() {
+    setState(() {
+      _isTorrentSearchActive = !_isTorrentSearchActive;
+      if (!_isTorrentSearchActive) {
+        _torrentSearchController.clear();
+        _torrentSearchQuery = '';
+        _allTorrentsForSearch.clear();
+      }
+    });
+  }
+
+  void _submitTorrentSearch() {
+    final query = _torrentSearchController.text.trim();
+    if (query.isEmpty) return;
+    setState(() => _torrentSearchQuery = query);
+    if (_allTorrentsForSearch.isEmpty && !_isLoadingSearch) {
+      _fetchAllTorrentsForSearch();
+    } else {
+      setState(() {}); // Trigger rebuild with new query
+    }
+  }
+
+  Future<void> _fetchAllTorrentsForSearch() async {
+    if (_apiKey == null) return;
+    setState(() => _isLoadingSearch = true);
+
+    try {
+      final List<RDTorrent> allTorrents = [];
+      int page = 1;
+      bool hasMore = true;
+
+      while (hasMore) {
+        final result = await DebridService.getTorrents(
+          _apiKey!,
+          page: page,
+          limit: 2000,
+        );
+        final List<RDTorrent> batch = result['torrents'];
+        allTorrents.addAll(batch);
+        hasMore = result['hasMore'] && batch.isNotEmpty;
+        page++;
+        // Safety cap at 3 pages (6000 torrents max)
+        if (page > 3) break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _allTorrentsForSearch = allTorrents;
+          _isLoadingSearch = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingSearch = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load torrents for search: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  List<RDTorrent> get _filteredSearchTorrents {
+    final downloaded = _allTorrentsForSearch.where((t) => t.isDownloaded);
+    if (_torrentSearchQuery.isEmpty) return downloaded.toList();
+    final query = _torrentSearchQuery.toLowerCase();
+    return downloaded
+        .where((t) => t.filename.toLowerCase().contains(query))
+        .toList();
   }
 
   // Downloads methods
@@ -2904,7 +3024,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<_DebridDownloadsView>(
+        child: Focus(
+          skipTraversal: true,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+              if (_isTorrentSearchActive) {
+                _torrentSearchFocusNode.requestFocus();
+              } else {
+                _firstItemFocusNode.requestFocus();
+              }
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: DropdownButton<_DebridDownloadsView>(
+          focusNode: _viewSelectorFocusNode,
           value: _selectedView,
           dropdownColor: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
@@ -2929,6 +3064,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               setState(() => _selectedView = value);
             }
           },
+        ),
         ),
       ),
     );
@@ -3023,6 +3159,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           _buildViewSelector(),
           const Spacer(),
+          Tooltip(
+            message: _isTorrentSearchActive ? 'Close search' : 'Search torrents',
+            child: IconButton(
+              onPressed: _toggleTorrentSearch,
+              icon: Icon(
+                _isTorrentSearchActive ? Icons.search_off_rounded : Icons.search_rounded,
+              ),
+              color: _isTorrentSearchActive
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
           if (_torrents.isNotEmpty) ...[
             Tooltip(
               message: _isSelectionMode ? 'Exit selection' : 'Select items',
@@ -3233,9 +3382,150 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Column(
       children: [
         _buildTorrentToolbar(),
+        if (_isTorrentSearchActive) _buildTorrentSearchBar(),
         if (_isSelectionMode) _buildSelectionBar(),
-        Expanded(child: body),
+        Expanded(child: _isTorrentSearchActive ? _buildTorrentSearchResults() : body),
       ],
+    );
+  }
+
+  // Focus nodes for torrent search DPAD navigation
+  late final FocusNode _torrentSearchFocusNode;
+  final FocusNode _torrentSearchClearFocusNode = FocusNode(debugLabel: 'rd-torrent-search-clear');
+
+  Widget _buildTorrentSearchBar() {
+    final hasText = _torrentSearchController.text.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+                controller: _torrentSearchController,
+                focusNode: _torrentSearchFocusNode,
+                autofocus: true,
+                onSubmitted: (_) => _submitTorrentSearch(),
+                textInputAction: TextInputAction.search,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search your torrents...',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                  prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                  ),
+                ),
+              ),
+            ),
+          if (hasText)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Focus(
+                focusNode: _torrentSearchClearFocusNode,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.select ||
+                      key == LogicalKeyboardKey.enter ||
+                      key == LogicalKeyboardKey.space) {
+                    _torrentSearchController.clear();
+                    setState(() => _torrentSearchQuery = '');
+                    _torrentSearchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.arrowLeft) {
+                    _torrentSearchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = Focus.of(context).hasFocus;
+                    return IconButton(
+                      onPressed: () {
+                        _torrentSearchController.clear();
+                        setState(() => _torrentSearchQuery = '');
+                        _torrentSearchFocusNode.requestFocus();
+                      },
+                      icon: Icon(
+                        Icons.clear_rounded,
+                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.4),
+                        size: 18,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTorrentSearchResults() {
+    if (_isLoadingSearch) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading all torrents...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    final results = _filteredSearchTorrents;
+
+    if (_torrentSearchQuery.isEmpty) {
+      return Center(
+        child: Text(
+          'Type a keyword and press search',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+        ),
+      );
+    }
+
+    if (results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+            const SizedBox(height: 12),
+            Text(
+              'No results',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final torrent = results[index];
+        return KeyedSubtree(
+          key: ValueKey('search_${torrent.id}'),
+          child: _buildTorrentCard(torrent, index),
+        );
+      },
     );
   }
 
@@ -4280,12 +4570,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
       );
 
-      // Get torrent info to access file names
+      // Get torrent info to access file names and links
       final torrentInfo = await DebridService.getTorrentInfo(
         _apiKey!,
         torrent.id,
       );
       final files = torrentInfo['files'] as List<dynamic>?;
+      final infoLinks = (torrentInfo['links'] as List<dynamic>? ?? [])
+          .map((l) => l?.toString() ?? '')
+          .toList();
 
       if (files == null || files.isEmpty) {
         if (mounted) Navigator.of(context).pop(); // close loading
@@ -4305,7 +4598,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Check if this is an archive (multiple files, single link)
       bool isArchive = false;
-      if (filesToUse.length > 1 && torrent.links.length == 1) {
+      if (filesToUse.length > 1 && infoLinks.length == 1) {
         isArchive = true;
       }
 
@@ -4384,17 +4677,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
 
           // Check if we have a corresponding link
-          if (i >= torrent.links.length) {
-            // Skip if no corresponding link
+          if (i >= infoLinks.length) {
             continue;
           }
 
           if (i == firstEpisodeIndex) {
-            // First episode: try to unrestrict for immediate playback
             try {
               final unrestrictResult = await DebridService.unrestrictLink(
                 _apiKey!,
-                torrent.links[i],
+                infoLinks[i],
               );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
@@ -4407,37 +4698,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   ),
                 );
               } else {
-                // If unrestriction failed or returned empty URL, add as restricted link
                 entries.add(
                   PlaylistEntry(
-                    url: '', // Empty URL - will be filled when unrestricted
+                    url: '',
                     title: finalFilename,
                     relativePath: relativePath,
-                    restrictedLink: torrent.links[i],
+                    restrictedLink: infoLinks[i],
                     sizeBytes: sizeBytes,
                   ),
                 );
               }
             } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
               entries.add(
                 PlaylistEntry(
-                  url: '', // Empty URL - will be filled when unrestricted
+                  url: '',
                   title: finalFilename,
                   relativePath: relativePath,
-                  restrictedLink: torrent.links[i],
+                  restrictedLink: infoLinks[i],
                   sizeBytes: sizeBytes,
                 ),
               );
             }
           } else {
-            // Other episodes: keep restricted links for lazy loading
             entries.add(
               PlaylistEntry(
-                url: '', // Empty URL - will be filled when unrestricted
+                url: '',
                 title: finalFilename,
                 relativePath: relativePath,
-                restrictedLink: torrent.links[i],
+                restrictedLink: infoLinks[i],
                 sizeBytes: sizeBytes,
               ),
             );
@@ -4452,13 +4740,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               file['filename']?.toString() ??
               file['path']?.toString();
 
-          // Save full path for relativePath before stripping to filename
           String? relativePath = filename;
           if (relativePath != null && relativePath.startsWith('/')) {
-            relativePath = relativePath.substring(1); // Remove leading slash
+            relativePath = relativePath.substring(1);
           }
 
-          // If we got a path, extract just the filename
           if (filename != null && filename.startsWith('/')) {
             filename = filename.split('/').last;
           }
@@ -4466,18 +4752,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           final finalFilename = filename ?? 'Unknown File';
           final int? sizeBytes = (file is Map) ? (file['bytes'] as int?) : null;
 
-          // Check if we have a corresponding link
-          if (i >= torrent.links.length) {
-            // Skip if no corresponding link
+          if (i >= infoLinks.length) {
             continue;
           }
 
           if (i == 0) {
-            // First video: try to unrestrict for immediate playback
             try {
               final unrestrictResult = await DebridService.unrestrictLink(
                 _apiKey!,
-                torrent.links[i],
+                infoLinks[i],
               );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
@@ -4490,37 +4773,34 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   ),
                 );
               } else {
-                // If unrestriction failed or returned empty URL, add as restricted link
                 entries.add(
                   PlaylistEntry(
-                    url: '', // Empty URL - will be filled when unrestricted
+                    url: '',
                     title: finalFilename,
                     relativePath: relativePath,
-                    restrictedLink: torrent.links[i],
+                    restrictedLink: infoLinks[i],
                     sizeBytes: sizeBytes,
                   ),
                 );
               }
             } catch (e) {
-              // If unrestriction fails, add as restricted link for lazy loading
               entries.add(
                 PlaylistEntry(
-                  url: '', // Empty URL - will be filled when unrestricted
+                  url: '',
                   title: finalFilename,
                   relativePath: relativePath,
-                  restrictedLink: torrent.links[i],
+                  restrictedLink: infoLinks[i],
                   sizeBytes: sizeBytes,
                 ),
               );
             }
           } else {
-            // Other videos: keep restricted links for lazy loading
             entries.add(
               PlaylistEntry(
-                url: '', // Empty URL - will be filled when unrestricted
+                url: '',
                 title: finalFilename,
                 relativePath: relativePath,
-                restrictedLink: torrent.links[i],
+                restrictedLink: infoLinks[i],
                 sizeBytes: sizeBytes,
               ),
             );

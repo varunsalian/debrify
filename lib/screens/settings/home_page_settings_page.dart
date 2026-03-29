@@ -43,6 +43,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
+      if (!mounted) return;
       setState(() {
         _addons = addons;
         _selectedSourceType = sourceType ?? 'all';
@@ -56,6 +57,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
