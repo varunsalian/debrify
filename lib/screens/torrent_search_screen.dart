@@ -2330,10 +2330,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
         if (episodeText.isNotEmpty) {
           episode = int.tryParse(episodeText);
-        } else if (season != null) {
-          // Default to episode 1 if season is specified in text mode
-          episode = 1;
         }
+        // Note: Don't default to episode 1 if episode is empty
+        // This allows searching entire season packs when only season is specified
       }
     }
 
