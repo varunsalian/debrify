@@ -1887,6 +1887,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           break;
       }
 
+      if (!mounted) return;
       setState(() {
         _currentTorrentId = torrent.id;
         _currentTorrent = torrent;
@@ -1899,6 +1900,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Focus first item after folder contents load
       _focusFirstItemOrFallback();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingFolder = false;
       });
@@ -2740,9 +2742,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
+  Widget _buildFolderLoadingView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: List.generate(4, (index) {
+        return _FolderLoadingShimmer(delay: index * 120);
+      }),
+    );
+  }
+
   Widget _buildFolderContentsView() {
     if (_isLoadingFolder) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildFolderLoadingView();
     }
 
     if (_currentViewNodes == null || _currentViewNodes!.isEmpty) {
@@ -3353,7 +3364,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _buildTorrentToolbar(),
         if (_isTorrentSearchActive) _buildTorrentSearchBar(),
         if (_isSelectionMode) _buildSelectionBar(),
-        Expanded(child: _isTorrentSearchActive ? _buildTorrentSearchResults() : body),
+        Expanded(child: _isLoadingFolder ? _buildFolderLoadingView() : _isTorrentSearchActive ? _buildTorrentSearchResults() : body),
       ],
     );
   }
@@ -7033,4 +7044,117 @@ class _RDSearchResult {
   final String path;
 
   const _RDSearchResult({required this.node, required this.path});
+}
+
+class _FolderLoadingShimmer extends StatefulWidget {
+  final int delay;
+  const _FolderLoadingShimmer({this.delay = 0});
+
+  @override
+  State<_FolderLoadingShimmer> createState() => _FolderLoadingShimmerState();
+}
+
+class _FolderLoadingShimmerState extends State<_FolderLoadingShimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _started = true;
+        _controller.repeat();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final shimmerValue = _started ? _animation.value : -1.0;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F2A44),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _shimmerBox(24, 24, shimmerValue),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _shimmerBox(double.infinity, 14, shimmerValue),
+                        const SizedBox(height: 8),
+                        _shimmerBox(120, 10, shimmerValue),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _shimmerBox(double.infinity, 36, shimmerValue, radius: 10)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _shimmerBox(double.infinity, 36, shimmerValue, radius: 10)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _shimmerBox(double width, double height, double shimmerValue, {double radius = 6}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          stops: [
+            (shimmerValue - 0.3).clamp(0.0, 1.0),
+            shimmerValue.clamp(0.0, 1.0),
+            (shimmerValue + 0.3).clamp(0.0, 1.0),
+          ],
+          colors: [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.12),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+        ),
+      ),
+    );
+  }
 }
