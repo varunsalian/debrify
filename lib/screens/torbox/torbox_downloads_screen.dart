@@ -90,7 +90,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   // Focus nodes for TV/DPAD navigation
   final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'torbox-view-mode');
-  final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'torbox-first-item');
+  late final FocusNode _firstItemFocusNode;
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'torbox-back');
 
   // Flag to focus first item after data loads (set by TV content focus handler)
@@ -103,6 +103,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'torbox-search-button');
   final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'torbox-search-clear');
   List<_TorboxSearchResult> _searchResults = [];
+
+  // Torrent-level search state (for root torrent list)
+  bool _isTorrentSearchActive = false;
+  final TextEditingController _torrentSearchController = TextEditingController();
+  late final FocusNode _torrentSearchFocusNode;
+  final FocusNode _torrentSearchClearFocusNode = FocusNode(debugLabel: 'torbox-torrent-search-clear');
+  final FocusNode _torrentSearchToggleFocusNode = FocusNode(debugLabel: 'torbox-torrent-search-toggle');
+  String _torrentSearchQuery = '';
+  List<TorboxTorrent> _allTorrentsForSearch = [];
+  bool _isLoadingTorrentSearch = false;
 
   // Multi-select state
   bool _isSelectionMode = false;
@@ -129,6 +139,40 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Initialize first item focus node with DPAD up handler
+    _firstItemFocusNode = FocusNode(
+      debugLabel: 'torbox-first-item',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (_isTorrentSearchActive) {
+            _torrentSearchFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
+    // Initialize torrent search focus node with DPAD navigation
+    _torrentSearchFocusNode = FocusNode(
+      debugLabel: 'torbox-torrent-search',
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowUp) {
+          _torrentSearchToggleFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          _firstItemFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+
     _scrollController.addListener(_onScroll);
     _webDownloadScrollController.addListener(_onWebDownloadScroll);
     _pendingInitialTorrent = widget.initialTorrentToOpen;
@@ -914,6 +958,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _searchFocusNode.dispose();
     _searchButtonFocusNode.dispose();
     _searchClearFocusNode.dispose();
+    _torrentSearchController.dispose();
+    _torrentSearchFocusNode.dispose();
+    _torrentSearchClearFocusNode.dispose();
+    _torrentSearchToggleFocusNode.dispose();
     _deleteButtonFocusNode.dispose();
     super.dispose();
   }
@@ -927,7 +975,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return true;
     }
 
-    // Close search first if active
+    // Close torrent search first if active
+    if (_isTorrentSearchActive) {
+      _toggleTorrentSearch();
+      return true;
+    }
+
+    // Close file search first if active
     if (_isSearchActive) {
       _toggleSearch();
       return true;
@@ -1017,6 +1071,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         _offset = 0;
         _hasMore = true;
         _torrents.clear();
+        _allTorrentsForSearch.clear();
       });
     } else {
       setState(() {
@@ -5380,7 +5435,86 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
-  // ============ Search Methods ============
+  // ============ Torrent-Level Search Methods ============
+
+  void _toggleTorrentSearch() {
+    setState(() {
+      _isTorrentSearchActive = !_isTorrentSearchActive;
+      if (!_isTorrentSearchActive) {
+        _torrentSearchController.clear();
+        _torrentSearchQuery = '';
+        _allTorrentsForSearch.clear();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _torrentSearchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  void _submitTorrentSearch() {
+    final query = _torrentSearchController.text.trim();
+    if (query.isEmpty) return;
+    if (_allTorrentsForSearch.isEmpty && !_isLoadingTorrentSearch) {
+      setState(() {
+        _torrentSearchQuery = query;
+        _isLoadingTorrentSearch = true;
+      });
+      _fetchAllTorrentsForSearch();
+    } else {
+      setState(() => _torrentSearchQuery = query);
+    }
+  }
+
+  Future<void> _fetchAllTorrentsForSearch() async {
+    final key = _apiKey;
+    if (key == null || key.isEmpty) return;
+
+    try {
+      final List<TorboxTorrent> allTorrents = [];
+      int offset = 0;
+      const limit = 1000;
+      bool hasMore = true;
+
+      while (hasMore) {
+        final result = await TorboxService.getTorrents(
+          key,
+          offset: offset,
+          limit: limit,
+        );
+        final List<TorboxTorrent> batch = (result['torrents'] as List).cast<TorboxTorrent>();
+        allTorrents.addAll(batch);
+        hasMore = result['hasMore'] as bool? ?? false;
+        offset += limit;
+        if (offset > 5000) break; // Safety cap
+      }
+
+      if (mounted) {
+        setState(() {
+          _allTorrentsForSearch = allTorrents;
+          _isLoadingTorrentSearch = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingTorrentSearch = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load torrents for search: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  List<TorboxTorrent> get _filteredTorrentSearchResults {
+    final source = _allTorrentsForSearch.isNotEmpty ? _allTorrentsForSearch : _torrents;
+    if (_torrentSearchQuery.isEmpty) return [];
+    final query = _torrentSearchQuery.toLowerCase();
+    return source
+        .where((t) => t.name.toLowerCase().contains(query))
+        .toList();
+  }
+
+  // ============ File Search Methods ============
 
   /// Toggle search mode on/off
   void _toggleSearch() {
@@ -5729,16 +5863,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
+          if (_isAtRoot && _isTorrentSearchActive) _buildTorrentSearchBar(),
           if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
           if (!_isAtRoot) _buildViewModeDropdown(),
           if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
-            child: _isSearchActive
-                ? _buildSearchResults()
-                : RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: _buildFilesFoldersList(),
-                  ),
+            child: _isTorrentSearchActive && _isAtRoot
+                ? _buildTorrentSearchResults()
+                : _isSearchActive
+                    ? _buildSearchResults()
+                    : RefreshIndicator(
+                        onRefresh: _refresh,
+                        child: _buildFilesFoldersList(),
+                      ),
           ),
         ],
       ),
@@ -6614,6 +6751,139 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
+  Widget _buildTorrentSearchBar() {
+    final hasText = _torrentSearchController.text.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _torrentSearchController,
+              focusNode: _torrentSearchFocusNode,
+              autofocus: true,
+              onSubmitted: (_) => _submitTorrentSearch(),
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search your torrents...',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                filled: true,
+                fillColor: const Color(0xFF1E293B),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+                ),
+              ),
+            ),
+          ),
+          if (hasText)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Focus(
+                focusNode: _torrentSearchClearFocusNode,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.select ||
+                      key == LogicalKeyboardKey.enter ||
+                      key == LogicalKeyboardKey.space) {
+                    _torrentSearchController.clear();
+                    setState(() => _torrentSearchQuery = '');
+                    _torrentSearchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.arrowLeft) {
+                    _torrentSearchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = Focus.of(context).hasFocus;
+                    return IconButton(
+                      onPressed: () {
+                        _torrentSearchController.clear();
+                        setState(() => _torrentSearchQuery = '');
+                        _torrentSearchFocusNode.requestFocus();
+                      },
+                      icon: Icon(
+                        Icons.clear_rounded,
+                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.4),
+                        size: 18,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTorrentSearchResults() {
+    if (_isLoadingTorrentSearch) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading all torrents...', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    if (_torrentSearchQuery.isEmpty) {
+      return Center(
+        child: Text(
+          'Type a keyword and press search',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+        ),
+      );
+    }
+
+    final results = _filteredTorrentSearchResults;
+
+    if (results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+            const SizedBox(height: 12),
+            Text(
+              'No results for "$_torrentSearchQuery"',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final torrent = results[index];
+        return _buildTorrentFolderCard(torrent, index);
+      },
+    );
+  }
+
   Widget _buildToolbar() {
     final theme = Theme.of(context);
     final isTorrentsView = _selectedView == _TorboxDownloadsView.torrents;
@@ -6657,6 +6927,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               ),
           ],
           if (isTorrentsView) ...[
+            Tooltip(
+              message: _isTorrentSearchActive ? 'Close search' : 'Search torrents',
+              child: IconButton(
+                focusNode: _torrentSearchToggleFocusNode,
+                onPressed: _toggleTorrentSearch,
+                icon: Icon(_isTorrentSearchActive ? Icons.search_off_rounded : Icons.search_rounded),
+                color: _isTorrentSearchActive ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
             Tooltip(
               message: 'Add magnet link',
               child: IconButton(
