@@ -523,6 +523,7 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
             height: isMobile
                 ? (isHero ? 180.0 : 155.0)
                 : (isHero ? 200.0 : 170),
+            clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
@@ -532,9 +533,7 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 width: isActive ? 1.5 : 0.5,
               ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
+            child: Stack(
                 fit: StackFit.expand,
                 children: [
                   // ── Poster image ──
@@ -762,7 +761,6 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   ),
                 ],
               ),
-            ),
           );
             },
           ),
@@ -802,9 +800,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
+            clipBehavior: Clip.hardEdge,
+            child: Stack(
                 fit: StackFit.expand,
                 children: [
                   // ── Poster image ──
@@ -1061,7 +1058,6 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                   ),
                 ],
               ),
-            ),
           );
             },
           ),

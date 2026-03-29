@@ -435,7 +435,8 @@ class _HomeDebrifyTvFavoritesSectionState
                     ),
                   ),
 
-                  // ── Decorative glow ──
+                  // ── Decorative glow (skip on TV for GPU perf) ──
+                  if (!widget.isTelevision)
                   Positioned(
                     top: -20,
                     right: -20,

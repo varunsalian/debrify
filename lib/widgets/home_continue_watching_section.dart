@@ -669,9 +669,7 @@ class _HomeContinueWatchingSectionState
         final contentType = item['contentType'] as String? ?? 'movie';
         final year = item['year'] as String? ?? '';
 
-        final cardContent = ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
+        final cardStack = Stack(
             fit: StackFit.expand,
             children: [
               // Backdrop image
@@ -872,7 +870,6 @@ class _HomeContinueWatchingSectionState
                       ),
               ),
             ],
-          ),
         );
 
         final cardDecoration = BoxDecoration(
@@ -900,8 +897,9 @@ class _HomeContinueWatchingSectionState
             child: Container(
               width: cardWidth,
               height: cardHeight,
+              clipBehavior: Clip.hardEdge,
               decoration: cardDecoration,
-              child: cardContent,
+              child: cardStack,
             ),
           );
         }
@@ -918,7 +916,10 @@ class _HomeContinueWatchingSectionState
             width: cardWidth,
             height: cardHeight,
             decoration: cardDecoration,
-            child: cardContent,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: cardStack,
+            ),
           ),
         );
       },
