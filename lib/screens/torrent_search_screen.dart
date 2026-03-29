@@ -2477,6 +2477,30 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _handleCatalogItemSelected(selection, updateSearchText: true);
   }
 
+  /// Search season packs for a series with full post-torrent actions (not source binding).
+  void _handleSearchPacks(StremioMeta show) {
+    debugPrint('TorrentSearchScreen: Search Packs triggered for ${show.name}');
+
+    // Ensure we are NOT in select-source mode — packs use normal post-torrent actions
+    if (_isSelectSourceMode) {
+      setState(() {
+        _isSelectSourceMode = false;
+        _selectSourceShow = null;
+      });
+    }
+
+    final selection = AdvancedSearchSelection(
+      imdbId: show.effectiveImdbId ?? show.id,
+      isSeries: show.type == 'series',
+      title: show.name,
+      year: show.year,
+      contentType: show.type,
+      posterUrl: show.poster,
+    );
+
+    _handleCatalogItemSelected(selection, updateSearchText: true);
+  }
+
   /// Switch from aggregated search to a specific addon's CatalogBrowser with episode drill-down.
   void _handleBrowseSeriesEpisodes(StremioMeta show, StremioAddon addon) {
     // Find the matching SearchSourceOption for this addon
@@ -13665,6 +13689,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _focusControlRow();
                           },
                           onSelectSource: _handleSelectSource,
+                          onSearchPacks: _handleSearchPacks,
                           onBrowseSeriesEpisodes: _handleBrowseSeriesEpisodes,
                         ),
                       ),
@@ -13692,6 +13717,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _focusControlRow();
                           },
                           onSelectSource: _handleSelectSource,
+                          onSearchPacks: _handleSearchPacks,
                           onEpisodeModeExited: _handleEpisodeModeExited,
                         ),
                       ),
@@ -13753,6 +13779,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           showQuickPlay: _defaultTorrentProvider != 'pikpak',
                           onUpArrowFromFilters: () => _sourceDropdownFocusNode.requestFocus(),
                           onSelectSource: _handleSelectSource,
+                          onSearchPacks: _handleSearchPacks,
                         ),
                       ),
 
@@ -14613,6 +14640,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           });
           _handleSelectSource(meta);
         },
+        onSearchPacks: (selection) {
+          final meta = StremioMeta.fromJson({
+            'id': selection.imdbId,
+            'name': selection.title,
+            'type': selection.contentType ?? 'series',
+            'year': selection.year,
+            'poster': selection.posterUrl,
+          });
+          _handleSearchPacks(meta);
+        },
         onRequestFocusAbove: () {
           _focusControlRow();
         },
@@ -14668,6 +14705,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         },
         onBrowseShow: (show) => _browseTraktShow(show),
         onSelectSource: _handleSelectSource,
+        onSearchPacks: _handleSearchPacks,
         onRequestFocusAbove: () {
           final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingShows);
           if (prev != null) {

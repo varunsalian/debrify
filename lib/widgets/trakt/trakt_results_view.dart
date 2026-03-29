@@ -152,6 +152,9 @@ class TraktResultsView extends StatefulWidget {
   /// Parent should trigger series probing search in select-source mode.
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Called when user selects "Search Season Packs" for a series.
+  final void Function(StremioMeta show)? onSearchPacks;
+
   const TraktResultsView({
     super.key,
     required this.searchQuery,
@@ -161,6 +164,7 @@ class TraktResultsView extends StatefulWidget {
     this.showQuickPlay = true,
     this.onUpArrowFromFilters,
     this.onSelectSource,
+    this.onSearchPacks,
   });
 
   @override
@@ -746,6 +750,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case TraktItemMenuAction.selectSource:
         _handleSelectSourceAction(item);
         return; // Handled via dialog, no snackbar needed
+      case TraktItemMenuAction.searchPacks:
+        widget.onSearchPacks?.call(item);
+        return;
     }
 
     if (!mounted) return;
@@ -2510,6 +2517,15 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 : 'Select Source'),
           ]),
         ),
+        if (widget.item.type == 'series')
+          const PopupMenuItem(
+            value: TraktItemMenuAction.searchPacks,
+            child: Row(children: [
+              Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFFFBBF24)),
+              SizedBox(width: 12),
+              Text('Search Season Packs'),
+            ]),
+          ),
       ],
       ),
     );

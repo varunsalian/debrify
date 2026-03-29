@@ -23,6 +23,7 @@ enum TraktItemMenuAction {
   removeFromList,
   removeFromPlayback,
   selectSource,
+  searchPacks,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -189,6 +190,7 @@ Future<void> handleTraktMenuAction(
   TraktItemMenuAction action, {
   void Function(StremioMeta)? onSelectSource,
   void Function(StremioMeta)? onEditSource,
+  void Function(StremioMeta)? onSearchPacks,
 }) async {
   final traktService = TraktService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
@@ -245,6 +247,9 @@ Future<void> handleTraktMenuAction(
       } else {
         onSelectSource?.call(item);
       }
+      return;
+    case TraktItemMenuAction.searchPacks:
+      onSearchPacks?.call(item);
       return;
   }
 
@@ -356,6 +361,15 @@ Widget buildTraktAddOnlyOverflowMenu({
               Text(hasBoundSource
                   ? (isMovie ? 'Edit Source' : 'Edit Sources')
                   : 'Select Source'),
+            ]),
+          ),
+        if (isSeries)
+          const PopupMenuItem(
+            value: TraktItemMenuAction.searchPacks,
+            child: Row(children: [
+              Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFFFBBF24)),
+              SizedBox(width: 12),
+              Text('Search Season Packs'),
             ]),
           ),
       ],

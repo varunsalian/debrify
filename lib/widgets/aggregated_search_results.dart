@@ -48,6 +48,9 @@ class AggregatedSearchResults extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta)? onSelectSource;
 
+  /// Callback when user selects "Search Season Packs" for a series
+  final void Function(StremioMeta)? onSearchPacks;
+
   /// Callback when user wants to browse a series with episode drill-down
   /// Passes the show and its source addon so the parent can switch to that addon's CatalogBrowser
   final void Function(StremioMeta show, StremioAddon addon)? onBrowseSeriesEpisodes;
@@ -63,6 +66,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
     this.onSelectSource,
+    this.onSearchPacks,
     this.onBrowseSeriesEpisodes,
   });
 
@@ -907,7 +911,8 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                         onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
                             ? (action) => handleTraktMenuAction(context, item, action,
                                 onSelectSource: widget.onSelectSource,
-                                onEditSource: _handleSelectSourceAction)
+                                onEditSource: _handleSelectSourceAction,
+                                onSearchPacks: widget.onSearchPacks)
                             : null,
                         hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
                         isTraktAuthenticated: _isTraktAuthenticated,

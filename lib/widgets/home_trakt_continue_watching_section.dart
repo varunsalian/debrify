@@ -23,6 +23,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
   final void Function(StremioMeta show)? onBrowseShow;
   final void Function(StremioMeta show)? onSelectSource;
+  final void Function(StremioMeta show)? onSearchPacks;
 
   const HomeTraktContinueWatchingSection({
     super.key,
@@ -36,6 +37,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
     this.onQuickPlay,
     this.onBrowseShow,
     this.onSelectSource,
+    this.onSearchPacks,
   });
 
   @override
@@ -428,6 +430,14 @@ class _HomeTraktContinueWatchingSectionState
                 color: const Color(0xFF60A5FA),
                 onTap: () => Navigator.pop(context, 'select_source'),
               ),
+            if (item.type == 'series' && widget.onSearchPacks != null)
+              _buildMenuItem(
+                icon: Icons.inventory_2_outlined,
+                label: 'Search Season Packs',
+                subtitle: 'Find full season packs to download or add',
+                color: const Color(0xFFFBBF24),
+                onTap: () => Navigator.pop(context, 'search_packs'),
+              ),
             Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
             _buildMenuItem(
               icon: Icons.remove_circle_outline_rounded,
@@ -455,6 +465,8 @@ class _HomeTraktContinueWatchingSectionState
       } else {
         widget.onSelectSource?.call(item);
       }
+    } else if (choice == 'search_packs') {
+      widget.onSearchPacks?.call(item);
     } else if (choice == 'remove') {
       _removePlayback(item);
     }

@@ -52,6 +52,9 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Callback when user selects "Search Season Packs" for a series
+  final void Function(StremioMeta show)? onSearchPacks;
+
   /// Callback when user exits episode drill-down mode (back button)
   final VoidCallback? onEpisodeModeExited;
 
@@ -65,6 +68,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onRequestFocusAbove,
     this.defaultCatalogId,
     this.onSelectSource,
+    this.onSearchPacks,
     this.onEpisodeModeExited,
   });
 
@@ -1984,7 +1988,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
                 ? (action) => handleTraktMenuAction(context, item, action,
                     onSelectSource: widget.onSelectSource,
-                    onEditSource: _handleSelectSourceAction)
+                    onEditSource: _handleSelectSourceAction,
+                    onSearchPacks: widget.onSearchPacks)
                 : null,
             hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
             isTraktAuthenticated: _isTraktAuthenticated,

@@ -22,6 +22,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
   final void Function(AdvancedSearchSelection selection)? onSelectSource;
+  final void Function(AdvancedSearchSelection selection)? onSearchPacks;
   final void Function(AdvancedSearchSelection selection, String? addonId)? onBrowseEpisodes;
 
   const HomeContinueWatchingSection({
@@ -33,6 +34,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
     this.onItemSelected,
     this.onQuickPlay,
     this.onSelectSource,
+    this.onSearchPacks,
     this.onBrowseEpisodes,
   });
 
@@ -252,6 +254,15 @@ class _HomeContinueWatchingSectionState
                     onTap: () => Navigator.pop(context, 'select_source'),
                     isTelevision: widget.isTelevision,
                   ),
+                if (isSeries && widget.onSearchPacks != null)
+                  _MenuItem(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Search Season Packs',
+                    subtitle: 'Find full season packs to download or add',
+                    color: const Color(0xFFFBBF24),
+                    onTap: () => Navigator.pop(context, 'search_packs'),
+                    isTelevision: widget.isTelevision,
+                  ),
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
                 _MenuItem(
                   icon: Icons.remove_circle_outline_rounded,
@@ -348,6 +359,8 @@ class _HomeContinueWatchingSectionState
       } else {
         widget.onSelectSource?.call(selection);
       }
+    } else if (choice == 'search_packs') {
+      widget.onSearchPacks?.call(selection);
     } else if (choice == 'remove') {
       final imdbId = item['imdbId'] as String?;
       if (imdbId != null) {
