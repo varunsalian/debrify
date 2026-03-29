@@ -279,6 +279,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _isLoadingSourceOptions = false;
   String? _defaultCatalogId;
   bool _hideProviderCards = false;
+  bool _continueWatchingEnabled = true;
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
   final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
   final FocusNode _searchToggleFocusNode = FocusNode(debugLabel: 'search_toggle');
@@ -446,6 +447,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _loadDefaultSettings();
     _detectTelevision();
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
+    MainPageBridge.addHomeSettingsListener(_handleHomeSettingsChanged);
 
     // Register TV sidebar focus handler (tab index 0 = Home/TorrentSearch)
     MainPageBridge.registerTvContentFocusHandler(0, _handleTvContentFocus);
@@ -1263,6 +1265,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _loadApiKeys();
   }
 
+  void _handleHomeSettingsChanged() async {
+    final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
+    final hideProviderCards = await StorageService.getHomeHideProviderCards();
+    if (!mounted) return;
+    setState(() {
+      _continueWatchingEnabled = continueWatchingEnabled;
+      _hideProviderCards = hideProviderCards;
+    });
+  }
+
   Future<void> _loadApiKeys() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
@@ -1298,6 +1310,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final defaultAddonUrl = await StorageService.getHomeDefaultAddonUrl();
       final defaultCatalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
+      final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
 
       SearchSourceOption? defaultOption;
       if (defaultSourceType != null && options.isNotEmpty) {
@@ -1321,6 +1334,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _isLoadingSourceOptions = false;
         _defaultCatalogId = defaultCatalogId;
         _hideProviderCards = hideProviderCards;
+        _continueWatchingEnabled = continueWatchingEnabled;
         if (defaultOption != null) {
           _selectedSource = defaultOption;
           // Set _searchMode to match the source type (mirrors _onSearchSourceChanged logic)
@@ -1568,6 +1582,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _engineTileFocusNodes.clear();
     _engineTileFocusStates.clear();
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
+    MainPageBridge.removeHomeSettingsListener(_handleHomeSettingsChanged);
     MainPageBridge.unregisterTvContentFocusHandler(0, _handleTvContentFocus);
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
@@ -14257,6 +14272,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
       // Continue Watching (local progress)
+      if (_continueWatchingEnabled)
       RepaintBoundary(child: HomeContinueWatchingSection(
         focusController: _homeFocusController,
         isTelevision: _isTelevision,
@@ -14312,6 +14328,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
+      if (_continueWatchingEnabled)
       _buildSectionDivider(),
       // Trakt Continue Watching - Movies
       RepaintBoundary(child: HomeTraktContinueWatchingSection(

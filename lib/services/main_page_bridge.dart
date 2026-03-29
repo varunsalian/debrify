@@ -98,6 +98,23 @@ class MainPageBridge {
     }
   }
 
+  static final List<VoidCallback> _homeSettingsListeners = [];
+
+  static void addHomeSettingsListener(VoidCallback listener) {
+    if (_homeSettingsListeners.contains(listener)) return;
+    _homeSettingsListeners.add(listener);
+  }
+
+  static void removeHomeSettingsListener(VoidCallback listener) {
+    _homeSettingsListeners.remove(listener);
+  }
+
+  static void notifyHomeSettingsChanged() {
+    for (final listener in List<VoidCallback>.from(_homeSettingsListeners)) {
+      listener();
+    }
+  }
+
   static void notifyPlayerLaunching() {
     hideAutoLaunchOverlay?.call();
   }

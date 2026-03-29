@@ -64,6 +64,7 @@ class StorageService {
   static const String _homeDefaultTraktListTypeKey = 'home_default_trakt_list_type';
   static const String _homeDefaultTraktContentTypeKey = 'home_default_trakt_content_type';
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
+  static const String _homeContinueWatchingEnabledKey = 'home_continue_watching_enabled';
   static const String _homeFavoritesOpenFolderKey = 'home_favorites_open_folder';
 
   // Startup settings
@@ -537,6 +538,7 @@ class StorageService {
     String? year,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool(_homeContinueWatchingEnabledKey) ?? true)) return;
     final raw = prefs.getString(_continueWatchingKey);
     List<Map<String, dynamic>> items = [];
     if (raw != null && raw.isNotEmpty) {
@@ -2649,6 +2651,16 @@ class StorageService {
     await prefs.setBool(_homeHideProviderCardsKey, value);
   }
 
+  static Future<bool> getHomeContinueWatchingEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_homeContinueWatchingEnabledKey) ?? true;
+  }
+
+  static Future<void> setHomeContinueWatchingEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_homeContinueWatchingEnabledKey, value);
+  }
+
   static Future<String> getHomeFavoritesTapAction() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
@@ -2665,6 +2677,7 @@ class StorageService {
     await prefs.remove(_homeDefaultAddonUrlKey);
     await prefs.remove(_homeDefaultCatalogIdKey);
     await prefs.remove(_homeHideProviderCardsKey);
+    await prefs.remove(_homeContinueWatchingEnabledKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
   }
 

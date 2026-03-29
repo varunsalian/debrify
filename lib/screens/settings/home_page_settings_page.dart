@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 
@@ -18,6 +19,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _selectedTraktListType = 'progress';
   String _selectedTraktContentType = 'movies';
   bool _hideProviderCards = false;
+  bool _continueWatchingEnabled = true;
   String _favoritesTapAction = 'choose';
   List<StremioAddon> _addons = [];
 
@@ -36,6 +38,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final addonUrl = await StorageService.getHomeDefaultAddonUrl();
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
+      final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
       final favoritesTapAction = await StorageService.getHomeFavoritesTapAction();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
@@ -48,6 +51,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _selectedTraktListType = traktListType ?? 'progress';
         _selectedTraktContentType = traktContentType ?? 'movies';
         _hideProviderCards = hideProviderCards;
+        _continueWatchingEnabled = continueWatchingEnabled;
         _favoritesTapAction = favoritesTapAction;
         _loading = false;
       });
@@ -137,9 +141,11 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   Future<void> _toggleHideProviderCards(bool value) async {
     try {
       await StorageService.setHomeHideProviderCards(value);
+      if (!mounted) return;
       setState(() {
         _hideProviderCards = value;
       });
+      MainPageBridge.notifyHomeSettingsChanged();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -438,6 +444,36 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 value: _hideProviderCards,
                 onChanged: (value) => _toggleHideProviderCards(value),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Continue Watching toggle
+            Card(
+              child: SwitchListTile(
+                secondary: Icon(
+                  Icons.history_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text('Continue Watching'),
+                subtitle: const Text(
+                  'Show and track recently watched items on the home screen',
+                ),
+                value: _continueWatchingEnabled,
+                onChanged: (value) async {
+                  try {
+                    await StorageService.setHomeContinueWatchingEnabled(value);
+                    if (!mounted) return;
+                    setState(() => _continueWatchingEnabled = value);
+                    MainPageBridge.notifyHomeSettingsChanged();
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save setting: $e')),
+                      );
+                    }
+                  }
+                },
               ),
             ),
             const SizedBox(height: 16),
