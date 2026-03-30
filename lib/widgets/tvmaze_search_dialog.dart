@@ -18,8 +18,9 @@ class TVMazeSearchDialog extends StatefulWidget {
 class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _listFocusNode = FocusNode();
+  final FocusNode _cancelFocusNode = FocusNode();
   final ScrollController _listScrollController = ScrollController();
+  final List<FocusNode> _itemFocusNodes = [];
 
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
@@ -43,9 +44,21 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _listFocusNode.dispose();
+    _cancelFocusNode.dispose();
     _listScrollController.dispose();
+    for (final node in _itemFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  void _ensureItemFocusNodes() {
+    while (_itemFocusNodes.length < _searchResults.length) {
+      _itemFocusNodes.add(FocusNode());
+    }
+    while (_itemFocusNodes.length > _searchResults.length) {
+      _itemFocusNodes.removeLast().dispose();
+    }
   }
 
   Future<void> _performSearch() async {
@@ -64,13 +77,17 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
       setState(() {
         _searchResults = results;
         _isSearching = false;
+        _ensureItemFocusNodes();
         if (results.isEmpty) {
           _errorMessage = 'No shows found for "$query"';
         } else {
-          // Auto-select first result for better DPAD navigation
           _selectedIndex = 0;
-          // Move focus to list after search completes
-          _listFocusNode.requestFocus();
+          // Focus first result for DPAD
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_itemFocusNodes.isNotEmpty && mounted) {
+              _itemFocusNodes[0].requestFocus();
+            }
+          });
         }
       });
     } catch (e) {
@@ -87,32 +104,106 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
 
   void _scrollToSelectedItem() {
     if (!_listScrollController.hasClients || _selectedIndex < 0) return;
-    // Each item is roughly 144px (120px poster + 12px padding top/bottom) + 8px separator
-    const estimatedItemHeight = 152.0;
+    final isCompact = MediaQuery.of(context).size.width < 500;
+    final estimatedItemHeight = isCompact ? 110.0 : 152.0;
     final targetOffset = _selectedIndex * estimatedItemHeight;
     final maxScroll = _listScrollController.position.maxScrollExtent;
     final viewportHeight = _listScrollController.position.viewportDimension;
 
-    // Only scroll if the item is outside the visible area
     final currentScroll = _listScrollController.offset;
     final itemTop = targetOffset;
     final itemBottom = targetOffset + estimatedItemHeight;
 
     if (itemBottom > currentScroll + viewportHeight) {
-      // Item is below viewport — scroll down
       _listScrollController.animateTo(
         (itemBottom - viewportHeight).clamp(0.0, maxScroll),
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
     } else if (itemTop < currentScroll) {
-      // Item is above viewport — scroll up
       _listScrollController.animateTo(
         itemTop.clamp(0.0, maxScroll),
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
     }
+  }
+
+  /// Handle DPAD key events on the search field
+  KeyEventResult _handleSearchKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_searchResults.isNotEmpty) {
+        setState(() => _selectedIndex = 0);
+        _itemFocusNodes[0].requestFocus();
+        _scrollToSelectedItem();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Handle DPAD key events on result items
+  KeyEventResult _handleItemKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (_selectedIndex < _searchResults.length - 1) {
+        setState(() => _selectedIndex++);
+        _itemFocusNodes[_selectedIndex].requestFocus();
+        _scrollToSelectedItem();
+        return KeyEventResult.handled;
+      } else {
+        // At last item, move to cancel button
+        _cancelFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (_selectedIndex > 0) {
+        setState(() => _selectedIndex--);
+        _itemFocusNodes[_selectedIndex].requestFocus();
+        _scrollToSelectedItem();
+        return KeyEventResult.handled;
+      } else {
+        // At first item, move to search bar
+        setState(() => _selectedIndex = -1);
+        _searchFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.select) {
+      if (_selectedIndex >= 0 && _selectedIndex < _searchResults.length) {
+        _selectShow(_searchResults[_selectedIndex]);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Handle DPAD key events on cancel button
+  KeyEventResult _handleCancelKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (_searchResults.isNotEmpty) {
+        setState(() => _selectedIndex = _searchResults.length - 1);
+        _itemFocusNodes[_selectedIndex].requestFocus();
+        _scrollToSelectedItem();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return KeyEventResult.handled;
+    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.select) {
+      Navigator.of(context).pop();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Widget _buildShowTile(Map<String, dynamic> show, int index, bool isSelected) {
@@ -124,8 +215,14 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
     final imageUrl = show['image']?['medium'] ?? show['image']?['original'];
     final rating = show['rating']?['average'];
     final status = show['status'] ?? '';
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 500;
+    final posterWidth = isCompact ? 56.0 : 80.0;
+    final posterHeight = isCompact ? 84.0 : 120.0;
 
     return Focus(
+      focusNode: _itemFocusNodes[index],
+      onKeyEvent: _handleItemKeyEvent,
       onFocusChange: (hasFocus) {
         if (hasFocus) {
           setState(() {
@@ -136,7 +233,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
       child: InkWell(
         onTap: () => _selectShow(show),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(isCompact ? 8 : 12),
           decoration: BoxDecoration(
             color: isSelected ? kPremiumBlue.withOpacity(0.1) : Colors.transparent,
             border: Border.all(
@@ -150,8 +247,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
             children: [
               // Show poster
               Container(
-                width: 80,
-                height: 120,
+                width: posterWidth,
+                height: posterHeight,
                 decoration: BoxDecoration(
                   color: const Color(0xFF333333),
                   borderRadius: BorderRadius.circular(4),
@@ -175,18 +272,18 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                         ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isCompact ? 8 : 12),
               // Show details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title and year
+                    // Title
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: isCompact ? 14 : 16,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
@@ -194,9 +291,11 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                     ),
                     const SizedBox(height: 4),
                     // Metadata row
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
-                        if (premiered.isNotEmpty) ...[
+                        if (premiered.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -212,9 +311,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (status.isNotEmpty) ...[
+                        if (status.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -232,19 +329,21 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (rating != null) ...[
-                          Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 2),
-                          Text(
-                            rating.toString(),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
+                        if (rating != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star, color: Colors.amber, size: 14),
+                              const SizedBox(width: 2),
+                              Text(
+                                rating.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
                       ],
                     ),
                     if (network.isNotEmpty) ...[
@@ -271,7 +370,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                    if (summary.isNotEmpty) ...[
+                    if (summary.isNotEmpty && !isCompact) ...[
                       const SizedBox(height: 6),
                       Text(
                         summary,
@@ -296,97 +395,97 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 500;
+
     return Dialog(
       backgroundColor: const Color(0xFF0F172A),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 12 : 40,
+        vertical: isCompact ? 24 : 40,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.8,
+        width: isCompact ? double.infinity : screenWidth * 0.8,
         height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 14 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.search,
                   color: kPremiumBlue,
-                  size: 28,
+                  size: isCompact ? 22 : 28,
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Fix Metadata - Search TVMaze',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isCompact ? 'Fix Metadata' : 'Fix Metadata - Search TVMaze',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: isCompact ? 16 : 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
                 // Close button
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close, color: Colors.white70),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: isCompact ? 12 : 20),
 
             // Search field
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Enter show name...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.1),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: kPremiumBlue, width: 2),
-                      ),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                    ),
-                    onSubmitted: (_) => _performSearch(),
+            Focus(
+              onKeyEvent: _handleSearchKeyEvent,
+              canRequestFocus: false, // Let the TextField handle focus
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Enter show name...',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.1),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: kPremiumBlue, width: 2),
+                  ),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                  suffixIcon: IconButton(
+                    onPressed: _isSearching ? null : _performSearch,
+                    icon: _isSearching
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: kPremiumBlue,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.arrow_forward, color: kPremiumBlue),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _isSearching ? null : _performSearch,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPremiumBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: _isSearching
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Search'),
-                ),
-              ],
+                onSubmitted: (_) => _performSearch(),
+              ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: isCompact ? 12 : 20),
 
             // Search results
             Expanded(
@@ -436,78 +535,50 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                                 ],
                               ),
                             )
-                          : Shortcuts(
-                              shortcuts: <LogicalKeySet, Intent>{
-                                LogicalKeySet(LogicalKeyboardKey.arrowUp): const _MoveSelectionIntent(-1),
-                                LogicalKeySet(LogicalKeyboardKey.arrowDown): const _MoveSelectionIntent(1),
-                                LogicalKeySet(LogicalKeyboardKey.enter): const _SelectItemIntent(),
-                                LogicalKeySet(LogicalKeyboardKey.select): const _SelectItemIntent(),
+                          : ListView.separated(
+                              controller: _listScrollController,
+                              itemCount: _searchResults.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final show = _searchResults[index];
+                                final isSelected = index == _selectedIndex;
+                                return _buildShowTile(show, index, isSelected);
                               },
-                              child: Actions(
-                                actions: <Type, Action<Intent>>{
-                                  _MoveSelectionIntent: CallbackAction<_MoveSelectionIntent>(
-                                    onInvoke: (intent) {
-                                      setState(() {
-                                        if (intent.direction == -1) {
-                                          // Move up
-                                          if (_selectedIndex > 0) {
-                                            _selectedIndex--;
-                                          }
-                                        } else {
-                                          // Move down
-                                          if (_selectedIndex < _searchResults.length - 1) {
-                                            _selectedIndex++;
-                                          }
-                                        }
-                                      });
-                                      // Scroll to keep selected item visible
-                                      _scrollToSelectedItem();
-                                      return null;
-                                    },
-                                  ),
-                                  _SelectItemIntent: CallbackAction<_SelectItemIntent>(
-                                    onInvoke: (_) {
-                                      if (_selectedIndex >= 0 && _selectedIndex < _searchResults.length) {
-                                        _selectShow(_searchResults[_selectedIndex]);
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                },
-                                child: Focus(
-                                  focusNode: _listFocusNode,
-                                  autofocus: _searchResults.isNotEmpty,
-                                  child: ListView.separated(
-                                    controller: _listScrollController,
-                                    itemCount: _searchResults.length,
-                                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                                    itemBuilder: (context, index) {
-                                      final show = _searchResults[index];
-                                      final isSelected = index == _selectedIndex;
-                                      return _buildShowTile(show, index, isSelected);
-                                    },
-                                  ),
-                                ),
-                              ),
                             ),
             ),
 
-            // Instructions
-            Container(
+            // Cancel button
+            Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.keyboard, color: Colors.white.withOpacity(0.3), size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Use arrow keys to navigate • Enter to select • ESC to cancel',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.3),
-                      fontSize: 12,
-                    ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Focus(
+                  focusNode: _cancelFocusNode,
+                  onKeyEvent: _handleCancelKeyEvent,
+                  onFocusChange: (hasFocus) {
+                    if (hasFocus) setState(() => _selectedIndex = -1);
+                  },
+                  child: Builder(
+                    builder: (context) {
+                      final isFocused = Focus.of(context).hasFocus;
+                      return OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(
+                            color: isFocused ? kPremiumBlue : Colors.white24,
+                            width: isFocused ? 2 : 1,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      );
+                    },
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -515,14 +586,4 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
       ),
     );
   }
-}
-
-// Custom intents for keyboard navigation
-class _MoveSelectionIntent extends Intent {
-  final int direction;
-  const _MoveSelectionIntent(this.direction);
-}
-
-class _SelectItemIntent extends Intent {
-  const _SelectItemIntent();
 }
