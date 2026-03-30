@@ -229,6 +229,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   bool _showSearchField = false;
+  bool _traktAuthenticated = false;
+  bool _traktSyncCatalog = false;
   int _activeSearchRequestId = 0;
   String? _apiKey;
   String? _torboxApiKey;
@@ -284,6 +286,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _sourceDropdownFocusNode = FocusNode(debugLabel: 'source_dropdown');
   final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
   final FocusNode _searchToggleFocusNode = FocusNode(debugLabel: 'search_toggle');
+  final FocusNode _traktSyncFocusNode = FocusNode(debugLabel: 'trakt_sync');
 
   ImdbTitleResult? _selectedImdbTitle;
   bool _isSeries = false;
@@ -459,6 +462,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!mounted) return;
       setState(() {
         _torboxCacheCheckEnabled = enabled;
+      });
+    });
+
+    // Load Trakt sync state
+    Future.wait([
+      TraktService.instance.isAuthenticated(),
+      StorageService.getTraktSyncCatalogItems(),
+    ]).then((results) {
+      if (!mounted) return;
+      setState(() {
+        _traktAuthenticated = results[0] as bool;
+        _traktSyncCatalog = results[1] as bool;
       });
     });
 
@@ -1563,6 +1578,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _sourceDropdownFocusNode.dispose();
     _clearButtonFocusNode.dispose();
     _searchToggleFocusNode.dispose();
+    _traktSyncFocusNode.dispose();
 
     // Dispose IMDB Smart Search Mode resources
     _modeSelectorFocusNode.dispose();
@@ -2281,9 +2297,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onLeftArrowPressed: () {
         _searchToggleFocusNode.requestFocus();
       },
-      // Right arrow: go to Sources / control row
+      // Right arrow: go to Trakt button if visible, otherwise Sources / control row
       onRightArrowPressed: () {
-        _focusControlRow();
+        if (_traktAuthenticated && (_selectedSource.type == SearchSourceType.all || (_selectedSource.type == SearchSourceType.addon && _selectedSource.addon != null && _selectedSource.addon!.supportsCatalogs))) {
+          _traktSyncFocusNode.requestFocus();
+        } else {
+          _focusControlRow();
+        }
       },
       // Up arrow: go to search bar
       onUpArrowPressed: () {
@@ -4080,6 +4100,115 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleTraktSync() {
+    setState(() {
+      _traktSyncCatalog = !_traktSyncCatalog;
+    });
+    StorageService.setTraktSyncCatalogItems(_traktSyncCatalog);
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _traktSyncCatalog ? 'Trakt sync enabled' : 'Trakt sync disabled',
+        ),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildTraktSyncButton() {
+    final isFocused = _traktSyncFocusNode.hasFocus;
+    return GestureDetector(
+      onTap: _toggleTraktSync,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: _traktSyncCatalog
+              ? const Color(0xFF4ADE80).withValues(alpha: 0.15)
+              : const Color(0xFFFF6B6B).withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isFocused
+                ? Colors.white.withValues(alpha: 0.8)
+                : _traktSyncCatalog
+                    ? const Color(0xFF4ADE80).withValues(alpha: 0.5)
+                    : const Color(0xFFFF6B6B).withValues(alpha: 0.5),
+            width: isFocused ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sync_rounded,
+              size: 15,
+              color: _traktSyncCatalog
+                  ? const Color(0xFF4ADE80)
+                  : const Color(0xFFFF6B6B),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Trakt',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _traktSyncCatalog
+                    ? const Color(0xFF4ADE80)
+                    : const Color(0xFFFF6B6B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTraktSyncFab() {
+    return GestureDetector(
+      onTap: _toggleTraktSync,
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: _traktSyncCatalog
+              ? const Color(0xFF4ADE80).withValues(alpha: 0.15)
+              : const Color(0xFFFF6B6B).withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _traktSyncCatalog
+                ? const Color(0xFF4ADE80).withValues(alpha: 0.6)
+                : const Color(0xFFFF6B6B).withValues(alpha: 0.6),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sync_rounded,
+              size: 16,
+              color: _traktSyncCatalog
+                  ? const Color(0xFF4ADE80)
+                  : const Color(0xFFFF6B6B),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Trakt',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _traktSyncCatalog
+                    ? const Color(0xFF4ADE80)
+                    : const Color(0xFFFF6B6B),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -13577,7 +13706,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             )
                           : const SizedBox.shrink(),
                     ),
-                    // Control row — centered
+                    // Control row — centered controls with Trakt button end-aligned
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -13661,6 +13793,35 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           const SizedBox(width: 10),
                           _buildCompactSourcesButton(context),
                         ],
+                      ],
+                    ),
+                    // Trakt sync toggle — end-aligned, wide screens only
+                    if (_traktAuthenticated && MediaQuery.of(context).size.width >= 500 && (_selectedSource.type == SearchSourceType.all || (_selectedSource.type == SearchSourceType.addon && _selectedSource.addon != null && _selectedSource.addon!.supportsCatalogs)))
+                      Positioned(
+                        right: 16,
+                        child: Focus(
+                          focusNode: _traktSyncFocusNode,
+                          onFocusChange: (focused) => setState(() {}),
+                          onKeyEvent: (node, event) {
+                            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                            if (event.logicalKey == LogicalKeyboardKey.enter ||
+                                event.logicalKey == LogicalKeyboardKey.select) {
+                              _toggleTraktSync();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                              _sourceDropdownFocusNode.requestFocus();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                              _focusBelowSourceBar();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: _buildTraktSyncButton(),
+                        ),
+                      ),
                       ],
                     ),
                   ],
@@ -14455,6 +14616,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 },
               ),
             ),
+          ),
+        // Trakt sync FAB — small screens only
+        if (_traktAuthenticated && !_isTelevision && !_isSelectionMode && MediaQuery.of(context).size.width < 500 && (_selectedSource.type == SearchSourceType.all || (_selectedSource.type == SearchSourceType.addon && _selectedSource.addon != null && _selectedSource.addon!.supportsCatalogs)))
+          Positioned(
+            left: 12,
+            bottom: 12 + MediaQuery.of(context).padding.bottom,
+            child: _buildTraktSyncFab(),
           ),
         // Bulk Add Button or Selection Mode Bar
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
