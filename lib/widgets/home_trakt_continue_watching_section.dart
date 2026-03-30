@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -56,6 +57,7 @@ class _HomeTraktContinueWatchingSectionState
   /// For shows, stores all playback IDs for that show.
   Map<String, List<int>> _playbackIds = {};
   bool _isLoading = true;
+  int _loadGeneration = 0;
 
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
@@ -109,113 +111,121 @@ class _HomeTraktContinueWatchingSectionState
   // ── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadItems() async {
+    final gen = ++_loadGeneration;
     setState(() => _isLoading = true);
 
     try {
-      final isAuth = await _traktService.isAuthenticated();
-      if (!isAuth) {
-        _finishEmpty();
-        return;
-      }
-
-      var rawItems =
-          await _traktService.fetchPlaybackItems(widget.contentType);
-      if (!mounted) return;
-
-      // For shows: also find recently watched shows with next episode available
-      if (widget.contentType == 'episodes') {
-        final playbackImdbIds = <String>{};
-        for (final raw in rawItems) {
-          if (raw is! Map<String, dynamic>) continue;
-          final show = raw['show'] as Map<String, dynamic>?;
-          final ids = show?['ids'] as Map<String, dynamic>?;
-          final imdbId = ids?['imdb'] as String?;
-          if (imdbId != null) playbackImdbIds.add(imdbId);
-        }
-
-        final recentWithNext = await _traktService.fetchRecentShowsWithNextEpisode(
-          excludeImdbIds: playbackImdbIds,
-        );
-        if (!mounted) return;
-
-        if (recentWithNext.isNotEmpty) {
-          rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
-        }
-      }
-
-      if (rawItems.isEmpty) {
-        _finishEmpty();
-        return;
-      }
-
-      List<StremioMeta> items;
-      Map<String, double> progressMap = {};
-      Map<String, List<int>> playbackIds = {};
-      var episodeInfo = <String, ({int season, int episode, int? runtime})>{};
-
-      if (widget.contentType == 'movies') {
-        items = TraktItemTransformer.transformList(rawItems,
-            inferredType: 'movie');
-        for (final raw in rawItems) {
-          if (raw is! Map<String, dynamic>) continue;
-          final progress = raw['progress'] as num?;
-          final pbId = raw['id'] as int?;
-          final movie = raw['movie'] as Map<String, dynamic>?;
-          final ids = movie?['ids'] as Map<String, dynamic>?;
-          final imdbId = ids?['imdb'] as String?;
-          if (imdbId != null && progress != null) {
-            progressMap[imdbId] = progress.toDouble();
-          }
-          if (imdbId != null && pbId != null) {
-            playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
-          }
-        }
-      } else {
-        items = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
-        for (final raw in rawItems) {
-          if (raw is! Map<String, dynamic>) continue;
-          final progress = raw['progress'] as num?;
-          final pbId = raw['id'] as int?;
-          final show = raw['show'] as Map<String, dynamic>?;
-          final ids = show?['ids'] as Map<String, dynamic>?;
-          final imdbId = ids?['imdb'] as String?;
-          final ep = raw['episode'] as Map<String, dynamic>?;
-          if (imdbId != null && progress != null) {
-            progressMap.putIfAbsent(imdbId, () => progress.toDouble());
-          }
-          if (imdbId != null && pbId != null) {
-            playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
-          }
-          if (imdbId != null && ep != null && !episodeInfo.containsKey(imdbId)) {
-            episodeInfo[imdbId] = (
-              season: ep['season'] as int? ?? 0,
-              episode: ep['number'] as int? ?? 0,
-              runtime: ep['runtime'] as int?,
-            );
-          }
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _progressMap = progressMap;
-        _playbackIds = playbackIds;
-        _episodeInfoMap = episodeInfo;
-        _isLoading = false;
-      });
-      _ensureFocusNodes();
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _updateScrollIndicators());
-      widget.focusController?.registerSection(
-        widget.homeSection,
-        hasItems: _items.isNotEmpty,
-        focusNodes: _cardFocusNodes,
-      );
+      await _loadItemsInner(gen).timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      debugPrint('Trakt continue watching timed out (${widget.contentType})');
+      if (gen == _loadGeneration) _finishEmpty();
     } catch (e) {
       debugPrint('Error loading Trakt continue watching: $e');
-      _finishEmpty();
+      if (gen == _loadGeneration) _finishEmpty();
     }
+  }
+
+  Future<void> _loadItemsInner(int gen) async {
+    final isAuth = await _traktService.isAuthenticated();
+    if (!isAuth) {
+      if (gen == _loadGeneration) _finishEmpty();
+      return;
+    }
+
+    var rawItems =
+        await _traktService.fetchPlaybackItems(widget.contentType);
+    if (!mounted || gen != _loadGeneration) return;
+
+    // For shows: also find recently watched shows with next episode available
+    if (widget.contentType == 'episodes') {
+      final playbackImdbIds = <String>{};
+      for (final raw in rawItems) {
+        if (raw is! Map<String, dynamic>) continue;
+        final show = raw['show'] as Map<String, dynamic>?;
+        final ids = show?['ids'] as Map<String, dynamic>?;
+        final imdbId = ids?['imdb'] as String?;
+        if (imdbId != null) playbackImdbIds.add(imdbId);
+      }
+
+      final recentWithNext = await _traktService.fetchRecentShowsWithNextEpisode(
+        excludeImdbIds: playbackImdbIds,
+      );
+      if (!mounted || gen != _loadGeneration) return;
+
+      if (recentWithNext.isNotEmpty) {
+        rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
+      }
+    }
+
+    if (rawItems.isEmpty) {
+      if (gen == _loadGeneration) _finishEmpty();
+      return;
+    }
+
+    List<StremioMeta> items;
+    Map<String, double> progressMap = {};
+    Map<String, List<int>> playbackIds = {};
+    var episodeInfo = <String, ({int season, int episode, int? runtime})>{};
+
+    if (widget.contentType == 'movies') {
+      items = TraktItemTransformer.transformList(rawItems,
+          inferredType: 'movie');
+      for (final raw in rawItems) {
+        if (raw is! Map<String, dynamic>) continue;
+        final progress = raw['progress'] as num?;
+        final pbId = raw['id'] as int?;
+        final movie = raw['movie'] as Map<String, dynamic>?;
+        final ids = movie?['ids'] as Map<String, dynamic>?;
+        final imdbId = ids?['imdb'] as String?;
+        if (imdbId != null && progress != null) {
+          progressMap[imdbId] = progress.toDouble();
+        }
+        if (imdbId != null && pbId != null) {
+          playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
+        }
+      }
+    } else {
+      items = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
+      for (final raw in rawItems) {
+        if (raw is! Map<String, dynamic>) continue;
+        final progress = raw['progress'] as num?;
+        final pbId = raw['id'] as int?;
+        final show = raw['show'] as Map<String, dynamic>?;
+        final ids = show?['ids'] as Map<String, dynamic>?;
+        final imdbId = ids?['imdb'] as String?;
+        final ep = raw['episode'] as Map<String, dynamic>?;
+        if (imdbId != null && progress != null) {
+          progressMap.putIfAbsent(imdbId, () => progress.toDouble());
+        }
+        if (imdbId != null && pbId != null) {
+          playbackIds.putIfAbsent(imdbId, () => []).add(pbId);
+        }
+        if (imdbId != null && ep != null && !episodeInfo.containsKey(imdbId)) {
+          episodeInfo[imdbId] = (
+            season: ep['season'] as int? ?? 0,
+            episode: ep['number'] as int? ?? 0,
+            runtime: ep['runtime'] as int?,
+          );
+        }
+      }
+    }
+
+    if (!mounted || gen != _loadGeneration) return;
+    setState(() {
+      _items = items;
+      _progressMap = progressMap;
+      _playbackIds = playbackIds;
+      _episodeInfoMap = episodeInfo;
+      _isLoading = false;
+    });
+    _ensureFocusNodes();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _updateScrollIndicators());
+    widget.focusController?.registerSection(
+      widget.homeSection,
+      hasItems: _items.isNotEmpty,
+      focusNodes: _cardFocusNodes,
+    );
   }
 
   void _finishEmpty() {

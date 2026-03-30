@@ -722,19 +722,35 @@ class TraktService {
 
     debugPrint('Trakt: Checking ${seenShows.length} recent shows for next episode');
 
-    // Check each show for a next episode (in parallel)
+    // Check each show for a next episode (in parallel, with one retry on network failure)
     final results = await Future.wait(
       seenShows.entries.map((entry) async {
         final show = entry.value;
         final traktId = show['ids']?['trakt']?.toString() ?? entry.key;
-        final nextEp = await fetchNextEpisode(traktId);
-        return nextEp != null
-            ? {
-                'show': show,
-                'type': 'episode',
-                'episode': {'season': nextEp.season, 'number': nextEp.episode},
-              }
-            : null;
+        try {
+          // First attempt: check if the API is reachable
+          final response = await _authenticatedGet('/shows/$traktId/progress/watched');
+          var nextEp = _parseNextEpisode(response);
+
+          // Retry once on network/HTTP failure (null response or non-200),
+          // but NOT when the show legitimately has no next episode (200 + null next_episode)
+          if (nextEp == null && (response == null || response.statusCode != 200)) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            final retryResponse = await _authenticatedGet('/shows/$traktId/progress/watched');
+            nextEp = _parseNextEpisode(retryResponse);
+          }
+
+          return nextEp != null
+              ? {
+                  'show': show,
+                  'type': 'episode',
+                  'episode': {'season': nextEp.season, 'number': nextEp.episode},
+                }
+              : null;
+        } catch (e) {
+          debugPrint('Trakt: fetchNextEpisode error for $traktId: $e');
+          return null;
+        }
       }),
     );
 
@@ -843,8 +859,12 @@ class TraktService {
   /// Returns (season, episode) or null if show is complete / not started / error.
   Future<({int season, int episode})?> fetchNextEpisode(String showId) async {
     final response = await _authenticatedGet('/shows/$showId/progress/watched');
-    if (response == null || response.statusCode != 200) return null;
+    return _parseNextEpisode(response);
+  }
 
+  /// Parse a next_episode from a watched-progress API response.
+  ({int season, int episode})? _parseNextEpisode(http.Response? response) {
+    if (response == null || response.statusCode != 200) return null;
     try {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final nextEp = data['next_episode'] as Map<String, dynamic>?;
@@ -856,7 +876,7 @@ class TraktService {
 
       return (season: season, episode: number);
     } catch (e) {
-      debugPrint('Trakt: fetchNextEpisode parse error: $e');
+      debugPrint('Trakt: _parseNextEpisode error: $e');
       return null;
     }
   }

@@ -361,6 +361,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
   String? _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
   bool _embeddedSubtitleApplied = false; // Track if embedded subtitle was auto-selected
+  bool _userManuallySelectedSubtitle = false; // Track if user manually selected a subtitle
   int _addonSubtitleFetchToken = 0; // Guard against stale async fetches on content switch
 
   // media_kit state
@@ -979,9 +980,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Wait for subtitle tracks to be parsed from the media file
   // media_kit initially only has 'auto' and 'no' tracks, real tracks come later
-  Future<void> _waitForSubtitleTracks() async {
-    // Wait up to 3 seconds for subtitle tracks to be available
-    for (int i = 0; i < 30; i++) {
+  Future<void> _waitForSubtitleTracks({required int token}) async {
+    // Wait up to 5 seconds for subtitle tracks to be available
+    for (int i = 0; i < 50; i++) {
+      if (token != _addonSubtitleFetchToken) return;
       final tracks = _player.state.tracks.subtitle;
       // Check if we have any real tracks (not just 'auto' and 'no')
       final hasRealTracks = tracks.any((t) =>
@@ -1438,11 +1440,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           debugPrint('Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).');
 
           // Clear subtitle, IMDB, and episode-finished state when switching content
-          _cachedStremioSubtitles = null;
-          _cachedSubtitleKey = null;
-          _selectedStremioSubtitleId = null;
-          _embeddedSubtitleApplied = false;
-          _addonSubtitleFetchToken++;
+          _resetSubtitleState();
           _singleFileImdbId = null;
           _singleFileImdbFetched = false;
           _currentEpisodeMarkedAsFinished = false;
@@ -1951,11 +1949,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Clear subtitle and IMDB state when switching channels
-    _cachedStremioSubtitles = null;
-    _cachedSubtitleKey = null;
-    _selectedStremioSubtitleId = null;
-    _embeddedSubtitleApplied = false;
-    _addonSubtitleFetchToken++;
+    _resetSubtitleState();
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
 
@@ -2080,11 +2074,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Clear subtitle and IMDB state when switching channels
-    _cachedStremioSubtitles = null;
-    _cachedSubtitleKey = null;
-    _selectedStremioSubtitleId = null;
-    _embeddedSubtitleApplied = false;
-    _addonSubtitleFetchToken++;
+    _resetSubtitleState();
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
 
@@ -2208,11 +2198,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentEpisodeMarkedAsFinished = false;
 
     // Clear subtitle cache and selection when changing content
-    _cachedStremioSubtitles = null;
-    _cachedSubtitleKey = null;
-    _selectedStremioSubtitleId = null;
-    _embeddedSubtitleApplied = false;
-    _addonSubtitleFetchToken++;
+    _resetSubtitleState();
 
     // For movie collections, prefetch movie metadata for the new index
     // This runs in background so subtitles are ready when user opens TracksSheet
@@ -4435,6 +4421,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       context,
       _player,
       onTrackChanged: (audioId, subtitleId) async {
+        _userManuallySelectedSubtitle = true;
         await _persistTrackChoice(audioId, subtitleId);
       },
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
@@ -4454,16 +4441,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       selectedStremioSubtitleId: _selectedStremioSubtitleId,
       onStremioSubtitleSelected: (id) {
         _selectedStremioSubtitleId = id;
+        _userManuallySelectedSubtitle = true;
       },
     );
   }
 
+  /// Reset subtitle-related state when switching content.
+  void _resetSubtitleState() {
+    _cachedStremioSubtitles = null;
+    _cachedSubtitleKey = null;
+    _selectedStremioSubtitleId = null;
+    _embeddedSubtitleApplied = false;
+    _userManuallySelectedSubtitle = false;
+    _addonSubtitleFetchToken++;
+  }
+
   /// Restore audio and subtitle track preferences
   Future<void> _restoreTrackPreferences() async {
+    // Capture token to detect if content changes during async operations
+    final restoreToken = _addonSubtitleFetchToken;
+
     try {
       // Wait for subtitle tracks to be parsed from the media file
       // media_kit initially only has 'auto' and 'no' placeholder tracks
-      await _waitForSubtitleTracks();
+      await _waitForSubtitleTracks(token: restoreToken);
+
+      if (restoreToken != _addonSubtitleFetchToken) return;
 
       final seriesPlaylist = _seriesPlaylist;
       Map<String, dynamic>? trackPreferences;
@@ -4482,6 +4485,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           videoTitle: videoTitle,
         );
       }
+
+      // Bail out if content changed during preferences fetch
+      if (restoreToken != _addonSubtitleFetchToken) return;
 
       bool subtitleApplied = false;
 
@@ -4503,6 +4509,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // No stored audio preference - apply default audio language setting
           await _applyDefaultAudioLanguage();
         }
+
+        // Bail out if content changed during audio track application
+        if (restoreToken != _addonSubtitleFetchToken) return;
 
         // Apply subtitle track preference
         if (subtitleTrackId != null && subtitleTrackId.isNotEmpty) {
@@ -4528,6 +4537,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _applyDefaultAudioLanguage();
         subtitleApplied = await _applyDefaultSubtitleLanguage();
       }
+
+      // Final check before applying state
+      if (restoreToken != _addonSubtitleFetchToken) return;
 
       // Track if embedded subtitle was applied for addon fallback
       _embeddedSubtitleApplied = subtitleApplied;
@@ -4684,9 +4696,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('VideoPlayer: Fetched and cached ${subtitles.length} addon subtitles');
       }
 
-      // Only auto-select if no embedded subtitle was applied
+      // Only auto-select if no embedded subtitle was applied and user hasn't manually selected
       if (_embeddedSubtitleApplied) {
         debugPrint('VideoPlayer: Embedded subtitle already applied, skipping addon auto-select');
+        return;
+      }
+
+      if (_userManuallySelectedSubtitle) {
+        debugPrint('VideoPlayer: User manually selected subtitle, skipping addon auto-select');
         return;
       }
 
@@ -4727,9 +4744,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         const Duration(seconds: 15),
       );
 
-      // Check if content changed during download
+      // Check if content changed or user manually selected during download
       if (fetchToken != _addonSubtitleFetchToken) {
         debugPrint('VideoPlayer: Content changed during addon subtitle download, discarding');
+        return;
+      }
+      if (_userManuallySelectedSubtitle) {
+        debugPrint('VideoPlayer: User manually selected subtitle during addon download, discarding');
         return;
       }
 
