@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Psychedelic full-screen loading overlay for Stremio TV playback resolution.
 ///
@@ -287,15 +288,43 @@ class _PsychLoadingOverlayState extends State<PsychLoadingOverlay>
         _buildAnimatedDots(glowColor),
         if (widget.onCancel != null) ...[
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap: widget.onCancel,
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
+          Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.select ||
+                   event.logicalKey == LogicalKeyboardKey.enter)) {
+                widget.onCancel!();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return GestureDetector(
+                  onTap: widget.onCancel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: focused
+                          ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5)
+                          : null,
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: focused
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.6),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],

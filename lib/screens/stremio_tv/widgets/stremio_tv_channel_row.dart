@@ -277,19 +277,22 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                           if (nowPlaying != null &&
                               !widget.hideNowPlaying &&
                               nowPlaying.item.description != null &&
-                              nowPlaying.item.description!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              nowPlaying.item.description!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.35),
-                                height: 1.3,
+                              nowPlaying.item.description!.isNotEmpty)
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  nowPlaying.item.description!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white.withValues(alpha: 0.35),
+                                    height: 1.3,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
                           const Spacer(),
                           // Progress bar
                           if (progress != null && nowPlaying != null)
