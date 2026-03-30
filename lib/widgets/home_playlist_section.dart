@@ -84,6 +84,13 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
       final favoriteKeys = results[1] as Set<String>;
       final posterOverrides = results[2] as Map<String, String>;
 
+      // Sort by addedAt descending (newest first)
+      allItems.sort((a, b) {
+        final aTime = a['addedAt'] as int? ?? 0;
+        final bTime = b['addedAt'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+
       // Apply poster overrides (single-pass, no extra reads)
       for (var item in allItems) {
         final key = StorageService.getPlaylistItemUniqueKey(item);

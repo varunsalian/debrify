@@ -1651,7 +1651,7 @@ class StorageService {
       }
     }
 
-    items.add(enriched);
+    items.insert(0, enriched);
     await savePlaylistItemsRaw(items);
 
     return true;

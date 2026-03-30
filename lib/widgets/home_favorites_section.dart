@@ -118,6 +118,13 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
         }
       }
 
+      // Sort by addedAt descending (newest first)
+      favorites.sort((a, b) {
+        final aTime = a['addedAt'] as int? ?? 0;
+        final bTime = b['addedAt'] as int? ?? 0;
+        return bTime.compareTo(aTime);
+      });
+
       final posterOverrides = await StorageService.getAllPlaylistPosterOverrides();
       for (var item in favorites) {
         final key = StorageService.getPlaylistItemUniqueKey(item);
