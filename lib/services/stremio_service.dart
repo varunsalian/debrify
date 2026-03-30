@@ -16,6 +16,7 @@ import '../models/torrent.dart';
 class StremioService {
   static const String _addonsKey = 'stremio_addons_v1';
   static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _retryTimeout = Duration(seconds: 5);
 
   // Singleton pattern
   static final StremioService _instance = StremioService._internal();
@@ -640,7 +641,14 @@ class StremioService {
 
     try {
       final uri = Uri.parse(url);
-      final response = await http.get(uri).timeout(_requestTimeout);
+      http.Response response;
+      try {
+        response = await http.get(uri).timeout(_requestTimeout);
+      } on TimeoutException {
+        // Retry once with shorter timeout (covers cold starts)
+        debugPrint('StremioService: ${addon.name} timed out, retrying...');
+        response = await http.get(uri).timeout(_retryTimeout);
+      }
 
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');

@@ -17834,7 +17834,9 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
     super.didUpdateWidget(oldWidget);
     // Rebuild overlay when selection changes so checkboxes update
     if (_isExpanded && _overlayEntry != null) {
-      _overlayEntry!.markNeedsBuild();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _overlayEntry?.markNeedsBuild();
+      });
     }
   }
 

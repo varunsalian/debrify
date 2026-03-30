@@ -234,6 +234,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
     private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
+    private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
     private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
     private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -1585,12 +1586,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun playMediaDirect(item: PlaybackItem) {
-        // Clear subtitle state when switching content
+    private fun resetSubtitleState() {
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
         embeddedSubtitleSelected = false
+        userManuallySelectedSubtitle = false
         addonSubtitleFetchToken++
+    }
+
+    private fun playMediaDirect(item: PlaybackItem) {
+        // Clear subtitle state when switching content
+        resetSubtitleState()
 
         val metadata = MediaMetadata.Builder()
             .setTitle(item.title)
@@ -1925,10 +1931,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AndroidTvPlayer", "PikPak: Starting retry logic for cold storage handling")
 
         // Clear subtitle state when switching content
-        stremioSubtitles.clear()
-        currentStremioSubtitleIndex = -1
-        embeddedSubtitleSelected = false
-        addonSubtitleFetchToken++
+        resetSubtitleState()
 
         // Cancel any previous retry loops
         pikPakRetryId++
@@ -2158,6 +2161,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 override fun onTracksChanged(tracks: Tracks) {
                     currentPlayer.removeListener(this)
 
+                    // Skip if user already manually selected a subtitle
+                    if (userManuallySelectedSubtitle) return
+
                     val trackSelector = trackSelector ?: return
 
                     // Get user's default subtitle language preference
@@ -2223,6 +2229,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun tryAutoSelectAddonSubtitle() {
         // Skip if embedded subtitle was already selected
         if (embeddedSubtitleSelected) {
+            return
+        }
+
+        // Skip if user manually selected a subtitle
+        if (userManuallySelectedSubtitle) {
             return
         }
 
@@ -4094,6 +4105,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 currentSubtitleTrackIndex = which
+                userManuallySelectedSubtitle = true
                 applySelectedSubtitleTrack()
                 updateSubtitlePanelValues()
                 dialog.dismiss()
