@@ -1069,13 +1069,14 @@ class DownloadService {
                       _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
                       
                       if (recId != null) {
+                        Map<String, dynamic> m;
                         try {
-                          final m = metaStr != null && metaStr.isNotEmpty ? jsonDecode(metaStr) : {};
-                          m['_handoffAttempt'] = handoffAttempt + 1;
-                          _upsertRecord(recId, {'state': 'paused', 'meta': jsonEncode(m)});
+                          m = metaStr != null && metaStr.isNotEmpty ? jsonDecode(metaStr) as Map<String, dynamic> : {};
                         } catch (_) {
-                          _upsertRecord(recId, {'state': 'paused'});
+                          m = {}; // If meta is corrupt, start with a fresh map.
                         }
+                        m['_handoffAttempt'] = handoffAttempt + 1;
+                        _upsertRecord(recId, {'state': 'paused', 'meta': jsonEncode(m)});
                       }
                       
                       // Nudge auto-resume by adding to pending resume list
