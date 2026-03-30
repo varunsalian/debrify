@@ -590,6 +590,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         imdbId: item.effectiveImdbId ?? item.id,
         season: season,
         episode: episode,
+        timeout: const Duration(seconds: 7),
       );
 
       // For series, retry with episode 1 if the picked episode returns no streams
@@ -604,6 +605,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             imdbId: item.effectiveImdbId ?? item.id,
             season: season,
             episode: 1,
+            timeout: const Duration(seconds: 7),
           );
           final retryTorrents = retryResults['torrents'] as List<Torrent>? ?? [];
           if (retryTorrents.isNotEmpty) {
@@ -856,6 +858,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       imdbId: item.effectiveImdbId ?? item.id,
       season: season,
       episode: episode,
+      timeout: const Duration(seconds: 7),
     );
 
     // E1 fallback for series
@@ -868,6 +871,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           imdbId: item.effectiveImdbId ?? item.id,
           season: season,
           episode: 1,
+          timeout: const Duration(seconds: 7),
         );
         if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
           results = retryResults;

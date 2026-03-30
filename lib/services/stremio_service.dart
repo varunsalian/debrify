@@ -250,6 +250,7 @@ class StremioService {
     int? season,
     int? episode,
     List<int>? availableSeasons,
+    Duration? timeout,
   }) async {
     final Map<String, int> addonCounts = {};
     final Map<String, String> addonErrors = {};
@@ -301,6 +302,7 @@ class StremioService {
         availableSeasons: availableSeasons,
         addonCounts: addonCounts,
         addonErrors: addonErrors,
+        timeout: timeout,
       );
     }
 
@@ -315,7 +317,7 @@ class StremioService {
       // Use stremio: prefix and lowercase to match Torrent model (which lowercases source)
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
       futures.add(
-        _fetchStreamsFromAddon(addon, type, streamId).then((streams) {
+        _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout).then((streams) {
           addonCounts[sourceKey] = streams.length;
           debugPrint(
             'StremioService: ${addon.name} returned ${streams.length} streams',
@@ -361,6 +363,7 @@ class StremioService {
     required Map<String, int> addonCounts,
     required Map<String, String> addonErrors,
     List<int>? availableSeasons,
+    Duration? timeout,
   }) async {
     const int minResultsThreshold = 5;
     const int maxConsecutiveEmpty = 3;
@@ -373,7 +376,7 @@ class StremioService {
     for (final addon in applicableAddons) {
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
       initialFutures.add(
-        _fetchStreamsFromAddon(addon, 'series', imdbId).then((streams) {
+        _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout).then((streams) {
           addonCounts[sourceKey] = streams.length;
           debugPrint(
             'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
@@ -451,7 +454,7 @@ class StremioService {
 
       for (final addon in applicableAddons) {
         seasonFutures.add(
-          _fetchStreamsFromAddon(addon, 'series', streamId).catchError((e) {
+          _fetchStreamsFromAddon(addon, 'series', streamId, timeout: timeout).catchError((e) {
             debugPrint(
               'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
             );
@@ -632,8 +635,9 @@ class StremioService {
   Future<List<StremioStream>> _fetchStreamsFromAddon(
     StremioAddon addon,
     String type,
-    String streamId,
-  ) async {
+    String streamId, {
+    Duration? timeout,
+  }) async {
     // Decode first (in case already encoded), then encode properly
     // This handles IDs like "vavoo_SKY%20ATLANTIC|group:it" that are partially encoded
     final decodedId = Uri.decodeComponent(streamId);
@@ -642,9 +646,10 @@ class StremioService {
 
     try {
       final uri = Uri.parse(url);
+      final effectiveTimeout = timeout ?? _requestTimeout;
       http.Response response;
       try {
-        response = await http.get(uri).timeout(_requestTimeout);
+        response = await http.get(uri).timeout(effectiveTimeout);
       } on TimeoutException {
         // Retry once with shorter timeout (covers cold starts)
         debugPrint('StremioService: ${addon.name} timed out, retrying...');
