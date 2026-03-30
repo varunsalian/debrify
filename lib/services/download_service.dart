@@ -445,13 +445,38 @@ class DownloadService {
     } catch (_) {}
   }
 
-  Future<void> retryAllFailed({String? torrentName}) async {
+  Future<void> retryAllFailed({String? groupId}) async {
     // Use the already in-memory _records map as the authoritative source.
     final failed = _records.entries.where((e) {
-      final isFailed = e.value['state'] == 'failed';
+      final rec = e.value;
+      final isFailed = rec['state'] == 'failed';
       if (!isFailed) return false;
-      if (torrentName != null) {
-        return e.value['torrentName'] == torrentName;
+      if (groupId != null) {
+        // Implement the same grouping logic as in the UI to ensure perfect match
+        final metaStr = rec['meta'] as String?;
+        String? torrentHash;
+        if (metaStr != null && metaStr.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(metaStr);
+            final rawHash = decoded['torrentHash'];
+            if (rawHash != null && rawHash.toString().isNotEmpty) {
+              torrentHash = rawHash.toString();
+            }
+          } catch (_) {}
+        }
+
+        final String recordGroupId;
+        if (torrentHash != null && torrentHash.isNotEmpty) {
+          recordGroupId = 'hash:${torrentHash.toLowerCase()}';
+        } else {
+          final torrentName = rec['torrentName'] as String?;
+          if (torrentName != null && torrentName.trim().isNotEmpty) {
+            recordGroupId = 'name:${torrentName.trim().toLowerCase()}';
+          } else {
+            recordGroupId = 'task:${e.key}';
+          }
+        }
+        return recordGroupId == groupId;
       }
       return true;
     }).toList();

@@ -2722,7 +2722,7 @@ class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScree
         actions: [
           IconButton(
             onPressed: () async {
-              await DownloadService.instance.retryAllFailed(torrentName: widget.groupTitle);
+              await DownloadService.instance.retryAllFailed(groupId: widget.groupId);
               await _refresh();
             },
             icon: const Icon(Icons.refresh_rounded),
