@@ -8639,17 +8639,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
-      // Check if this is a cache-related error and Quick Play with retry is enabled
-      final errorStr = e.toString().toLowerCase();
-      final isCacheError = errorStr.contains('not readily available') ||
-          errorStr.contains('file is not available') ||
-          errorStr.contains('no files found');
-
-      if (forcePlay && isCacheError && _tryNextQuickPlayTorrent(provider: 'debrid')) {
+      // Quick Play retry — any error means this torrent can't be played, try next
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) {
         return; // Next torrent is being tried
       }
 
-      // Reset Quick Play state on non-cache error
       if (forcePlay) {
         _resetQuickPlayState();
       }
@@ -9501,11 +9495,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
+      // Quick Play retry — any error means this torrent can't be played, try next
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) {
+        return; // Next torrent is being tried
+      }
       _showTorboxSnack(
         'Failed to add torrent: ${_formatTorboxError(e)}',
         isError: true,
       );
-      // Reset Quick Play state on non-cache error
       if (forcePlay) {
         _resetQuickPlayState();
       }
