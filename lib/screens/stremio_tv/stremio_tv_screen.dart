@@ -635,9 +635,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // Build playable sources list (exclude external URLs and tiny junk files)
       // Direct streams under 5MB are placeholder/tracking files (e.g. mytrakt sync)
+      // Filter out 480p torrents — rarely cached on debrid services
       var playableSources = torrents
           .where((t) => !t.isExternalStream)
           .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
+          .where((t) => t.streamType != StreamType.torrent || _extractQuality(t.name) != '480p')
           .toList();
 
       // For TorBox, filter torrent sources to only cached ones
@@ -883,10 +885,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final torrents = results['torrents'] as List<Torrent>? ?? [];
     if (torrents.isEmpty) return null;
 
-    // Filter sources
+    // Filter sources — exclude 480p torrents (rarely cached on debrid)
     var playableSources = torrents
         .where((t) => !t.isExternalStream)
         .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
+        .where((t) => t.streamType != StreamType.torrent || _extractQuality(t.name) != '480p')
         .toList();
 
     // TorBox cache filter
