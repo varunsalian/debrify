@@ -53,6 +53,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
+  int _playGeneration = 0;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
 
   /// Get the rotation duration for a channel based on its content type.
@@ -497,10 +498,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   Future<void> _playChannel(StremioTvChannel channel) async {
+    final myGeneration = ++_playGeneration;
+
     // Ensure items are loaded before trying to play
     if (!channel.hasItems) {
       await _ensureChannelItemsLoaded(channel);
-      if (!mounted) return;
+      if (!mounted || _playGeneration != myGeneration) return;
     }
 
     final nowPlaying = _service.getNowPlaying(
@@ -552,7 +555,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         seed: episodeSeed,
       );
 
-      if (!mounted) return;
+      if (!mounted || _playGeneration != myGeneration) return;
       Navigator.of(context).pop(); // Dismiss episode resolution dialog
 
       if (resolved == null) {
@@ -574,14 +577,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       _currentPlayTitle = null;
     }
 
-    // Show loading dialog
-    if (!mounted) return;
+    // Show loading dialog with updatable message
+    if (!mounted || _playGeneration != myGeneration) return;
     bool streamDialogShown = false;
-    showPsychLoading(
+    final loadingStatus = showPsychLoadingUpdatable(
       context,
       season != null
           ? 'Summoning ${item.name} S${season}E$episode from the void...'
           : 'Warping into the ${item.name} dimension...',
+      onCancel: () {
+        _playGeneration++;
+        if (mounted) Navigator.of(context).pop();
+      },
     );
     streamDialogShown = true;
 
@@ -620,9 +627,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       }
 
-      if (!mounted) return;
+      if (!mounted || _playGeneration != myGeneration) {
+        if (streamDialogShown && mounted) { Navigator.of(context).pop(); }
+        return;
+      }
 
       final torrents = results['torrents'] as List<Torrent>? ?? [];
+      final directCount = torrents.where((t) => t.isDirectStream).length;
+      final torrentCount = torrents.where((t) => !t.isDirectStream && !t.isExternalStream).length;
+      loadingStatus.value = 'Found $directCount direct + $torrentCount torrent streams, resolving...';
 
       if (torrents.isEmpty) {
         if (mounted) {
@@ -704,9 +717,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       for (int d = 0; d < maxDirectAttempts; d++) {
         final stream = directStreams[d];
         if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
-        if (!mounted) return;
+        if (!mounted || _playGeneration != myGeneration) return;
         final valid = await _isValidStreamUrl(stream.directUrl!);
-        if (!mounted) return;
+        if (!mounted || _playGeneration != myGeneration) return;
         if (valid) {
           firstPlayableUrl = stream.directUrl!;
           firstPlayableIndex = playableSources.indexWhere((t) =>
@@ -728,7 +741,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
         final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
         for (int i = 0; i < maxTorrentAttempts; i++) {
-          if (!mounted) return;
+          if (!mounted || _playGeneration != myGeneration) return;
           final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
           if (url != null && url.isNotEmpty) {
             firstPlayableUrl = url;

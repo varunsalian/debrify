@@ -9,8 +9,10 @@ import 'package:flutter/material.dart';
 /// floating particles, and glowing text — all animated.
 class PsychLoadingOverlay extends StatefulWidget {
   final String message;
+  final ValueNotifier<String>? messageNotifier;
+  final VoidCallback? onCancel;
 
-  const PsychLoadingOverlay({super.key, required this.message});
+  const PsychLoadingOverlay({super.key, required this.message, this.messageNotifier, this.onCancel});
 
   @override
   State<PsychLoadingOverlay> createState() => _PsychLoadingOverlayState();
@@ -22,11 +24,13 @@ class _PsychLoadingOverlayState extends State<PsychLoadingOverlay>
   late final AnimationController _pulseController;
   late final AnimationController _textController;
   late final List<_Particle> _particles;
+  late final ValueNotifier<String> _effectiveNotifier;
   final _random = Random();
 
   @override
   void initState() {
     super.initState();
+    _effectiveNotifier = widget.messageNotifier ?? ValueNotifier(widget.message);
     _mainController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -259,25 +263,42 @@ class _PsychLoadingOverlayState extends State<PsychLoadingOverlay>
     return Column(
       children: [
         // Message text with color-cycling glow
-        Text(
-          widget.message,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            shadows: [
-              Shadow(color: glowColor, blurRadius: 20),
-              Shadow(color: glowColor.withValues(alpha: 0.5), blurRadius: 40),
-            ],
+        ValueListenableBuilder<String>(
+          valueListenable: _effectiveNotifier,
+          builder: (_, msg, __) => Text(
+            msg,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              shadows: [
+                Shadow(color: glowColor, blurRadius: 20),
+                Shadow(color: glowColor.withValues(alpha: 0.5), blurRadius: 40),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
         // Animated dots
         _buildAnimatedDots(glowColor),
+        if (widget.onCancel != null) ...[
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: widget.onCancel,
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -490,4 +511,24 @@ void showPsychLoading(BuildContext context, String message) {
       );
     },
   );
+}
+
+/// Shows the psychedelic loading overlay with an updatable message.
+/// Returns a [ValueNotifier] — update its value to change the displayed text.
+ValueNotifier<String> showPsychLoadingUpdatable(BuildContext context, String message, {VoidCallback? onCancel}) {
+  final notifier = ValueNotifier<String>(message);
+  showGeneralDialog(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 400),
+    pageBuilder: (_, __, ___) => PsychLoadingOverlay(message: message, messageNotifier: notifier, onCancel: onCancel),
+    transitionBuilder: (_, anim, __, child) {
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: child,
+      );
+    },
+  );
+  return notifier;
 }
