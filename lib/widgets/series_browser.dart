@@ -297,6 +297,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         );
       }
 
+      // Clear stale tvmazeShowId so _getOverrideShowId() reads the new mapping
+      widget.seriesPlaylist.tvmazeShowId = null;
+
       // Reload episode info with the new show ID
       setState(() {
         _tvmazeAvailable = true;

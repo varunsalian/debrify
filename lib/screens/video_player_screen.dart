@@ -220,6 +220,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Map<String, dynamic>? _constructPlaylistItemData() {
     // Need at least one identifier
     if ((widget.rdTorrentId == null || widget.rdTorrentId!.isEmpty) &&
+        (widget.torboxTorrentId == null || widget.torboxTorrentId!.isEmpty) &&
         (widget.pikpakCollectionId == null || widget.pikpakCollectionId!.isEmpty) &&
         (_activePlaylist == null || _activePlaylist!.isEmpty)) {
       return null;
@@ -230,6 +231,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Add RealDebrid torrent ID if available
     if (widget.rdTorrentId != null && widget.rdTorrentId!.isNotEmpty) {
       data['rdTorrentId'] = widget.rdTorrentId;
+    }
+
+    // Add Torbox torrent ID if available
+    if (widget.torboxTorrentId != null && widget.torboxTorrentId!.isNotEmpty) {
+      data['torboxTorrentId'] = widget.torboxTorrentId;
     }
 
     // Add PikPak collection ID if available

@@ -1965,6 +1965,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Reload episode info with the new show ID
       if (_seriesPlaylist != null && _seriesPlaylist!.isSeries && mounted) {
+        // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping
+        _seriesPlaylist!.tvmazeShowId = null;
+
         setState(() {
           _isLoadingSeriesMetadata = true;
         });
@@ -3213,6 +3216,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         subtitle: '${entries.length} episodes',
         playlist: entries,
         startIndex: startIndex,
+        torboxTorrentId: torboxTorrentId.toString(),
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
@@ -3316,6 +3320,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         subtitle: '${entries.length} episodes',
         playlist: entries,
         startIndex: startIndex,
+        pikpakCollectionId: widget.playlistItem['pikpakCollectionId'] as String?,
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
