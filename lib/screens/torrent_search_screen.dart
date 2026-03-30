@@ -8576,11 +8576,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
-      // Reset Quick Play retry state on success
-      if (forcePlay) {
-        _resetQuickPlayState();
-      }
-
       // Auto-save movie source for quick reuse (overrides any previous source)
       final sel = _activeAdvancedSelection;
       if (sel != null && !sel.isSeries && sel.contentType == 'movie') {
@@ -9462,17 +9457,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final torboxTorrent = await _fetchTorboxTorrentById(apiKey, torrentId);
       if (torboxTorrent == null) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) return;
         _showTorboxSnack(
           'Torbox cached the torrent but details are not ready yet. Check the Torbox tab shortly.',
         );
+        if (forcePlay) _resetQuickPlayState();
         return;
       }
 
       if (!mounted) return;
-      // Reset Quick Play retry state on success
-      if (forcePlay) {
-        _resetQuickPlayState();
-      }
 
       // Auto-save movie source for quick reuse (overrides any previous source)
       final sel = _activeAdvancedSelection;
@@ -9618,7 +9611,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       case 'play':
         if (hasVideo) {
-          await _playTorboxTorrent(torboxTorrent);
+          await _playTorboxTorrent(torboxTorrent, forcePlay: forcePlay);
           // Refresh bound sources after movie play so "Edit Source" appears
           if (_activeAdvancedSelection?.contentType == 'movie') {
             _traktResultsKey.currentState?.refreshBoundSources();
@@ -9626,6 +9619,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _aggregatedResultsKey.currentState?.refreshBoundSources();
           }
           return;
+        }
+        // No video files — retry next torrent for Quick Play
+        if (forcePlay) {
+          if (_tryNextQuickPlayTorrent(provider: 'torbox')) return;
+          _resetQuickPlayState();
         }
         // Fall through to 'choose' if no video
         break;
@@ -10377,7 +10375,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return fallback;
   }
 
-  Future<void> _playTorboxTorrent(TorboxTorrent torrent) async {
+  Future<void> _playTorboxTorrent(TorboxTorrent torrent, {bool forcePlay = false}) async {
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showTorboxApiKeyMissingMessage();
@@ -10390,10 +10388,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }).toList();
 
     if (videoFiles.isEmpty) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) return;
       _showTorboxSnack(
         'No playable video files found in this torrent.',
         isError: true,
       );
+      if (forcePlay) _resetQuickPlayState();
       return;
     }
 
@@ -10411,6 +10411,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final useDeoVR = await _shouldUseDeoVR(torrent.name);
         if (useDeoVR) {
           await _launchWithDeoVR(videoUrl: streamUrl, filename: torrent.name);
+          if (forcePlay) _resetQuickPlayState();
           return;
         }
 
@@ -10436,11 +10437,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             addonId: _selectedSource.addon?.id,
           ),
         );
+        if (forcePlay) _resetQuickPlayState();
       } catch (e) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) return;
         _showTorboxSnack(
           'Failed to play file: ${_formatTorboxError(e)}',
           isError: true,
         );
+        if (forcePlay) _resetQuickPlayState();
       }
       return;
     }
@@ -10502,10 +10506,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         file: sortedEntries[startIndex].file,
       );
     } catch (e) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) return;
       _showTorboxSnack(
         'Failed to prepare stream: ${_formatTorboxError(e)}',
         isError: true,
       );
+      if (forcePlay) _resetQuickPlayState();
       return;
     }
 
@@ -10579,6 +10585,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         addonId: _selectedSource.addon?.id,
       ),
     );
+    if (forcePlay) _resetQuickPlayState();
   }
 
   void _openTorboxFiles(TorboxTorrent torrent) {
@@ -11341,6 +11348,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           fileSelection: fileSelection,
           torrentId: result['torrentId']?.toString(),
           infohash: infohash,
+          forcePlay: forcePlay,
         );
         // Refresh bound sources after movie play so "Edit Source" appears
         if (_activeAdvancedSelection?.contentType == 'movie') {
@@ -11627,6 +11635,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     required String fileSelection,
     String? torrentId,
     String? infohash,
+    bool forcePlay = false,
   }) async {
     final String? apiKey = await StorageService.getApiKey();
     if (apiKey == null || apiKey.isEmpty) return;
@@ -11642,6 +11651,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torrentId,
         infohash: infohash,
       );
+      if (forcePlay) _resetQuickPlayState();
       return;
     }
     try {
@@ -11675,6 +11685,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final useDeoVR = await _shouldUseDeoVR(finalTitle);
         if (useDeoVR) {
           await _launchWithDeoVR(videoUrl: videoUrl, filename: finalTitle);
+          if (forcePlay) _resetQuickPlayState();
           return;
         }
 
@@ -11699,7 +11710,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             addonId: _selectedSource.addon?.id,
           ),
         );
+        if (forcePlay) _resetQuickPlayState();
       } else {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) return;
+        if (forcePlay) _resetQuickPlayState();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -11732,6 +11746,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         );
       }
     } catch (e) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) return;
+      if (forcePlay) _resetQuickPlayState();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
