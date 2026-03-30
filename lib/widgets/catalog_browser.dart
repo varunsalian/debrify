@@ -130,6 +130,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   // Episode drill-down mode
   StremioMeta? _pendingEpisodeShow; // Deferred until _loadAddons completes
+  int? _pendingEpisodeSeason;
+  int? _pendingEpisodeEpisode;
   int _episodeModeGeneration = 0;
   StremioMeta? _selectedShow;
   List<TraktSeason> _episodeSeasons = [];
@@ -183,11 +185,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   /// Public: enter episode drill-down for a show (called from parent when switching from aggregated search)
   /// If _selectedAddon is not yet loaded (async), defers until _loadAddons completes.
-  void enterEpisodeModeForShow(StremioMeta show) {
+  void enterEpisodeModeForShow(StremioMeta show, {int? season, int? episode}) {
     if (_selectedAddon != null) {
-      _enterEpisodeMode(show);
+      _enterEpisodeMode(show, initialSeason: season, initialEpisode: episode);
     } else {
       _pendingEpisodeShow = show;
+      _pendingEpisodeSeason = season;
+      _pendingEpisodeEpisode = episode;
     }
   }
 
@@ -413,10 +417,14 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           // Consume pending episode drill-down (deferred from enterEpisodeModeForShow)
           final pending = _pendingEpisodeShow;
           if (pending != null && _selectedAddon != null) {
+            final pendingSeason = _pendingEpisodeSeason;
+            final pendingEpisode = _pendingEpisodeEpisode;
             _pendingEpisodeShow = null;
+            _pendingEpisodeSeason = null;
+            _pendingEpisodeEpisode = null;
             // Schedule after setState completes
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _enterEpisodeMode(pending);
+              if (mounted) _enterEpisodeMode(pending, initialSeason: pendingSeason, initialEpisode: pendingEpisode);
             });
           }
         });
@@ -1474,7 +1482,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected?.call(selection);
   }
 
-  void _enterEpisodeMode(StremioMeta show) async {
+  void _enterEpisodeMode(StremioMeta show, {int? initialSeason, int? initialEpisode}) async {
     final generation = ++_episodeModeGeneration;
 
     setState(() {
@@ -1482,7 +1490,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       _isLoadingEpisodes = true;
       _episodeErrorMessage = null;
       _episodeSeasons = [];
-      _selectedSeasonNumber = 1;
+      _selectedSeasonNumber = initialSeason ?? 1;
     });
 
     // Load bound sources and watch progress for this show
@@ -1559,16 +1567,39 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       }).toList()
         ..sort((a, b) => a.number.compareTo(b.number));
 
-      // Build focus nodes for first season
-      for (int i = 0; i < seasons.first.episodes.length; i++) {
+      // Pick the target season: prefer initialSeason if it exists in the data
+      final targetSeason = (initialSeason != null && seasons.any((s) => s.number == initialSeason))
+          ? seasons.firstWhere((s) => s.number == initialSeason)
+          : seasons.first;
+
+      // Build focus nodes for target season
+      for (int i = 0; i < targetSeason.episodes.length; i++) {
         _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
       }
 
       setState(() {
         _episodeSeasons = seasons;
-        _selectedSeasonNumber = seasons.first.number;
+        _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
       });
+
+      // Scroll to the target episode if specified
+      if (initialEpisode != null) {
+        final episodeIndex = targetSeason.episodes.indexWhere((e) => e.number == initialEpisode);
+        if (episodeIndex > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_episodeScrollController.hasClients && mounted) {
+              // Estimate ~120px per episode card + 8px padding
+              final offset = episodeIndex * 128.0;
+              _episodeScrollController.animateTo(
+                offset.clamp(0.0, _episodeScrollController.position.maxScrollExtent),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+      }
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('CatalogBrowser: Episode fetch failed: $e');

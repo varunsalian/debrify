@@ -239,39 +239,37 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Load progress data for all files
   Future<void> _loadProgressData() async {
     try {
-      // Get the series/collection title from the playlist item
-      final String? seriesTitle = widget.playlistItem['seriesTitle'] as String?;
-      print('🎬 Loading progress for series: $seriesTitle');
-      print('📦 Playlist item keys: ${widget.playlistItem.keys.toList()}');
+      Map<String, Map<String, dynamic>> episodeProgress = {};
 
-      // If it's a series, load all episode progress
-      if (seriesTitle != null && seriesTitle.isNotEmpty) {
-        final episodeProgress = await StorageService.getEpisodeProgress(
-          seriesTitle: seriesTitle,
-        );
-        print('📊 Loaded ${episodeProgress.length} episodes with progress');
-        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
-        setState(() {
-          _fileProgressCache = episodeProgress;
-        });
-      } else {
-        print('⚠️ No series title found, trying fallback methods');
-        // Fallback: try to get title from other fields
-        final title = widget.playlistItem['title'] as String?;
-        if (title != null) {
-          print('🔄 Trying with title: $title');
-          final episodeProgress = await StorageService.getEpisodeProgress(
-            seriesTitle: title,
+      // 1. Try IMDB ID lookup first (most reliable — avoids title mismatches)
+      final imdbId = widget.playlistItem['imdbId'] as String?;
+      if (imdbId != null && imdbId.isNotEmpty) {
+        episodeProgress = await StorageService.getEpisodeProgressByImdbId(imdbId);
+      }
+
+      // 2. Fallback: try seriesTitle field
+      if (episodeProgress.isEmpty) {
+        final seriesTitle = widget.playlistItem['seriesTitle'] as String?;
+        if (seriesTitle != null && seriesTitle.isNotEmpty) {
+          episodeProgress = await StorageService.getEpisodeProgress(
+            seriesTitle: seriesTitle,
           );
-          print('📊 Loaded ${episodeProgress.length} episodes with progress');
-          print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
-          setState(() {
-            _fileProgressCache = episodeProgress;
-          });
-        } else {
-          _fileProgressCache = {};
         }
       }
+
+      // 3. Fallback: try raw title
+      if (episodeProgress.isEmpty) {
+        final title = widget.playlistItem['title'] as String?;
+        if (title != null) {
+          episodeProgress = await StorageService.getEpisodeProgress(
+            seriesTitle: title,
+          );
+        }
+      }
+
+      setState(() {
+        _fileProgressCache = episodeProgress;
+      });
     } catch (e) {
       print('❌ Error loading progress data: $e');
       _fileProgressCache = {};

@@ -2501,7 +2501,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Switch from aggregated search to a specific addon's CatalogBrowser with episode drill-down.
-  void _handleBrowseSeriesEpisodes(StremioMeta show, StremioAddon addon) {
+  void _handleBrowseSeriesEpisodes(StremioMeta show, StremioAddon addon, {int? season, int? episode}) {
     // Find the matching SearchSourceOption for this addon
     final addonOption = _availableSourceOptions.cast<SearchSourceOption?>().firstWhere(
       (opt) => opt?.type == SearchSourceType.addon && opt?.addon?.baseUrl == addon.baseUrl,
@@ -2525,7 +2525,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Enter episode mode after the CatalogBrowser rebuilds
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _catalogBrowserKey.currentState?.enterEpisodeModeForShow(show);
+      _catalogBrowserKey.currentState?.enterEpisodeModeForShow(show, season: season, episode: episode);
     });
   }
 
@@ -14616,7 +14616,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         onQuickPlay: (selection) {
           _handleQuickPlay(selection);
         },
-        onBrowseEpisodes: (selection, addonId) {
+        onBrowseEpisodes: (selection, addonId, {int? season, int? episode}) {
           final meta = StremioMeta.fromJson({
             'id': selection.imdbId,
             'name': selection.title,
@@ -14637,7 +14637,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             orElse: () => null,
           );
           if (addonOption?.addon != null) {
-            _handleBrowseSeriesEpisodes(meta, addonOption!.addon!);
+            _handleBrowseSeriesEpisodes(meta, addonOption!.addon!, season: season, episode: episode);
           } else {
             _handleCatalogItemSelected(selection, updateSearchText: true);
           }

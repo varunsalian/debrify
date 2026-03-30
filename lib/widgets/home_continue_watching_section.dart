@@ -23,7 +23,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
   final void Function(AdvancedSearchSelection selection)? onSelectSource;
   final void Function(AdvancedSearchSelection selection)? onSearchPacks;
-  final void Function(AdvancedSearchSelection selection, String? addonId)? onBrowseEpisodes;
+  final void Function(AdvancedSearchSelection selection, String? addonId, {int? season, int? episode})? onBrowseEpisodes;
 
   const HomeContinueWatchingSection({
     super.key,
@@ -322,7 +322,16 @@ class _HomeContinueWatchingSectionState
             widget.onItemSelected?.call(withEpisode);
           }
         } else {
-          // No episode history — default to S1E1
+          // No episode from IMDB lookup — try title-based fallback
+          int fallbackSeason = 1;
+          int fallbackEpisode = 1;
+          final titleLastEp = await StorageService.getLastPlayedEpisode(
+            seriesTitle: selection.title,
+          );
+          if (titleLastEp != null) {
+            fallbackSeason = titleLastEp['season'] as int? ?? 1;
+            fallbackEpisode = titleLastEp['episode'] as int? ?? 1;
+          }
           final withEpisode = AdvancedSearchSelection(
             imdbId: selection.imdbId,
             isSeries: true,
@@ -330,8 +339,8 @@ class _HomeContinueWatchingSectionState
             year: selection.year,
             contentType: selection.contentType,
             posterUrl: selection.posterUrl,
-            season: 1,
-            episode: 1,
+            season: fallbackSeason,
+            episode: fallbackEpisode,
           );
           if (widget.onQuickPlay != null) {
             widget.onQuickPlay!(withEpisode);
@@ -349,7 +358,11 @@ class _HomeContinueWatchingSectionState
     } else if (choice == 'browse') {
       if (selection.isSeries && widget.onBrowseEpisodes != null) {
         final addonId = item['addonId'] as String?;
-        widget.onBrowseEpisodes!(selection, addonId);
+        final cachedEp = _episodeInfoMap[selection.imdbId];
+        widget.onBrowseEpisodes!(selection, addonId,
+          season: cachedEp?.season,
+          episode: cachedEp?.episode,
+        );
       } else {
         widget.onItemSelected?.call(selection);
       }
