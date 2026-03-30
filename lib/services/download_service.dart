@@ -445,21 +445,41 @@ class DownloadService {
     } catch (_) {}
   }
 
-  Future<void> retryAllFailed() async {
-    await _loadRecords();
-    final failed = _records.entries.where((e) => (e.value['state'] == 'failed'));
+  Future<void> retryAllFailed({String? torrentName}) async {
+    // Use the already in-memory _records map as the authoritative source.
+    final failed = _records.entries.where((e) {
+      final isFailed = e.value['state'] == 'failed';
+      if (!isFailed) return false;
+      if (torrentName != null) {
+        return e.value['torrentName'] == torrentName;
+      }
+      return true;
+    }).toList();
+
     for (final e in failed) {
       final rec = e.value;
-      final meta = rec['meta'] as String?;
+      String? meta = rec['meta'] as String?;
       final url = rec['url'] as String?;
       final fileName = rec['displayName'] as String?;
-      final torrentName = rec['torrentName'] as String?;
+      final tName = rec['torrentName'] as String?;
+
+      // Strip _handoffAttempt from meta to ensure a fresh start on manual retry
       if (meta != null && meta.isNotEmpty) {
-        await enqueueDownload(url: url ?? '', fileName: fileName, meta: meta, torrentName: torrentName);
-      } else if (url != null && url.isNotEmpty) {
-        await enqueueDownload(url: url, fileName: fileName, torrentName: torrentName);
+        try {
+          final m = jsonDecode(meta);
+          if (m is Map && m.containsKey('_handoffAttempt')) {
+            m.remove('_handoffAttempt');
+            meta = jsonEncode(m);
+          }
+        } catch (_) {}
       }
-      _upsertRecord(e.key, {'state': 'queued'});
+
+      if (meta != null && meta.isNotEmpty) {
+        await enqueueDownload(url: url ?? '', fileName: fileName, meta: meta, torrentName: tName);
+      } else if (url != null && url.isNotEmpty) {
+        await enqueueDownload(url: url, fileName: fileName, torrentName: tName);
+      }
+      _upsertRecord(e.key, {'state': 'queued', 'meta': meta});
     }
   }
 
@@ -1272,7 +1292,7 @@ class DownloadService {
       await d.create(recursive: true);
     }
 
-    // Check for filename conflict and increment if needed using file(1).ext format.
+    // Check for filename conflict and increment if needed using file (1).ext format.
     // Cap at 1000 iterations to prevent infinite loops in edge cases.
     String finalFilename = filename;
     int counter = 1;
@@ -1281,9 +1301,9 @@ class DownloadService {
       if (dot > 0) {
         final base = filename.substring(0, dot);
         final ext = filename.substring(dot);
-        finalFilename = '$base($counter)$ext';
+        finalFilename = '$base ($counter)$ext';
       } else {
-        finalFilename = '$filename($counter)';
+        finalFilename = '$filename ($counter)';
       }
       counter++;
     }
