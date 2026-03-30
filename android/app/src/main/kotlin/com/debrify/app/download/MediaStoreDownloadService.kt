@@ -188,178 +188,157 @@ class MediaStoreDownloadService : Service() {
 		if (state.running) return
 		state.running = true
 		var uri: Uri? = state.uri
-		var connection: HttpURLConnection? = null
-		var input: InputStream? = null
-		var out: BufferedOutputStream? = null
-		var outPfd: ParcelFileDescriptor? = null
-		var outChannel: FileChannel? = null
-		try {
-			if (uri == null) {
-				val values = ContentValues().apply {
-					put(MediaStore.Downloads.DISPLAY_NAME, state.fileName)
-					put(MediaStore.Downloads.MIME_TYPE, state.mimeType)
-					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-						put(MediaStore.Downloads.RELATIVE_PATH, "Download/${state.subDir}")
-						put(MediaStore.Downloads.IS_PENDING, 1)
+		
+		var retryCount = 0
+		val maxRetries = 10 // Resilient against handoffs
+
+		while (retryCount <= maxRetries && !state.canceled && !state.paused) {
+			var connection: HttpURLConnection? = null
+			var input: InputStream? = null
+			var out: BufferedOutputStream? = null
+			var outPfd: ParcelFileDescriptor? = null
+			var outChannel: FileChannel? = null
+			
+			try {
+				if (uri == null) {
+					val values = ContentValues().apply {
+						put(MediaStore.Downloads.DISPLAY_NAME, state.fileName)
+						put(MediaStore.Downloads.MIME_TYPE, state.mimeType)
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+							put(MediaStore.Downloads.RELATIVE_PATH, "Download/${state.subDir}")
+							put(MediaStore.Downloads.IS_PENDING, 1)
+						}
+					}
+					uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+					if (uri == null) {
+						notifyTask(state, "Failed to create destination", indeterminate = true, completed = false)
+						ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
+						states.remove(state.taskId)
+						break
+					}
+					state.uri = uri
+					ChannelBridge.emit(mapOf("type" to "started", "taskId" to state.taskId, "fileName" to state.fileName, "subDir" to state.subDir))
+				}
+
+				// Always confirm bytes already written on disk
+				uri?.let { confirmed ->
+					val onDisk = existingSize(confirmed)
+					if (onDisk > 0L) state.downloaded = onDisk
+				}
+
+				val url = URL(state.url)
+				connection = (url.openConnection() as HttpURLConnection).apply {
+					instanceFollowRedirects = true
+					connectTimeout = 15000
+					readTimeout = 15000
+					doInput = true
+					state.headers.forEach { (k, v) -> setRequestProperty(k, v) }
+					if (state.downloaded > 0L) {
+						setRequestProperty("Range", "bytes=${state.downloaded}-")
+						state.etag?.let { setRequestProperty("If-Range", it) }
 					}
 				}
-				uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-				if (uri == null) {
-					notifyTask(state, "Failed to create destination", indeterminate = true, completed = false)
-					ChannelBridge.emit(mapOf("type" to "error", "taskId" to state.taskId, "message" to "no destination"))
-					stopSelfSafely(); return
-				}
-				state.uri = uri
-				ChannelBridge.emit(mapOf("type" to "started", "taskId" to state.taskId, "fileName" to state.fileName, "subDir" to state.subDir))
-			}
+				connection.connect()
+				state.connection = connection
 
-			// Always confirm bytes already written on disk
-			uri?.let { confirmed ->
-				val onDisk = existingSize(confirmed)
-				if (onDisk > 0L) state.downloaded = onDisk
-			}
+				val resp = connection.responseCode
+				// Handle resume edge cases before opening output stream
+				if (state.downloaded > 0L && resp == HttpURLConnection.HTTP_OK) {
+					// Server ignored Range; restart from 0 by truncating existing file
+					state.downloaded = 0L
+					if (uri != null) {
+						try {
+							val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
+							val fos = FileOutputStream(pfd!!.fileDescriptor)
+							val channel: FileChannel = fos.channel
+							channel.truncate(0)
+							channel.position(0)
+							fos.close()
+							pfd.close()
+						} catch (_: Exception) {}
+					}
+				} else if (state.downloaded > 0L && resp == 416) {
+					// 416: already fully downloaded on server side; treat as complete
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+						val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+						contentResolver.update(uri!!, done, null, null)
+					}
+					notifyTask(state, "Download complete", indeterminate = false, completed = true)
+					ChannelBridge.emit(mapOf(
+						"type" to "complete",
+						"taskId" to state.taskId,
+						"bytes" to state.total,
+						"total" to state.total,
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+						"url" to state.url,
+						"contentUri" to (uri?.toString() ?: ""),
+						"mimeType" to state.mimeType,
+					))
+					states.remove(state.taskId)
+					notificationManager.cancel(taskNotificationId(state.taskId))
+					break
+				} else if (resp !in 200..206) {
+					throw IllegalStateException("HTTP $resp for $url")
+				}
 
-			val url = URL(state.url)
-			connection = (url.openConnection() as HttpURLConnection).apply {
-				instanceFollowRedirects = true
-				connectTimeout = 15000
-				readTimeout = 15000
-				doInput = true
-				state.headers.forEach { (k, v) -> setRequestProperty(k, v) }
-				if (state.downloaded > 0L) {
-					setRequestProperty("Range", "bytes=${state.downloaded}-")
-					state.etag?.let { setRequestProperty("If-Range", it) }
-				}
-			}
-			connection.connect()
-			state.connection = connection
-
-			val resp = connection.responseCode
-			// Handle resume edge cases before opening output stream
-			if (state.downloaded > 0L && resp == HttpURLConnection.HTTP_OK) {
-				// Server ignored Range; restart from 0 by truncating existing file
-				state.downloaded = 0L
-				if (uri != null) {
-					try {
-						val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
-						val fos = FileOutputStream(pfd!!.fileDescriptor)
-						val channel: FileChannel = fos.channel
-						channel.truncate(0)
-						channel.position(0)
-						fos.close()
-						pfd.close()
-					} catch (_: Exception) {}
-				}
-			} else if (state.downloaded > 0L && resp == 416) {
-				// 416: already fully downloaded on server side; treat as complete
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-					contentResolver.update(uri!!, done, null, null)
-				}
-				notifyTask(state, "Download complete", indeterminate = false, completed = true)
-				ChannelBridge.emit(mapOf(
-					"type" to "complete",
-					"taskId" to state.taskId,
-					"bytes" to state.total,
-					"total" to state.total,
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-					"contentUri" to (uri?.toString() ?: ""),
-					"mimeType" to state.mimeType,
-				))
-				states.remove(state.taskId)
-				notificationManager.cancel(taskNotificationId(state.taskId))
-				if (states.isEmpty()) {
-					stopForeground(STOP_FOREGROUND_REMOVE)
-					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
-					stopSelfSafely()
-				} else {
-					updateSummaryNotification()
-				}
-				return
-			} else if (resp !in 200..206) {
-				throw IllegalStateException("HTTP $resp for $url")
-			}
-
-			val resumedByServer = state.downloaded > 0L && resp == HttpURLConnection.HTTP_PARTIAL
-			// Parse Content-Range if present to validate start and total
-			if (resumedByServer) {
-				parseContentRange(connection.getHeaderField("Content-Range"))?.let { (start, end, total) ->
-					if (total > 0) state.total = total
-					if (start != state.downloaded) {
-						if (start == 0L) {
-							// Server starts from 0; restart full
-							state.downloaded = 0L
-							if (uri != null) {
-								try {
-									val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
-									val fos = FileOutputStream(pfd!!.fileDescriptor)
-									val ch = fos.channel
-									ch.truncate(0)
-									ch.position(0)
-									fos.close(); pfd.close()
-								} catch (_: Exception) {}
+				val resumedByServer = state.downloaded > 0L && resp == HttpURLConnection.HTTP_PARTIAL
+				// Parse Content-Range if present to validate start and total
+				if (resumedByServer) {
+					parseContentRange(connection.getHeaderField("Content-Range"))?.let { (start, end, total) ->
+						if (total > 0) state.total = total
+						if (start != state.downloaded) {
+							if (start == 0L) {
+								// Server starts from 0; restart full
+								state.downloaded = 0L
+								if (uri != null) {
+									try {
+										val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
+										val fos = FileOutputStream(pfd!!.fileDescriptor)
+										val ch = fos.channel
+										ch.truncate(0)
+										ch.position(0)
+										fos.close(); pfd.close()
+									} catch (_: Exception) {}
+								}
+							} else {
+								// Adjust to server-provided offset
+								state.downloaded = start
 							}
-						} else {
-							// Adjust to server-provided offset
-							state.downloaded = start
 						}
 					}
 				}
-			}
 
-			// Compute total length if not set earlier
-			if (state.total <= 0L) {
-				val reportedLength = connection.contentLengthLong
-				state.total = if (resumedByServer && reportedLength >= 0L) state.downloaded + reportedLength else reportedLength.coerceAtLeast(0L)
-			}
-			// Only update validators if present
-			connection.getHeaderField("ETag")?.let { state.etag = it }
-			connection.getHeaderField("Last-Modified")?.let { state.lastModified = it }
+				// Compute total length if not set earlier
+				if (state.total <= 0L) {
+					val reportedLength = connection.contentLengthLong
+					state.total = if (resumedByServer && reportedLength >= 0L) state.downloaded + reportedLength else reportedLength.coerceAtLeast(0L)
+				}
+				// Only update validators if present
+				connection.getHeaderField("ETag")?.let { state.etag = it }
+				connection.getHeaderField("Last-Modified")?.let { state.lastModified = it }
 
-			input = BufferedInputStream(connection.inputStream)
-			state.input = input
-			out = if (state.downloaded > 0L) {
-				val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
-				outPfd = pfd
-				val fos = FileOutputStream(pfd!!.fileDescriptor)
-				val channel: FileChannel = fos.channel
-				outChannel = channel
-				channel.position(state.downloaded)
-				BufferedOutputStream(fos)
-			} else {
-				// start from 0, ensure overwrite
-				BufferedOutputStream(contentResolver.openOutputStream(uri!!, "w") ?: throw IllegalStateException("No output stream"))
-			}
+				input = BufferedInputStream(connection.inputStream)
+				state.input = input
+				out = if (state.downloaded > 0L) {
+					val pfd = contentResolver.openFileDescriptor(uri!!, "rw")
+					outPfd = pfd
+					val fos = FileOutputStream(pfd!!.fileDescriptor)
+					val channel: FileChannel = fos.channel
+					outChannel = channel
+					channel.position(state.downloaded)
+					BufferedOutputStream(fos)
+				} else {
+					// start from 0, ensure overwrite
+					BufferedOutputStream(contentResolver.openOutputStream(uri!!, "w") ?: throw IllegalStateException("No output stream"))
+				}
 
-			val buffer = ByteArray(256 * 1024)
-			var bytesRead: Int
-			var lastUpdate = System.currentTimeMillis()
-			notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
-			updateSummaryNotification()
-			if (state.downloaded == 0L) {
-				ChannelBridge.emit(mapOf(
-					"type" to "progress",
-					"taskId" to state.taskId,
-					"bytes" to state.downloaded,
-					"total" to state.total,
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-				))
-			}
-
-			while (true) {
-				if (state.canceled) throw InterruptedException("canceled")
-				if (state.paused) break
-				bytesRead = input.read(buffer)
-				if (bytesRead == -1) break
-				out.write(buffer, 0, bytesRead)
-				state.downloaded += bytesRead
-				val now = System.currentTimeMillis()
-				if (now - lastUpdate > 500) {
-					notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+				val buffer = ByteArray(256 * 1024)
+				var bytesRead: Int
+				var lastUpdate = System.currentTimeMillis()
+				notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+				updateSummaryNotification()
+				if (state.downloaded == 0L) {
 					ChannelBridge.emit(mapOf(
 						"type" to "progress",
 						"taskId" to state.taskId,
@@ -369,62 +348,97 @@ class MediaStoreDownloadService : Service() {
 						"subDir" to state.subDir,
 						"url" to state.url,
 					))
-					lastUpdate = now
 				}
-			}
-			out.flush()
 
-			if (!state.paused) {
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-					val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-					contentResolver.update(uri!!, done, null, null)
+				while (true) {
+					if (state.canceled) throw InterruptedException("canceled")
+					if (state.paused) break
+					bytesRead = input.read(buffer)
+					if (bytesRead == -1) break
+					out.write(buffer, 0, bytesRead)
+					state.downloaded += bytesRead
+					val now = System.currentTimeMillis()
+					if (now - lastUpdate > 500) {
+						notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
+						ChannelBridge.emit(mapOf(
+							"type" to "progress",
+							"taskId" to state.taskId,
+							"bytes" to state.downloaded,
+							"total" to state.total,
+							"fileName" to state.fileName,
+							"subDir" to state.subDir,
+							"url" to state.url,
+						))
+						lastUpdate = now
+					}
 				}
-				notifyTask(state, "Download complete", indeterminate = false, completed = true)
-				ChannelBridge.emit(mapOf(
-					"type" to "complete",
-					"taskId" to state.taskId,
-					"bytes" to state.total,
-					"total" to state.total,
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-					"contentUri" to (uri?.toString() ?: ""),
-					"mimeType" to state.mimeType,
-				))
-				states.remove(state.taskId)
-				notificationManager.cancel(taskNotificationId(state.taskId))
-				if (states.isEmpty()) {
-					stopForeground(STOP_FOREGROUND_REMOVE)
-					notificationManager.cancel(SERVICE_NOTIFICATION_ID)
-					stopSelfSafely()
+				out.flush()
+
+				if (!state.paused) {
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+						val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+						contentResolver.update(uri!!, done, null, null)
+					}
+					notifyTask(state, "Download complete", indeterminate = false, completed = true)
+					ChannelBridge.emit(mapOf(
+						"type" to "complete",
+						"taskId" to state.taskId,
+						"bytes" to state.total,
+						"total" to state.total,
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+						"url" to state.url,
+						"contentUri" to (uri?.toString() ?: ""),
+						"mimeType" to state.mimeType,
+					))
+					states.remove(state.taskId)
+					notificationManager.cancel(taskNotificationId(state.taskId))
 				} else {
-					updateSummaryNotification()
+					notifyTask(state, "Paused", indeterminate = false, completed = false)
 				}
-			} else {
-				notifyTask(state, "Paused", indeterminate = false, completed = false)
-				updateSummaryNotification()
+				break // Success or pause exit
+			} catch (e: Exception) {
+				if (state.paused || state.canceled) break
+				
+				retryCount++
+				if (retryCount > maxRetries) {
+					notifyTask(state, "Download failed", indeterminate = true, completed = false)
+					ChannelBridge.emit(mapOf(
+						"type" to "error",
+						"taskId" to state.taskId,
+						"message" to (e.message ?: "unknown error"),
+						"fileName" to state.fileName,
+						"subDir" to state.subDir,
+						"url" to state.url,
+					))
+					states.remove(state.taskId)
+					break
+				}
+				
+				val delay = (1000L * (1L shl (retryCount - 1))).coerceIn(2000L, 30000L)
+				notifyTask(state, "Retrying ($retryCount/$maxRetries)...", indeterminate = true, completed = false)
+				// Safe to sleep here as startOrResume is always called within a dedicated background Thread
+				try { Thread.sleep(delay) } catch (_: Exception) {}
+				// continue to retry connection
+			} finally {
+				try { out?.close() } catch (_: Exception) {}
+				try { outChannel?.close() } catch (_: Exception) {}
+				try { outPfd?.close() } catch (_: Exception) {}
+				try { input?.close() } catch (_: Exception) {}
+				try { connection?.disconnect() } catch (_: Exception) {}
 			}
-		} catch (e: Exception) {
-			if (state.paused) {
-				notifyTask(state, "Paused", indeterminate = false, completed = false)
-			} else if (!state.canceled) {
-				notifyTask(state, "Download failed", indeterminate = true, completed = false)
-				ChannelBridge.emit(mapOf(
-					"type" to "error",
-					"taskId" to state.taskId,
-					"message" to (e.message ?: "unknown error"),
-					"fileName" to state.fileName,
-					"subDir" to state.subDir,
-					"url" to state.url,
-				))
-			}
-		} finally {
-			try { out?.close() } catch (_: Exception) {}
-			try { outChannel?.close() } catch (_: Exception) {}
-			try { outPfd?.close() } catch (_: Exception) {}
-			try { input?.close() } catch (_: Exception) {}
-			try { connection?.disconnect() } catch (_: Exception) {}
-			state.running = false
+		}
+		state.running = false
+		checkIfIdleAndStop()
+	}
+
+	private fun checkIfIdleAndStop() {
+		if (states.isEmpty()) {
+			stopForeground(STOP_FOREGROUND_REMOVE)
+			notificationManager.cancel(SERVICE_NOTIFICATION_ID)
+			stopSelfSafely()
+		} else {
+			updateSummaryNotification()
 		}
 	}
 

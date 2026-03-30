@@ -354,6 +354,33 @@ class DownloadService {
     } catch (_) {}
   }
 
+  static String deriveGroupId({
+    required String recordId,
+    String? metaStr,
+    String? torrentName,
+  }) {
+    String? torrentHash;
+    if (metaStr != null && metaStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(metaStr);
+        if (decoded is Map) {
+          final rawHash = decoded['torrentHash'];
+          if (rawHash != null && rawHash.toString().isNotEmpty) {
+            torrentHash = rawHash.toString();
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (torrentHash != null && torrentHash.isNotEmpty) {
+      return 'hash:${torrentHash.toLowerCase()}';
+    }
+    if (torrentName != null && torrentName.trim().isNotEmpty) {
+      return 'name:${torrentName.trim().toLowerCase()}';
+    }
+    return 'task:$recordId';
+  }
+
   void _upsertRecord(String recordId, Map<String, dynamic> patch) {
     final existing = _records[recordId] ?? <String, dynamic>{};
     existing.addAll(patch);
@@ -445,21 +472,47 @@ class DownloadService {
     } catch (_) {}
   }
 
-  Future<void> retryAllFailed() async {
-    await _loadRecords();
-    final failed = _records.entries.where((e) => (e.value['state'] == 'failed'));
+  Future<void> retryAllFailed({String? groupId}) async {
+    // Use the already in-memory _records map as the authoritative source.
+    final failed = _records.entries.where((e) {
+      final rec = e.value;
+      final isFailed = rec['state'] == 'failed';
+      if (!isFailed) return false;
+      if (groupId != null) {
+        return DownloadService.deriveGroupId(
+              recordId: e.key,
+              metaStr: rec['meta'] as String?,
+              torrentName: rec['torrentName'] as String?,
+            ) ==
+            groupId;
+      }
+      return true;
+    }).toList();
+
     for (final e in failed) {
       final rec = e.value;
-      final meta = rec['meta'] as String?;
+      String? meta = rec['meta'] as String?;
       final url = rec['url'] as String?;
       final fileName = rec['displayName'] as String?;
-      final torrentName = rec['torrentName'] as String?;
+      final tName = rec['torrentName'] as String?;
+
+      // Strip _handoffAttempt from meta to ensure a fresh start on manual retry
       if (meta != null && meta.isNotEmpty) {
-        await enqueueDownload(url: url ?? '', fileName: fileName, meta: meta, torrentName: torrentName);
-      } else if (url != null && url.isNotEmpty) {
-        await enqueueDownload(url: url, fileName: fileName, torrentName: torrentName);
+        try {
+          final m = jsonDecode(meta);
+          if (m is Map && m.containsKey('_handoffAttempt')) {
+            m.remove('_handoffAttempt');
+            meta = jsonEncode(m);
+          }
+        } catch (_) {}
       }
-      _upsertRecord(e.key, {'state': 'queued'});
+
+      if (meta != null && meta.isNotEmpty) {
+        await enqueueDownload(url: url ?? '', fileName: fileName, meta: meta, torrentName: tName);
+      } else if (url != null && url.isNotEmpty) {
+        await enqueueDownload(url: url, fileName: fileName, torrentName: tName);
+      }
+      _upsertRecord(e.key, {'state': 'queued', 'meta': meta});
     }
   }
 
@@ -989,7 +1042,21 @@ class DownloadService {
             if (uri.isNotEmpty) {
               _lastFileByTaskId[taskId] = (uri, mime);
             }
-            if (recId != null) _upsertRecord(recId, {'state': 'complete'});
+            if (recId != null) {
+              final rec = _records[recId];
+              final metaStr = rec?['meta'] as String?;
+              if (metaStr != null && metaStr.contains('_handoffAttempt')) {
+                try {
+                  final m = jsonDecode(metaStr);
+                  m.remove('_handoffAttempt');
+                  _upsertRecord(recId, {'state': 'complete', 'meta': jsonEncode(m)});
+                } catch (_) {
+                  _upsertRecord(recId, {'state': 'complete'});
+                }
+              } else {
+                _upsertRecord(recId, {'state': 'complete'});
+              }
+            }
             _reevaluateQueue();
             break;
           case 'error':
@@ -1016,11 +1083,52 @@ class DownloadService {
               unawaited(() async {
                 final retried = await _handlePikPakFailedRetry(recId);
                 if (!retried) {
-                  // Not PikPak or max retries exceeded - mark as failed
-                  debugPrint('ANDR ERR net=${nowNet.name} → failed');
-                  AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
-                  _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
-                  if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                  // If we are on mobile, it might be a handoff glitch (e.g. 5G -> 4G socket reset)
+                  // Treat as paused and nudge auto-resume instead of hard failing, with a cap.
+                  if (nowNet == ConnectivityResult.mobile) {
+                    final rec = recId != null ? _records[recId] : null;
+                    final metaStr = rec?['meta'] as String?;
+                    int handoffAttempt = 0;
+                    if (metaStr != null && metaStr.isNotEmpty) {
+                      try {
+                        final m = jsonDecode(metaStr);
+                        handoffAttempt = (m['_handoffAttempt'] as num? ?? 0).toInt();
+                      } catch (_) {}
+                    }
+
+                    if (handoffAttempt < 5) {
+                      debugPrint('ANDR ERR mobile handoff? (net=${nowNet.name}, attempt ${handoffAttempt + 1}) → paused for auto-resume');
+                      AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
+                      _statusController.add(TaskStatusUpdate(task, TaskStatus.paused));
+                      
+                      if (recId != null) {
+                        Map<String, dynamic> m;
+                        try {
+                          m = metaStr != null && metaStr.isNotEmpty ? jsonDecode(metaStr) as Map<String, dynamic> : {};
+                        } catch (_) {
+                          m = {}; // If meta is corrupt, start with a fresh map.
+                        }
+                        m['_handoffAttempt'] = handoffAttempt + 1;
+                        _upsertRecord(recId, {'state': 'paused', 'meta': jsonEncode(m)});
+                      }
+                      
+                      // Nudge auto-resume by adding to pending resume list
+                      if (!_pendingResumeAndroid.contains(taskId)) {
+                        _pendingResumeAndroid.add(taskId);
+                      }
+                    } else {
+                      debugPrint('ANDR ERR mobile handoff max retries exceeded → failed');
+                      AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+                      _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+                      if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                    }
+                  } else {
+                    // Not mobile or PikPak - mark as failed
+                    debugPrint('ANDR ERR net=${nowNet.name} → failed');
+                    AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
+                    _statusController.add(TaskStatusUpdate(task, TaskStatus.failed));
+                    if (recId != null) _upsertRecord(recId, {'state': 'failed'});
+                  }
                 }
                 _reevaluateQueue();
               }());
@@ -1202,26 +1310,39 @@ class DownloadService {
 
     filename = _sanitizeName(filename);
 
-    // Use torrent name for folder if provided, otherwise use base name of file
-    String folder;
+    // Use torrent name for folder if provided. 
+    // If no torrentName is provided, we drop files directly into the downloads root 
+    // to avoid the "directory instead of file" issues for single-file downloads.
+    String? folder;
     if (torrentName != null && torrentName.trim().isNotEmpty) {
       folder = _sanitizeName(torrentName.trim());
-    } else {
-      // Make a folder from base name (without extension)
-      final int dot = filename.lastIndexOf('.');
-      final String baseName = dot > 0 ? filename.substring(0, dot) : filename;
-      folder = _sanitizeName(baseName);
     }
 
     // Place under downloads/<folder>
     final String downloadsRoot = await _appDownloadsSubdir();
-    final String dir = path.join(downloadsRoot, folder);
+    final String dir = folder != null ? path.join(downloadsRoot, folder) : downloadsRoot;
     final Directory d = Directory(dir);
     if (!await d.exists()) {
       await d.create(recursive: true);
     }
 
-    return (dir, filename);
+    // Check for filename conflict and increment if needed using file (1).ext format.
+    // Cap at 1000 iterations to prevent infinite loops in edge cases.
+    String finalFilename = filename;
+    int counter = 1;
+    while (await File(path.join(dir, finalFilename)).exists() && counter < 1000) {
+      final dot = filename.lastIndexOf('.');
+      if (dot > 0) {
+        final base = filename.substring(0, dot);
+        final ext = filename.substring(dot);
+        finalFilename = '$base ($counter)$ext';
+      } else {
+        finalFilename = '$filename ($counter)';
+      }
+      counter++;
+    }
+
+    return (dir, finalFilename);
   }
 
   Future<DownloadEntry> enqueueDownload({
