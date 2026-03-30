@@ -545,6 +545,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Resolve season/episode: prefer current playlist entry (tracks auto-advance),
   /// fall back to launch args, then filename parsing.
   ({int? season, int? episode}) _traktSeasonEpisode() {
+    // Movies never have season/episode — avoid filename false positives (e.g. "5.1" surround)
+    if (widget.contentType == 'movie') {
+      return (season: null, episode: null);
+    }
     // Prefer current playlist entry — correct even after auto-advance
     if (_activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
       final info = SeriesParser.parseFilename(_activePlaylist![_currentIndex].title);

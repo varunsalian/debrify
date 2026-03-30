@@ -1451,8 +1451,9 @@ class VideoPlayerLauncher {
         final traktProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
         final imdbId = payload.imdbId!;
         // For series, read season/episode from Kotlin progress update
-        final season = progress['season'] as int?;
-        final episode = progress['episode'] as int?;
+        // For non-series, ignore parsed values — avoids filename false positives (e.g. "5.1" surround → S5E1)
+        final season = payload.contentType == _PlaybackContentType.series ? progress['season'] as int? : null;
+        final episode = payload.contentType == _PlaybackContentType.series ? progress['episode'] as int? : null;
 
         // Detect episode switch — scrobble stop for the old episode
         if (_traktLastKnownSeason != null && _traktLastKnownEpisode != null &&
