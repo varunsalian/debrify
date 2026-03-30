@@ -354,6 +354,33 @@ class DownloadService {
     } catch (_) {}
   }
 
+  static String deriveGroupId({
+    required String recordId,
+    String? metaStr,
+    String? torrentName,
+  }) {
+    String? torrentHash;
+    if (metaStr != null && metaStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(metaStr);
+        if (decoded is Map) {
+          final rawHash = decoded['torrentHash'];
+          if (rawHash != null && rawHash.toString().isNotEmpty) {
+            torrentHash = rawHash.toString();
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (torrentHash != null && torrentHash.isNotEmpty) {
+      return 'hash:${torrentHash.toLowerCase()}';
+    }
+    if (torrentName != null && torrentName.trim().isNotEmpty) {
+      return 'name:${torrentName.trim().toLowerCase()}';
+    }
+    return 'task:$recordId';
+  }
+
   void _upsertRecord(String recordId, Map<String, dynamic> patch) {
     final existing = _records[recordId] ?? <String, dynamic>{};
     existing.addAll(patch);
@@ -452,31 +479,12 @@ class DownloadService {
       final isFailed = rec['state'] == 'failed';
       if (!isFailed) return false;
       if (groupId != null) {
-        // Implement the same grouping logic as in the UI to ensure perfect match
-        final metaStr = rec['meta'] as String?;
-        String? torrentHash;
-        if (metaStr != null && metaStr.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(metaStr);
-            final rawHash = decoded['torrentHash'];
-            if (rawHash != null && rawHash.toString().isNotEmpty) {
-              torrentHash = rawHash.toString();
-            }
-          } catch (_) {}
-        }
-
-        final String recordGroupId;
-        if (torrentHash != null && torrentHash.isNotEmpty) {
-          recordGroupId = 'hash:${torrentHash.toLowerCase()}';
-        } else {
-          final torrentName = rec['torrentName'] as String?;
-          if (torrentName != null && torrentName.trim().isNotEmpty) {
-            recordGroupId = 'name:${torrentName.trim().toLowerCase()}';
-          } else {
-            recordGroupId = 'task:${e.key}';
-          }
-        }
-        return recordGroupId == groupId;
+        return DownloadService.deriveGroupId(
+              recordId: e.key,
+              metaStr: rec['meta'] as String?,
+              torrentName: rec['torrentName'] as String?,
+            ) ==
+            groupId;
       }
       return true;
     }).toList();

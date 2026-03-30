@@ -1521,14 +1521,11 @@ List<TorrentDownloadGroup> buildTorrentGroups({
 }
 
 String _deriveGroupId(TaskRecord record, DownloadRecordDetails? details, TorrentMeta meta) {
-  if (meta.torrentHash != null && meta.torrentHash!.isNotEmpty) {
-    return 'hash:${meta.torrentHash!.toLowerCase()}';
-  }
-  final torrentName = details?.torrentName;
-  if (torrentName != null && torrentName.trim().isNotEmpty) {
-    return 'name:${torrentName.trim().toLowerCase()}';
-  }
-  return 'task:${record.task.taskId}';
+  return DownloadService.deriveGroupId(
+    recordId: record.task.taskId,
+    metaStr: details?.meta,
+    torrentName: details?.torrentName,
+  );
 }
 
 String formatBytes(int bytes) {
