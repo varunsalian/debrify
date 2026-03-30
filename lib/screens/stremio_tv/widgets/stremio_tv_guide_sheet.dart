@@ -118,21 +118,9 @@ class StremioTvGuideSheet extends StatelessWidget {
             ),
             // Schedule list
             Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 16),
-                itemCount: schedule.length,
-                itemBuilder: (context, index) {
-                  final entry = schedule[index];
-                  final isCurrent = index == 0;
-                  return _GuideEntry(
-                    entry: entry,
-                    isCurrent: isCurrent,
-                    onTap: isCurrent && onItemTap != null
-                        ? () => onItemTap!(index)
-                        : null,
-                  );
-                },
+              child: _FocusableGuideList(
+                schedule: schedule,
+                onItemTap: onItemTap,
               ),
             ),
           ],
@@ -142,14 +130,92 @@ class StremioTvGuideSheet extends StatelessWidget {
   }
 }
 
+/// Stateful wrapper that manages focus nodes for DPAD scrolling
+class _FocusableGuideList extends StatefulWidget {
+  final List<StremioTvNowPlaying> schedule;
+  final void Function(int index)? onItemTap;
+
+  const _FocusableGuideList({
+    required this.schedule,
+    this.onItemTap,
+  });
+
+  @override
+  State<_FocusableGuideList> createState() => _FocusableGuideListState();
+}
+
+class _FocusableGuideListState extends State<_FocusableGuideList> {
+  final ScrollController _scrollController = ScrollController();
+  final List<FocusNode> _focusNodes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    for (int i = 0; i < widget.schedule.length; i++) {
+      _focusNodes.add(FocusNode(debugLabel: 'guide-entry-$i'));
+    }
+    // Auto-focus first item for DPAD
+    if (_focusNodes.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusNodes[0].requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  void _scrollToIndex(int index) {
+    if (!_scrollController.hasClients) return;
+    // ~85px per entry (65px poster + 16px vertical padding + 4px spacing)
+    final offset = index * 85.0;
+    _scrollController.animateTo(
+      offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _scrollController,
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: widget.schedule.length,
+      itemBuilder: (context, index) {
+        final entry = widget.schedule[index];
+        final isCurrent = index == 0;
+        return _GuideEntry(
+          entry: entry,
+          isCurrent: isCurrent,
+          focusNode: _focusNodes[index],
+          onFocused: () => _scrollToIndex(index),
+          onTap: isCurrent && widget.onItemTap != null ? () => widget.onItemTap!(index) : null,
+        );
+      },
+    );
+  }
+}
+
 class _GuideEntry extends StatelessWidget {
   final StremioTvNowPlaying entry;
   final bool isCurrent;
+  final FocusNode? focusNode;
+  final VoidCallback? onFocused;
   final VoidCallback? onTap;
 
   const _GuideEntry({
     required this.entry,
     required this.isCurrent,
+    this.focusNode,
+    this.onFocused,
     this.onTap,
   });
 
@@ -158,13 +224,33 @@ class _GuideEntry extends StatelessWidget {
     final theme = Theme.of(context);
     final item = entry.item;
 
-    final content = Material(
-      color: isCurrent
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
-          : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
+    final content = Focus(
+      focusNode: focusNode,
+      onFocusChange: (hasFocus) {
+        if (hasFocus) onFocused?.call();
+      },
+      child: Builder(
+        builder: (context) {
+          final isFocused = Focus.of(context).hasFocus;
+          return Material(
+            color: isFocused
+                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                : isCurrent
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
+                    : Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                decoration: isFocused
+                    ? BoxDecoration(
+                        border: Border.all(
+                          color: theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      )
+                    : null,
+                child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Row(
             children: [
@@ -267,10 +353,24 @@ class _GuideEntry extends StatelessWidget {
             ],
           ),
         ),
+              ),
+            ),
+          );
+        },
       ),
     );
 
-    // Dim future items
+    // Dim future items (but not when focused via DPAD)
+    if (!isCurrent && focusNode != null) {
+      return ListenableBuilder(
+        listenable: focusNode!,
+        builder: (context, child) => Opacity(
+          opacity: focusNode!.hasFocus ? 1.0 : 0.45,
+          child: child,
+        ),
+        child: content,
+      );
+    }
     if (!isCurrent) {
       return Opacity(opacity: 0.45, child: content);
     }
