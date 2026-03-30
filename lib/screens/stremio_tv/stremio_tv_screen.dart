@@ -18,6 +18,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
+import '../../services/torrent_service.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
@@ -585,27 +586,30 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     streamDialogShown = true;
 
     try {
-      var results = await _service.searchStreams(
-        type: item.type,
-        imdbId: item.effectiveImdbId ?? item.id,
+      final isMovie = item.type.toLowerCase() == 'movie';
+      var results = await TorrentService.searchByImdbWithStremio(
+        item.effectiveImdbId ?? item.id,
+        isMovie: isMovie,
         season: season,
         episode: episode,
-        timeout: const Duration(seconds: 7),
+        contentType: item.type,
+        stremioTimeout: const Duration(seconds: 7),
       );
 
       // For series, retry with episode 1 if the picked episode returns no streams
-      if (item.type.toLowerCase() == 'series' &&
+      if (!isMovie &&
           episode != null &&
           episode != 1) {
         final torrents = results['torrents'] as List<Torrent>? ?? [];
         if (torrents.isEmpty) {
           debugPrint('StremioTV: No streams for S${season}E$episode, retrying with E1');
-          final retryResults = await _service.searchStreams(
-            type: item.type,
-            imdbId: item.effectiveImdbId ?? item.id,
+          final retryResults = await TorrentService.searchByImdbWithStremio(
+            item.effectiveImdbId ?? item.id,
+            isMovie: false,
             season: season,
             episode: 1,
-            timeout: const Duration(seconds: 7),
+            contentType: item.type,
+            stremioTimeout: const Duration(seconds: 7),
           );
           final retryTorrents = retryResults['torrents'] as List<Torrent>? ?? [];
           if (retryTorrents.isNotEmpty) {
@@ -854,26 +858,29 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ? '${item.name} (S${season}E$episode)'
         : item.name;
 
-    // Search streams
-    var results = await _service.searchStreams(
-      type: item.type,
-      imdbId: item.effectiveImdbId ?? item.id,
+    // Search streams (torrent engines + Stremio addons)
+    final isMovie = item.type.toLowerCase() == 'movie';
+    var results = await TorrentService.searchByImdbWithStremio(
+      item.effectiveImdbId ?? item.id,
+      isMovie: isMovie,
       season: season,
       episode: episode,
-      timeout: const Duration(seconds: 7),
+      contentType: item.type,
+      stremioTimeout: const Duration(seconds: 7),
     );
 
     // E1 fallback for series
-    if (item.type.toLowerCase() == 'series' && episode != null && episode != 1) {
+    if (!isMovie && episode != null && episode != 1) {
       final torrents = results['torrents'] as List<Torrent>? ?? [];
       if (torrents.isEmpty) {
         debugPrint('StremioTV guide: No streams for S${season}E$episode, retrying E1');
-        final retryResults = await _service.searchStreams(
-          type: item.type,
-          imdbId: item.effectiveImdbId ?? item.id,
+        final retryResults = await TorrentService.searchByImdbWithStremio(
+          item.effectiveImdbId ?? item.id,
+          isMovie: false,
           season: season,
           episode: 1,
-          timeout: const Duration(seconds: 7),
+          contentType: item.type,
+          stremioTimeout: const Duration(seconds: 7),
         );
         if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
           results = retryResults;

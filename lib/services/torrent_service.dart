@@ -378,6 +378,7 @@ class TorrentService {
     bool includeStremio = true,
     List<int>? availableSeasons,
     String? contentType, // Optional explicit content type (for TV channels, etc.)
+    Duration? stremioTimeout,
   }) async {
     // For non-IMDB content types (TV channels, etc.), skip traditional engine search
     final isNonImdbContent = contentType != null && contentType != 'movie' && contentType != 'series';
@@ -409,6 +410,7 @@ class TorrentService {
           episode: episode,
           availableSeasons: availableSeasons,
           contentType: contentType,
+          timeout: stremioTimeout,
         ),
       );
     }
@@ -493,6 +495,7 @@ class TorrentService {
     int? episode,
     List<int>? availableSeasons,
     String? contentType, // Optional explicit content type (for TV channels, etc.)
+    Duration? timeout,
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -514,6 +517,7 @@ class TorrentService {
         season: season,
         episode: episode,
         availableSeasons: availableSeasons,
+        timeout: timeout,
       );
 
       return {
