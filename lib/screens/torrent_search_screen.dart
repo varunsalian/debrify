@@ -3624,7 +3624,46 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }).toList();
 
     // Use title-matched torrents if available, otherwise fall back to all
-    final torrentsForQuickPlay = titleMatched.isNotEmpty ? titleMatched : torrentsOnly;
+    var torrentsForQuickPlay = titleMatched.isNotEmpty ? titleMatched : torrentsOnly;
+
+    // For Torbox: ensure cache status is available and filter to cached-only
+    if (_defaultTorrentProvider == 'torbox' || (!hasDebridProvider && _torboxIntegrationEnabled && _torboxApiKey != null && _torboxApiKey!.isNotEmpty)) {
+      if (_torboxCacheStatus == null && _torboxApiKey != null && _torboxApiKey!.isNotEmpty) {
+        // Force a cache check for Quick Play candidates
+        final hashes = torrentsForQuickPlay
+            .map((t) => t.infohash.trim().toLowerCase())
+            .where((h) => h.isNotEmpty)
+            .toSet()
+            .toList();
+        if (hashes.isNotEmpty) {
+          try {
+            final cached = await TorboxService.checkCachedTorrents(
+              apiKey: _torboxApiKey!,
+              infoHashes: hashes,
+              listFiles: false,
+            );
+            if (!mounted) return;
+            setState(() {
+              _torboxCacheStatus = {
+                for (final h in hashes) h: cached.contains(h),
+              };
+            });
+          } catch (e) {
+            debugPrint('TorrentSearchScreen: Quick Play Torbox cache check failed: $e');
+          }
+        }
+      }
+      // Filter to cached torrents if status is available
+      if (_torboxCacheStatus != null) {
+        final cachedOnly = torrentsForQuickPlay
+            .where((t) => _torboxCacheStatus![t.infohash.trim().toLowerCase()] == true)
+            .toList();
+        if (cachedOnly.isNotEmpty) {
+          torrentsForQuickPlay = cachedOnly;
+          debugPrint('TorrentSearchScreen: Quick Play - filtered to ${cachedOnly.length} cached Torbox torrents');
+        }
+      }
+    }
 
     // Store the full list of torrents for potential retries
     _quickPlayTorrentsList = torrentsForQuickPlay;
