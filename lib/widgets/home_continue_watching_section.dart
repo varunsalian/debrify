@@ -626,14 +626,18 @@ class _HomeContinueWatchingSectionState
               final imdbId = item['imdbId'] as String? ?? '';
               final progress = _progressMap[imdbId];
 
-              return _buildCard(
-                item: item,
-                progressPercent: progress != null ? progress / 100.0 : null,
-                episodeInfo: _episodeInfoMap[imdbId],
-                index: index,
-                focusNode: index < _cardFocusNodes.length
-                    ? _cardFocusNodes[index]
-                    : null,
+              return Padding(
+                padding: EdgeInsets.only(
+                    right: index < _items.length - 1 ? 16 : 0),
+                child: _buildCard(
+                  item: item,
+                  progressPercent: progress != null ? progress / 100.0 : null,
+                  episodeInfo: _episodeInfoMap[imdbId],
+                  index: index,
+                  focusNode: index < _cardFocusNodes.length
+                      ? _cardFocusNodes[index]
+                      : null,
+                ),
               );
             },
           ),
