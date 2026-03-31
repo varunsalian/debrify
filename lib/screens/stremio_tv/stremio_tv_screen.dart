@@ -54,6 +54,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
   int _playGeneration = 0;
+  int _dialogGeneration = -1;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
 
   /// Get the rotation duration for a channel based on its content type.
@@ -579,7 +580,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Show loading dialog with updatable message
     if (!mounted || _playGeneration != myGeneration) return;
-    bool streamDialogShown = false;
+    _dialogGeneration = myGeneration;
     final loadingStatus = showPsychLoadingUpdatable(
       context,
       season != null
@@ -587,10 +588,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           : 'Warping into the ${item.name} dimension...',
       onCancel: () {
         _playGeneration++;
+        _dialogGeneration = -1;
         if (mounted) Navigator.of(context).pop();
       },
     );
-    streamDialogShown = true;
 
     try {
       final isMovie = item.type.toLowerCase() == 'movie';
@@ -628,7 +629,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (!mounted || _playGeneration != myGeneration) {
-        if (streamDialogShown && mounted) { Navigator.of(context).pop(); }
+        if (_dialogGeneration == myGeneration && mounted) {
+          _dialogGeneration = -1;
+          Navigator.of(context).pop();
+        }
         return;
       }
 
@@ -640,7 +644,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (torrents.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
-          streamDialogShown = false;
+          _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('No streams found for ${item.name}'),
@@ -693,7 +697,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (playableSources.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
-          streamDialogShown = false;
+          _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No playable streams found for ${item.name}')),
           );
@@ -761,7 +765,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
-          streamDialogShown = false;
+          _dialogGeneration = -1;
           // Show source picker so user can manually select
           final result = await _showManualSourcePicker(
             playableSources, item,
@@ -797,7 +801,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // Dismiss loading dialog right before player launch
       Navigator.of(context).pop();
-      streamDialogShown = false;
+      _dialogGeneration = -1;
 
       // Launch player with all sources for in-player switching
       await VideoPlayerLauncher.push(
@@ -823,7 +827,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      if (streamDialogShown) Navigator.of(context).pop();
+      if (_dialogGeneration == myGeneration) {
+        _dialogGeneration = -1;
+        Navigator.of(context).pop();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error searching streams: $e')),
       );
