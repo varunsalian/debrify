@@ -190,32 +190,59 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Timeout',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                DropdownButton<int>(
-                  value: _searchTimeout,
-                  underline: const SizedBox.shrink(),
-                  borderRadius: BorderRadius.circular(12),
-                  items: timeoutOptions.map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text('${s}s'),
+          InkWell(
+            onTap: () async {
+              final selected = await showDialog<int>(
+                context: context,
+                builder: (ctx) => SimpleDialog(
+                  title: const Text('Search Timeout'),
+                  children: timeoutOptions.map((s) => SimpleDialogOption(
+                    onPressed: () => Navigator.of(ctx).pop(s),
+                    child: Row(
+                      children: [
+                        if (s == _searchTimeout)
+                          Icon(Icons.check, size: 18, color: theme.colorScheme.primary)
+                        else
+                          const SizedBox(width: 18),
+                        const SizedBox(width: 12),
+                        Text('${s} seconds'),
+                      ],
+                    ),
                   )).toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _searchTimeout = value);
-                    StorageService.setQuickPlaySearchTimeout(value);
-                  },
                 ),
-              ],
+              );
+              if (selected != null) {
+                setState(() => _searchTimeout = selected);
+                StorageService.setQuickPlaySearchTimeout(selected);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Timeout',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${_searchTimeout}s',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -281,63 +308,73 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             onChanged: _setTryMultipleTorrents,
           ),
 
-          // Max retries slider (only visible when try multiple is enabled)
+          // Max retries (only visible when try multiple is enabled)
           if (_tryMultipleTorrents) ...[
             const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Max torrents to try',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+            InkWell(
+              onTap: () async {
+                final selected = await showDialog<int>(
+                  context: context,
+                  builder: (ctx) => SimpleDialog(
+                    title: const Text('Max torrents to try'),
+                    children: List.generate(9, (i) => i + 2).map((n) => SimpleDialogOption(
+                      onPressed: () => Navigator.of(ctx).pop(n),
+                      child: Row(
+                        children: [
+                          if (n == _maxRetries)
+                            Icon(Icons.check, size: 18, color: theme.colorScheme.primary)
+                          else
+                            const SizedBox(width: 18),
+                          const SizedBox(width: 12),
+                          Text('$n torrents'),
+                        ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '$_maxRetries',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onPrimaryContainer,
+                    )).toList(),
+                  ),
+                );
+                if (selected != null) {
+                  _setMaxRetries(selected);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Max torrents to try',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Higher values increase chance of finding cached content',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: theme.colorScheme.primary,
-                      inactiveTrackColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-                      thumbColor: theme.colorScheme.primary,
-                      overlayColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      child: Text(
+                        '$_maxRetries',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
                     ),
-                    child: Slider(
-                      value: _maxRetries.toDouble(),
-                      min: 2,
-                      max: 10,
-                      divisions: 8,
-                      label: '$_maxRetries',
-                      onChanged: (value) => _setMaxRetries(value.round()),
-                    ),
-                  ),
-                  Text(
-                    'Higher values increase chance of finding cached content but may take longer',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
