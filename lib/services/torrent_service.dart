@@ -258,6 +258,7 @@ class TorrentService {
     int? season,
     int? episode,
     List<int>? availableSeasons,
+    Duration? timeout,
   }) async {
     await ensureInitialized();
 
@@ -316,8 +317,7 @@ class TorrentService {
       final maxResults = await _settings.getMaxResults(engineId, defaultMax);
 
       // Use executeSearch which supports maxResults
-      futures.add(
-        engine.executeSearch(
+      var future = engine.executeSearch(
           imdbId: imdbId,
           isSeries: !isMovie,
           season: (!isMovie && engine.supportsSeriesSearch) ? season : null,
@@ -334,8 +334,16 @@ class TorrentService {
           engineErrors[engineId] = error.toString();
           debugPrint('TorrentService: $engineId (IMDB) error: $error');
           return <Torrent>[];
-        }),
-      );
+        });
+      if (timeout != null) {
+        future = future.timeout(timeout, onTimeout: () {
+          engineCounts[engineId] = 0;
+          engineErrors[engineId] = 'Timeout after ${timeout.inSeconds}s';
+          debugPrint('TorrentService: $engineId (IMDB) timed out after ${timeout.inSeconds}s');
+          return <Torrent>[];
+        });
+      }
+      futures.add(future);
     }
 
     final allResults = await Future.wait(futures);
@@ -379,6 +387,7 @@ class TorrentService {
     List<int>? availableSeasons,
     String? contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? stremioTimeout,
+    Duration? engineTimeout,
   }) async {
     // For non-IMDB content types (TV channels, etc.), skip traditional engine search
     final isNonImdbContent = contentType != null && contentType != 'movie' && contentType != 'series';
@@ -396,6 +405,7 @@ class TorrentService {
           season: season,
           episode: episode,
           availableSeasons: availableSeasons,
+          timeout: engineTimeout,
         ),
       );
     }

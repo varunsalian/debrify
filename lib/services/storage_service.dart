@@ -3606,6 +3606,18 @@ class StorageService {
     await prefs.setInt(_quickPlayMaxRetriesKey, maxRetries.clamp(2, 10));
   }
 
+  static const String _quickPlaySearchTimeoutKey = 'quick_play_search_timeout';
+
+  static Future<int> getQuickPlaySearchTimeout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_quickPlaySearchTimeoutKey) ?? 5;
+  }
+
+  static Future<void> setQuickPlaySearchTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_quickPlaySearchTimeoutKey, seconds);
+  }
+
   /// Clear all Quick Play Cache Fallback settings
   static Future<void> clearQuickPlayCacheFallbackSettings() async {
     final prefs = await SharedPreferences.getInstance();

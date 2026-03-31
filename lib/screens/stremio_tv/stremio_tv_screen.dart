@@ -602,6 +602,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         episode: episode,
         contentType: item.type,
         stremioTimeout: const Duration(seconds: 7),
+        engineTimeout: const Duration(seconds: 10),
       );
 
       // For series, retry with episode 1 if the picked episode returns no streams
@@ -618,6 +619,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             episode: 1,
             contentType: item.type,
             stremioTimeout: const Duration(seconds: 7),
+        engineTimeout: const Duration(seconds: 10),
           );
           final retryTorrents = retryResults['torrents'] as List<Torrent>? ?? [];
           if (retryTorrents.isNotEmpty) {
@@ -901,6 +903,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           episode: 1,
           contentType: item.type,
           stremioTimeout: const Duration(seconds: 7),
+        engineTimeout: const Duration(seconds: 10),
         );
         if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
           results = retryResults;

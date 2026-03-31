@@ -652,6 +652,8 @@ class StremioService {
         response = await http.get(uri).timeout(effectiveTimeout);
       } on TimeoutException {
         // Retry once with shorter timeout (covers cold starts)
+        // Skip retry if caller provided a custom timeout (e.g. Quick Play)
+        if (timeout != null) rethrow;
         debugPrint('StremioService: ${addon.name} timed out, retrying...');
         response = await http.get(uri).timeout(_retryTimeout);
       }

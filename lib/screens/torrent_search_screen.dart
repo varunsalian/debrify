@@ -1716,6 +1716,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Use IMDB search when we have an advanced selection, otherwise keyword search
       if (selection != null && selection.imdbId.trim().isNotEmpty) {
         debugPrint('TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}, contentType=${selection.contentType}');
+        final Duration? quickPlayTimeout;
+        if (_quickPlayPending) {
+          final timeoutSecs = await StorageService.getQuickPlaySearchTimeout();
+          quickPlayTimeout = Duration(seconds: timeoutSecs);
+        } else {
+          quickPlayTimeout = null;
+        }
         result = await TorrentService.searchByImdbWithStremio(
           selection.imdbId,
           engineStates: _engineStates,
@@ -1724,6 +1731,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           episode: selection.episode,
           availableSeasons: selection.isSeries ? _availableSeasons : null,
           contentType: selection.contentType,
+          stremioTimeout: quickPlayTimeout,
+          engineTimeout: quickPlayTimeout,
         );
       } else {
         debugPrint('TorrentSearchScreen: Using KEYWORD search (no advanced selection) for query: $query');
@@ -2470,6 +2479,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Now search with season data available (if fetched)
+    if (!mounted) return;
     _createAdvancedSelectionAndSearch();
   }
 

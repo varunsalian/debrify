@@ -13,6 +13,9 @@ class QuickPlaySettingsPage extends StatefulWidget {
 class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   bool _loading = true;
 
+  // Search timeout
+  int _searchTimeout = 5;
+
   // Cache Fallback Settings
   bool _tryMultipleTorrents = false;
   int _maxRetries = 3;
@@ -27,6 +30,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   }
 
   Future<void> _loadSettings() async {
+    final searchTimeout = await StorageService.getQuickPlaySearchTimeout();
     final tryMultipleTorrents = await StorageService.getQuickPlayTryMultipleTorrents();
     final maxRetries = await StorageService.getQuickPlayMaxRetries();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
@@ -34,6 +38,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     if (!mounted) return;
 
     setState(() {
+      _searchTimeout = searchTimeout;
       _tryMultipleTorrents = tryMultipleTorrents;
       _maxRetries = maxRetries;
       _defaultProvider = defaultProvider;
@@ -77,6 +82,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(context),
+            const SizedBox(height: 24),
+            _buildSearchTimeoutSection(context),
             const SizedBox(height: 24),
             // Cache Fallback section (hide for PikPak - not supported)
             if (_defaultProvider != 'pikpak') ...[
@@ -130,6 +137,83 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                             .onPrimaryContainer
                             .withValues(alpha: 0.7),
                       ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchTimeoutSection(BuildContext context) {
+    final theme = Theme.of(context);
+    const timeoutOptions = [5, 10, 15, 20, 30];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.timer_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Search Timeout',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Maximum time to wait for search results before starting playback with whatever is available.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Timeout',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                DropdownButton<int>(
+                  value: _searchTimeout,
+                  underline: const SizedBox.shrink(),
+                  borderRadius: BorderRadius.circular(12),
+                  items: timeoutOptions.map((s) => DropdownMenuItem(
+                    value: s,
+                    child: Text('${s}s'),
+                  )).toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _searchTimeout = value);
+                    StorageService.setQuickPlaySearchTimeout(value);
+                  },
                 ),
               ],
             ),
