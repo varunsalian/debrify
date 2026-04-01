@@ -765,6 +765,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentYear: _activeAdvancedSelection?.year,
         addonId: _selectedSource.addon?.id,
       ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
   }
 
@@ -2975,6 +2976,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // The search completion handler will check _quickPlayPending and auto-play
   }
 
+  /// Handle Quick Play next episode result from video player.
+  /// Called when the player pops with a 'quickPlayNext' result.
+  Future<void> _handleQuickPlayNextEpisode(Map<String, dynamic> result) async {
+    if (!mounted) return;
+    final imdbId = result['imdbId'] as String?;
+    final season = result['season'] as int?;
+    final episode = result['episode'] as int?;
+    final title = result['title'] as String? ?? _activeAdvancedSelection?.title ?? '';
+    final posterUrl = result['posterUrl'] as String? ?? _activeAdvancedSelection?.posterUrl;
+    final year = result['year'] as String? ?? _activeAdvancedSelection?.year;
+
+    if (imdbId == null || season == null || episode == null) return;
+
+    debugPrint('TorrentSearchScreen: Quick Play next episode S${season}E$episode for $title');
+    final selection = AdvancedSearchSelection(
+      imdbId: imdbId,
+      isSeries: true,
+      title: title,
+      season: season,
+      episode: episode,
+      contentType: 'series',
+      posterUrl: posterUrl,
+      year: year,
+    );
+    await _handleQuickPlay(selection);
+  }
+
+  /// Callback for VideoPlayerLauncher to handle Quick Play next episode.
+  Future<void> Function(Map<String, dynamic>)? get _quickPlayNextCallback {
+    // Only provide callback for series content
+    if (_activeAdvancedSelection?.isSeries != true) return null;
+    return _handleQuickPlayNextEpisode;
+  }
+
   void _showQuickPlayLoading(String title, {VoidCallback? onDismissed}) {
     showDialog(
       context: context,
@@ -3254,6 +3289,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torboxTorrentId: torboxTorrentId,
         pikpakCollectionId: pikpakCollectionId,
       ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
 
     if (mounted) _goBackAndRefreshSources();
@@ -7886,6 +7922,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               contentYear: _activeAdvancedSelection?.year,
               addonId: _selectedSource.addon?.id,
             ),
+            onQuickPlayNextEpisode: _quickPlayNextCallback,
           );
         }
       } catch (e) {
@@ -8013,6 +8050,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentYear: _activeAdvancedSelection?.year,
         addonId: _selectedSource.addon?.id,
       ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
   }
 
@@ -10485,6 +10523,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             contentYear: _activeAdvancedSelection?.year,
             addonId: _selectedSource.addon?.id,
           ),
+          onQuickPlayNextEpisode: _quickPlayNextCallback,
         );
         if (forcePlay) _resetQuickPlayState();
       } catch (e) {
@@ -10633,6 +10672,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         contentYear: _activeAdvancedSelection?.year,
         addonId: _selectedSource.addon?.id,
       ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
     if (forcePlay) _resetQuickPlayState();
   }
@@ -11758,6 +11798,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             contentYear: _activeAdvancedSelection?.year,
             addonId: _selectedSource.addon?.id,
           ),
+          onQuickPlayNextEpisode: _quickPlayNextCallback,
         );
         if (forcePlay) _resetQuickPlayState();
       } else {
@@ -12272,6 +12313,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           contentYear: _activeAdvancedSelection?.year,
           addonId: _selectedSource.addon?.id,
         ),
+        onQuickPlayNextEpisode: _quickPlayNextCallback,
       );
     } catch (e) {
       if (mounted) {
