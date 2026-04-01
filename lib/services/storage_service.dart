@@ -1185,8 +1185,16 @@ class StorageService {
       }
 
       if (lastEpisode != null) {
+        // Check if this episode is marked as finished
+        final finishedEpisodes = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
+        if (finishedEpisodes != null) {
+          final seasonFinished = finishedEpisodes[lastEpisode['season'].toString()] as Map<String, dynamic>?;
+          if (seasonFinished != null && seasonFinished.containsKey(lastEpisode['episode'].toString())) {
+            lastEpisode['finished'] = true;
+          }
+        }
         debugPrint(
-          'StorageService: getLastPlayedEpisodeByImdbId found S${lastEpisode['season']}E${lastEpisode['episode']} for "$imdbId"',
+          'StorageService: getLastPlayedEpisodeByImdbId found S${lastEpisode['season']}E${lastEpisode['episode']} for "$imdbId"${lastEpisode['finished'] == true ? ' (finished)' : ''}',
         );
       }
       return lastEpisode;

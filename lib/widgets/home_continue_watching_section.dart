@@ -121,10 +121,11 @@ class _HomeContinueWatchingSectionState
         if (contentType == 'series') {
           final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
           if (lastEp != null) {
+            final finished = lastEp['finished'] == true;
             final posMs = lastEp['positionMs'] as int? ?? 0;
             final durMs = lastEp['durationMs'] as int? ?? 1;
             if (durMs > 0) {
-              progressMap[imdbId] = (posMs / durMs * 100).clamp(0.0, 100.0);
+              progressMap[imdbId] = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
             }
             final s = lastEp['season'] as int?;
             final e = lastEp['episode'] as int?;
@@ -292,8 +293,9 @@ class _HomeContinueWatchingSectionState
         if (cachedEp != null) {
           int season = cachedEp.season;
           int episode = cachedEp.episode;
-          // If episode is near-complete (>=90%), find the real next episode from the catalog
+          // If episode is near-complete (>=90%) or finished, find the real next episode from the catalog
           final progress = _progressMap[selection.imdbId] ?? 0.0; // 0-100
+          debugPrint('HomeContinueWatching: Quick Play S${season}E$episode progress=$progress');
           if (progress >= 90) {
             final nextEp = await _findNextEpisode(selection.imdbId, season, episode, item['addonId'] as String?);
             if (!mounted) return;
