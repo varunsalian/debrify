@@ -334,7 +334,11 @@ class VideoPlayerLauncher {
     return nameWithoutExt.hashCode.toString();
   }
 
-  static Future<void> push(BuildContext context, VideoPlayerLaunchArgs originalArgs) async {
+  static Future<void> push(
+    BuildContext context,
+    VideoPlayerLaunchArgs originalArgs, {
+    Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
+  }) async {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
     if (!args.traktScrobble && args.contentImdbId != null && args.stremioTvChannels == null) {
@@ -445,9 +449,16 @@ class VideoPlayerLauncher {
       }
     }
 
-    await Navigator.of(context).push(
+    final result = await Navigator.of(context).push<Map<String, dynamic>?>(
       MaterialPageRoute(builder: (_) => args.toWidget()),
     );
+
+    // Handle Quick Play next episode request from player
+    if (result != null &&
+        result['quickPlayNext'] == true &&
+        onQuickPlayNextEpisode != null) {
+      await onQuickPlayNextEpisode(result);
+    }
   }
 
   /// Launch video with external player based on platform
