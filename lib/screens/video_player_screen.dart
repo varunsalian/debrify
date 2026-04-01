@@ -1397,11 +1397,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _hasNextEpisode() {
     if (_findNextEpisodeIndex() != -1) return true;
     // Series content may have a next episode discoverable via Stremio metadata.
-    // The actual episode is resolved at call time from the series playlist or
-    // widget params, so we just need to know it's a series with an IMDB ID.
+    // Requires episode info from widget params or a parsed series playlist.
     if (widget.requestMagicNext == null &&
         widget.contentType == 'series' &&
-        widget.contentImdbId != null) {
+        widget.contentImdbId != null &&
+        (widget.contentSeason != null || _seriesPlaylist != null)) {
       return true;
     }
     return false;
