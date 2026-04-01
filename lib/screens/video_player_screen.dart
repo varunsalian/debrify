@@ -1561,10 +1561,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'imdbId': widget.contentImdbId,
         'season': nextEp.season,
         'episode': nextEp.episode,
-        'title': widget.contentTitle ?? widget.title,
+        'title': widget.title,
         'contentType': widget.contentType,
-        'posterUrl': widget.posterUrl,
-        'year': widget.contentYear,
       });
     }
     return true;
