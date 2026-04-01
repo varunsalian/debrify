@@ -595,6 +595,23 @@ class StorageService {
     }
   }
 
+  /// Remove all playback state entries (series progress, video progress) for an IMDB ID.
+  static Future<void> clearPlaybackStateByImdbId(String imdbId) async {
+    final map = await _getPlaybackStateMap();
+    final keysToRemove = <String>[];
+    for (final entry in map.entries) {
+      if (entry.value is Map<String, dynamic> && entry.value['imdbId'] == imdbId) {
+        keysToRemove.add(entry.key);
+      }
+    }
+    if (keysToRemove.isEmpty) return;
+    for (final key in keysToRemove) {
+      map.remove(key);
+    }
+    await _savePlaybackStateMap(map);
+    debugPrint('StorageService: Cleared ${keysToRemove.length} playback state entries for "$imdbId"');
+  }
+
   static Future<void> _savePlaybackStateMap(Map<String, dynamic> map) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_playbackStateKey, jsonEncode(map));
@@ -1066,15 +1083,15 @@ class StorageService {
     final map = await _getPlaybackStateMap();
     final result = <String, double>{};
 
-    // Find series entry with matching imdbId, track most recent video fallback
-    Map<String, dynamic>? seriesData;
+    // Find ALL series entries with matching imdbId (different season packs may
+    // have different title keys). Also track most recent video fallback.
+    final seriesEntries = <Map<String, dynamic>>[];
     Map<String, dynamic>? videoFallback;
     int videoFallbackUpdatedAt = -1;
     for (final entry in map.values) {
       if (entry is Map<String, dynamic> && entry['imdbId'] == imdbId) {
         if (entry['type'] == 'series') {
-          seriesData = entry;
-          break;
+          seriesEntries.add(entry);
         } else if (entry['type'] == 'video') {
           final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
           if (updatedAt > videoFallbackUpdatedAt) {
@@ -1086,7 +1103,7 @@ class StorageService {
     }
 
     // Fallback: single-file video entry — parse season/episode from title
-    if (seriesData == null && videoFallback != null) {
+    if (seriesEntries.isEmpty && videoFallback != null) {
       final title = videoFallback['title'] as String? ?? '';
       final match = RegExp(r'[Ss](\d+)[Ee](\d+)').firstMatch(title);
       if (match != null) {
@@ -1101,34 +1118,40 @@ class StorageService {
       }
     }
 
-    if (seriesData == null) return result;
+    if (seriesEntries.isEmpty) return result;
 
-    // Check finished episodes
-    final finishedMap = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
+    // Aggregate progress across ALL matching series entries
+    for (final seriesData in seriesEntries) {
+      final finishedMap = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
 
-    final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
-    for (final seasonEntry in seasons.entries) {
-      final seasonNum = seasonEntry.key;
-      final episodes = seasonEntry.value as Map<String, dynamic>? ?? {};
+      final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
+      for (final seasonEntry in seasons.entries) {
+        final seasonNum = seasonEntry.key;
+        final episodes = seasonEntry.value as Map<String, dynamic>? ?? {};
 
-      // Get finished episodes for this season
-      final finishedEps = finishedMap?[seasonNum] as Map<String, dynamic>?;
+        // Get finished episodes for this season
+        final finishedEps = finishedMap?[seasonNum] as Map<String, dynamic>?;
 
-      for (final episodeEntry in episodes.entries) {
-        final epNum = episodeEntry.key;
-        final epData = episodeEntry.value as Map<String, dynamic>;
-        final key = '$seasonNum-$epNum';
+        for (final episodeEntry in episodes.entries) {
+          final epNum = episodeEntry.key;
+          final epData = episodeEntry.value as Map<String, dynamic>;
+          final key = '$seasonNum-$epNum';
 
-        // Check if finished first
-        if (finishedEps != null && finishedEps.containsKey(epNum)) {
-          result[key] = 100.0;
-          continue;
-        }
+          // Check if finished first
+          if (finishedEps != null && finishedEps.containsKey(epNum)) {
+            result[key] = 100.0;
+            continue;
+          }
 
-        final positionMs = (epData['positionMs'] as num?)?.toInt() ?? 0;
-        final durationMs = (epData['durationMs'] as num?)?.toInt() ?? 1;
-        if (durationMs > 0 && positionMs > 0) {
-          result[key] = (positionMs / durationMs * 100).clamp(0.0, 100.0);
+          final positionMs = (epData['positionMs'] as num?)?.toInt() ?? 0;
+          final durationMs = (epData['durationMs'] as num?)?.toInt() ?? 1;
+          if (durationMs > 0 && positionMs > 0) {
+            final progress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
+            // Keep higher progress if duplicate across entries
+            if (!result.containsKey(key) || progress > result[key]!) {
+              result[key] = progress;
+            }
+          }
         }
       }
     }
@@ -1143,15 +1166,16 @@ class StorageService {
   static Future<Map<String, dynamic>?> getLastPlayedEpisodeByImdbId(String imdbId) async {
     final map = await _getPlaybackStateMap();
 
-    // Find series entry with matching imdbId, track most recent video fallback
-    Map<String, dynamic>? seriesData;
+    // Find ALL series entries with matching imdbId (different season packs may
+    // have different title keys, e.g. "young sheldon (2017)" vs "young sheldon").
+    // Also track most recent video fallback.
+    final seriesEntries = <Map<String, dynamic>>[];
     Map<String, dynamic>? videoFallback;
     int videoFallbackUpdatedAt = -1;
     for (final entry in map.values) {
       if (entry is Map<String, dynamic> && entry['imdbId'] == imdbId) {
         if (entry['type'] == 'series') {
-          seriesData = entry;
-          break;
+          seriesEntries.add(entry);
         } else if (entry['type'] == 'video') {
           final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
           if (updatedAt > videoFallbackUpdatedAt) {
@@ -1162,31 +1186,35 @@ class StorageService {
       }
     }
 
-    if (seriesData != null) {
-      // Find most recently updated episode (same logic as getLastPlayedEpisode)
+    if (seriesEntries.isNotEmpty) {
+      // Find most recently updated episode across ALL matching series entries
       Map<String, dynamic>? lastEpisode;
+      Map<String, dynamic>? lastEpisodeSeriesData; // track which entry it came from
       int lastUpdated = 0;
 
-      final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
-      for (final seasonEntry in seasons.entries) {
-        final season = int.parse(seasonEntry.key);
-        final episodes = seasonEntry.value as Map<String, dynamic>;
+      for (final seriesData in seriesEntries) {
+        final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
+        for (final seasonEntry in seasons.entries) {
+          final season = int.parse(seasonEntry.key);
+          final episodes = seasonEntry.value as Map<String, dynamic>;
 
-        for (final episodeEntry in episodes.entries) {
-          final episode = int.parse(episodeEntry.key);
-          final episodeData = episodeEntry.value as Map<String, dynamic>;
-          final updatedAt = (episodeData['updatedAt'] as num?)?.toInt() ?? 0;
+          for (final episodeEntry in episodes.entries) {
+            final episode = int.parse(episodeEntry.key);
+            final episodeData = episodeEntry.value as Map<String, dynamic>;
+            final updatedAt = (episodeData['updatedAt'] as num?)?.toInt() ?? 0;
 
-          if (updatedAt > lastUpdated) {
-            lastUpdated = updatedAt;
-            lastEpisode = {'season': season, 'episode': episode, ...episodeData};
+            if (updatedAt > lastUpdated) {
+              lastUpdated = updatedAt;
+              lastEpisode = {'season': season, 'episode': episode, ...episodeData};
+              lastEpisodeSeriesData = seriesData;
+            }
           }
         }
       }
 
-      if (lastEpisode != null) {
-        // Check if this episode is marked as finished
-        final finishedEpisodes = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
+      if (lastEpisode != null && lastEpisodeSeriesData != null) {
+        // Check if this episode is marked as finished (in its own series entry)
+        final finishedEpisodes = lastEpisodeSeriesData['finishedEpisodes'] as Map<String, dynamic>?;
         if (finishedEpisodes != null) {
           final seasonFinished = finishedEpisodes[lastEpisode['season'].toString()] as Map<String, dynamic>?;
           if (seasonFinished != null && seasonFinished.containsKey(lastEpisode['episode'].toString())) {

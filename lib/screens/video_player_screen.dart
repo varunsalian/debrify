@@ -127,6 +127,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final String? contentType; // 'movie' or 'series'
   final int? contentSeason;
   final int? contentEpisode;
+  final String? contentTitle; // Clean display name (IMDB title)
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
@@ -177,6 +178,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentType,
     this.contentSeason,
     this.contentEpisode,
+    this.contentTitle,
     this.iptvChannels,
     this.iptvStartIndex,
     this.stremioSources,
@@ -1586,7 +1588,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'imdbId': widget.contentImdbId,
         'season': nextEp.season,
         'episode': nextEp.episode,
-        'title': widget.title,
+        'title': widget.contentTitle ?? widget.title,
         'contentType': widget.contentType,
       });
     }
@@ -2231,6 +2233,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Mark the current episode as finished if it's a series
   Future<void> _markCurrentEpisodeAsFinished() async {
     final seriesPlaylist = _seriesPlaylist;
+    // Single-file series playback: use widget params
+    if ((seriesPlaylist == null || !seriesPlaylist.isSeries) &&
+        widget.contentType == 'series' &&
+        widget.contentSeason != null &&
+        widget.contentEpisode != null &&
+        widget.contentImdbId != null) {
+      _currentEpisodeMarkedAsFinished = true;
+      try {
+        await StorageService.markEpisodeAsFinished(
+          seriesTitle: widget.contentTitle ?? widget.title,
+          season: widget.contentSeason!,
+          episode: widget.contentEpisode!,
+          imdbId: widget.contentImdbId,
+        );
+      } catch (_) {}
+      return;
+    }
     if (seriesPlaylist == null || !seriesPlaylist.isSeries || seriesPlaylist.seriesTitle == null) return;
     _currentEpisodeMarkedAsFinished = true;
     try {
@@ -3403,20 +3422,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 			}
 		} else {
 			// Single video file (no playlist)
-          final currentUrl = widget.videoUrl;
-          final videoTitle = widget.title.isNotEmpty
-              ? widget.title
-              : 'Unknown Video';
+          // If it's a series episode (from Quick Play next episode), save as series state
+          if (widget.contentType == 'series' &&
+              widget.contentSeason != null &&
+              widget.contentEpisode != null) {
+            await StorageService.saveSeriesPlaybackState(
+              seriesTitle: widget.contentTitle ?? widget.title,
+              season: widget.contentSeason!,
+              episode: widget.contentEpisode!,
+              positionMs: pos.inMilliseconds,
+              durationMs: dur.inMilliseconds,
+              speed: _playbackSpeed,
+              aspect: aspectStr,
+              imdbId: widget.contentImdbId,
+            );
+          } else {
+            final currentUrl = widget.videoUrl;
+            final videoTitle = widget.title.isNotEmpty
+                ? widget.title
+                : 'Unknown Video';
 
-          await StorageService.saveVideoPlaybackState(
-            videoTitle: videoTitle,
-            videoUrl: currentUrl,
-            positionMs: pos.inMilliseconds,
-            durationMs: dur.inMilliseconds,
-            speed: _playbackSpeed,
-            aspect: aspectStr,
-            imdbId: widget.contentImdbId,
-          );
+            await StorageService.saveVideoPlaybackState(
+              videoTitle: videoTitle,
+              videoUrl: currentUrl,
+              positionMs: pos.inMilliseconds,
+              durationMs: dur.inMilliseconds,
+              speed: _playbackSpeed,
+              aspect: aspectStr,
+              imdbId: widget.contentImdbId,
+            );
+          }
         }
       }
     } catch (e) {}
@@ -4740,7 +4775,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } else {
         // Use widget's content IMDB ID or single file IMDB ID
         imdbId = widget.contentImdbId ?? _singleFileImdbId;
-        contentType = 'movie';
+        // Single-file series playback: use widget params for S/E
+        if (widget.contentType == 'series' && widget.contentSeason != null && widget.contentEpisode != null) {
+          contentType = 'series';
+          season = widget.contentSeason;
+          episode = widget.contentEpisode;
+        } else {
+          contentType = 'movie';
+        }
       }
 
       // Need IMDB ID to fetch Stremio subtitles

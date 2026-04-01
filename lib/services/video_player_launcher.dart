@@ -288,6 +288,7 @@ class VideoPlayerLaunchArgs {
       contentType: contentType,
       contentSeason: contentSeason,
       contentEpisode: contentEpisode,
+      contentTitle: contentTitle,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
       stremioSources: stremioSources,

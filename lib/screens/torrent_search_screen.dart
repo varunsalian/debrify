@@ -681,7 +681,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Check if this is a Quick Play action (to skip dialog if multiple services)
     final isQuickPlay = _quickPlayPending;
     if (isQuickPlay) {
-      debugPrint('DEBUG: _quickPlayPending set to false at _handleTorrentCardActivated');
       setState(() {
         _quickPlayPending = false;
       });
@@ -3597,7 +3596,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_torrents.isEmpty) {
       debugPrint('TorrentSearchScreen: Quick Play - no torrents found');
       // Reset quick play state
-      debugPrint('DEBUG: _quickPlayPending set to false at _checkQuickPlay (no torrents)');
       setState(() {
         _quickPlayPending = false;
       });
@@ -3636,7 +3634,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ? 'Torrents found but no debrid provider configured'
           : 'No playable sources found';
       debugPrint('TorrentSearchScreen: Quick Play - $reason');
-      debugPrint('DEBUG: _quickPlayPending set to false at _checkQuickPlay (no playable sources)');
       setState(() {
         _quickPlayPending = false;
       });
@@ -3661,7 +3658,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       debugPrint('TorrentSearchScreen: Quick Play - playing direct stream: ${selectedTorrent.displayTitle}');
 
       // Reset quick play state before playing direct stream (no retry logic for direct)
-      debugPrint('DEBUG: _quickPlayPending set to false at _checkQuickPlay (direct stream)');
       setState(() {
         _quickPlayPending = false;
       });
@@ -4956,7 +4952,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Check if Quick Play is pending and auto-select
-    debugPrint('TorrentSearchScreen: _sortTorrents done, _quickPlayPending=$_quickPlayPending, _quickPlaySelection=$_quickPlaySelection');
     if (_quickPlayPending) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -9371,7 +9366,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Resets Quick Play state after completion or failure
   void _resetQuickPlayState() {
-    debugPrint('DEBUG: _quickPlayPending set to false at _resetQuickPlayState');
     setState(() {
       _quickPlayPending = false;
       _quickPlayTorrentsList = [];

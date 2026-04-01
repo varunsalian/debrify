@@ -379,6 +379,7 @@ class _HomeContinueWatchingSectionState
       final imdbId = item['imdbId'] as String?;
       if (imdbId != null) {
         await StorageService.removeContinueWatchingItem(imdbId);
+        await StorageService.clearPlaybackStateByImdbId(imdbId);
         if (mounted) _loadItems();
       }
     }
