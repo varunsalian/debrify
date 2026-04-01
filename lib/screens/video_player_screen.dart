@@ -1396,12 +1396,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Check if there's a next episode available
   bool _hasNextEpisode() {
     if (_findNextEpisodeIndex() != -1) return true;
-    // Series content without season pack may have a next episode via metadata
+    // Series content may have a next episode discoverable via Stremio metadata.
+    // The actual episode is resolved at call time from the series playlist or
+    // widget params, so we just need to know it's a series with an IMDB ID.
     if (widget.requestMagicNext == null &&
         widget.contentType == 'series' &&
-        widget.contentImdbId != null &&
-        widget.contentSeason != null &&
-        widget.contentEpisode != null) {
+        widget.contentImdbId != null) {
       return true;
     }
     return false;
@@ -1535,18 +1535,43 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// find the next episode via Stremio meta and pop the player with the result.
   /// The caller (TorrentSearchScreen) will receive this and trigger Quick Play.
   Future<bool> _handleSeriesNextEpisode() async {
-    if (widget.contentType != 'series' ||
-        widget.contentImdbId == null ||
-        widget.contentSeason == null ||
-        widget.contentEpisode == null) {
+    if (widget.contentType != 'series' || widget.contentImdbId == null) {
       return false;
     }
 
-    debugPrint('Player: Looking up next episode after S${widget.contentSeason}E${widget.contentEpisode}');
+    // Determine the CURRENT episode: prefer the series playlist (tracks actual
+    // playback position within a season pack) over widget params (set at launch).
+    int? currentSeason;
+    int? currentEpisode;
+
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null &&
+        seriesPlaylist.isSeries &&
+        _activePlaylist != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      try {
+        final current = seriesPlaylist.allEpisodes.firstWhere(
+          (ep) => ep.originalIndex == _currentIndex,
+        );
+        currentSeason = current.seriesInfo.season;
+        currentEpisode = current.seriesInfo.episode;
+      } catch (_) {
+        // firstWhere threw — no match, fall through to widget params
+      }
+    }
+
+    // Fallback to widget params (single-file playback without a series playlist)
+    currentSeason ??= widget.contentSeason;
+    currentEpisode ??= widget.contentEpisode;
+
+    if (currentSeason == null || currentEpisode == null) return false;
+
+    debugPrint('Player: Looking up next episode after S${currentSeason}E$currentEpisode');
     final nextEp = await NextEpisodeService.findNextEpisode(
       widget.contentImdbId!,
-      widget.contentSeason!,
-      widget.contentEpisode!,
+      currentSeason,
+      currentEpisode,
     );
 
     if (nextEp == null) {
