@@ -22,6 +22,7 @@ import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/next_episode_service.dart';
 
 import '../widgets/series_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -1057,11 +1058,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    if (_activePlaylist == null || _activePlaylist!.isEmpty) return;
+    if (_activePlaylist == null || _activePlaylist!.isEmpty) {
+      // No playlist — try series next episode
+      await _handleSeriesNextEpisode();
+      return;
+    }
 
     // Find the next logical episode
     final nextIndex = _findNextEpisodeIndex();
-    if (nextIndex == -1) return; // No next episode found
+    if (nextIndex == -1) {
+      // End of playlist — try series next episode
+      await _handleSeriesNextEpisode();
+      return;
+    }
 
     // Mark this as auto-advancing to the next episode
     _isAutoAdvancing = true;
@@ -1426,6 +1435,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // Series content without season pack: find next episode and trigger Quick Play
+    if (widget.requestMagicNext == null) {
+      final handled = await _handleSeriesNextEpisode();
+      if (handled) return;
+    }
+
     // If there is no playlist-based next item and Debrify TV provider is present, use it
     if (widget.requestMagicNext != null) {
       debugPrint('Player: MagicTV next requested.');
@@ -1505,6 +1520,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _isTransitioning = false;
       });
     }
+  }
+
+  /// When no playlist-based next episode exists and content is a series,
+  /// find the next episode via Stremio meta and pop the player with the result.
+  /// The caller (TorrentSearchScreen) will receive this and trigger Quick Play.
+  Future<bool> _handleSeriesNextEpisode() async {
+    if (widget.contentType != 'series' ||
+        widget.contentImdbId == null ||
+        widget.contentSeason == null ||
+        widget.contentEpisode == null) {
+      return false;
+    }
+
+    debugPrint('Player: Looking up next episode after S${widget.contentSeason}E${widget.contentEpisode}');
+    final nextEp = await NextEpisodeService.findNextEpisode(
+      widget.contentImdbId!,
+      widget.contentSeason!,
+      widget.contentEpisode!,
+    );
+
+    if (nextEp == null) {
+      debugPrint('Player: No next episode found (last episode or lookup failed)');
+      return false;
+    }
+
+    debugPrint('Player: Found next episode S${nextEp.season}E${nextEp.episode}, popping for Quick Play');
+    if (mounted) {
+      Navigator.of(context).pop(<String, dynamic>{
+        'quickPlayNext': true,
+        'imdbId': widget.contentImdbId,
+        'season': nextEp.season,
+        'episode': nextEp.episode,
+        'title': widget.contentTitle ?? widget.title,
+        'contentType': widget.contentType,
+        'posterUrl': widget.posterUrl,
+        'year': widget.contentYear,
+      });
+    }
+    return true;
   }
 
   /// Parse channel directory from widget params into ChannelEntry list
