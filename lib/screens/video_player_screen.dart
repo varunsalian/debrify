@@ -1395,7 +1395,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Check if there's a next episode available
   bool _hasNextEpisode() {
-    return _findNextEpisodeIndex() != -1;
+    if (_findNextEpisodeIndex() != -1) return true;
+    // Series content without season pack may have a next episode via metadata
+    if (widget.requestMagicNext == null &&
+        widget.contentType == 'series' &&
+        widget.contentImdbId != null &&
+        widget.contentSeason != null &&
+        widget.contentEpisode != null) {
+      return true;
+    }
+    return false;
   }
 
   /// Check if there's a previous episode available
