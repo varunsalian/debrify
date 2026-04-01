@@ -5,10 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/advanced_search_selection.dart';
-import '../models/stremio_addon.dart';
 import '../services/storage_service.dart';
-import '../services/stremio_service.dart';
 import '../services/series_source_service.dart';
+import '../services/next_episode_service.dart';
 import '../services/main_page_bridge.dart';
 import 'home_focus_controller.dart';
 
@@ -402,57 +401,7 @@ class _HomeContinueWatchingSectionState
   Future<({int season, int episode})?> _findNextEpisode(
     String imdbId, int currentSeason, int currentEpisode, String? addonId,
   ) async {
-    try {
-      final stremioService = StremioService.instance;
-      final addons = await stremioService.getEnabledAddons();
-      if (addons.isEmpty) return null;
-
-      // Prefer the stored addon, fallback to first catalog addon with meta support
-      StremioAddon? addon;
-      if (addonId != null) {
-        addon = addons.cast<StremioAddon?>().firstWhere(
-          (a) => a?.id == addonId,
-          orElse: () => null,
-        );
-      }
-      addon ??= addons.cast<StremioAddon?>().firstWhere(
-        (a) => a?.resources.contains('meta') == true,
-        orElse: () => null,
-      );
-      if (addon == null) return null;
-
-      final episodes = await stremioService.fetchSeriesMeta(addon, imdbId);
-      if (episodes == null || episodes.isEmpty) return null;
-
-      // Sort episodes by season then episode number
-      final sorted = List<Map<String, dynamic>>.from(episodes);
-      sorted.sort((a, b) {
-        final sa = a['season'] as int? ?? 0;
-        final sb = b['season'] as int? ?? 0;
-        if (sa != sb) return sa.compareTo(sb);
-        final ea = a['episode'] as int? ?? a['number'] as int? ?? 0;
-        final eb = b['episode'] as int? ?? b['number'] as int? ?? 0;
-        return ea.compareTo(eb);
-      });
-
-      // Find the current episode index, then return the next one
-      for (int i = 0; i < sorted.length; i++) {
-        final s = sorted[i]['season'] as int? ?? 0;
-        final e = sorted[i]['episode'] as int? ?? sorted[i]['number'] as int? ?? 0;
-        if (s == currentSeason && e == currentEpisode && i + 1 < sorted.length) {
-          final next = sorted[i + 1];
-          final ns = next['season'] as int? ?? 0;
-          final ne = next['episode'] as int? ?? next['number'] as int? ?? 0;
-          if (ns > 0 && ne > 0) {
-            return (season: ns, episode: ne);
-          }
-        }
-      }
-      return null;
-    } catch (e) {
-      debugPrint('HomeContinueWatching: Error finding next episode: $e');
-      return null;
-    }
+    return NextEpisodeService.findNextEpisode(imdbId, currentSeason, currentEpisode);
   }
 
   Future<void> _showEditSourceDialog(AdvancedSearchSelection selection) async {
