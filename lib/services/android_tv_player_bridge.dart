@@ -8,6 +8,7 @@ import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
 import 'movie_metadata_service.dart';
+import 'next_episode_service.dart';
 import 'subtitle_font_service.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
@@ -44,6 +45,9 @@ class AndroidTvPlayerBridge {
   static Future<List<Map<String, dynamic>>?> Function(int)? _sourcePlaylistResolver;
   static Future<Map<String, dynamic>?> Function(List<String>)? _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)? _stremioTvChannelSwitchProvider;
+
+  // Quick Play next episode result from Android TV player
+  static Map<String, dynamic>? _quickPlayNextEpisodeResult;
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
@@ -288,6 +292,8 @@ class AndroidTvPlayerBridge {
               debugPrint('AndroidTvPlayerBridge: torrent finished callback threw: $e\n$stack');
             }
           }
+          // Clear any unconsumed quick play next result to prevent stale state
+          _quickPlayNextEpisodeResult = null;
           return null;
         case 'requestTorrentStream':
           debugPrint('AndroidTvPlayerBridge: requestTorrentStream received - args: ${call.arguments}');
@@ -394,6 +400,27 @@ class AndroidTvPlayerBridge {
             debugPrint('MovieMetadata: lookupMovieImdb error: $e');
             return null;
           }
+        case 'requestQuickPlayNextEpisode':
+          final args = call.arguments;
+          if (args is Map) {
+            final imdbId = args['imdbId'] as String?;
+            final season = args['season'] as int?;
+            final episode = args['episode'] as int?;
+            if (imdbId != null && season != null && episode != null) {
+              debugPrint('AndroidTvPlayerBridge: Quick Play next episode requested after S${season}E$episode');
+              final nextEp = await NextEpisodeService.findNextEpisode(imdbId, season, episode);
+              if (nextEp != null) {
+                debugPrint('AndroidTvPlayerBridge: Found next episode S${nextEp.season}E${nextEp.episode}');
+                _quickPlayNextEpisodeResult = {
+                  'quickPlayNext': true,
+                  'imdbId': imdbId,
+                  'season': nextEp.season,
+                  'episode': nextEp.episode,
+                };
+              }
+            }
+          }
+          return null;
         default:
           throw PlatformException(
             code: 'unimplemented',
@@ -576,6 +603,14 @@ class AndroidTvPlayerBridge {
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
     return false;
+  }
+
+  /// Consume and return the Quick Play next episode result (if any).
+  /// Returns null if no next episode was requested or found.
+  static Map<String, dynamic>? consumeQuickPlayNextResult() {
+    final result = _quickPlayNextEpisodeResult;
+    _quickPlayNextEpisodeResult = null;
+    return result;
   }
 
   static void clearTorboxProvider() {

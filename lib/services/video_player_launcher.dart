@@ -444,7 +444,7 @@ class VideoPlayerLauncher {
 
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
     if (isTv) {
-      final launched = await _launchOnAndroidTv(args);
+      final launched = await _launchOnAndroidTv(args, onQuickPlayNextEpisode: onQuickPlayNextEpisode);
       if (launched) {
         return;
       }
@@ -907,7 +907,9 @@ class VideoPlayerLauncher {
     }
   }
 
-  static Future<bool> _launchOnAndroidTv(VideoPlayerLaunchArgs args) async {
+  static Future<bool> _launchOnAndroidTv(VideoPlayerLaunchArgs args, {
+    Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
+  }) async {
     // Route IPTV playlists to dedicated IPTV launcher
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
       return _launchIptvOnAndroidTv(args);
@@ -1093,6 +1095,11 @@ class VideoPlayerLauncher {
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
+          // Check if the Android TV player requested Quick Play next episode
+          final quickPlayResult = AndroidTvPlayerBridge.consumeQuickPlayNextResult();
+          if (quickPlayResult != null && onQuickPlayNextEpisode != null) {
+            await onQuickPlayNextEpisode(quickPlayResult);
+          }
         },
         onRequestStream: resolver.handleRequest,
         onRequestMovieMetadata: result.payload.contentType != _PlaybackContentType.series

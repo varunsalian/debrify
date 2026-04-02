@@ -368,6 +368,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             playItem(nextIndex)
                         }, 1500)
                     } else {
+                        // No next in playlist — request Quick Play next episode for series
+                        val currentItem = model.items[currentIndex]
+                        if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null && model.imdbId != null) {
+                            requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                        }
                         finish()
                     }
                 }
@@ -1784,7 +1789,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (nextIndex != null) {
             playItem(nextIndex)
         } else {
-            Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
+            // No next in playlist — request Quick Play next episode for series
+            val model = payload
+            val currentItem = model?.items?.getOrNull(currentIndex)
+            if (model != null && currentItem != null &&
+                model.contentType == "series" && currentItem.season != null &&
+                currentItem.episode != null && model.imdbId != null) {
+                requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                finish()
+            } else {
+                Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -4393,6 +4408,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun sendFinished() {
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackFinished", null)
+    }
+
+    private fun requestQuickPlayNextEpisode(imdbId: String, season: Int, episode: Int) {
+        android.util.Log.d("AndroidTvPlayer", "Requesting Quick Play next episode after S${season}E${episode} for $imdbId")
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "requestQuickPlayNextEpisode",
+            hashMapOf<String, Any>(
+                "imdbId" to imdbId,
+                "season" to season,
+                "episode" to episode,
+            )
+        )
     }
 
     // Utilities
