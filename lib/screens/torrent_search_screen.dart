@@ -2664,22 +2664,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _goBackAndRefreshSources();
       } on TorrentNotCachedException catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
-        // Still store as source even if not cached — it'll download in background
-        await _saveSource(imdbId, SeriesSource(
-          torrentHash: infohash,
-          torrentName: torrentName,
-          debridService: 'rd',
-          debridTorrentId: e.torrentId,
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ), isMovie: show.type == 'movie');
+        // Clean up the uncached torrent from RD
+        try {
+          await DebridService.deleteTorrent(e.apiKey, e.torrentId);
+        } catch (_) {}
         if (!mounted) return;
-        _exitSelectSourceMode();
+        // Don't bind uncached sources — they can't be played immediately
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Source set (torrent not cached yet — will download in background)'),
+          content: Text('Torrent is not cached on Real-Debrid. Try another torrent.'),
           backgroundColor: Color(0xFFF59E0B),
           duration: Duration(seconds: 3),
         ));
-        _goBackAndRefreshSources();
       } catch (e) {
         if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
         if (!mounted) return;
@@ -2786,50 +2781,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!success) {
         final error = (response['error'] ?? '').toString();
         if (error == 'DOWNLOAD_NOT_CACHED') {
-          // Ask user if they want to add it anyway (will download in background)
+          // Don't bind uncached sources — they can't be played immediately
           if (!mounted) return;
-          final addAnyway = await _showNotCachedDialog('torbox');
-          if (!mounted) return;
-          if (addAnyway) {
-            _showSelectSourceLoadingDialog(torrentName);
-            final retryResponse = await TorboxService.createTorrent(
-              apiKey: apiKey,
-              magnet: magnetLink,
-              seed: true,
-              allowZip: true,
-              addOnlyIfCached: false,
-            );
-            if (!mounted) return;
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-
-            final retrySuccess = retryResponse['success'] as bool? ?? false;
-            if (retrySuccess) {
-              final torrentId = retryResponse['data']?['torrent_id']?.toString() ?? '';
-              await _saveSource(imdbId, SeriesSource(
-                torrentHash: infohash,
-                torrentName: torrentName,
-                debridService: 'torbox',
-                debridTorrentId: torrentId,
-                boundAt: DateTime.now().millisecondsSinceEpoch,
-              ), isMovie: _selectSourceShow?.type == 'movie');
-              if (!mounted) return;
-              _exitSelectSourceMode();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Source set (torrent not cached yet — will download in background)'),
-                backgroundColor: Color(0xFFF59E0B),
-                duration: Duration(seconds: 3),
-              ));
-              _goBackAndRefreshSources();
-            } else {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Failed to add torrent: ${_formatTorboxError(retryResponse['error'] ?? '')}'),
-                backgroundColor: const Color(0xFFEF4444),
-                duration: const Duration(seconds: 3),
-              ));
-            }
-          }
-          // User cancelled — do nothing, stay on results
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Torrent is not cached on Torbox. Try another torrent.'),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 3),
+          ));
           return;
         }
         // Other TorBox errors
