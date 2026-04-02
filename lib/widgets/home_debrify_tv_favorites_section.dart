@@ -271,6 +271,12 @@ class _HomeDebrifyTvFavoritesSectionState
             ],
           ),
         ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(height: 1, thickness: 0.5, color: Color(0x14FFFFFF)),
+        ),
+        const SizedBox(height: 10),
       ],
     );
   }

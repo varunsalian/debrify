@@ -14829,17 +14829,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  static Widget _buildSectionDivider() => Column(
-    children: [
-      const SizedBox(height: 10),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Divider(height: 1, thickness: 0.5, color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      const SizedBox(height: 10),
-    ],
-  );
-
   Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
@@ -14911,8 +14900,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      if (_continueWatchingEnabled)
-      _buildSectionDivider(),
       // Trakt Continue Watching - Movies
       RepaintBoundary(child: HomeTraktContinueWatchingSection(
         focusController: _homeFocusController,
@@ -14941,7 +14928,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      _buildSectionDivider(),
       // Trakt Continue Watching - Shows
       RepaintBoundary(child: HomeTraktContinueWatchingSection(
         focusController: _homeFocusController,
@@ -14970,7 +14956,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      _buildSectionDivider(),
       // Playlist favorites section (horizontal scroll)
       RepaintBoundary(child: HomeFavoritesSection(
         key: _homeFavoritesKey,
@@ -14992,7 +14977,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      _buildSectionDivider(),
       // Playlist section (horizontal scroll)
       RepaintBoundary(child: HomePlaylistSection(
         key: _homePlaylistKey,
@@ -15014,7 +14998,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      _buildSectionDivider(),
       // IPTV favorites section (horizontal scroll)
       RepaintBoundary(child: HomeIptvFavoritesSection(
         focusController: _homeFocusController,
@@ -15033,7 +15016,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         },
         onPlayChannel: _playIptvChannelFromHome,
       )),
-      _buildSectionDivider(),
       // Debrify TV favorites section (horizontal scroll)
       RepaintBoundary(child: HomeDebrifyTvFavoritesSection(
         focusController: _homeFocusController,
@@ -15051,7 +15033,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
         },
       )),
-      _buildSectionDivider(),
       // Stremio TV favorites section (horizontal scroll)
       RepaintBoundary(child: HomeStremioTvFavoritesSection(
         focusController: _homeFocusController,
@@ -15070,7 +15051,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         },
       )),
       if (!_hideProviderCards) ...[
-        _buildSectionDivider(),
         // Debrid services section
         RepaintBoundary(child: ProviderStatusCards(
           focusController: _homeFocusController,
