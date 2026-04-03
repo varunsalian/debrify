@@ -1583,23 +1583,29 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _isLoadingEpisodes = false;
       });
 
-      // Scroll to the target episode if specified
-      if (initialEpisode != null) {
-        final episodeIndex = targetSeason.episodes.indexWhere((e) => e.number == initialEpisode);
-        if (episodeIndex > 0) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_episodeScrollController.hasClients && mounted) {
-              // Estimate ~120px per episode card + 8px padding
-              final offset = episodeIndex * 128.0;
-              _episodeScrollController.animateTo(
-                offset.clamp(0.0, _episodeScrollController.position.maxScrollExtent),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            }
-          });
+      // Scroll to the target episode and focus it
+      final targetEpIndex = initialEpisode != null
+          ? targetSeason.episodes.indexWhere((e) => e.number == initialEpisode)
+          : -1;
+      final focusIndex = targetEpIndex >= 0 ? targetEpIndex : 0;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || generation != _episodeModeGeneration) return;
+        // Scroll to target episode if not at top
+        if (focusIndex > 0 && _episodeScrollController.hasClients) {
+          final offset = focusIndex * 128.0;
+          _episodeScrollController.jumpTo(
+            offset.clamp(0.0, _episodeScrollController.position.maxScrollExtent),
+          );
         }
-      }
+        // Focus the episode card after scroll
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _episodeModeGeneration) return;
+          if (focusIndex < _episodeFocusNodes.length) {
+            _episodeFocusNodes[focusIndex].requestFocus();
+          }
+        });
+      });
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('CatalogBrowser: Episode fetch failed: $e');
