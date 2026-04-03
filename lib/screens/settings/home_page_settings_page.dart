@@ -20,7 +20,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _selectedTraktContentType = 'movies';
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
-  String _favoritesTapAction = 'choose';
   List<StremioAddon> _addons = [];
 
   @override
@@ -39,7 +38,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final catalogId = await StorageService.getHomeDefaultCatalogId();
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final continueWatchingEnabled = await StorageService.getHomeContinueWatchingEnabled();
-      final favoritesTapAction = await StorageService.getHomeFavoritesTapAction();
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
@@ -53,7 +51,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _selectedTraktContentType = traktContentType ?? 'movies';
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
-        _favoritesTapAction = favoritesTapAction;
         _loading = false;
       });
     } catch (e) {
@@ -148,21 +145,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _hideProviderCards = value;
       });
       MainPageBridge.notifyHomeSettingsChanged();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _selectFavoritesTapAction(String value) async {
-    try {
-      await StorageService.setHomeFavoritesTapAction(value);
-      setState(() {
-        _favoritesTapAction = value;
-      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -476,42 +458,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     }
                   }
                 },
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Favorites tap action
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _favoritesTapAction,
-                  decoration: InputDecoration(
-                    labelText: 'Favorite tap action',
-                    prefixIcon: Icon(
-                      _favoritesTapAction == 'view_files'
-                          ? Icons.folder_open_rounded
-                          : _favoritesTapAction == 'choose'
-                              ? Icons.touch_app_rounded
-                              : Icons.play_arrow_rounded,
-                      color: theme.colorScheme.primary,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'choose', child: Text('Let me Choose')),
-                    DropdownMenuItem(value: 'play', child: Text('Play')),
-                    DropdownMenuItem(value: 'view_files', child: Text('View Files')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) _selectFavoritesTapAction(value);
-                  },
-                ),
               ),
             ),
             const SizedBox(height: 16),
