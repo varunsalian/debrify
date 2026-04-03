@@ -14688,8 +14688,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
             ),
           ),
-        // Trakt sync FAB — small screens only
-        if (_traktAuthenticated && !_isTelevision && !_isSelectionMode && MediaQuery.of(context).size.width < 500 && (_selectedSource.type == SearchSourceType.all || (_selectedSource.type == SearchSourceType.addon && _selectedSource.addon != null && _selectedSource.addon!.supportsCatalogs)))
+        // Trakt sync FAB — small screens only, hide when torrent results are showing
+        if (_traktAuthenticated && !_isTelevision && !_isSelectionMode && _torrents.isEmpty && MediaQuery.of(context).size.width < 500 && (_selectedSource.type == SearchSourceType.all || (_selectedSource.type == SearchSourceType.addon && _selectedSource.addon != null && _selectedSource.addon!.supportsCatalogs)))
           Positioned(
             left: 12,
             bottom: 12 + MediaQuery.of(context).padding.bottom,
