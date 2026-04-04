@@ -278,6 +278,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                     ),
                   ),
                 const SizedBox(height: 20),
+                Center(
+                  child: Container(
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
