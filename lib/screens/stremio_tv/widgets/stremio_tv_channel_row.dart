@@ -460,6 +460,22 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                             const SizedBox(height: 2),
                             if (!widget.hideNowPlaying)
                               _buildMetaRow(nowPlaying.item),
+                            if (!widget.hideNowPlaying &&
+                                nowPlaying.item.description != null &&
+                                nowPlaying.item.description!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  nowPlaying.item.description!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white.withValues(alpha: 0.35),
+                                    height: 1.3,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             const SizedBox(height: 6),
                             if (progress != null)
                               _buildProgressBar(
