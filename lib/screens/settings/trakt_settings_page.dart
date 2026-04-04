@@ -86,7 +86,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
     final int expiresIn = codes['expires_in'];
 
     Timer? pollTimer;
-    bool isAuthorized = false;
+    Timer? expirationTimer;
 
     showDialog(
       context: context,
@@ -99,12 +99,19 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
             
             if (result['status'] == 'success') {
               timer.cancel();
-              isAuthorized = true;
+              expirationTimer?.cancel();
               if (context.mounted) Navigator.of(context).pop(true);
             } else if (result['status'] == 'expired') {
               timer.cancel();
+              expirationTimer?.cancel();
               if (context.mounted) Navigator.of(context).pop(false);
             }
+          });
+
+          // Set expiration timer if not already set
+          expirationTimer ??= Timer(Duration(seconds: expiresIn), () {
+            pollTimer?.cancel();
+            if (context.mounted) Navigator.of(context).pop(false);
           });
 
           return AlertDialog(
@@ -168,6 +175,10 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       ),
     ).then((success) {
       pollTimer?.cancel();
+      expirationTimer?.cancel();
+
+      if (!mounted) return;
+
       if (success == true) {
         _loadSettings();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -179,6 +190,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       }
     });
   }
+
 
   Future<void> _toggleScrobbling(bool value) async {
     await StorageService.setTraktEnabled(value);
