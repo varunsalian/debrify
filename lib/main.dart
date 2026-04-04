@@ -781,6 +781,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
       if (success) {
         await StorageService.setTraktEnabled(true);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Successfully connected to Trakt!'),
