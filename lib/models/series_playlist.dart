@@ -92,6 +92,7 @@ class EpisodeInfo {
   final List<String> genres;
   final String? network;
   final String? country;
+  final String? imdbId; // For subtitle fetching
 
   const EpisodeInfo({
     this.title,
@@ -107,6 +108,7 @@ class EpisodeInfo {
     this.genres = const [],
     this.network,
     this.country,
+    this.imdbId,
   });
 
   factory EpisodeInfo.fromTVMaze(Map<String, dynamic> json, {Map<String, dynamic>? showInfo}) {
@@ -141,6 +143,7 @@ class EpisodeInfo {
       genres: genres,
       network: network,
       country: country,
+      imdbId: null,
     );
   }
 }
