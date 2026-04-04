@@ -119,7 +119,7 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
     final progress = widget.displayProgress ?? nowPlaying?.progress;
 
     return Container(
-      height: 160,
+      height: 190,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
