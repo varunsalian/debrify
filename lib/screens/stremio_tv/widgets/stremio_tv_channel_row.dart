@@ -591,29 +591,31 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
   }
 
   Widget _buildMetaRow(dynamic item) {
-    final parts = <String>[];
-    if (item.year != null) parts.add(item.year!);
-    if (item.imdbRating != null) parts.add('${item.imdbRating}');
-    if (item.genres != null && item.genres!.isNotEmpty) {
-      parts.add(item.genres!.first);
-    }
+    final metaStyle = TextStyle(
+      fontSize: 11,
+      color: Colors.white.withValues(alpha: 0.5),
+    );
+    final divider = Text(' | ', style: metaStyle);
     return Row(
       children: [
+        if (item.year != null) Text(item.year!, style: metaStyle),
+        if (item.year != null && item.imdbRating != null) divider,
         if (item.imdbRating != null) ...[
           Icon(Icons.star_rounded, size: 12, color: Colors.amber.shade600),
           const SizedBox(width: 2),
+          Text('${item.imdbRating}', style: metaStyle),
         ],
-        Flexible(
-          child: Text(
-            parts.join(' \u00B7 '),
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.white.withValues(alpha: 0.5),
+        if (item.genres != null && item.genres!.isNotEmpty) ...[
+          Text(' \u00B7 ', style: metaStyle),
+          Flexible(
+            child: Text(
+              item.genres!.first,
+              style: metaStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
+        ],
       ],
     );
   }

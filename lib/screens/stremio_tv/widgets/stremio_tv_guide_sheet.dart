@@ -378,30 +378,34 @@ class _GuideEntry extends StatelessWidget {
   }
 
   Widget _buildMetaRow(StremioMeta item, ThemeData theme) {
-    final parts = <String>[];
-    if (item.year != null) parts.add(item.year!);
-    if (item.imdbRating != null) parts.add('${item.imdbRating}');
-    if (item.genres != null && item.genres!.isNotEmpty) {
-      parts.add(item.genres!.first);
-    }
-    if (parts.isEmpty) return const SizedBox.shrink();
+    final hasYear = item.year != null;
+    final hasRating = item.imdbRating != null;
+    final hasGenre = item.genres != null && item.genres!.isNotEmpty;
+    if (!hasYear && !hasRating && !hasGenre) return const SizedBox.shrink();
 
+    final metaStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Row(
       children: [
-        if (item.imdbRating != null) ...[
+        if (hasYear) Text(item.year!, style: metaStyle),
+        if (hasYear && hasRating) Text(' | ', style: metaStyle),
+        if (hasRating) ...[
           Icon(Icons.star_rounded, size: 12, color: Colors.amber.shade600),
           const SizedBox(width: 2),
+          Text('${item.imdbRating}', style: metaStyle),
         ],
-        Flexible(
-          child: Text(
-            parts.join(' \u00B7 '),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+        if (hasGenre) ...[
+          Text(' \u00B7 ', style: metaStyle),
+          Flexible(
+            child: Text(
+              item.genres!.first,
+              style: metaStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
+        ],
       ],
     );
   }
