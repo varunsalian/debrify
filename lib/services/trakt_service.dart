@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'storage_service.dart';
 
 /// Represents a media item for Trakt scrobbling
@@ -258,8 +259,9 @@ class TraktService {
 
     try {
       final body = item.toJson();
+      final packageInfo = await PackageInfo.fromPlatform();
       body['progress'] = progress;
-      body['app_version'] = '1.0'; // Should get from PackageInfo
+      body['app_version'] = packageInfo.version;
       body['app_date'] = DateTime.now().toIso8601String().split('T')[0];
 
       final response = await http.post(

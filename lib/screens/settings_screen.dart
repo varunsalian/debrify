@@ -168,12 +168,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String traktStatus = 'Not connected';
     String traktCaption = 'Tap to connect';
 
-    final traktToken = await StorageService.getTraktAccessToken();
+    final results = await Future.wait([
+      StorageService.getTraktAccessToken(),
+      StorageService.getTraktUsername(),
+      StorageService.getTraktEnabled(),
+    ]);
+
+    final traktToken = results[0] as String?;
+    final traktUsername = results[1] as String?;
+    final traktEnabled = results[2] as bool;
+
     if (traktToken != null && traktToken.isNotEmpty) {
       traktConnected = true;
       traktStatus = 'Active';
-      final traktUsername = await StorageService.getTraktUsername();
-      final traktEnabled = await StorageService.getTraktEnabled();
       if (traktEnabled) {
         traktCaption = traktUsername != null ? 'Scrobbling as $traktUsername' : 'Scrobbling enabled';
       } else {

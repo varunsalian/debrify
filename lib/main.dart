@@ -767,8 +767,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Set the callback for handling Trakt OAuth redirect
     deepLinkService.onTraktCodeReceived = (code) async {
       if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
           content: Text('Connecting to Trakt...'),
           duration: Duration(seconds: 2),
@@ -782,14 +783,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (success) {
         await StorageService.setTraktEnabled(true);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Successfully connected to Trakt!'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Failed to connect to Trakt. Please try again.'),
             backgroundColor: Colors.red,

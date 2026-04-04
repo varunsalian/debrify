@@ -40,13 +40,15 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Future<void> _connectToTrakt() async {
+    if (!mounted) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final isTv = await AndroidNativeDownloader.isTelevision();
     
     if (isTv) {
       final codes = await TraktService.generateDeviceCode();
       if (codes == null) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('Failed to generate pairing code')),
         );
         return;
@@ -61,14 +63,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         
         if (!mounted) return;
         
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Please complete the login in your browser'),
           ),
         );
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Could not launch browser'),
             backgroundColor: Colors.red,
@@ -178,10 +180,11 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       expirationTimer?.cancel();
 
       if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
 
       if (success == true) {
         _loadSettings();
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Successfully connected to Trakt!'),
             backgroundColor: Colors.green,
@@ -200,10 +203,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Future<void> _logout() async {
+    if (!mounted) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     await TraktService.logout();
     await _loadSettings();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    scaffoldMessenger.showSnackBar(
       const SnackBar(
         content: Text('Disconnected from Trakt'),
       ),
