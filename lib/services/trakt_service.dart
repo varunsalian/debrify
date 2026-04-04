@@ -240,6 +240,11 @@ class TraktService {
     return _sendScrobble('start', item, progress);
   }
 
+  /// Scrobble: Update progress (Trakt uses 'start' action for this)
+  static Future<bool> updateScrobble(TraktMediaItem item, double progress) async {
+    return _sendScrobble('start', item, progress);
+  }
+
   /// Scrobble: Pause watching
   static Future<bool> pauseScrobble(TraktMediaItem item, double progress) async {
     return _sendScrobble('pause', item, progress);

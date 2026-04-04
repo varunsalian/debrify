@@ -823,7 +823,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     
     // Update every 1% or at least every minute (Trakt suggests updating every few minutes)
     if ((progress - _lastScrobbleProgress).abs() >= 1.0) {
-      TraktService.startScrobble(_traktItem!, progress); // Trakt uses "start" for updates too
+      TraktService.updateScrobble(_traktItem!, progress);
       _lastScrobbleProgress = progress;
     }
   }
