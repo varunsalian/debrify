@@ -82,6 +82,13 @@ class StorageService {
   static const String _redditFavoriteSubredditsKey = 'reddit_favorite_subreddits';
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
 
+  // Trakt settings
+  static const String _traktAccessTokenKey = 'trakt_access_token';
+  static const String _traktRefreshTokenKey = 'trakt_refresh_token';
+  static const String _traktExpiresAtKey = 'trakt_expires_at';
+  static const String _traktUsernameKey = 'trakt_username';
+  static const String _traktEnabledKey = 'trakt_enabled';
+
   // External Player settings
   // Default player mode: 'debrify' (app player), 'external' (external player), 'deovr' (DeoVR on Android)
   static const String _defaultPlayerModeKey = 'default_player_mode';
@@ -2540,6 +2547,84 @@ class StorageService {
     } else {
       await prefs.setString(_redditDefaultSubredditKey, subreddit);
     }
+  }
+
+  // Trakt Settings
+  static Future<String?> getTraktAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktAccessTokenKey);
+  }
+
+  static Future<void> setTraktAccessToken(String? token) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (token == null) {
+      await prefs.remove(_traktAccessTokenKey);
+    } else {
+      await prefs.setString(_traktAccessTokenKey, token);
+    }
+  }
+
+  static Future<String?> getTraktRefreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktRefreshTokenKey);
+  }
+
+  static Future<void> setTraktRefreshToken(String? token) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (token == null) {
+      await prefs.remove(_traktRefreshTokenKey);
+    } else {
+      await prefs.setString(_traktRefreshTokenKey, token);
+    }
+  }
+
+  static Future<DateTime?> getTraktExpiresAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final expiresAt = prefs.getInt(_traktExpiresAtKey);
+    if (expiresAt == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(expiresAt);
+  }
+
+  static Future<void> setTraktExpiresAt(DateTime? expiresAt) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (expiresAt == null) {
+      await prefs.remove(_traktExpiresAtKey);
+    } else {
+      await prefs.setInt(_traktExpiresAtKey, expiresAt.millisecondsSinceEpoch);
+    }
+  }
+
+  static Future<String?> getTraktUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_traktUsernameKey);
+  }
+
+  static Future<void> setTraktUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username == null) {
+      await prefs.remove(_traktUsernameKey);
+    } else {
+      await prefs.setString(_traktUsernameKey, username);
+    }
+  }
+
+  static Future<bool> getTraktEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_traktEnabledKey) ?? false;
+  }
+
+  static Future<void> setTraktEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_traktEnabledKey, enabled);
+  }
+
+  static Future<void> clearTraktAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_traktAccessTokenKey);
+    await prefs.remove(_traktRefreshTokenKey);
+    await prefs.remove(_traktExpiresAtKey);
+    await prefs.remove(_traktUsernameKey);
+    await prefs.setBool(_traktEnabledKey, false);
   }
 
   // PikPak API Settings

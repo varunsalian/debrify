@@ -22,6 +22,7 @@ import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/trakt_service.dart';
 
 import '../widgets/series_browser.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -198,6 +199,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
+  
+  // Trakt scrobbling state
+  TraktMediaItem? _traktItem;
+  double _lastScrobbleProgress = -1.0;
+  Timer? _scrobbleUpdateTimer;
 
   // Cached IMDB ID for single-file movie playback (when no playlist exists)
   String? _singleFileImdbId;
@@ -703,6 +709,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _playSub = _player.stream.playing.listen((p) {
       _isPlaying = p;
+      if (p) {
+        _startTraktScrobble();
+      } else {
+        _pauseTraktScrobble();
+      }
       if (p && _transitionRunning) {
         // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
         _transitionStopTimer?.cancel();
@@ -730,7 +741,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     // No need to observe video params for sizing; we use a fixed logical surface
     _completedSub = _player.stream.completed.listen((done) {
-      if (done) _onPlaybackEnded();
+      if (done) {
+        _stopTraktScrobble(finished: true);
+        _onPlaybackEnded();
+      }
     });
     _bufferingSub = _player.stream.buffering.listen((isBuffering) {
       if (!_isReady || _isTransitioning) return;
@@ -757,6 +771,89 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Preload episode information if this is a series
     _preloadEpisodeInfo();
+
+    // Initialize Trakt scrobbling
+    _initTraktItem();
+  }
+
+  void _initTraktItem() {
+    final seriesPlaylist = _seriesPlaylist;
+    
+    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      // Find current episode
+      final episode = seriesPlaylist.allEpisodes.firstWhereOrNull(
+        (ep) => ep.originalIndex == _currentIndex,
+      );
+      
+      if (episode != null) {
+        _traktItem = TraktMediaItem(
+          title: seriesPlaylist.seriesTitle ?? widget.title,
+          imdbId: episode.episodeInfo?.imdbId ?? widget.contentImdbId,
+          type: 'episode',
+          season: episode.seriesInfo.season,
+          episode: episode.seriesInfo.episode,
+        );
+      }
+    } else {
+      // Movie or single file
+      _traktItem = TraktMediaItem(
+        title: widget.title,
+        imdbId: widget.contentImdbId,
+        type: 'movie',
+      );
+    }
+    
+    _lastScrobbleProgress = -1.0;
+  }
+
+  void _startTraktScrobble() {
+    if (_traktItem == null || _duration == Duration.zero) return;
+    
+    final progress = (_position.inMilliseconds / _duration.inMilliseconds) * 100.0;
+    TraktService.startScrobble(_traktItem!, progress);
+    _lastScrobbleProgress = progress;
+    
+    _startScrobbleTimer();
+  }
+
+  void _updateTraktScrobble() {
+    if (_traktItem == null || _duration == Duration.zero || !_isPlaying) return;
+    
+    final progress = (_position.inMilliseconds / _duration.inMilliseconds) * 100.0;
+    
+    // Update every 1% or at least every minute (Trakt suggests updating every few minutes)
+    if ((progress - _lastScrobbleProgress).abs() >= 1.0) {
+      TraktService.startScrobble(_traktItem!, progress); // Trakt uses "start" for updates too
+      _lastScrobbleProgress = progress;
+    }
+  }
+
+  void _pauseTraktScrobble() {
+    if (_traktItem == null || _duration == Duration.zero) return;
+    
+    final progress = (_position.inMilliseconds / _duration.inMilliseconds) * 100.0;
+    TraktService.pauseScrobble(_traktItem!, progress);
+    _stopScrobbleTimer();
+  }
+
+  void _stopTraktScrobble({bool finished = false}) {
+    if (_traktItem == null || _duration == Duration.zero) return;
+    
+    final progress = finished ? 100.0 : (_position.inMilliseconds / _duration.inMilliseconds) * 100.0;
+    TraktService.stopScrobble(_traktItem!, progress);
+    _stopScrobbleTimer();
+  }
+
+  void _startScrobbleTimer() {
+    _scrobbleUpdateTimer?.cancel();
+    _scrobbleUpdateTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _updateTraktScrobble();
+    });
+  }
+
+  void _stopScrobbleTimer() {
+    _scrobbleUpdateTimer?.cancel();
+    _scrobbleUpdateTimer = null;
   }
 
   @override
@@ -2004,9 +2101,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
 
+    _stopTraktScrobble();
     await _saveResume();
     final entry = _activePlaylist![index];
     _currentIndex = index;
+    _initTraktItem();
 
     // Clear subtitle cache and selection when changing content
     _cachedStremioSubtitles = null;
@@ -2747,6 +2846,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    // Stop Trakt scrobble
+    _stopTraktScrobble();
+    
     // Save the current state before disposing
     _saveResume();
 

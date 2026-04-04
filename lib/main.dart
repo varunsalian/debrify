@@ -32,6 +32,7 @@ import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
 import 'services/magnet_link_handler.dart';
 import 'services/stremio_service.dart';
+import 'services/trakt_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
@@ -761,6 +762,39 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
       // Handle the shared URL
       await handler.handleSharedUrl(url);
+    };
+
+    // Set the callback for handling Trakt OAuth redirect
+    deepLinkService.onTraktCodeReceived = (code) async {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connecting to Trakt...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      final success = await TraktService.authenticate(code);
+
+      if (!mounted) return;
+
+      if (success) {
+        await StorageService.setTraktEnabled(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Successfully connected to Trakt!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to connect to Trakt. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     };
 
     // Set the callback for handling Stremio addon URLs

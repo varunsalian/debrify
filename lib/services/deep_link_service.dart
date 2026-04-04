@@ -24,6 +24,9 @@ class DeepLinkService {
   // Callback function to handle Stremio addon URLs
   Future<void> Function(String manifestUrl)? onStremioAddonReceived;
 
+  // Callback function to handle Trakt OAuth redirect
+  Future<void> Function(String code)? onTraktCodeReceived;
+
   // Track recently processed links to avoid duplicates
   final Map<String, DateTime> _recentlyProcessedMagnets = {};
   final Map<String, DateTime> _recentlyProcessedUrls = {};
@@ -99,6 +102,8 @@ class DeepLinkService {
       _handleMagnetUri(uri);
     } else if (uri.scheme == 'stremio') {
       _handleStremioUri(uri);
+    } else if (uri.scheme == 'debrify') {
+      _handleDebrifyUri(uri);
     } else if (uri.scheme == 'https' || uri.scheme == 'http') {
       // Check if it's a Stremio manifest URL
       if (uri.path.endsWith('manifest.json')) {
@@ -193,6 +198,23 @@ class DeepLinkService {
       _handleStremioManifestUrl(manifestUrl);
     } else {
       debugPrint('Could not extract manifest URL from Stremio link: $uri');
+    }
+  }
+
+  /// Handle debrify:// URI (Trakt OAuth, etc.)
+  void _handleDebrifyUri(Uri uri) {
+    debugPrint('Debrify link detected: $uri');
+
+    if (uri.host == 'trakt-auth') {
+      final code = uri.queryParameters['code'];
+      if (code != null && code.isNotEmpty) {
+        debugPrint('Trakt OAuth code detected: $code');
+        if (onTraktCodeReceived != null) {
+          onTraktCodeReceived!(code);
+        } else {
+          debugPrint('No Trakt code handler registered');
+        }
+      }
     }
   }
 
