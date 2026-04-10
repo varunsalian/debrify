@@ -58,6 +58,7 @@ import '../widgets/home_stremio_tv_favorites_section.dart';
 import '../widgets/home_iptv_favorites_section.dart';
 import '../widgets/home_continue_watching_section.dart';
 import '../widgets/home_trakt_continue_watching_section.dart';
+import '../widgets/home_trakt_now_playing_card.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
@@ -14806,6 +14807,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
+      // Now Playing (Trakt live scrobble) — self-hides when nothing is playing
+      RepaintBoundary(child: HomeTraktNowPlayingCard(
+        isTelevision: _isTelevision,
+      )),
       // Continue Watching (local progress)
       if (_continueWatchingEnabled)
       RepaintBoundary(child: HomeContinueWatchingSection(
@@ -14864,7 +14869,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _handleSearchPacks(meta);
         },
         onRequestFocusAbove: () {
-          _focusControlRow();
+          final prev = _homeFocusController.getPreviousSection(HomeSection.continueWatching);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          } else {
+            _focusControlRow();
+          }
         },
         onRequestFocusBelow: () {
           final next = _homeFocusController.getNextSection(HomeSection.continueWatching);

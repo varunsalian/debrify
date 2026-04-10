@@ -657,6 +657,24 @@ class TraktService {
   // Playback / Continue Watching Methods
   // ============================================================================
 
+  /// Fetch what the authenticated user is currently watching (live scrobble).
+  /// Returns the raw JSON map on 200, null on 204 (nothing playing) or any error.
+  Future<Map<String, dynamic>?> fetchNowWatching() async {
+    final response = await _authenticatedGet('/users/me/watching');
+    if (response == null) return null;
+    if (response.statusCode == 204) return null;
+    if (response.statusCode != 200) {
+      debugPrint('Trakt: fetchNowWatching failed (${response.statusCode})');
+      return null;
+    }
+    try {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchNowWatching parse error: $e');
+      return null;
+    }
+  }
+
   /// Fetch playback items (paused mid-watch) with full metadata.
   /// Returns raw items from /sync/playback for transformation.
   /// Each item has shape: { "progress": N, "movie": { ... } } or { "progress": N, "show": { ... } }
