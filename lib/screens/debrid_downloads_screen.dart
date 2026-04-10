@@ -2630,6 +2630,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         : _buildDownloadContent();
 
     return Scaffold(
+      appBar: widget.selectSourceMode
+          ? AppBar(
+              leading: IconButton(
+                focusNode: _backButtonFocusNode,
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Back',
+              ),
+              title: const Text('Select Source from Real-Debrid'),
+            )
+          : null,
       body: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: Column(

@@ -5852,7 +5852,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final showSearch = !_isAtRoot && currentMode != _FolderViewMode.seriesArrange;
 
     return Scaffold(
-      appBar: _isAtRoot ? null : AppBar(
+      appBar: _isAtRoot
+          ? (widget.selectSourceMode
+              ? AppBar(
+                  leading: IconButton(
+                    focusNode: _backButtonFocusNode,
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Back',
+                  ),
+                  title: const Text('Select Source from TorBox'),
+                )
+              : null)
+          : AppBar(
         leading: IconButton(
           focusNode: _backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
