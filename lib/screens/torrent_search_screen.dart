@@ -16698,45 +16698,63 @@ class _DebridActionTile extends StatefulWidget {
 class _DebridActionTileState extends State<_DebridActionTile> {
   bool _focused = false;
 
+  /// Consume Select/Enter on both KeyDown and KeyUp so they don't propagate
+  /// to the underlying torrent row (which would otherwise re-open this dialog).
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter;
+    if (!isSelect) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      return KeyEventResult.handled;
+    }
+    if (event is KeyUpEvent) {
+      if (widget.enabled) widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Opacity(
       opacity: widget.enabled ? 1.0 : 0.35,
-      child: InkWell(
+      child: Focus(
         autofocus: widget.autofocus,
         canRequestFocus: widget.enabled,
-        onTap: widget.enabled ? widget.onTap : null,
         onFocusChange: (focused) => setState(() => _focused = focused),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: widget.color.withValues(alpha: _focused ? 0.25 : 0.15),
-                  borderRadius: BorderRadius.circular(10),
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          onTap: widget.enabled ? widget.onTap : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: _focused ? 0.25 : 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(widget.icon, size: 18, color: widget.color),
                 ),
-                child: Icon(widget.icon, size: 18, color: widget.color),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 2),
-                    Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
-                  ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 2),
+                      Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
