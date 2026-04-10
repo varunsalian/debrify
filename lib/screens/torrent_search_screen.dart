@@ -12596,19 +12596,47 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       final addResult = await pikpak.addOfflineDownload(magnet, parentFolderId: subFolderId);
       String? fileId;
+      String? taskId;
       if (addResult['file'] != null) {
         fileId = addResult['file']['id'];
       } else if (addResult['task'] != null) {
         fileId = addResult['task']['file_id'];
+        taskId = addResult['task']['id'];
       } else if (addResult['id'] != null) {
         fileId = addResult['id'];
       }
       if (fileId == null) return null;
 
-      // Poll briefly for completion (max ~20 seconds)
       const pollInterval = Duration(seconds: 2);
-      for (int attempt = 0; attempt < 10; attempt++) {
-        await Future.delayed(pollInterval);
+
+      // Phase 1: poll task status until complete (mirrors _pollPikPakStatus Phase 1)
+      // Capped at 7 attempts (~15 s) so a stalled task never hangs indefinitely.
+      // Breaks early at >=90% progress so a near-complete task doesn't burn the full budget.
+      bool phase1Completed = false;
+      if (taskId != null) {
+        for (int attempt = 0; attempt < 7; attempt++) {
+          if (attempt > 0) await Future.delayed(pollInterval);
+          try {
+            final taskData = await pikpak.getTaskStatus(taskId);
+            final phase = taskData['phase'];
+            if (phase == 'PHASE_TYPE_COMPLETE') { phase1Completed = true; break; }
+            if (phase == 'PHASE_TYPE_ERROR') return null;
+            // Mirror _pollPikPakStatus: break early at high progress so Phase 2 can proceed
+            final rawProgress = taskData['progress'];
+            if (rawProgress != null) {
+              final p = rawProgress is int ? rawProgress : int.tryParse(rawProgress.toString()) ?? 0;
+              if (p >= 90) { phase1Completed = true; break; }
+            }
+          } catch (_) {
+            break; // task API failed — fall through to file polling
+          }
+        }
+      }
+
+      // Phase 2: poll file status until complete (max ~10 seconds).
+      // Skip the first delay when Phase 1 already confirmed the task is done.
+      for (int attempt = 0; attempt < 5; attempt++) {
+        if (attempt > 0 || !phase1Completed) await Future.delayed(pollInterval);
         try {
           final fileData = await pikpak.getFileDetails(fileId);
           if (fileData['phase'] == 'PHASE_TYPE_COMPLETE') {
