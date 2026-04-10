@@ -14885,6 +14885,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       )),
       // Trakt Continue Watching - Movies
       RepaintBoundary(child: HomeTraktContinueWatchingSection(
+        key: const ValueKey('trakt_continue_watching_movies'),
         focusController: _homeFocusController,
         isTelevision: _isTelevision,
         homeSection: HomeSection.traktContinueWatchingMovies,
@@ -14914,6 +14915,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       )),
       // Trakt Continue Watching - Shows
       RepaintBoundary(child: HomeTraktContinueWatchingSection(
+        key: const ValueKey('trakt_continue_watching_shows'),
         focusController: _homeFocusController,
         isTelevision: _isTelevision,
         homeSection: HomeSection.traktContinueWatchingShows,
