@@ -12,6 +12,7 @@ import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
+import 'add_source_picker_dialog.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
 /// Displays aggregated search results from all catalog sources
@@ -464,14 +465,52 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     if (mounted) setState(() => _boundSources = sources);
   }
 
-  /// Handle select source action — show edit dialog if source exists, otherwise enter select mode.
+  /// Handle select source action — show edit dialog if source exists, otherwise show picker.
   void _handleSelectSourceAction(StremioMeta item) {
     final imdbId = item.effectiveImdbId ?? item.id;
     if (_boundSources.containsKey(imdbId)) {
       _showEditSourceDialog(item);
     } else {
-      widget.onSelectSource?.call(item);
+      _showAddSourcePicker(item, imdbId);
     }
+  }
+
+  /// Show the add-source picker (Torrent Search / Real-Debrid / TorBox).
+  /// Skips the picker if no cloud providers are enabled.
+  Future<void> _showAddSourcePicker(StremioMeta item, String imdbId) async {
+    final rdKey = await StorageService.getApiKey();
+    final torboxKey = await StorageService.getTorboxApiKey();
+    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
+    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+
+    if (!mounted) return;
+
+    // No cloud providers — skip picker, go straight to torrent search
+    if (!rdEnabled && !torboxEnabled) {
+      widget.onSelectSource?.call(item);
+      return;
+    }
+
+    await showAddSourcePickerDialog(
+      context,
+      onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onRealDebrid: rdEnabled
+          ? () => _pushDebridSelectSource(
+                show: item,
+                imdbId: imdbId,
+                rdEnabled: true,
+                torboxEnabled: false,
+              )
+          : null,
+      onTorbox: torboxEnabled
+          ? () => _pushDebridSelectSource(
+                show: item,
+                imdbId: imdbId,
+                rdEnabled: false,
+                torboxEnabled: true,
+              )
+          : null,
+    );
   }
 
   /// Show "Edit Sources" dialog with list of bound sources and management options.
@@ -726,19 +765,27 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     required bool rdEnabled,
     required bool torboxEnabled,
   }) {
+    final isMovie = show.type == 'movie';
+
+    Future<void> saveSource(SeriesSource source) async {
+      if (isMovie) {
+        await SeriesSourceService.setSources(imdbId, [source]);
+      } else {
+        await SeriesSourceService.addSource(imdbId, source);
+      }
+      final updated = await SeriesSourceService.getSources(imdbId);
+      if (mounted) {
+        setState(() => _boundSources[imdbId] = updated);
+      }
+    }
+
     void pushRd() {
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => DebridDownloadsScreen(
           isPushedRoute: true,
           initialSearchQuery: show.name,
           selectSourceMode: true,
-          onSourceSelected: (source) async {
-            await SeriesSourceService.addSource(imdbId, source);
-            final updated = await SeriesSourceService.getSources(imdbId);
-            if (mounted) {
-              setState(() => _boundSources[imdbId] = updated);
-            }
-          },
+          onSourceSelected: saveSource,
         ),
       ));
     }
@@ -749,13 +796,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           isPushedRoute: true,
           initialSearchQuery: show.name,
           selectSourceMode: true,
-          onSourceSelected: (source) async {
-            await SeriesSourceService.addSource(imdbId, source);
-            final updated = await SeriesSourceService.getSources(imdbId);
-            if (mounted) {
-              setState(() => _boundSources[imdbId] = updated);
-            }
-          },
+          onSourceSelected: saveSource,
         ),
       ));
     }

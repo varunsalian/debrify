@@ -13,6 +13,7 @@ import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
+import 'add_source_picker_dialog.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
@@ -270,6 +271,7 @@ class _HomeTraktContinueWatchingSectionState
     final imdbId = show.effectiveImdbId ?? show.id;
     var sources = await SeriesSourceService.getSources(imdbId);
     if (sources.isEmpty || !mounted) return;
+    final isMovie = show.type == 'movie';
 
     await showDialog<void>(
       context: context,
@@ -291,19 +293,21 @@ class _HomeTraktContinueWatchingSectionState
                           const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
                           const SizedBox(width: 8),
                           Text(
-                            'Torrent Sources (${sources.length})',
+                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'First match wins — reorder by priority',
-                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                      if (!isMovie) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'First match wins — reorder by priority',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 12),
                       Flexible(
                         child: ListView.builder(
@@ -394,8 +398,8 @@ class _HomeTraktContinueWatchingSectionState
                           ),
                           const SizedBox(width: 8),
                           FilledButton.icon(
-                            icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('Add Source'),
+                            icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
+                            label: Text(isMovie ? 'Change Source' : 'Add Source'),
                             onPressed: () {
                               Navigator.of(dialogContext).pop();
                               widget.onSelectSource?.call(show);
@@ -414,6 +418,44 @@ class _HomeTraktContinueWatchingSectionState
     );
   }
 
+  /// Show the add-source picker (Torrent Search / Real-Debrid / TorBox).
+  /// Skips the picker if no cloud providers are enabled.
+  Future<void> _showAddSourcePicker(StremioMeta item) async {
+    final imdbId = item.effectiveImdbId ?? item.id;
+    final rdKey = await StorageService.getApiKey();
+    final torboxKey = await StorageService.getTorboxApiKey();
+    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
+    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+
+    if (!mounted) return;
+
+    if (!rdEnabled && !torboxEnabled) {
+      widget.onSelectSource?.call(item);
+      return;
+    }
+
+    await showAddSourcePickerDialog(
+      context,
+      onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onRealDebrid: rdEnabled
+          ? () => _pushDebridSelectSource(
+                show: item,
+                imdbId: imdbId,
+                rdEnabled: true,
+                torboxEnabled: false,
+              )
+          : null,
+      onTorbox: torboxEnabled
+          ? () => _pushDebridSelectSource(
+                show: item,
+                imdbId: imdbId,
+                rdEnabled: false,
+                torboxEnabled: true,
+              )
+          : null,
+    );
+  }
+
   /// Push debrid downloads screen in select-source mode.
   /// If both providers enabled, shows a picker first.
   void _pushDebridSelectSource({
@@ -422,15 +464,23 @@ class _HomeTraktContinueWatchingSectionState
     required bool rdEnabled,
     required bool torboxEnabled,
   }) {
+    final isMovie = show.type == 'movie';
+
+    Future<void> saveSource(SeriesSource source) async {
+      if (isMovie) {
+        await SeriesSourceService.setSources(imdbId, [source]);
+      } else {
+        await SeriesSourceService.addSource(imdbId, source);
+      }
+    }
+
     void pushRd() {
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => DebridDownloadsScreen(
           isPushedRoute: true,
           initialSearchQuery: show.name,
           selectSourceMode: true,
-          onSourceSelected: (source) async {
-            await SeriesSourceService.addSource(imdbId, source);
-          },
+          onSourceSelected: saveSource,
         ),
       ));
     }
@@ -441,9 +491,7 @@ class _HomeTraktContinueWatchingSectionState
           isPushedRoute: true,
           initialSearchQuery: show.name,
           selectSourceMode: true,
-          onSourceSelected: (source) async {
-            await SeriesSourceService.addSource(imdbId, source);
-          },
+          onSourceSelected: saveSource,
         ),
       ));
     }
@@ -498,9 +546,9 @@ class _HomeTraktContinueWatchingSectionState
   }
 
   void _onItemTap(StremioMeta item) async {
-    // Check if series has bound source
+    // Check if item has bound source (works for both movies and series)
     bool hasBoundSource = false;
-    if (item.type == 'series' && widget.onSelectSource != null) {
+    if (widget.onSelectSource != null) {
       final imdbId = item.effectiveImdbId ?? item.id;
       final sources = await SeriesSourceService.getSources(imdbId);
       hasBoundSource = sources.isNotEmpty;
@@ -554,10 +602,10 @@ class _HomeTraktContinueWatchingSectionState
               color: const Color(0xFF818CF8),
               onTap: () => Navigator.pop(context, 'browse'),
             ),
-            if (item.type == 'series' && widget.onSelectSource != null)
+            if (widget.onSelectSource != null)
               _buildMenuItem(
                 icon: hasBoundSource ? Icons.edit_rounded : Icons.add_link_rounded,
-                label: hasBoundSource ? 'Edit Torrent Source' : 'Add Torrent Source',
+                label: hasBoundSource ? 'Edit Source' : 'Add Source',
                 subtitle: hasBoundSource ? 'Change the bound torrent source' : 'Bind a torrent source for quick play',
                 color: const Color(0xFF60A5FA),
                 onTap: () => Navigator.pop(context, 'select_source'),
@@ -595,7 +643,7 @@ class _HomeTraktContinueWatchingSectionState
       if (hasBoundSource) {
         _showEditSourceDialog(item);
       } else {
-        widget.onSelectSource?.call(item);
+        await _showAddSourcePicker(item);
       }
     } else if (choice == 'search_packs') {
       widget.onSearchPacks?.call(item);

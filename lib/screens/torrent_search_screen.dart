@@ -14913,6 +14913,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _handleQuickPlay(selection);
         },
         onBrowseShow: (show) => _browseTraktShow(show),
+        onSelectSource: _handleSelectSource,
         onRequestFocusAbove: () {
           final prev = _homeFocusController.getPreviousSection(HomeSection.traktContinueWatchingMovies);
           if (prev != null) {
