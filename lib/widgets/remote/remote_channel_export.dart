@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/debrify_tv_cache.dart';
 import '../../models/debrify_tv_channel_record.dart';
+import '../../services/community/channel_yaml_builder.dart';
 import '../../services/community/magnet_yaml_service.dart';
-import '../../services/debrify_tv_cache_service.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -107,7 +106,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
 
         try {
           // Generate YAML from channel data + cached torrents
-          final yamlContent = await _generateChannelYaml(channel);
+          final yamlContent = await ChannelYamlBuilder.build(channel);
 
           // Encode as debrify:// URI
           final debrifyUri = MagnetYamlService.encode(
@@ -255,75 +254,6 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     }
 
     return true;
-  }
-
-  Future<String> _generateChannelYaml(DebrifyTvChannelRecord channel) async {
-    final buffer = StringBuffer();
-    buffer.writeln('channel_name: "${_escapeYamlString(channel.name)}"');
-    buffer.writeln('avoid_nsfw: ${channel.avoidNsfw}');
-    buffer.writeln('');
-    buffer.writeln('keywords:');
-
-    final cacheEntry = await DebrifyTvCacheService.getEntry(channel.channelId);
-    final cachedTorrents = cacheEntry?.torrents ?? <CachedTorrent>[];
-
-    final keywordStats = cacheEntry?.keywordStats ?? <String, KeywordStat>{};
-
-    for (final keyword in channel.keywords) {
-      buffer.writeln('  "${_escapeYamlString(keyword)}":');
-
-      final keywordLower = keyword.toLowerCase();
-
-      // Include keyword stats if available
-      final stat = keywordStats[keywordLower];
-      if (stat != null) {
-        buffer.writeln('    total_fetched: ${stat.totalFetched}');
-        buffer.writeln('    last_searched_at: ${stat.lastSearchedAt}');
-        buffer.writeln('    pages_pulled: ${stat.pagesPulled}');
-        buffer.writeln('    pirate_bay_hits: ${stat.pirateBayHits}');
-      }
-
-      final seen = <String>{};
-      final matchingTorrents = cachedTorrents
-          .where((t) => t.keywords.contains(keywordLower))
-          .where((t) {
-        if (seen.contains(t.infohash)) return false;
-        seen.add(t.infohash);
-        return true;
-      }).toList();
-
-      if (matchingTorrents.isEmpty) {
-        buffer.writeln('    torrents: []');
-      } else {
-        buffer.writeln('    torrents:');
-        for (final torrent in matchingTorrents) {
-          buffer.writeln('      - infohash: ${torrent.infohash}');
-          buffer.writeln(
-              '        name: "${_escapeYamlString(torrent.name)}"');
-          buffer.writeln('        size_bytes: ${torrent.sizeBytes}');
-          buffer.writeln('        created_unix: ${torrent.createdUnix}');
-          buffer.writeln('        seeders: ${torrent.seeders}');
-          buffer.writeln('        leechers: ${torrent.leechers}');
-          buffer.writeln('        completed: ${torrent.completed}');
-          buffer.writeln('        scraped_date: ${torrent.scrapedDate}');
-          if (torrent.sources.isNotEmpty) {
-            buffer.writeln(
-                '        sources: [${torrent.sources.map((s) => '"$s"').join(', ')}]');
-          }
-        }
-      }
-    }
-
-    return buffer.toString();
-  }
-
-  String _escapeYamlString(String value) {
-    return value
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\t', '\\t');
   }
 
   @override

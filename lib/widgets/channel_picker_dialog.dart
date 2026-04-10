@@ -66,14 +66,8 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
   }
 
   Future<void> _loadChannels() async {
-    debugPrint('[ChannelPicker] Loading channels...');
     try {
       final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-      debugPrint('[ChannelPicker] Loaded ${channels.length} channels');
-      for (var ch in channels) {
-        debugPrint('[ChannelPicker]   - ${ch.name} (${ch.channelId}): keywords=${ch.keywords}');
-      }
-
       if (mounted) {
         setState(() {
           _channels = channels;
@@ -89,7 +83,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
         });
       }
     } catch (e) {
-      debugPrint('[ChannelPicker] ERROR loading channels: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -111,8 +104,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
   }
 
   void _handleChannelSelect(DebrifyTvChannelRecord channel) {
-    debugPrint('[ChannelPicker] User selected existing channel: ${channel.name} (${channel.channelId})');
-    debugPrint('[ChannelPicker] Channel keywords at selection: ${channel.keywords}');
     Navigator.of(context).pop(
       ChannelPickerResult(
         channelId: channel.channelId,
@@ -123,7 +114,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
   }
 
   void _handleCreateNew() {
-    debugPrint('[ChannelPicker] User tapped "Create New Channel"');
     setState(() {
       _isCreating = true;
     });
@@ -138,11 +128,8 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
   Future<void> _createChannel() async {
     final name = _nameController.text.trim();
-    debugPrint('[ChannelPicker] Creating new channel with name: "$name"');
-    debugPrint('[ChannelPicker] Initial keyword: "${widget.searchKeyword}"');
 
     if (name.isEmpty) {
-      debugPrint('[ChannelPicker] ERROR: Empty channel name');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Channel name cannot be empty'),
@@ -170,32 +157,21 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
         updatedAt: now,
       );
 
-      debugPrint('[ChannelPicker] Channel record created: ${channel.channelId}');
-      debugPrint('[ChannelPicker] Channel keywords: ${channel.keywords}');
-
-      // Save channel to database
-      debugPrint('[ChannelPicker] Saving channel to database...');
       await DebrifyTvRepository.instance.upsertChannel(channel);
-      debugPrint('[ChannelPicker] Channel saved to database');
 
       if (!mounted) return;
 
       // Initialize empty cache entry with warming status
       final normalizedKeyword = widget.searchKeyword.toLowerCase();
-      debugPrint('[ChannelPicker] Creating cache entry with normalized keyword: "$normalizedKeyword"');
-
       final cacheEntry = DebrifyTvChannelCacheEntry.empty(
         channelId: channelId,
         normalizedKeywords: [normalizedKeyword],
         status: DebrifyTvCacheStatus.warming,
       );
 
-      debugPrint('[ChannelPicker] Saving cache entry...');
       await DebrifyTvCacheService.saveEntry(cacheEntry);
-      debugPrint('[ChannelPicker] Cache entry saved');
 
       if (mounted) {
-        debugPrint('[ChannelPicker] SUCCESS: Returning new channel result');
         Navigator.of(context).pop(
           ChannelPickerResult(
             channelId: channelId,
@@ -205,7 +181,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
         );
       }
     } catch (e) {
-      debugPrint('[ChannelPicker] ERROR creating channel: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
