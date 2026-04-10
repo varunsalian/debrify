@@ -12,6 +12,8 @@ import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
+import '../screens/debrid_downloads_screen.dart';
+import '../screens/torbox/torbox_downloads_screen.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
@@ -1358,6 +1360,42 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                           ],
                         ],
                       ),
+                      // Add from Debrid button
+                      FutureBuilder<List<bool>>(
+                        future: Future.wait([
+                          StorageService.getApiKey().then((k) => k != null && k.isNotEmpty),
+                          StorageService.getTorboxApiKey().then((k) => k != null && k.isNotEmpty),
+                        ]),
+                        builder: (context, snapshot) {
+                          final rdEnabled = snapshot.data?[0] ?? false;
+                          final torboxEnabled = snapshot.data?[1] ?? false;
+                          if (!rdEnabled && !torboxEnabled) return const SizedBox.shrink();
+
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  _pushDebridSelectSource(
+                                    show: show,
+                                    imdbId: imdbId,
+                                    rdEnabled: rdEnabled,
+                                    torboxEnabled: torboxEnabled,
+                                  );
+                                },
+                                icon: const Icon(Icons.cloud_download_outlined, size: 18, color: Color(0xFF60A5FA)),
+                                label: const Text('Add from Debrid', style: TextStyle(color: Color(0xFF60A5FA))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFF60A5FA), width: 1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
@@ -1371,6 +1409,99 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           },
         );
       },
+    );
+  }
+
+  /// Push debrid downloads screen in select-source mode.
+  /// If both providers enabled, shows a picker first.
+  void _pushDebridSelectSource({
+    required StremioMeta show,
+    required String imdbId,
+    required bool rdEnabled,
+    required bool torboxEnabled,
+  }) {
+    void pushRd() {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DebridDownloadsScreen(
+          isPushedRoute: true,
+          initialSearchQuery: show.name,
+          selectSourceMode: true,
+          onSourceSelected: (source) async {
+            await SeriesSourceService.addSource(imdbId, source);
+            final updated = await SeriesSourceService.getSources(imdbId);
+            if (mounted) {
+              setState(() => _boundSources[imdbId] = updated);
+            }
+          },
+        ),
+      ));
+    }
+
+    void pushTorbox() {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => TorboxDownloadsScreen(
+          isPushedRoute: true,
+          initialSearchQuery: show.name,
+          selectSourceMode: true,
+          onSourceSelected: (source) async {
+            await SeriesSourceService.addSource(imdbId, source);
+            final updated = await SeriesSourceService.getSources(imdbId);
+            if (mounted) {
+              setState(() => _boundSources[imdbId] = updated);
+            }
+          },
+        ),
+      ));
+    }
+
+    // If only one provider, push directly
+    if (rdEnabled && !torboxEnabled) {
+      pushRd();
+      return;
+    }
+    if (torboxEnabled && !rdEnabled) {
+      pushTorbox();
+      return;
+    }
+
+    // Both enabled — show picker
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Select Provider',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
+              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                pushRd();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
+              title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                pushTorbox();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 

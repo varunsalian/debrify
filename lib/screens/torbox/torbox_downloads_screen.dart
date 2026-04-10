@@ -8,6 +8,7 @@ import '../../models/torbox_file.dart';
 import '../../models/torbox_torrent.dart';
 import '../../models/torbox_web_download.dart';
 import '../../models/rd_file_node.dart';
+import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
@@ -28,6 +29,9 @@ class TorboxDownloadsScreen extends StatefulWidget {
     super.key,
     this.initialTorrentToOpen,
     this.isPushedRoute = false,
+    this.initialSearchQuery,
+    this.selectSourceMode = false,
+    this.onSourceSelected,
   });
 
   final TorboxTorrent? initialTorrentToOpen;
@@ -35,6 +39,15 @@ class TorboxDownloadsScreen extends StatefulWidget {
   /// When true, this screen was pushed as a route (not displayed in a tab).
   /// Back navigation will pop the route instead of switching tabs.
   final bool isPushedRoute;
+
+  /// Pre-populate torrent search with this query on init.
+  final String? initialSearchQuery;
+
+  /// When true, torrent cards show "Select" instead of Open/Play/3-dot.
+  final bool selectSourceMode;
+
+  /// Called when user selects a torrent in select-source mode.
+  final void Function(SeriesSource)? onSourceSelected;
 
   @override
   State<TorboxDownloadsScreen> createState() => _TorboxDownloadsScreenState();
@@ -183,7 +196,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
       // Set up timeout - if we're still at root after 10 seconds, pop and show error
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && widget.isPushedRoute && _isAtRoot) {
+        if (mounted && widget.isPushedRoute && !widget.selectSourceMode && _isAtRoot) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1057,6 +1070,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _fetchTorrents(reset: true),
       _fetchWebDownloads(reset: true),
     ]);
+
+    // Auto-activate torrent search if initial query provided (select source mode)
+    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+      setState(() {
+        _torrentSearchController.text = widget.initialSearchQuery!;
+        _isTorrentSearchActive = true;
+      });
+      _submitTorrentSearch();
+    }
   }
 
   Future<void> _fetchTorrents({bool reset = false}) async {
@@ -5803,7 +5825,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     // When pushed as a route and still at root, show loading state
     // (we're waiting for navigation into the specific torrent)
-    if (widget.isPushedRoute && _isAtRoot) {
+    if (widget.isPushedRoute && !widget.selectSourceMode && _isAtRoot) {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -6384,102 +6406,127 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ),
             if (!_isSelectionMode) ...[
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTorrentActionButton(
-                    focusNode: index == 0 ? _firstItemFocusNode : null,
-                    icon: Icons.folder_open,
-                    label: 'Open',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () => _navigateIntoTorrent(torrent),
-                  ),
-                ),
-                if (videoCount > 0) ...[
-                  const SizedBox(width: 8),
+            if (widget.selectSourceMode)
+              Row(
+                children: [
                   Expanded(
                     child: _buildTorrentActionButton(
-                      icon: Icons.play_arrow_rounded,
-                      label: 'Play',
-                      color: const Color(0xFF22C55E),
-                      onTap: () => _handlePlayTorrent(torrent),
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
+                      icon: Icons.check_circle_outline,
+                      label: 'Select',
+                      color: const Color(0xFF6366F1),
+                      onTap: () {
+                        final source = SeriesSource(
+                          torrentHash: torrent.hash,
+                          torrentName: torrent.name,
+                          debridService: 'torbox',
+                          debridTorrentId: torrent.id.toString(),
+                          boundAt: DateTime.now().millisecondsSinceEpoch,
+                        );
+                        widget.onSourceSelected?.call(source);
+                        Navigator.of(context).pop();
+                      },
                     ),
                   ),
                 ],
-                const SizedBox(width: 8),
-                // 3-dot menu
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert),
-                  tooltip: 'More options',
-                  onSelected: (value) {
-                    if (value == 'open') {
-                      _navigateIntoTorrent(torrent);
-                    } else if (value == 'download') {
-                      _showDownloadOptionsDialog(torrent);
-                    } else if (value == 'copy_zip_link') {
-                      _copyTorboxZipLink(torrent);
-                    } else if (value == 'add_to_playlist') {
-                      _handleAddToPlaylist(torrent);
-                    } else if (value == 'delete') {
-                      _confirmDeleteTorrent(torrent);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'open',
-                      child: Row(
-                        children: [
-                          Icon(Icons.folder_open, size: 18, color: Colors.blue),
-                          SizedBox(width: 12),
-                          Text('Open'),
-                        ],
-                      ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTorrentActionButton(
+                      focusNode: index == 0 ? _firstItemFocusNode : null,
+                      icon: Icons.folder_open,
+                      label: 'Open',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: () => _navigateIntoTorrent(torrent),
                     ),
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Row(
-                        children: [
-                          Icon(Icons.download, size: 18, color: Colors.green),
-                          SizedBox(width: 12),
-                          Text('Download to device'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'copy_zip_link',
-                      child: Row(
-                        children: [
-                          Icon(Icons.link, size: 18, color: Color(0xFFEC4899)),
-                          SizedBox(width: 12),
-                          Text('Copy Download Link (Zip)'),
-                        ],
-                      ),
-                    ),
-                    if (videoCount > 0)
-                      const PopupMenuItem(
-                        value: 'add_to_playlist',
-                        child: Row(
-                          children: [
-                            Icon(Icons.playlist_add, size: 18, color: Colors.blue),
-                            SizedBox(width: 12),
-                            Text('Add to Playlist'),
-                          ],
-                        ),
-                      ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          SizedBox(width: 12),
-                          Text('Delete'),
-                        ],
+                  ),
+                  if (videoCount > 0) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildTorrentActionButton(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _handlePlayTorrent(torrent),
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  // 3-dot menu
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      if (value == 'open') {
+                        _navigateIntoTorrent(torrent);
+                      } else if (value == 'download') {
+                        _showDownloadOptionsDialog(torrent);
+                      } else if (value == 'copy_zip_link') {
+                        _copyTorboxZipLink(torrent);
+                      } else if (value == 'add_to_playlist') {
+                        _handleAddToPlaylist(torrent);
+                      } else if (value == 'delete') {
+                        _confirmDeleteTorrent(torrent);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'open',
+                        child: Row(
+                          children: [
+                            Icon(Icons.folder_open, size: 18, color: Colors.blue),
+                            SizedBox(width: 12),
+                            Text('Open'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download, size: 18, color: Colors.green),
+                            SizedBox(width: 12),
+                            Text('Download to device'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'copy_zip_link',
+                        child: Row(
+                          children: [
+                            Icon(Icons.link, size: 18, color: Color(0xFFEC4899)),
+                            SizedBox(width: 12),
+                            Text('Copy Download Link (Zip)'),
+                          ],
+                        ),
+                      ),
+                      if (videoCount > 0)
+                        const PopupMenuItem(
+                          value: 'add_to_playlist',
+                          child: Row(
+                            children: [
+                              Icon(Icons.playlist_add, size: 18, color: Colors.blue),
+                              SizedBox(width: 12),
+                              Text('Add to Playlist'),
+                            ],
+                          ),
+                        ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Delete'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ],
           ],
         ),
