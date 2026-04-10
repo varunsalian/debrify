@@ -949,7 +949,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
+                          onPressed: () {
+                            DialogTapGuard.markKeyAction();
+                            Navigator.of(ctx).pop();
+                          },
                           icon: const Icon(
                             Icons.close_rounded,
                             color: Colors.white54,
@@ -6099,6 +6102,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 actions: [
                   TextButton(
                     onPressed: () {
+                      DialogTapGuard.markKeyAction();
                       cancelled = true;
                       Navigator.of(dialogContext).pop();
                     },
@@ -6462,6 +6466,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 actions: [
                   TextButton(
                     onPressed: () {
+                      DialogTapGuard.markKeyAction();
                       cancelled = true;
                       Navigator.of(dialogContext).pop();
                     },
@@ -6810,6 +6815,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 actions: [
                   TextButton(
                     onPressed: () {
+                      DialogTapGuard.markKeyAction();
                       cancelled = true;
                       Navigator.of(dialogContext).pop();
                     },
@@ -7010,13 +7016,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () {
+                    DialogTapGuard.markKeyAction();
+                    Navigator.of(context).pop();
+                  },
                   child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
                 ),
                 TextButton(
                   onPressed: nameController.text.trim().isEmpty
                       ? null
-                      : () => Navigator.of(context).pop(nameController.text.trim()),
+                      : () {
+                          DialogTapGuard.markKeyAction();
+                          Navigator.of(context).pop(nameController.text.trim());
+                        },
                   child: Text(
                     'Create',
                     style: TextStyle(
@@ -7492,7 +7504,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
+                          onPressed: () {
+                            DialogTapGuard.markKeyAction();
+                            Navigator.of(ctx).pop();
+                          },
                           icon: const Icon(Icons.close_rounded, color: Colors.white54),
                         ),
                       ],
@@ -7579,6 +7594,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () {
+                      DialogTapGuard.markKeyAction();
                       Navigator.of(ctx).pop();
                       _restoreFocusToCard(-1, torrent);
                     },
@@ -9769,7 +9785,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                           ),
                         ),
                         IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
+                          onPressed: () {
+                            DialogTapGuard.markKeyAction();
+                            Navigator.of(ctx).pop();
+                          },
                           icon: const Icon(
                             Icons.close_rounded,
                             color: Colors.white54,
@@ -9874,6 +9893,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () {
+                      DialogTapGuard.markKeyAction();
                       Navigator.of(ctx).pop();
                       _restoreFocusToCard(-1, torrent);
                     },
@@ -10009,7 +10029,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             ),
                           ),
                           GestureDetector(
-                            onTap: () => Navigator.of(context).pop(),
+                            onTap: () {
+                              DialogTapGuard.markKeyAction();
+                              Navigator.of(context).pop();
+                            },
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
@@ -10226,14 +10249,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ],
         ),
         actions: [
-          TextButton(
+          _DpadSafeButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton.icon(
+          _DpadSafeButton(
             onPressed: () => Navigator.of(context).pop(true),
-            icon: const Icon(Icons.download),
-            label: const Text('Download'),
+            filled: true,
+            autofocus: true,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.download),
+                SizedBox(width: 6),
+                Text('Download'),
+              ],
+            ),
           ),
         ],
       ),
@@ -10880,7 +10911,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => onChanged(value),
+          onTap: () {
+            DialogTapGuard.markKeyAction();
+            onChanged(value);
+          },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -11565,11 +11599,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(context).pop(false);
+                },
                 child: const Text('Cancel'),
               ),
               FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(true),
+                onPressed: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(context).pop(true);
+                },
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Play'),
               ),
@@ -12813,6 +12853,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       style: TextStyle(color: Colors.grey[400]),
                     ),
                     onTap: () async {
+                      DialogTapGuard.markKeyAction();
                       Navigator.of(context).pop();
                       await _downloadAllFiles(fileList, torrentName);
                     },
@@ -12844,6 +12885,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             style: TextStyle(color: Colors.grey[400]),
                           ),
                           onTap: () async {
+                            DialogTapGuard.markKeyAction();
                             Navigator.of(context).pop();
                             await _downloadFile(
                               file['restrictedLink'],
@@ -12859,7 +12901,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        DialogTapGuard.markKeyAction();
+                        Navigator.of(context).pop();
+                      },
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -13107,14 +13152,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ],
         ),
         actions: [
-          TextButton(
+          _DpadSafeButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton.icon(
+          _DpadSafeButton(
             onPressed: () => Navigator.of(context).pop(true),
-            icon: const Icon(Icons.download),
-            label: const Text('Download'),
+            filled: true,
+            autofocus: true,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.download),
+                SizedBox(width: 6),
+                Text('Download'),
+              ],
+            ),
           ),
         ],
       ),
@@ -15810,713 +15863,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 }
 
-/// Individual torrent card widget with isolated focus state
-class _TorrentCard extends StatefulWidget {
-  const _TorrentCard({
-    super.key,
-    required this.torrent,
-    required this.index,
-    required this.focusNode,
-    required this.isTelevision,
-    required this.apiKey,
-    required this.torboxApiKey,
-    required this.torboxCacheStatus,
-    required this.realDebridIntegrationEnabled,
-    required this.torboxIntegrationEnabled,
-    required this.pikpakEnabled,
-    required this.torboxCacheCheckEnabled,
-    required this.isSeries,
-    required this.selectedImdbTitle,
-    required this.hasSeasonData,
-    required this.selectedSeason,
-    required this.seasonInputFocusNode,
-    required this.onCardActivated,
-    required this.onCopyMagnet,
-    required this.onAddToDebrid,
-    required this.onAddToTorbox,
-    required this.onAddToPikPak,
-    required this.onShowFileSelection,
-    required this.buildSizeOrPackChip,
-    required this.buildSourceStatChip,
-    required this.buildStreamTypeChip,
-    required this.torboxResultIsCached,
-    required this.searchFocusNode,
-    required this.episodeInputFocusNode,
-    required this.filterButtonFocusNode,
-    required this.backButtonFocusNode,
-    required this.cameFromCatalogBrowse,
-  });
-
-  final Torrent torrent;
-  final int index;
-  final FocusNode focusNode;
-  final bool isTelevision;
-  final String? apiKey;
-  final String? torboxApiKey;
-  final Map<String, bool>? torboxCacheStatus;
-  final bool realDebridIntegrationEnabled;
-  final bool torboxIntegrationEnabled;
-  final bool pikpakEnabled;
-  final bool torboxCacheCheckEnabled;
-  final bool isSeries;
-  final ImdbTitleResult? selectedImdbTitle;
-  final bool hasSeasonData;
-  final int? selectedSeason;
-  final FocusNode seasonInputFocusNode;
-  final VoidCallback onCardActivated;
-  final VoidCallback onCopyMagnet;
-  final void Function(String infohash, String name, int index) onAddToDebrid;
-  final void Function(String infohash, String name) onAddToTorbox;
-  final void Function(String infohash, String name) onAddToPikPak;
-  final void Function(String infohash, String name, int index) onShowFileSelection;
-  final Widget Function(Torrent) buildSizeOrPackChip;
-  final Widget Function(String) buildSourceStatChip;
-  final Widget? Function(Torrent) buildStreamTypeChip;
-  final bool Function(String) torboxResultIsCached;
-  final FocusNode searchFocusNode;
-  final FocusNode episodeInputFocusNode;
-  final FocusNode filterButtonFocusNode;
-  final FocusNode backButtonFocusNode;
-  final bool cameFromCatalogBrowse;
-
-  @override
-  State<_TorrentCard> createState() => _TorrentCardState();
-}
-
-class _TorrentCardState extends State<_TorrentCard> {
-  bool _isFocused = false;
-  // Static timer shared across all cards to throttle scroll animations
-  static Timer? _scrollThrottleTimer;
-  // Track active instances to clean up static timer when last one disposes
-  static int _activeInstances = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _activeInstances++;
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    _activeInstances--;
-    // Cancel static timer when last instance disposes
-    if (_activeInstances == 0) {
-      _scrollThrottleTimer?.cancel();
-      _scrollThrottleTimer = null;
-    }
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (!mounted) return;
-    final focused = widget.focusNode.hasFocus;
-    if (_isFocused != focused) {
-      debugPrint('[TorrentCard ${widget.index}] Focus changed: $_isFocused -> $focused');
-      setState(() {
-        _isFocused = focused;
-      });
-
-      // Auto-scroll on focus (throttled to prevent overlapping animations)
-      if (focused && widget.isTelevision) {
-        _scrollThrottleTimer?.cancel();
-        _scrollThrottleTimer = Timer(const Duration(milliseconds: 50), () {
-          if (!mounted) return;
-          final ctx = widget.focusNode.context;
-          if (ctx != null) {
-            Scrollable.ensureVisible(
-              ctx,
-              alignment: 0.2,
-              duration: const Duration(milliseconds: 100),
-              curve: Curves.easeOutCubic,
-            );
-          }
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        // DEBUG: Log all key events on torrent cards
-        debugPrint('[TorrentCard ${widget.index}] KeyEvent: ${event.runtimeType} - ${event.logicalKey.keyLabel}');
-
-        // Handle OK/Select/Enter press
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          debugPrint('[TorrentCard ${widget.index}] ACTIVATING card via KeyDownEvent');
-          widget.onCardActivated();
-          return KeyEventResult.handled;
-        }
-        // Handle Arrow Up from first card - navigate to header controls
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            widget.index == 0) {
-          // Navigate to back button if came from catalog, otherwise torrent dropdown
-          if (widget.cameFromCatalogBrowse) {
-            widget.backButtonFocusNode.requestFocus();
-          } else {
-            widget.filterButtonFocusNode.requestFocus();
-          }
-          return KeyEventResult.handled;
-        }
-        // Handle Back/Escape to return to search field (TV shortcut)
-        if (widget.isTelevision && event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.escape ||
-                event.logicalKey == LogicalKeyboardKey.backspace)) {
-          // Only handle if this is the first card (avoid capturing all back presses)
-          if (widget.index == 0) {
-            widget.searchFocusNode.requestFocus();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: _buildCardContent(),
-    );
-  }
-
-  Widget _buildCardContent() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E293B), // Slate 800
-            Color(0xFF334155), // Slate 700
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: widget.isTelevision && _isFocused
-            ? Border.all(color: const Color(0xFFE50914), width: 3)
-            : null,
-        boxShadow: widget.isTelevision && _isFocused
-            ? [
-                BoxShadow(
-                  color: const Color(0xFFE50914).withValues(alpha: 0.4),
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ]
-            : null,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title Row - Now with more space for title!
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.torrent.displayTitle,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                // Only show copy magnet button for torrent streams on non-TV
-                if (!widget.isTelevision && widget.torrent.streamType == StreamType.torrent) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: widget.onCopyMagnet,
-                    tooltip: 'Copy magnet link',
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D2A3F),
-                      foregroundColor: const Color(0xFF60A5FA),
-                      padding: const EdgeInsets.all(10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Stats Grid - Now includes source and stream type
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                widget.buildSizeOrPackChip(widget.torrent),
-                // Only show seeders/leechers for torrent streams
-                if (widget.torrent.streamType == StreamType.torrent) ...[
-                  StatChip(
-                    icon: Icons.upload_rounded,
-                    text: '${widget.torrent.seeders}',
-                    color: const Color(0xFF22C55E), // Green 500 - Fresh green
-                  ),
-                  StatChip(
-                    icon: Icons.download_rounded,
-                    text: '${widget.torrent.leechers}',
-                    color: const Color(0xFFF59E0B), // Amber 500 - Warm amber
-                  ),
-                ],
-                widget.buildSourceStatChip(widget.torrent.source),
-                // Show stream type chip for direct/external streams
-                if (widget.buildStreamTypeChip(widget.torrent) != null)
-                  widget.buildStreamTypeChip(widget.torrent)!,
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Date
-            Row(
-              children: [
-                Icon(
-                  Icons.schedule_rounded,
-                  color: Colors.white.withValues(alpha: 0.6),
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  Formatters.formatDate(widget.torrent.createdUnix),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Action Buttons (Hidden on TV since we use smart action on card click)
-            if (!widget.isTelevision)
-            LayoutBuilder(
-              builder: (context, constraints) {
-              final isCompactLayout = constraints.maxWidth < 360;
-
-              // For direct/external streams, show Play button and Copy URL button
-              if (widget.torrent.isDirectStream || widget.torrent.isExternalStream) {
-                return Row(
-                  children: [
-                    // Play/Open button
-                    Expanded(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          focusColor: const Color(0xFF10B981).withValues(alpha: 0.25),
-                          onTap: () {
-                            debugPrint('[_TorrentCard ${widget.index}] InkWell.onTap triggered');
-                            if (DialogTapGuard.shouldIgnoreTap()) return;
-                            widget.onCardActivated();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              gradient: LinearGradient(
-                                colors: widget.torrent.isDirectStream
-                                    ? const [Color(0xFF059669), Color(0xFF10B981)]
-                                    : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (widget.torrent.isDirectStream
-                                      ? const Color(0xFF10B981)
-                                      : const Color(0xFF6366F1)).withValues(alpha: 0.4),
-                                  spreadRadius: 0,
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  widget.torrent.isDirectStream
-                                      ? Icons.play_circle_filled_rounded
-                                      : Icons.open_in_new_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  widget.torrent.isDirectStream ? 'Play Stream' : 'Open Link',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.2,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Copy URL button
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          final url = widget.torrent.directUrl;
-                          if (url != null && url.isNotEmpty) {
-                            Clipboard.setData(ClipboardData(text: url));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('URL copied to clipboard'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: const Color(0xFF374151),
-                          ),
-                          child: const Icon(
-                            Icons.copy_rounded,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              Widget buildTorboxButton() {
-                final bool isCached = widget.torboxResultIsCached(widget.torrent.infohash);
-                final gradientColors = isCached
-                    ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
-                    : const [Color(0xFF475569), Color(0xFF1F2937)];
-                final shadowColor = isCached
-                    ? const Color(0xFF7C3AED).withValues(alpha: 0.35)
-                    : const Color(0xFF1F2937).withValues(alpha: 0.25);
-                final textColor = isCached ? Colors.white : Colors.white70;
-
-                return Opacity(
-                  opacity: isCached ? 1.0 : 0.55,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      focusColor:
-                          const Color(0xFF7C3AED).withValues(alpha: 0.25),
-                      onTap: isCached
-                          ? () => widget.onAddToTorbox(widget.torrent.infohash, widget.torrent.name)
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          gradient: LinearGradient(
-                            colors: gradientColors,
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: shadowColor,
-                              spreadRadius: 0,
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.flash_on_rounded,
-                              color: textColor,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Torbox',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                  color: textColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.expand_more_rounded,
-                              color: textColor.withValues(alpha: 0.7),
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              Widget buildRealDebridButton() {
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    focusColor:
-                        const Color(0xFF6366F1).withValues(alpha: 0.25),
-                    onTap: () =>
-                        widget.onAddToDebrid(widget.torrent.infohash, widget.torrent.name, widget.index),
-                    onLongPress: () {
-                      widget.onShowFileSelection(
-                        widget.torrent.infohash,
-                        widget.torrent.name,
-                        widget.index,
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E40AF), Color(0xFF6366F1)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF1E40AF,
-                            ).withValues(alpha: 0.4),
-                            spreadRadius: 0,
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            Icons.cloud_download_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Real-Debrid',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.expand_more_rounded,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              Widget buildPikPakButton() {
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    focusColor:
-                        const Color(0xFF0088CC).withValues(alpha: 0.25),
-                    onTap: () =>
-                        widget.onAddToPikPak(widget.torrent.infohash, widget.torrent.name),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0088CC), Color(0xFF229ED9)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF0088CC,
-                            ).withValues(alpha: 0.4),
-                            spreadRadius: 0,
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(
-                            Icons.telegram,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'PikPak',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.expand_more_rounded,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              final Widget? torboxButton =
-                  (widget.torboxIntegrationEnabled &&
-                      widget.torboxApiKey != null &&
-                      widget.torboxApiKey!.isNotEmpty)
-                  ? buildTorboxButton()
-                  : null;
-              final Widget? realDebridButton =
-                  (widget.realDebridIntegrationEnabled &&
-                      widget.apiKey != null &&
-                      widget.apiKey!.isNotEmpty)
-                  ? buildRealDebridButton()
-                  : null;
-              final Widget? pikpakButton = widget.pikpakEnabled
-                  ? buildPikPakButton()
-                  : null;
-
-              if (torboxButton == null && realDebridButton == null && pikpakButton == null) {
-                return const SizedBox.shrink();
-              }
-
-              // Count active buttons
-              final int buttonCount = [torboxButton, realDebridButton, pikpakButton]
-                  .where((button) => button != null)
-                  .length;
-
-              if (isCompactLayout) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (torboxButton != null) torboxButton,
-                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                      const SizedBox(height: 8),
-                    if (realDebridButton != null) realDebridButton,
-                    if (realDebridButton != null && pikpakButton != null)
-                      const SizedBox(height: 8),
-                    if (pikpakButton != null) pikpakButton,
-                  ],
-                );
-              }
-
-              // For non-compact layouts, show buttons in a row
-              if (buttonCount == 3) {
-                return Row(
-                  children: [
-                    Expanded(child: torboxButton!),
-                    const SizedBox(width: 8),
-                    Expanded(child: realDebridButton!),
-                    const SizedBox(width: 8),
-                    Expanded(child: pikpakButton!),
-                  ],
-                );
-              } else if (buttonCount == 2) {
-                return Row(
-                  children: [
-                    if (torboxButton != null) Expanded(child: torboxButton),
-                    if (torboxButton != null && (realDebridButton != null || pikpakButton != null))
-                      const SizedBox(width: 8),
-                    if (realDebridButton != null) Expanded(child: realDebridButton),
-                    if (realDebridButton != null && pikpakButton != null)
-                      const SizedBox(width: 8),
-                    if (pikpakButton != null) Expanded(child: pikpakButton),
-                  ],
-                );
-              } else {
-                final Widget singleButton = torboxButton ?? realDebridButton ?? pikpakButton!;
-                return SizedBox(width: double.infinity, child: singleButton);
-              }
-            },
-          ),
-          // TV hint
-          if (widget.isTelevision && _isFocused) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Press OK to add torrent',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
-  }
-}
 
 class _TorrentMetadata {
   final SeriesInfo seriesInfo;
@@ -16597,10 +15943,16 @@ class _GlassOptionCardState extends State<_GlassOptionCard> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
+        final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space;
+        if (!isSelect) return KeyEventResult.ignored;
+        // Consume KeyDown to prevent stock activation, fire on KeyUp so
+        // we're guaranteed to still own focus when the action runs.
+        if (event is KeyDownEvent) {
+          return KeyEventResult.handled;
+        }
+        if (event is KeyUpEvent) {
           DialogTapGuard.markKeyAction();
           widget.onTap();
           return KeyEventResult.handled;
@@ -16754,6 +16106,105 @@ class _DebridActionTileState extends State<_DebridActionTile> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// DPAD-safe button replacement for Flutter's stock TextButton/FilledButton.
+/// Stock Flutter buttons use internal Shortcuts that intercept Select/Enter keys
+/// on KeyDown, causing the paired KeyUp to leak through to underlying widgets
+/// (e.g. TorrentResultRow) and re-trigger them.
+/// This widget handles Select/Enter explicitly: KeyDown is consumed only,
+/// onPressed fires on KeyUp — ensuring the widget still owns focus when the
+/// action runs and no KeyUp can propagate to the underlying row.
+class _DpadSafeButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final Widget child;
+  final bool filled;
+  final bool autofocus;
+  final Color? color;
+  final String? semanticLabel;
+
+  const _DpadSafeButton({
+    required this.onPressed,
+    required this.child,
+    this.filled = false,
+    this.autofocus = false,
+    this.color,
+    this.semanticLabel,
+  });
+
+  @override
+  State<_DpadSafeButton> createState() => _DpadSafeButtonState();
+}
+
+class _DpadSafeButtonState extends State<_DpadSafeButton> {
+  bool _focused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter;
+    if (!isSelect) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      return KeyEventResult.handled;
+    }
+    if (event is KeyUpEvent) {
+      DialogTapGuard.markKeyAction();
+      widget.onPressed();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = widget.color ?? theme.colorScheme.primary;
+    return Semantics(
+      button: true,
+      enabled: true,
+      label: widget.semanticLabel,
+      onTap: widget.onPressed,
+      child: Focus(
+        autofocus: widget.autofocus,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            DialogTapGuard.markKeyAction();
+            widget.onPressed();
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: widget.filled
+                  ? (_focused ? color : color.withValues(alpha: 0.85))
+                  : (_focused ? color.withValues(alpha: 0.15) : Colors.transparent),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _focused ? color : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: DefaultTextStyle(
+              style: TextStyle(
+                color: widget.filled ? Colors.white : color,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+              child: IconTheme(
+                data: IconThemeData(
+                  color: widget.filled ? Colors.white : color,
+                  size: 18,
+                ),
+                child: widget.child,
+              ),
             ),
           ),
         ),
@@ -17398,7 +16849,10 @@ class _SourcesDialogState extends State<_SourcesDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      DialogTapGuard.markKeyAction();
+                      Navigator.of(context).pop();
+                    },
                     child: Text(
                       'Close',
                       style: TextStyle(
@@ -17713,10 +17167,16 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                   return Focus(
                     focusNode: _providerFocusNodes[index],
                     onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          (event.logicalKey == LogicalKeyboardKey.select ||
-                              event.logicalKey == LogicalKeyboardKey.enter ||
-                              event.logicalKey == LogicalKeyboardKey.space)) {
+                      final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+                          event.logicalKey == LogicalKeyboardKey.enter ||
+                          event.logicalKey == LogicalKeyboardKey.space;
+                      if (!isSelect) return KeyEventResult.ignored;
+                      // Fire on KeyUp so we're guaranteed to still own focus.
+                      if (event is KeyDownEvent) {
+                        return KeyEventResult.handled;
+                      }
+                      if (event is KeyUpEvent) {
+                        DialogTapGuard.markKeyAction();
                         _selectProvider(provider.id);
                         return KeyEventResult.handled;
                       }
@@ -17762,10 +17222,14 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                 Focus(
                   focusNode: _checkboxFocusNode,
                   onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent &&
-                        (event.logicalKey == LogicalKeyboardKey.select ||
-                            event.logicalKey == LogicalKeyboardKey.enter ||
-                            event.logicalKey == LogicalKeyboardKey.space)) {
+                    final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+                        event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.space;
+                    if (!isSelect) return KeyEventResult.ignored;
+                    if (event is KeyDownEvent) {
+                      return KeyEventResult.handled;
+                    }
+                    if (event is KeyUpEvent) {
                       setState(() => _alwaysUseThis = !_alwaysUseThis);
                       return KeyEventResult.handled;
                     }
