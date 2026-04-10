@@ -1902,7 +1902,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Only show when navigated at least one level deep (inside a folder)
     final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
     final currentMode = _getCurrentViewMode();
-    final showSearch = showViewModeDropdown && currentMode != _FolderViewMode.seriesArrange && !_isInVirtualFolder;
+    final showSearch =
+        showViewModeDropdown && currentMode != _FolderViewMode.seriesArrange && !_isInVirtualFolder;
+
+    final bool isCompactActions = MediaQuery.sizeOf(context).width < 500;
+    final double actionIconSize = isCompactActions ? 20 : 24;
+    final EdgeInsets actionIconPadding =
+        isCompactActions ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+    final BoxConstraints actionIconConstraints = isCompactActions
+        ? const BoxConstraints(minWidth: 36, minHeight: 36)
+        : const BoxConstraints(minWidth: 48, minHeight: 48);
 
     // Back navigation is handled via MainPageBridge.handleBackNavigation
     return Scaffold(
@@ -1949,6 +1958,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               color: _isSelectionMode
                   ? Theme.of(context).colorScheme.error
                   : null,
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
             ),
           if (showSearch)
             IconButton(
@@ -1956,18 +1969,30 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               icon: Icon(_isSearchActive ? Icons.close : Icons.search),
               onPressed: _toggleSearch,
               tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
             ),
           IconButton(
             focusNode: _addLinkButtonFocusNode,
             icon: const Icon(Icons.add_link),
             onPressed: _isLoading ? null : _showAddLinkDialog,
             tooltip: 'Add Link',
+            iconSize: actionIconSize,
+            padding: actionIconPadding,
+            constraints: actionIconConstraints,
+            visualDensity: VisualDensity.compact,
           ),
           IconButton(
             focusNode: _refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _refreshFiles,
             tooltip: 'Refresh',
+            iconSize: actionIconSize,
+            padding: actionIconPadding,
+            constraints: actionIconConstraints,
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),

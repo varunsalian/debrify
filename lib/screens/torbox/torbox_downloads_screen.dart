@@ -6710,11 +6710,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
-  Widget _buildViewSelector() {
+  Widget _buildViewSelector({bool isCompact = false}) {
     final theme = Theme.of(context);
     return Container(
-      height: 42,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: isCompact ? 36 : 42,
+      padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(10),
@@ -6725,21 +6725,25 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<_TorboxDownloadsView>(
           value: _selectedView,
+          isDense: isCompact,
+          isExpanded: true,
           dropdownColor: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           iconEnabledColor: theme.colorScheme.onPrimaryContainer,
+          iconSize: isCompact ? 20 : 24,
           style: TextStyle(
             color: theme.colorScheme.onPrimaryContainer,
             fontWeight: FontWeight.w600,
+            fontSize: isCompact ? 13 : 14,
           ),
-          items: const [
-            DropdownMenuItem(
+          items: [
+            const DropdownMenuItem(
               value: _TorboxDownloadsView.torrents,
               child: Text('Torrents'),
             ),
             DropdownMenuItem(
               value: _TorboxDownloadsView.webDownloads,
-              child: Text('Web Downloads'),
+              child: Text(isCompact ? 'Web DL' : 'Web Downloads'),
             ),
           ],
           onChanged: (value) {
@@ -6948,76 +6952,102 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final isTorrentsView = _selectedView == _TorboxDownloadsView.torrents;
     final hasItems = isTorrentsView ? _torrents.isNotEmpty : _webDownloads.isNotEmpty;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1F2937)),
-      ),
-      child: Row(
-        children: [
-          _buildViewSelector(),
-          const Spacer(),
-          if (hasItems) ...[
-            Tooltip(
-              message: _isSelectionMode ? 'Exit selection' : 'Select items',
-              child: IconButton(
-                onPressed: _toggleSelectionMode,
-                icon: Icon(
-                  _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 480;
+        final double iconSize = isCompact ? 20 : 24;
+        final EdgeInsets iconPadding =
+            isCompact ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+        final BoxConstraints iconConstraints = isCompact
+            ? const BoxConstraints(minWidth: 36, minHeight: 36)
+            : const BoxConstraints(minWidth: 44, minHeight: 44);
+        return Container(
+          margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF1F2937)),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: _buildViewSelector(isCompact: isCompact)),
+              SizedBox(width: isCompact ? 6 : 12),
+              if (hasItems) ...[
+                Tooltip(
+                  message: _isSelectionMode ? 'Exit selection' : 'Select items',
+                  child: IconButton(
+                    onPressed: _toggleSelectionMode,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: Icon(
+                      _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                    ),
+                    color: _isSelectionMode
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-                color: _isSelectionMode
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurface,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            if (isTorrentsView)
-              Tooltip(
-                message: 'Delete all torrents',
-                child: IconButton(
-                  onPressed: _confirmDeleteAll,
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  color: theme.colorScheme.error,
-                  visualDensity: VisualDensity.compact,
+                if (isTorrentsView)
+                  Tooltip(
+                    message: 'Delete all torrents',
+                    child: IconButton(
+                      onPressed: _confirmDeleteAll,
+                      iconSize: iconSize,
+                      padding: iconPadding,
+                      constraints: iconConstraints,
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                      color: theme.colorScheme.error,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+              ],
+              if (isTorrentsView) ...[
+                Tooltip(
+                  message: _isTorrentSearchActive ? 'Close search' : 'Search torrents',
+                  child: IconButton(
+                    focusNode: _torrentSearchToggleFocusNode,
+                    onPressed: _toggleTorrentSearch,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: Icon(_isTorrentSearchActive ? Icons.search_off_rounded : Icons.search_rounded),
+                    color: _isTorrentSearchActive ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
-              ),
-          ],
-          if (isTorrentsView) ...[
-            Tooltip(
-              message: _isTorrentSearchActive ? 'Close search' : 'Search torrents',
-              child: IconButton(
-                focusNode: _torrentSearchToggleFocusNode,
-                onPressed: _toggleTorrentSearch,
-                icon: Icon(_isTorrentSearchActive ? Icons.search_off_rounded : Icons.search_rounded),
-                color: _isTorrentSearchActive ? theme.colorScheme.primary : theme.colorScheme.onSurface,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            Tooltip(
-              message: 'Add magnet link',
-              child: IconButton(
-                onPressed: _showAddMagnetDialog,
-                icon: const Icon(Icons.add_circle_outline),
-                color: theme.colorScheme.primary,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ] else ...[
-            Tooltip(
-              message: 'Add web download',
-              child: IconButton(
-                onPressed: _showAddWebDownloadDialog,
-                icon: const Icon(Icons.link),
-                color: theme.colorScheme.primary,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        ],
-      ),
+                Tooltip(
+                  message: 'Add magnet link',
+                  child: IconButton(
+                    onPressed: _showAddMagnetDialog,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.add_circle_outline),
+                    color: theme.colorScheme.primary,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ] else ...[
+                Tooltip(
+                  message: 'Add web download',
+                  child: IconButton(
+                    onPressed: _showAddWebDownloadDialog,
+                    iconSize: iconSize,
+                    padding: iconPadding,
+                    constraints: iconConstraints,
+                    icon: const Icon(Icons.link),
+                    color: theme.colorScheme.primary,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
