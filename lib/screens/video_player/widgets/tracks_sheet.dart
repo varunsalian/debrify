@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart' as mk;
 import '../../../models/stremio_subtitle.dart';
 import '../../../services/stremio_subtitle_service.dart';
@@ -29,6 +28,8 @@ class TracksSheet {
     void Function(List<StremioSubtitle> subtitles)? onSubtitlesFetched,
     String? selectedStremioSubtitleId,
     void Function(String? id)? onStremioSubtitleSelected,
+    Future<String?> Function(StremioSubtitle subtitle)?
+        onDownloadStremioSubtitleToFile,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -210,6 +211,8 @@ class TracksSheet {
                           }
                         },
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
+                        onDownloadStremioSubtitleToFile:
+                            onDownloadStremioSubtitleToFile,
                         subtitleStyle: subtitleStyle,
                         onStyleChanged: (newStyle) {
                           setModalState(() => subtitleStyle = newStyle);
@@ -314,6 +317,8 @@ class TracksSheet {
     required bool isLoadingStremioSubtitles,
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
+    required Future<String?> Function(StremioSubtitle subtitle)?
+        onDownloadStremioSubtitleToFile,
     required SubtitleSettingsData subtitleStyle,
     required void Function(SubtitleSettingsData) onStyleChanged,
     required bool isWide,
@@ -341,6 +346,7 @@ class TracksSheet {
           onTrackChanged: onTrackChanged,
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
+          onDownloadStremioSubtitleToFile: onDownloadStremioSubtitleToFile,
         );
       case 2:
         return _StyleTab(
@@ -439,6 +445,8 @@ class _SubtitlesTab extends StatelessWidget {
   final Future<void> Function(String, String) onTrackChanged;
   final void Function(String) onSubChanged;
   final void Function(String? id)? onStremioSubtitleSelected;
+  final Future<String?> Function(StremioSubtitle subtitle)?
+      onDownloadStremioSubtitleToFile;
 
   const _SubtitlesTab({
     super.key,
@@ -451,6 +459,7 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onTrackChanged,
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
+    required this.onDownloadStremioSubtitleToFile,
   });
 
   @override
@@ -542,13 +551,12 @@ class _SubtitlesTab extends StatelessWidget {
                   onTap: () async {
                     onSubChanged(subId);
                     try {
-                      final response = await http.get(Uri.parse(sub.url)).timeout(
-                        const Duration(seconds: 15),
-                      );
-                      if (response.statusCode != 200) return;
+                      final filePath =
+                          await onDownloadStremioSubtitleToFile?.call(sub);
+                      if (filePath == null) return;
 
-                      final track = mk.SubtitleTrack.data(
-                        response.body,
+                      final track = mk.SubtitleTrack.uri(
+                        filePath,
                         title: sub.displayName,
                         language: sub.lang,
                       );

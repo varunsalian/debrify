@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -366,6 +367,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _embeddedSubtitleApplied = false; // Track if embedded subtitle was auto-selected
   bool _userManuallySelectedSubtitle = false; // Track if user manually selected a subtitle
   int _addonSubtitleFetchToken = 0; // Guard against stale async fetches on content switch
+  // Paths of temp SRT/VTT files we've written for addon subtitles. We hand
+  // these to libmpv as file URIs so it auto-detects encoding (GBK, Big5,
+  // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
+  final Set<String> _tempSubtitleFiles = {};
 
   // media_kit state
   bool _isReady = false;
@@ -3050,6 +3055,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryCount = 0;
     _pikPakRetryMessage = null;
 
+    _cleanupTempSubtitleFilesSync();
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
@@ -4564,6 +4570,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _selectedStremioSubtitleId = id;
         _userManuallySelectedSubtitle = true;
       },
+      onDownloadStremioSubtitleToFile: _downloadStremioSubtitleToTempFile,
     );
   }
 
@@ -4575,6 +4582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _embeddedSubtitleApplied = false;
     _userManuallySelectedSubtitle = false;
     _addonSubtitleFetchToken++;
+    _cleanupTempSubtitleFilesSync();
   }
 
   /// Restore audio and subtitle track preferences
@@ -4749,6 +4757,69 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Download an addon subtitle's raw bytes and write them to a temp file.
+  ///
+  /// Returning a file path (rather than a pre-decoded string) lets libmpv
+  /// auto-detect the character encoding via its `sub-codepage=auto` default,
+  /// which correctly handles GBK, Big5, EUC-KR, Windows-125x, etc. Pre-decoding
+  /// via `http.Response.body` would silently corrupt non-UTF-8 subtitle files.
+  Future<String?> _downloadStremioSubtitleToTempFile(StremioSubtitle sub) async {
+    try {
+      final uri = Uri.parse(sub.url);
+      final urlPath = uri.path.toLowerCase();
+      String ext = 'srt';
+      if (urlPath.endsWith('.vtt')) {
+        ext = 'vtt';
+      } else if (urlPath.endsWith('.ass') || urlPath.endsWith('.ssa')) {
+        ext = 'ass';
+      } else if (urlPath.endsWith('.ttml') || urlPath.endsWith('.xml')) {
+        ext = 'ttml';
+      } else if (urlPath.endsWith('.sub')) {
+        ext = 'sub';
+      }
+
+      final dir = await getTemporaryDirectory();
+      final stem = sub.id.hashCode.toUnsigned(32).toRadixString(16);
+      final file = File('${dir.path}/stremio_sub_$stem.$ext');
+
+      // Re-tapping the same subtitle (or finding a leftover from a previous
+      // session) — reuse the existing file instead of re-downloading.
+      if (file.existsSync()) {
+        _tempSubtitleFiles.add(file.path);
+        return file.path;
+      }
+
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        debugPrint(
+            'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}');
+        return null;
+      }
+
+      await file.writeAsBytes(response.bodyBytes);
+      _tempSubtitleFiles.add(file.path);
+      debugPrint(
+          'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)');
+      return file.path;
+    } catch (e) {
+      debugPrint('VideoPlayer: Subtitle download/write failed: $e');
+      return null;
+    }
+  }
+
+  /// Delete any temp subtitle files we've written. Called from dispose.
+  void _cleanupTempSubtitleFilesSync() {
+    for (final path in _tempSubtitleFiles) {
+      try {
+        File(path).deleteSync();
+      } catch (e) {
+        debugPrint('VideoPlayer: Failed to delete temp subtitle $path: $e');
+      }
+    }
+    _tempSubtitleFiles.clear();
+  }
+
   /// Fetch Stremio addon subtitles proactively and auto-select if no embedded subtitle was applied.
   /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
   Future<void> _fetchAndMaybeAutoSelectAddonSubtitle() async {
@@ -4867,10 +4938,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       debugPrint('VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})');
 
-      // Download and apply the subtitle
-      final response = await http.get(Uri.parse(matchingSub.url)).timeout(
-        const Duration(seconds: 15),
-      );
+      // Download to a temp file so libmpv can detect the encoding itself.
+      final filePath = await _downloadStremioSubtitleToTempFile(matchingSub);
 
       // Check if content changed or user manually selected during download
       if (fetchToken != _addonSubtitleFetchToken) {
@@ -4881,14 +4950,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('VideoPlayer: User manually selected subtitle during addon download, discarding');
         return;
       }
-
-      if (response.statusCode != 200) {
+      if (filePath == null) {
         debugPrint('VideoPlayer: Failed to download addon subtitle');
         return;
       }
 
-      final track = mk.SubtitleTrack.data(
-        response.body,
+      final track = mk.SubtitleTrack.uri(
+        filePath,
         title: matchingSub.displayName,
         language: matchingSub.lang,
       );
