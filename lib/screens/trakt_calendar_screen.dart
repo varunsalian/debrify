@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
@@ -424,6 +425,26 @@ class _DayCellState extends State<_DayCell> {
         child: Focus(
           focusNode: _focusNode,
           canRequestFocus: hasEntries,
+          onKeyEvent: (node, event) {
+            if (!hasEntries) return KeyEventResult.ignored;
+            if (event is! KeyDownEvent) return KeyEventResult.ignored;
+            final key = event.logicalKey;
+            if (key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.select ||
+                key == LogicalKeyboardKey.space ||
+                key == LogicalKeyboardKey.gameButtonA) {
+              widget.onTap(
+                DateTime(
+                  widget.cell.date.year,
+                  widget.cell.date.month,
+                  widget.cell.date.day,
+                ),
+                entries,
+              );
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
           child: Builder(
             builder: (ctx) {
               final isFocused = Focus.of(ctx).hasFocus;
@@ -455,7 +476,7 @@ class _DayCellState extends State<_DayCell> {
                           )
                       : null,
                   child: Padding(
-                    padding: const EdgeInsets.all(4),
+                    padding: EdgeInsets.all(widget.cellWidth > 140 ? 8 : 4),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -465,18 +486,24 @@ class _DayCellState extends State<_DayCell> {
                             color: isToday
                                 ? const Color(0xFF60A5FA)
                                 : Colors.white70,
-                            fontSize: 11,
+                            fontSize: widget.cellWidth > 140 ? 15 : 11,
                             fontWeight: isToday
                                 ? FontWeight.w700
-                                : FontWeight.w400,
+                                : (widget.cellWidth > 140
+                                    ? FontWeight.w600
+                                    : FontWeight.w400),
                           ),
                         ),
-                        const Spacer(),
+                        SizedBox(height: widget.cellWidth > 140 ? 6 : 0),
                         if (entries.isNotEmpty)
-                          _DayCellSummary(
-                            entries: entries,
-                            cellWidth: widget.cellWidth,
-                          ),
+                          Expanded(
+                            child: _DayCellSummary(
+                              entries: entries,
+                              cellWidth: widget.cellWidth,
+                            ),
+                          )
+                        else
+                          const Spacer(),
                       ],
                     ),
                   ),
@@ -498,63 +525,101 @@ class _DayCellSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Very narrow: dots + count indicator.
     if (cellWidth < 48) {
-      return Row(
+      return Align(
+        alignment: Alignment.bottomLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                color: _colorForShow(entries.first.showTitle),
+                shape: BoxShape.circle,
+              ),
+            ),
+            if (entries.length > 1) ...[
+              const SizedBox(width: 2),
+              Text(
+                '${entries.length}',
+                style: const TextStyle(color: Colors.white54, fontSize: 9),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Wide: rich chips with mini poster + bigger text.
+    if (cellWidth > 140) {
+      final visible = entries.take(2).toList();
+      final overflow = entries.length > 2 ? entries.length - 2 : 0;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(
-              color: _colorForShow(entries.first.showTitle),
-              shape: BoxShape.circle,
+          for (final e in visible)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _RichChip(entry: e, accent: _colorForShow(e.showTitle)),
             ),
-          ),
-          if (entries.length > 1) ...[
-            const SizedBox(width: 2),
-            Text(
-              '${entries.length}',
-              style: const TextStyle(color: Colors.white54, fontSize: 9),
+          if (overflow > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 2),
+              child: Text(
+                '+$overflow more',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          ],
         ],
       );
     }
 
+    // Medium: compact chips with truncated show name.
     final maxName = cellWidth > 100 ? 16 : 8;
     final visible = entries.take(2).toList();
     final overflow = entries.length > 2 ? entries.length - 2 : 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final e in visible)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: _colorForShow(e.showTitle),
-                borderRadius: BorderRadius.circular(2),
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final e in visible)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _colorForShow(e.showTitle),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  _truncate(e.showTitle, maxName),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 9),
+                ),
               ),
+            ),
+          if (overflow > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
               child: Text(
-                _truncate(e.showTitle, maxName),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 9),
+                '+$overflow',
+                style: const TextStyle(color: Colors.white54, fontSize: 9),
               ),
             ),
-          ),
-        if (overflow > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              '+$overflow',
-              style: const TextStyle(color: Colors.white54, fontSize: 9),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -579,5 +644,93 @@ class _DayCellSummary extends StatelessWidget {
   static String _truncate(String s, int max) {
     if (s.length <= max) return s;
     return '${s.substring(0, max - 1)}…';
+  }
+}
+
+/// Rich chip for wide-screen day cells — mini poster + show name + episode label
+/// on a show-colored accent background.
+class _RichChip extends StatelessWidget {
+  const _RichChip({required this.entry, required this.accent});
+
+  final TraktCalendarEntry entry;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: entry.posterUrl != null
+                ? Image.network(
+                    entry.posterUrl!,
+                    width: 26,
+                    height: 38,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 26,
+                      height: 38,
+                      color: Colors.black.withValues(alpha: 0.25),
+                      child: const Icon(
+                        Icons.tv_rounded,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  )
+                : Container(
+                    width: 26,
+                    height: 38,
+                    color: Colors.black.withValues(alpha: 0.25),
+                    child: const Icon(
+                      Icons.tv_rounded,
+                      size: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.showTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'S${entry.seasonNumber.toString().padLeft(2, '0')}E${entry.episodeNumber.toString().padLeft(2, '0')}',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    height: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
