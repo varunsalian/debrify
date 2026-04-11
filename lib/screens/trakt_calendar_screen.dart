@@ -26,6 +26,11 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   Map<DateTime, List<TraktCalendarEntry>> _byDay = const {};
   final ScrollController _scrollController = ScrollController();
 
+  /// GlobalKeys for each month block, keyed by month start date. Used by
+  /// [_jumpToToday] to scroll precisely to the current month via
+  /// [Scrollable.ensureVisible] without relying on fixed-height estimates.
+  final Map<DateTime, GlobalKey> _monthKeys = {};
+
   @override
   void initState() {
     super.initState();
@@ -137,7 +142,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       itemCount: _monthStarts.length,
       itemBuilder: (ctx, index) {
         final monthStart = _monthStarts[index];
+        final key = _monthKeys.putIfAbsent(monthStart, () => GlobalKey());
         return _MonthBlock(
+          key: key,
           monthStart: monthStart,
           byDay: _byDay,
           onDayTap: _onDayTap,
@@ -148,16 +155,46 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
   void _jumpToToday() {
     final now = DateTime.now();
-    final idx = _monthStarts.indexWhere(
-      (m) => m.year == now.year && m.month == now.month,
-    );
-    if (idx >= 0) {
-      _scrollController.animateTo(
-        idx * 420.0,
+    final thisMonthStart = DateTime(now.year, now.month, 1);
+
+    // Fast path: the current month is built in the viewport (or within the
+    // cache extent) — let Flutter calculate the exact offset.
+    final key = _monthKeys[thisMonthStart];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
+        alignment: 0.0, // top-align the month header
       );
+      return;
     }
+
+    // Slow path: the current month isn't mounted (user scrolled far away).
+    // Do a best-effort jump based on index, wait a frame for the ListView to
+    // build the month, then call ensureVisible for pixel-perfect alignment.
+    final idx = _monthStarts.indexWhere((m) => m == thisMonthStart);
+    if (idx < 0) return;
+    // 500 is a middle-ground estimate — month heights range roughly 350-900
+    // depending on cell size and row count. The post-frame ensureVisible
+    // corrects any error.
+    _scrollController.jumpTo((idx * 500.0).clamp(
+      _scrollController.position.minScrollExtent,
+      _scrollController.position.maxScrollExtent,
+    ));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx2 = _monthKeys[thisMonthStart]?.currentContext;
+      if (ctx2 != null) {
+        Scrollable.ensureVisible(
+          ctx2,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          alignment: 0.0,
+        );
+      }
+    });
   }
 
   void _onScroll() {
@@ -188,7 +225,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       _monthStarts.add(next);
       _byDay = {..._byDay, ...grouped};
     });
-    _isLoadingMore = false;
+    // Release the loading flag AFTER the new state has been laid out so the
+    // scroll listener doesn't fire a cascading append while maxScrollExtent
+    // is still being recalculated.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _isLoadingMore = false;
+    });
   }
 
   Future<void> _prependPreviousMonth() async {
@@ -208,19 +251,27 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       _monthStarts.insert(0, prev);
       _byDay = {..._byDay, ...grouped};
     });
+    // CRITICAL: keep _isLoadingMore=true until AFTER the viewport jump so the
+    // scroll listener doesn't see an intermediate state (new content, old
+    // position still < 600) and fire another prepend. Without this guard,
+    // prepend cascades and the view lands in an unexpected month.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) {
+        _isLoadingMore = false;
+        return;
+      }
       final afterMax = _scrollController.position.maxScrollExtent;
       final delta = afterMax - beforeMax;
       _scrollController.jumpTo(beforePos + delta);
+      _isLoadingMore = false;
     });
-    _isLoadingMore = false;
   }
 }
 
 /// Renders one month header + 7-column day grid.
 class _MonthBlock extends StatelessWidget {
   const _MonthBlock({
+    super.key,
     required this.monthStart,
     required this.byDay,
     required this.onDayTap,
