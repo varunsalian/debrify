@@ -282,6 +282,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   SearchSourceOption _selectedSource = SearchSourceOption.all();
   List<SearchSourceOption> _availableSourceOptions = [];
   bool _isLoadingSourceOptions = false;
+  // Tracks a reload request that arrived while another load was in flight
+  // (e.g. deep-link addon install during startup). Drained when the current
+  // load completes so notifications are never silently dropped.
+  bool _pendingSourceReload = false;
+  bool _pendingReloadPreserveSelection = false;
   String? _defaultCatalogId;
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
@@ -460,6 +465,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     _loadApiKeys();
     _loadSearchSourceOptions();
+    StremioService.instance.addAddonsChangedListener(_onAddonsChanged);
     StorageService.getTorboxCacheCheckEnabled().then((enabled) {
       if (!mounted) return;
       setState(() {
@@ -1317,9 +1323,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  /// Loads available search source options (All, Keyword, + addon catalogs)
-  Future<void> _loadSearchSourceOptions() async {
-    if (_isLoadingSourceOptions) return;
+  /// Loads available search source options (All, Keyword, + addon catalogs).
+  ///
+  /// When [preserveCurrentSelection] is true and the currently-selected source
+  /// still exists in the refreshed options list, the selection is kept instead
+  /// of being reassigned to the stored home default. This lets addon-change
+  /// refreshes leave the user's in-progress browsing session undisturbed.
+  Future<void> _loadSearchSourceOptions({bool preserveCurrentSelection = false}) async {
+    if (_isLoadingSourceOptions) {
+      // Queue the request; honored when the in-flight load finishes so that
+      // notifications arriving mid-load are never silently dropped.
+      _pendingSourceReload = true;
+      _pendingReloadPreserveSelection =
+          _pendingReloadPreserveSelection || preserveCurrentSelection;
+      return;
+    }
 
     setState(() => _isLoadingSourceOptions = true);
 
@@ -1353,13 +1371,21 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
       }
 
+      // If preserving, try to locate the current selection in the refreshed list.
+      // SearchSourceOption's operator == matches on type + addon manifestUrl.
+      final preservedOption = preserveCurrentSelection
+          ? options.where((o) => o == _selectedSource).firstOrNull
+          : null;
+
       setState(() {
         _availableSourceOptions = options;
         _isLoadingSourceOptions = false;
         _defaultCatalogId = defaultCatalogId;
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
-        if (defaultOption != null) {
+        if (preservedOption != null) {
+          _selectedSource = preservedOption;
+        } else if (defaultOption != null) {
           _selectedSource = defaultOption;
           // Set _searchMode to match the source type (mirrors _onSearchSourceChanged logic)
           if (defaultOption.type == SearchSourceType.addon) {
@@ -1383,6 +1409,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         });
       }
     }
+
+    // Drain any reload that arrived while we were running.
+    if (_pendingSourceReload && mounted) {
+      final preserve = _pendingReloadPreserveSelection;
+      _pendingSourceReload = false;
+      _pendingReloadPreserveSelection = false;
+      // ignore: unawaited_futures
+      _loadSearchSourceOptions(preserveCurrentSelection: preserve);
+    }
+  }
+
+  /// Listener fired by StremioService when addons are added, removed,
+  /// enabled/disabled, or reordered (including deep-link installs). Rebuilds
+  /// the home source dropdown so newly-installed addons show up without
+  /// requiring a manual nav switch.
+  void _onAddonsChanged() {
+    if (!mounted) return;
+    _loadSearchSourceOptions(preserveCurrentSelection: true);
   }
 
   /// Converts a stored source type string to SearchSourceType enum
@@ -1607,6 +1651,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
     _engineTileFocusNodes.clear();
     _engineTileFocusStates.clear();
+    StremioService.instance.removeAddonsChangedListener(_onAddonsChanged);
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.removeHomeSettingsListener(_handleHomeSettingsChanged);
     MainPageBridge.unregisterTvContentFocusHandler(0, _handleTvContentFocus);
