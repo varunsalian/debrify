@@ -59,6 +59,8 @@ import '../widgets/home_iptv_favorites_section.dart';
 import '../widgets/home_continue_watching_section.dart';
 import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/home_trakt_now_playing_card.dart';
+import '../widgets/home_today_calendar_card.dart';
+import 'trakt_calendar_screen.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
@@ -4264,6 +4266,46 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 color: _traktSyncCatalog
                     ? const Color(0xFF4ADE80)
                     : const Color(0xFFFF6B6B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTraktCalendarFab() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
+        );
+      },
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE50914).withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFE50914).withValues(alpha: 0.6),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.calendar_month_rounded,
+              size: 16,
+              color: Color(0xFFE50914),
+            ),
+            SizedBox(width: 6),
+            Text(
+              'Calendar',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFE50914),
               ),
             ),
           ],
@@ -14714,6 +14756,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             bottom: 12 + MediaQuery.of(context).padding.bottom,
             child: _buildTraktSyncFab(),
           ),
+        // Trakt Calendar FAB — small screens only, shown when Trakt source is selected
+        if (_traktAuthenticated && !_isTelevision && !_isSelectionMode && _torrents.isEmpty && MediaQuery.of(context).size.width < 500 && _selectedSource.type == SearchSourceType.trakt)
+          Positioned(
+            left: 12,
+            bottom: 12 + MediaQuery.of(context).padding.bottom,
+            child: _buildTraktCalendarFab(),
+          ),
         // Bulk Add Button or Selection Mode Bar
         if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
           _isSelectionMode
@@ -14852,6 +14901,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       children: [
+      // Today Calendar (Trakt upcoming episodes) — self-hides when empty
+      RepaintBoundary(child: HomeTodayCalendarCard(
+        focusController: _homeFocusController,
+        isTelevision: _isTelevision,
+        onRequestFocusAbove: () {
+          final prev = _homeFocusController.getPreviousSection(HomeSection.todayCalendar);
+          if (prev != null) {
+            _homeFocusController.focusSection(prev);
+          } else {
+            _focusControlRow();
+          }
+        },
+        onRequestFocusBelow: () {
+          final next = _homeFocusController.getNextSection(HomeSection.todayCalendar);
+          if (next != null) {
+            _homeFocusController.focusSection(next);
+          }
+        },
+        onItemSelected: (meta) {
+          final isSeries = meta.type == 'series';
+          final selection = AdvancedSearchSelection(
+            imdbId: meta.imdbId ?? meta.id,
+            isSeries: isSeries,
+            title: meta.name,
+            contentType: isSeries ? 'series' : 'movie',
+            posterUrl: meta.poster,
+            year: meta.year,
+          );
+          _handleCatalogItemSelected(selection, updateSearchText: true);
+        },
+      )),
       // Now Playing (Trakt live scrobble) — self-hides when nothing is playing
       RepaintBoundary(child: HomeTraktNowPlayingCard(
         isTelevision: _isTelevision,

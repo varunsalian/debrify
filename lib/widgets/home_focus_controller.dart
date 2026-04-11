@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 /// Sections in the Home screen that can receive focus
 enum HomeSection {
   sources,
+  todayCalendar,
   continueWatching,
   traktContinueWatchingMovies,
   traktContinueWatchingShows,
@@ -26,6 +27,7 @@ class HomeFocusController extends ChangeNotifier {
 
   /// Last focused card index per section
   final Map<HomeSection, int> _lastFocusedIndex = {
+    HomeSection.todayCalendar: 0,
     HomeSection.continueWatching: 0,
     HomeSection.traktContinueWatchingMovies: 0,
     HomeSection.traktContinueWatchingShows: 0,
@@ -40,6 +42,7 @@ class HomeFocusController extends ChangeNotifier {
   /// Whether each section has focusable items
   final Map<HomeSection, bool> _sectionHasItems = {
     HomeSection.sources: true, // Sources accordion is always present
+    HomeSection.todayCalendar: false,
     HomeSection.continueWatching: false,
     HomeSection.traktContinueWatchingMovies: false,
     HomeSection.traktContinueWatchingShows: false,

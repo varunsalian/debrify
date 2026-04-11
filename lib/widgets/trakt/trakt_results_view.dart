@@ -14,6 +14,7 @@ import '../../services/series_source_service.dart';
 import '../../services/storage_service.dart';
 import '../../screens/debrid_downloads_screen.dart';
 import '../../screens/torbox/torbox_downloads_screen.dart';
+import '../../screens/trakt_calendar_screen.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../add_source_picker_dialog.dart';
 
@@ -216,6 +217,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'trakt-content-type');
   final FocusNode _customListFocusNode = FocusNode(debugLabel: 'trakt-custom-list');
   final FocusNode _likedListFocusNode = FocusNode(debugLabel: 'trakt-liked-list');
+  final FocusNode _calendarButtonFocusNode = FocusNode(debugLabel: 'trakt-calendar-btn');
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
@@ -271,6 +273,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
     _contentTypeFocusNode.dispose();
     _customListFocusNode.dispose();
     _likedListFocusNode.dispose();
+    _calendarButtonFocusNode.dispose();
     _seasonDropdownFocusNode.dispose();
     _backButtonFocusNode.dispose();
     for (final node in _cardFocusNodes) {
@@ -1706,6 +1709,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final hasCustomList = _selectedListType == TraktListType.customList;
     final hasLikedList = _selectedListType == TraktListType.likedLists;
     final hasSubList = hasCustomList || hasLikedList;
+    // Calendar button is inline only on wide screens; narrow screens get a
+    // FAB over on torrent_search_screen.dart instead.
+    final showInlineCalendar = MediaQuery.of(context).size.width >= 500;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1751,7 +1757,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
               onUpArrow: widget.onUpArrowFromFilters,
               onDownArrow: _focusFirstCard,
               onLeftFocus: _listTypeFocusNode,
-              onRightFocus: hasCustomList ? _customListFocusNode : hasLikedList ? _likedListFocusNode : null,
+              onRightFocus: hasCustomList
+                  ? _customListFocusNode
+                  : hasLikedList
+                      ? _likedListFocusNode
+                      : (showInlineCalendar ? _calendarButtonFocusNode : null),
             ),
           ),
           // Custom list dropdown (only when Custom Lists is selected)
@@ -1784,6 +1794,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                 onUpArrow: widget.onUpArrowFromFilters,
                 onDownArrow: _focusFirstCard,
                 onLeftFocus: _contentTypeFocusNode,
+                onRightFocus: showInlineCalendar ? _calendarButtonFocusNode : null,
               ),
             ),
           ],
@@ -1827,6 +1838,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                 onUpArrow: widget.onUpArrowFromFilters,
                 onDownArrow: _focusFirstCard,
                 onLeftFocus: _contentTypeFocusNode,
+                onRightFocus: showInlineCalendar ? _calendarButtonFocusNode : null,
               ),
             ),
           ],
@@ -1845,9 +1857,104 @@ class TraktResultsViewState extends State<TraktResultsView> {
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
+          // Calendar shortcut button — opens the Trakt Calendar screen.
+          // Wide screens only; narrow screens get a FAB in torrent_search_screen.dart.
+          if (showInlineCalendar) ...[
+            const SizedBox(width: 8),
+            _buildCalendarButton(context),
+          ],
         ],
       ),
       ),
+    );
+  }
+
+  Widget _buildCalendarButton(BuildContext context) {
+    final previousFocus = hasCustomListActive
+        ? _customListFocusNode
+        : hasLikedListActive
+            ? _likedListFocusNode
+            : _contentTypeFocusNode;
+    return Focus(
+      focusNode: _calendarButtonFocusNode,
+      onFocusChange: (_) => setState(() {}),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.space ||
+            key == LogicalKeyboardKey.gameButtonA) {
+          _openTraktCalendar();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          previousFocus.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          widget.onUpArrowFromFilters?.call();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowDown) {
+          _focusFirstCard();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Builder(
+        builder: (ctx) {
+          final isFocused = Focus.of(ctx).hasFocus;
+          return GestureDetector(
+            onTap: _openTraktCalendar,
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: isFocused
+                    ? _traktRed.withValues(alpha: 0.22)
+                    : _traktRed.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isFocused
+                      ? _traktRed
+                      : _traktRed.withValues(alpha: 0.4),
+                  width: isFocused ? 2 : 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.calendar_month_rounded,
+                    size: 15,
+                    color: _traktRed,
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Calendar',
+                    style: TextStyle(
+                      color: _traktRed,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  bool get hasCustomListActive => _selectedListType == TraktListType.customList;
+  bool get hasLikedListActive => _selectedListType == TraktListType.likedLists;
+
+  void _openTraktCalendar() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
     );
   }
 

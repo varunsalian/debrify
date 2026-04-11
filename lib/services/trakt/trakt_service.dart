@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../storage_service.dart';
+import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
 
 /// Service for Trakt OAuth authentication and API calls.
@@ -89,6 +90,7 @@ class TraktService {
     }
 
     await StorageService.clearTraktAuth();
+    TraktCalendarService.instance.invalidate();
   }
 
   /// Get the stored username.
@@ -691,6 +693,40 @@ class TraktService {
       return jsonDecode(response.body) as List<dynamic>;
     } catch (e) {
       debugPrint('Trakt: fetchPlaybackItems parse error: $e');
+      return [];
+    }
+  }
+
+  /// Fetch upcoming episodes from the user's Trakt calendar for the given window.
+  ///
+  /// Wraps GET `/calendars/my/shows/{startDate}/{days}`. Returns raw JSON
+  /// entries, or `[]` on error / when unauthenticated. Trakt caps `days` at
+  /// 33 — callers must not exceed this.
+  ///
+  /// Note: intentionally NOT using `?extended=full` — Trakt's calendar
+  /// endpoints routinely time out with that flag, and the basic response
+  /// already includes the fields we need (show title, ids, episode
+  /// season/number, first_aired).
+  Future<List<dynamic>> fetchCalendarMyShows({
+    required DateTime startDate,
+    required int days,
+  }) async {
+    assert(days > 0 && days <= 33, 'Trakt caps calendar days at 33');
+    final y = startDate.year.toString().padLeft(4, '0');
+    final m = startDate.month.toString().padLeft(2, '0');
+    final d = startDate.day.toString().padLeft(2, '0');
+    final path = '/calendars/my/shows/$y-$m-$d/$days';
+
+    final response = await _authenticatedGet(path);
+    if (response == null || response.statusCode != 200) {
+      debugPrint(
+          'Trakt: fetchCalendarMyShows failed (${response?.statusCode})');
+      return [];
+    }
+    try {
+      return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {
+      debugPrint('Trakt: fetchCalendarMyShows parse error: $e');
       return [];
     }
   }

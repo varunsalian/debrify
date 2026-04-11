@@ -17,6 +17,14 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
     this.isTelevision = false,
   });
 
+  /// True when there's currently an active Trakt scrobble (something playing).
+  ///
+  /// Exposed as a global notifier so sibling Home widgets (like
+  /// HomeTodayCalendarCard) can subscribe and adjust their visibility when
+  /// the user is actively watching something.
+  static final ValueNotifier<bool> isScrobbleActive =
+      ValueNotifier<bool>(false);
+
   @override
   State<HomeTraktNowPlayingCard> createState() => HomeTraktNowPlayingCardState();
 }
@@ -90,6 +98,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
       if (!mounted || gen != _loadGeneration) return;
 
       setState(() { _data = data; _isLoading = false; });
+      HomeTraktNowPlayingCard.isScrobbleActive.value = data != null;
 
       _progressTimer?.cancel();
       if (data != null) {
@@ -113,6 +122,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
     if (!mounted || gen != _loadGeneration) return;
     _progressTimer?.cancel();
     setState(() { _data = null; _isLoading = false; });
+    HomeTraktNowPlayingCard.isScrobbleActive.value = false;
     _scheduleNextLoad(playing: false);
   }
 
@@ -215,49 +225,24 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
                 errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF0D1117)),
               ),
 
-            DecoratedBox(
+            // Single clean left-to-right gradient: solid dark over the text
+            // area (left 60%), smoothly fading into the fanart on the right.
+            const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    const Color(0xFF0D1117).withValues(alpha: 0.97),
-                    const Color(0xFF0D1117).withValues(alpha: 0.88),
-                    const Color(0xFF0D1117).withValues(alpha: 0.40),
+                    Color(0xFF0D1117),
+                    Color(0xFF0D1117),
                     Colors.transparent,
                   ],
-                  stops: const [0.0, 0.40, 0.68, 1.0],
+                  stops: [0.0, 0.6, 1.0],
                 ),
               ),
             ),
 
-            if (data.posterUrl.isNotEmpty)
-              Positioned(
-                right: 0, top: 0, bottom: 0,
-                width: posterWidth + 56,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CachedNetworkImage(
-                      imageUrl: data.posterUrl,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 120,
-                      errorWidget: (_, __, ___) => const SizedBox.expand(),
-                    ),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [Color(0xFF0D1117), Colors.transparent],
-                          stops: [0.0, 0.55],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
+            // Thin red border on top of everything.
             DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
@@ -269,7 +254,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
             ),
 
             Positioned(
-              left: 0, right: posterWidth + 8,
+              left: 0, right: 0,
               top: 0, bottom: 3,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -279,6 +264,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
                     _PulsingDot(color: _red),
                     const SizedBox(width: 10),
                     Expanded(
+                      flex: 5,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,31 +308,10 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ValueListenableBuilder<double>(
-                          valueListenable: _progress,
-                          builder: (_, p, __) => Text(
-                            '${p.toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              color: _red,
-                              fontSize: widget.isTelevision ? 13 : 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'watched',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.35),
-                            fontSize: 7.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                    // Empty flex space on the right — reveals the fanart
+                    // through the transparent end of the gradient. Progress
+                    // is communicated by the red bar along the bottom.
+                    const Spacer(flex: 3),
                   ],
                 ),
               ),
