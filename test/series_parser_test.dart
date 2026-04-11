@@ -55,6 +55,33 @@ void main() {
       expect(result.isSeries, false);
     });
 
+    test('should NOT treat 4-letter release code as series', () {
+      final result = SeriesParser.parseFilename('ABCD-222.mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat release code with quality tag as series', () {
+      final result = SeriesParser.parseFilename('WXYZ-456 1080p.mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat 4-letter release code mp4 as series', () {
+      final result = SeriesParser.parseFilename('QRST-123.mp4');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat 5-letter release code with brackets as series', () {
+      final result = SeriesParser.parseFilename('ABCDE-789 [1080p].mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('product code check should not break legitimate series with S01E01', () {
+      final result = SeriesParser.parseFilename('Breaking Bad S01E05 BluRay.mkv');
+      expect(result.isSeries, true);
+      expect(result.season, 1);
+      expect(result.episode, 5);
+    });
+
     test('should parse Season 1 Episode 2 format', () {
       final result = SeriesParser.parseFilename('Stranger Things Season 1 Episode 2.mp4');
       expect(result.isSeries, true);

@@ -170,6 +170,12 @@ class SeriesParser {
     RegExp(r'^(.+?)[\s._-]EP?\d{3}', caseSensitive: false),
   ];
 
+  // Single-release product/catalog codes shaped as 2-6 uppercase letters,
+  // dash, 3-5 digits. These must not be parsed as series or anime — they
+  // otherwise collide with the generic "prefix separator N-digits" anime
+  // fallback pattern.
+  static final RegExp _productCodePattern = RegExp(r'\b[A-Z]{2,6}-\d{3,5}\b');
+
   static final RegExp _yearPattern = RegExp(r'\((\d{4})\)');
   static final RegExp _qualityPattern = RegExp(r'(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)');
   static final RegExp _audioCodecPattern = RegExp(r'(AAC|AC3|DTS|FLAC|MP3|OGG)');
@@ -692,6 +698,13 @@ class SeriesParser {
       }
     }
 
+    // Short-prefix release codes otherwise get picked up by the generic anime
+    // "prefix + 3-digits" pattern and mis-classified as anime.
+    if (!isMoviePattern && _productCodePattern.hasMatch(nameWithoutExt)) {
+      debugPrint('SeriesParser: Detected product/release code, treating as non-series');
+      isMoviePattern = true;
+    }
+
     // Check if it's a sample file
     bool isSample = false;
     for (final keyword in SAMPLE_KEYWORDS) {
@@ -943,6 +956,14 @@ class SeriesParser {
         movieReason = 'movie episode pattern';
         break;
       }
+    }
+
+    // Short-prefix release codes are single-release identifiers that
+    // otherwise get matched by the generic anime "prefix + 3-digits" regex.
+    if (!isLikelyMovie && _productCodePattern.hasMatch(nameWithoutExt)) {
+      debugPrint('SeriesParser (Conservative): Product/release code detected');
+      isLikelyMovie = true;
+      movieReason = 'product/release code';
     }
 
     // Check for multi-part movie indicators (CD/Disc/Part)
