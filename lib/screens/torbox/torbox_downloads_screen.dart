@@ -127,6 +127,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   List<TorboxTorrent> _allTorrentsForSearch = [];
   bool _isLoadingTorrentSearch = false;
 
+  // Whether TorBox is hidden from bottom-nav. In selectSourceMode we use this to
+  // decide whether to restrict searches to queries matching the show title.
+  bool _hiddenFromNav = false;
+
   // Multi-select state
   bool _isSelectionMode = false;
   final Set<int> _selectedTorrentIds = {};
@@ -189,6 +193,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     _scrollController.addListener(_onScroll);
     _webDownloadScrollController.addListener(_onWebDownloadScroll);
     _pendingInitialTorrent = widget.initialTorrentToOpen;
+
+    if (widget.selectSourceMode &&
+        widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _isTorrentSearchActive = true;
+      _torrentSearchController.text = widget.initialSearchQuery!;
+      StorageService.getTorboxHiddenFromNav().then((v) {
+        if (mounted) setState(() => _hiddenFromNav = v);
+      });
+    }
+
     _loadApiKeyAndTorrents();
 
     // Register back navigation handler for folder navigation
@@ -982,6 +997,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Select-source mode: back always pops the route.
+    if (widget.selectSourceMode && widget.isPushedRoute) {
+      Navigator.of(context).pop();
+      return true;
+    }
+
     // Exit selection mode first if active
     if (_isSelectionMode) {
       _exitSelectionMode();
@@ -1071,12 +1092,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       _fetchWebDownloads(reset: true),
     ]);
 
-    // Auto-activate torrent search if initial query provided (select source mode)
     if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
-      setState(() {
-        _torrentSearchController.text = widget.initialSearchQuery!;
-        _isTorrentSearchActive = true;
-      });
       _submitTorrentSearch();
     }
   }
@@ -5460,6 +5476,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   // ============ Torrent-Level Search Methods ============
 
   void _toggleTorrentSearch() {
+    if (widget.selectSourceMode) return;
     setState(() {
       _isTorrentSearchActive = !_isTorrentSearchActive;
       if (!_isTorrentSearchActive) {
@@ -5474,9 +5491,37 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     });
   }
 
+  bool _queryMatchesInitialTitle(String query) {
+    final title = widget.initialSearchQuery;
+    if (title == null || title.isEmpty) return true;
+    const stopwords = {'the', 'a', 'an'};
+    final rawTokens = title
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    final filtered = rawTokens
+        .where((t) => !stopwords.contains(t) && t.length >= 2)
+        .toList();
+    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
+    if (effectiveTokens.isEmpty) return true;
+    final normalizedQuery = query.toLowerCase();
+    return effectiveTokens.any((t) => normalizedQuery.contains(t));
+  }
+
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
     if (query.isEmpty) return;
+    if (widget.selectSourceMode &&
+        _hiddenFromNav &&
+        !_queryMatchesInitialTitle(query)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Search must include part of "${widget.initialSearchQuery}"'),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 3),
+      ));
+      return;
+    }
     if (_allTorrentsForSearch.isEmpty && !_isLoadingTorrentSearch) {
       setState(() {
         _torrentSearchQuery = query;
@@ -5896,7 +5941,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       body: Column(
         children: [
           const SizedBox(height: 8),
-          if (_isAtRoot) _buildToolbar(),
+          if (_isAtRoot && !widget.selectSourceMode) _buildToolbar(),
           if (_isAtRoot && _isTorrentSearchActive) _buildTorrentSearchBar(),
           if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
           if (!_isAtRoot) _buildViewModeDropdown(),

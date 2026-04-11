@@ -156,6 +156,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   bool _isLoadingSearch = false;
   String _torrentSearchQuery = '';
 
+  // Whether RD is hidden from bottom-nav. In selectSourceMode we use this to
+  // decide whether to restrict searches to queries matching the show title.
+  bool _hiddenFromNav = false;
+
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
@@ -204,6 +208,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
 
     _checkIfTelevision();
+
+    if (widget.selectSourceMode &&
+        widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      _isTorrentSearchActive = true;
+      _torrentSearchController.text = widget.initialSearchQuery!;
+      StorageService.getRealDebridHiddenFromNav().then((v) {
+        if (mounted) setState(() => _hiddenFromNav = v);
+      });
+    }
+
     _loadApiKeyAndData();
     _torrentScrollController.addListener(_onTorrentScroll);
     _downloadScrollController.addListener(_onDownloadScroll);
@@ -357,6 +372,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Handle back navigation for folder browsing.
   /// Returns true if handled (navigated up), false if at root level.
   bool _handleBackNavigation() {
+    // Select-source mode: back always pops the route.
+    if (widget.selectSourceMode && widget.isPushedRoute) {
+      Navigator.of(context).pop();
+      return true;
+    }
+
     // Exit selection mode first if active
     if (_isSelectionMode) {
       _exitSelectionMode();
@@ -437,12 +458,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     }
 
-    // Auto-activate torrent search if initial query provided (select source mode)
     if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
-      setState(() {
-        _torrentSearchController.text = widget.initialSearchQuery!;
-        _isTorrentSearchActive = true;
-      });
       _submitTorrentSearch();
     }
   }
@@ -548,6 +564,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   // Torrent list search methods
 
   void _toggleTorrentSearch() {
+    if (widget.selectSourceMode) return;
     setState(() {
       _isTorrentSearchActive = !_isTorrentSearchActive;
       if (!_isTorrentSearchActive) {
@@ -558,9 +575,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
   }
 
+  bool _queryMatchesInitialTitle(String query) {
+    final title = widget.initialSearchQuery;
+    if (title == null || title.isEmpty) return true;
+    const stopwords = {'the', 'a', 'an'};
+    final rawTokens = title
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    final filtered = rawTokens
+        .where((t) => !stopwords.contains(t) && t.length >= 2)
+        .toList();
+    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
+    if (effectiveTokens.isEmpty) return true;
+    final normalizedQuery = query.toLowerCase();
+    return effectiveTokens.any((t) => normalizedQuery.contains(t));
+  }
+
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
     if (query.isEmpty) return;
+    if (widget.selectSourceMode &&
+        _hiddenFromNav &&
+        !_queryMatchesInitialTitle(query)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Search must include part of "${widget.initialSearchQuery}"'),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 3),
+      ));
+      return;
+    }
     setState(() => _torrentSearchQuery = query);
     if (_allTorrentsForSearch.isEmpty && !_isLoadingSearch) {
       _fetchAllTorrentsForSearch();
@@ -609,6 +654,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   List<RDTorrent> get _filteredSearchTorrents {
+    if (widget.selectSourceMode && _torrentSearchQuery.isEmpty) return [];
     final downloaded = _allTorrentsForSearch.where((t) => t.isDownloaded);
     if (_torrentSearchQuery.isEmpty) return downloaded.toList();
     final query = _torrentSearchQuery.toLowerCase();
@@ -3441,7 +3487,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     return Column(
       children: [
-        _buildTorrentToolbar(),
+        if (!widget.selectSourceMode) _buildTorrentToolbar(),
         if (_isTorrentSearchActive) _buildTorrentSearchBar(),
         if (_isSelectionMode) _buildSelectionBar(),
         Expanded(child: _isLoadingFolder ? _buildFolderLoadingView() : _isTorrentSearchActive ? _buildTorrentSearchResults() : body),
