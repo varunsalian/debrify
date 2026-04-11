@@ -23,7 +23,7 @@
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
   <a href="https://www.reddit.com/r/debrify/">Reddit</a> &bull;
-  <a href="https://discord.gg/nay3FVtAp">Discord</a>
+  <a href="https://discord.gg/xuAc4Q2c9G">Discord</a>
 </p>
 
 ---
@@ -282,7 +282,7 @@ flutter build linux --release            # Linux
 ## 💬 Community
 
 - **Reddit** — [r/debrify](https://www.reddit.com/r/debrify/) for discussion and tips
-- **Discord** — [Join the server](https://discord.gg/nay3FVtAp) for help and updates
+- **Discord** — [Join the server](https://discord.gg/xuAc4Q2c9G) for help and updates
 - **Issues** — [Report bugs](https://github.com/varunsalian/debrify/issues) or request features
 
 ---

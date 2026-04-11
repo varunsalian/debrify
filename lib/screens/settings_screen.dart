@@ -769,7 +769,7 @@ class _SettingsLayout extends StatelessWidget {
                 icon: Icons.chat_rounded,
                 title: 'Discord',
                 subtitle: 'Join for help, updates, and discussion',
-                onTap: () => launchUrl(Uri.parse('https://discord.gg/nay3FVtAp')),
+                onTap: () => launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
                 iconColor: const Color(0xFF5865F2),
               ),
               _SettingsTile(
