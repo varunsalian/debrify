@@ -678,14 +678,26 @@ class _HomeTraktContinueWatchingSectionState
 
     if (item.type == 'series') {
       final showId = item.imdbId ?? item.id;
-      final next = await _traktService.fetchNextEpisode(showId);
-      if (!mounted) return;
-      if (next == null) {
-        _browseItem(item);
-        return;
+      // Prefer the episode info already loaded for the Continue Watching tile
+      // — it comes from /sync/playback/episodes (the actually-paused episode)
+      // and matches what the user saw on screen. Falling back to
+      // fetchNextEpisode (/shows/{id}/progress/watched) would return
+      // "first unwatched" which can disagree when earlier episodes aren't
+      // flagged as watched yet (e.g. before scrobble-stop fires).
+      final cached = _episodeInfoMap[item.id];
+      if (cached != null) {
+        season = cached.season;
+        episode = cached.episode;
+      } else {
+        final next = await _traktService.fetchNextEpisode(showId);
+        if (!mounted) return;
+        if (next == null) {
+          _browseItem(item);
+          return;
+        }
+        season = next.season;
+        episode = next.episode;
       }
-      season = next.season;
-      episode = next.episode;
 
       if (season != null && episode != null) {
         final episodeProgress =
