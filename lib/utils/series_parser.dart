@@ -133,7 +133,9 @@ class SeriesParser {
     RegExp(r'[Ss](\d{1,2})[Ee](\d{1,3})'),
     // 1x02, 01x02, 1.02, 01.02
     RegExp(r'(\d{1,2})[xX](\d{1,3})'),
-    RegExp(r'(\d{1,2})\.(\d{1,3})'),
+    // Dot notation requires a 2+ digit episode so audio-channel configs like
+    // 5.1, 7.1, 2.0, 5.1.2 (Atmos) don't get parsed as season.episode.
+    RegExp(r'(\d{1,2})\.(\d{2,3})'),
     // Season 1 Episode 2, Season 01 Episode 02
     RegExp(r'[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,3})'),
     // Episode 2, Ep 2, E02
@@ -160,7 +162,9 @@ class SeriesParser {
     RegExp(r'^(.+?)\s*[Ss](\d{1,2})[Ee][Pp](\d{1,3})'),
     RegExp(r'^(.+?)\s*[Ss](\d{1,2})[Ee](\d{1,3})'),
     RegExp(r'^(.+?)\s*(\d{1,2})[xX](\d{1,3})'),
-    RegExp(r'^(.+?)\s*(\d{1,2})\.(\d{1,3})'),
+    // Match only 2+ digit episodes so "Movie 5.1" / "Movie 7.1" audio configs
+    // are not extracted as series titles.
+    RegExp(r'^(.+?)\s*(\d{1,2})\.(\d{2,3})'),
     // Anime patterns for title extraction
     RegExp(r'^(.+?)[\s._-]\d{3}(?:[\s._-]|$)'),
     RegExp(r'^(.+?)[\s._-]EP?\d{3}', caseSensitive: false),
@@ -1036,9 +1040,10 @@ class SeriesParser {
               continue;
             }
 
-            // Additional check: If pattern is just digits.digits, check for year context
-            if (pattern == _seasonEpisodePatterns[5]) { // The (\d{1,2})\.(\d{1,3}) pattern
-              // Check if there's a 4-digit year before this pattern
+            // Additional check: If pattern is the digits.digits form, reject
+            // matches that come directly after a 4-digit year (likely a
+            // quality or version number, not a real season.episode).
+            if (pattern == _seasonEpisodePatterns[4]) { // (\d{1,2})\.(\d{2,3})
               final yearBeforePattern = RegExp(r'(?:19|20)\d{2}[\s\._-]*$');
               final textBeforeMatch = nameWithoutExt.substring(0, match.start);
               if (yearBeforePattern.hasMatch(textBeforeMatch)) {

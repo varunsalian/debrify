@@ -35,6 +35,26 @@ void main() {
       expect(result.episode, 2);
     });
 
+    test('should NOT treat 5.1 audio channels as season.episode', () {
+      final result = SeriesParser.parseFilename('Mad Max Fury Road 2015 1080p BluRay 5.1.mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat 7.1 audio channels as season.episode', () {
+      final result = SeriesParser.parseFilename('Dune Part Two 2024 2160p DTS-HD 7.1.mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat 5.1.2 Atmos as season.episode', () {
+      final result = SeriesParser.parseFilename('Oppenheimer 2023 2160p Atmos 5.1.2.mkv');
+      expect(result.isSeries, false);
+    });
+
+    test('should NOT treat 2.0 audio as season.episode', () {
+      final result = SeriesParser.parseFilename('Casablanca 1942 1080p AAC 2.0.mkv');
+      expect(result.isSeries, false);
+    });
+
     test('should parse Season 1 Episode 2 format', () {
       final result = SeriesParser.parseFilename('Stranger Things Season 1 Episode 2.mp4');
       expect(result.isSeries, true);
