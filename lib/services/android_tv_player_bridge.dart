@@ -8,7 +8,6 @@ import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
 import 'movie_metadata_service.dart';
-import 'next_episode_service.dart';
 import 'subtitle_font_service.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
@@ -408,16 +407,16 @@ class AndroidTvPlayerBridge {
             final episode = args['episode'] as int?;
             if (imdbId != null && season != null && episode != null) {
               debugPrint('AndroidTvPlayerBridge: Quick Play next episode requested after S${season}E$episode');
-              final nextEp = await NextEpisodeService.findNextEpisode(imdbId, season, episode);
-              if (nextEp != null) {
-                debugPrint('AndroidTvPlayerBridge: Found next episode S${nextEp.season}E${nextEp.episode}');
-                _quickPlayNextEpisodeResult = {
-                  'quickPlayNext': true,
-                  'imdbId': imdbId,
-                  'season': nextEp.season,
-                  'episode': nextEp.episode,
-                };
-              }
+              // Store the raw request only — the async NextEpisode lookup
+              // happens in the onFinished callback to avoid racing with the
+              // native Activity's finish() call (which was consuming a null
+              // result before this handler's await had completed).
+              _quickPlayNextEpisodeResult = {
+                'quickPlayNext': true,
+                'imdbId': imdbId,
+                'currentSeason': season,
+                'currentEpisode': episode,
+              };
             }
           }
           return null;

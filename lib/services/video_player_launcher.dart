@@ -21,6 +21,7 @@ import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/episode_info_service.dart';
 import '../services/main_page_bridge.dart';
+import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -1095,10 +1096,32 @@ class VideoPlayerLauncher {
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
-          // Check if the Android TV player requested Quick Play next episode
-          final quickPlayResult = AndroidTvPlayerBridge.consumeQuickPlayNextResult();
-          if (quickPlayResult != null && onQuickPlayNextEpisode != null) {
-            await onQuickPlayNextEpisode(quickPlayResult);
+          // The native player may have requested a Quick Play next episode
+          // right before it called finish(). The bridge handler only stores
+          // the raw request (imdbId + current season/episode) — the async
+          // NextEpisode lookup happens here so it doesn't race the Activity's
+          // finish() → onFinished flow.
+          final pending = AndroidTvPlayerBridge.consumeQuickPlayNextResult();
+          if (pending != null && onQuickPlayNextEpisode != null) {
+            final imdbId = pending['imdbId'] as String?;
+            final curSeason = pending['currentSeason'] as int?;
+            final curEpisode = pending['currentEpisode'] as int?;
+            if (imdbId != null && curSeason != null && curEpisode != null) {
+              final nextEp = await NextEpisodeService.findNextEpisode(
+                imdbId, curSeason, curEpisode,
+              );
+              if (nextEp != null) {
+                debugPrint('VideoPlayerLauncher: Quick Play next → S${nextEp.season}E${nextEp.episode}');
+                await onQuickPlayNextEpisode({
+                  'quickPlayNext': true,
+                  'imdbId': imdbId,
+                  'season': nextEp.season,
+                  'episode': nextEp.episode,
+                });
+              } else {
+                debugPrint('VideoPlayerLauncher: No next episode found after S${curSeason}E$curEpisode');
+              }
+            }
           }
         },
         onRequestStream: resolver.handleRequest,
