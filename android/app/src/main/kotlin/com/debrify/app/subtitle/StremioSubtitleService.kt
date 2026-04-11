@@ -5,6 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -143,7 +144,10 @@ class StremioSubtitleService(private val context: Context) {
         private const val TAG = "StremioSubtitleService"
         private const val PREFS_NAME = "FlutterSharedPreferences"
         private const val ADDONS_KEY = "flutter.stremio_addons_v1"
-        private const val REQUEST_TIMEOUT_MS = 30000
+        private const val REQUEST_TIMEOUT_MS = 15000
+        private const val MAX_ATTEMPTS = 3
+        private const val INITIAL_BACKOFF_MS = 500L
+        private const val BACKOFF_MULTIPLIER = 3
     }
 
     /**
@@ -194,24 +198,14 @@ class StremioSubtitleService(private val context: Context) {
             return@withContext emptyList()
         }
 
-        // Filter addons that support the content type
-        val applicableAddons = addons.filter { addon ->
-            when (type) {
-                "movie" -> addon.supportsMovies
-                "series" -> addon.supportsSeries
-                else -> addon.types.contains(type) || addon.types.isEmpty()
-            }
-        }
-
-        if (applicableAddons.isEmpty()) {
-            return@withContext emptyList()
-        }
-
         // Build subtitle ID (only add season:episode for series)
         val subtitleId = buildSubtitleId(imdbId, season, episode)
 
-        // Fetch from all applicable addons in parallel
-        val results = applicableAddons.map { addon ->
+        // Fetch from every subtitle addon in parallel. We intentionally don't
+        // filter by the addon's declared `types` — that field describes an
+        // addon's catalogs/metas, not its subtitle endpoint, and many addons
+        // misconfigure it. If an addon has the `subtitles` resource, we ask it.
+        val results = addons.map { addon ->
             async {
                 try {
                     fetchSubtitlesFromAddon(addon, type, subtitleId)
@@ -270,15 +264,51 @@ class StremioSubtitleService(private val context: Context) {
     }
 
     /**
-     * Fetch subtitles from a single addon.
+     * Fetch subtitles from a single addon, retrying on any failure.
+     *
+     * Stremio addon quality varies — some return incorrect status codes,
+     * intermittently time out, or briefly 5xx. We retry any thrown exception
+     * (HTTP non-200, timeout, socket error, JSON parse error) up to
+     * MAX_ATTEMPTS times with exponential backoff. A valid JSON response
+     * with no subtitles is NOT treated as failure — it just means the addon
+     * has nothing for this content.
      */
-    private fun fetchSubtitlesFromAddon(
+    private suspend fun fetchSubtitlesFromAddon(
         addon: StremioAddon,
         type: String,
         subtitleId: String
     ): List<StremioSubtitle> {
         val url = "${addon.baseUrl}/subtitles/$type/$subtitleId.json"
 
+        var lastError: Exception? = null
+        var backoffMs = INITIAL_BACKOFF_MS
+
+        for (attempt in 1..MAX_ATTEMPTS) {
+            try {
+                return attemptFetch(addon, url)
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "${addon.name} attempt $attempt/$MAX_ATTEMPTS failed: ${e.message}")
+                if (attempt < MAX_ATTEMPTS) {
+                    delay(backoffMs)
+                    backoffMs *= BACKOFF_MULTIPLIER
+                }
+            }
+        }
+
+        Log.e(TAG, "${addon.name} exhausted $MAX_ATTEMPTS attempts, giving up")
+        throw lastError ?: Exception("All retry attempts failed")
+    }
+
+    /**
+     * Single fetch attempt. Throws on HTTP non-200, timeout, socket error,
+     * or JSON parse failure. Returns an empty list if the addon responds
+     * successfully with no subtitles.
+     */
+    private fun attemptFetch(
+        addon: StremioAddon,
+        url: String
+    ): List<StremioSubtitle> {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = REQUEST_TIMEOUT_MS
         connection.readTimeout = REQUEST_TIMEOUT_MS

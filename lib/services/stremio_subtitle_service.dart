@@ -13,7 +13,10 @@ import 'stremio_service.dart';
 /// - Parallel fetching from multiple addons
 /// - Deduplication of subtitle results
 class StremioSubtitleService {
-  static const Duration _requestTimeout = Duration(seconds: 10);
+  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const int _maxAttempts = 3;
+  static const Duration _initialBackoff = Duration(milliseconds: 500);
+  static const int _backoffMultiplier = 3;
 
   // Singleton pattern
   static final StremioSubtitleService _instance =
@@ -59,30 +62,21 @@ class StremioSubtitleService {
       return const StremioSubtitleResult(subtitles: []);
     }
 
-    // Filter addons that support the content type
-    final applicableAddons = addons.where((a) {
-      if (type == 'movie') return a.supportsMovies;
-      if (type == 'series') return a.supportsSeries;
-      return a.types.contains(type) || a.types.isEmpty;
-    }).toList();
-
-    if (applicableAddons.isEmpty) {
-      debugPrint(
-          'StremioSubtitleService: No addons support type: $type for subtitles');
-      return const StremioSubtitleResult(subtitles: []);
-    }
-
     // Build subtitle ID
     final subtitleId = _buildSubtitleId(imdbId, season, episode);
 
     debugPrint(
-        'StremioSubtitleService: Fetching subtitles for $type/$subtitleId from ${applicableAddons.length} addons');
+        'StremioSubtitleService: Fetching subtitles for $type/$subtitleId from ${addons.length} addons');
 
-    // Fetch from all applicable addons in parallel
+    // Fetch from every subtitle addon in parallel. We intentionally don't
+    // filter by the addon's declared `types` — that field describes an
+    // addon's catalogs/metas, not its subtitle endpoint, and many addons
+    // misconfigure it. If an addon has the `subtitles` resource, we ask it;
+    // empty responses are cheap and handled gracefully.
     final List<String> failedAddons = [];
     final List<Future<List<StremioSubtitle>>> futures = [];
 
-    for (final addon in applicableAddons) {
+    for (final addon in addons) {
       futures.add(
         _fetchSubtitlesFromAddon(addon, type, subtitleId).catchError((error) {
           debugPrint(
@@ -129,7 +123,14 @@ class StremioSubtitleService {
     return imdbId;
   }
 
-  /// Fetch subtitles from a single addon
+  /// Fetch subtitles from a single addon, retrying on any failure.
+  ///
+  /// Stremio addon quality varies — some return incorrect status codes,
+  /// intermittently time out, or briefly 5xx. We retry any thrown exception
+  /// (HTTP non-200, timeout, socket error, JSON parse error) up to
+  /// [_maxAttempts] times with exponential backoff. A valid JSON response
+  /// with no subtitles is NOT treated as failure — it just means the addon
+  /// has nothing for this content.
   Future<List<StremioSubtitle>> _fetchSubtitlesFromAddon(
     StremioAddon addon,
     String type,
@@ -138,39 +139,62 @@ class StremioSubtitleService {
     final url = '${addon.baseUrl}/subtitles/$type/$subtitleId.json';
     debugPrint('StremioSubtitleService: Fetching from ${addon.name}: $url');
 
-    try {
-      final uri = Uri.parse(url);
-      final response = await http.get(uri).timeout(_requestTimeout);
-      debugPrint('StremioSubtitleService: ${addon.name} response: ${response.statusCode}');
+    Object? lastError;
+    Duration backoff = _initialBackoff;
 
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
+    for (int attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        return await _attemptFetch(addon, url);
+      } catch (e) {
+        lastError = e;
+        debugPrint(
+            'StremioSubtitleService: ${addon.name} attempt $attempt/$_maxAttempts failed: $e');
+        if (attempt < _maxAttempts) {
+          await Future.delayed(backoff);
+          backoff *= _backoffMultiplier;
+        }
       }
-
-      final Map<String, dynamic> data = json.decode(response.body);
-      final subtitlesRaw = data['subtitles'] as List<dynamic>?;
-
-      if (subtitlesRaw == null || subtitlesRaw.isEmpty) {
-        debugPrint('StremioSubtitleService: ${addon.name} returned no subtitles');
-        return [];
-      }
-
-      final subtitles = subtitlesRaw
-          .map((s) => StremioSubtitle.fromJson(
-                s as Map<String, dynamic>,
-                addon.name,
-              ))
-          .where((s) => s.url.isNotEmpty)
-          .toList();
-
-      debugPrint(
-          'StremioSubtitleService: ${addon.name} returned ${subtitles.length} subtitles');
-      return subtitles;
-    } catch (e) {
-      debugPrint(
-          'StremioSubtitleService: Error fetching subtitles from ${addon.name}: $e');
-      rethrow;
     }
+
+    debugPrint(
+        'StremioSubtitleService: ${addon.name} exhausted $_maxAttempts attempts, giving up');
+    throw lastError ?? Exception('All retry attempts failed');
+  }
+
+  /// Single fetch attempt. Throws on HTTP non-200, timeout, socket error,
+  /// or JSON parse failure. Returns an empty list if the addon responds
+  /// successfully with no subtitles.
+  Future<List<StremioSubtitle>> _attemptFetch(
+    StremioAddon addon,
+    String url,
+  ) async {
+    final uri = Uri.parse(url);
+    final response = await http.get(uri).timeout(_requestTimeout);
+    debugPrint('StremioSubtitleService: ${addon.name} response: ${response.statusCode}');
+
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+
+    final Map<String, dynamic> data = json.decode(response.body);
+    final subtitlesRaw = data['subtitles'] as List<dynamic>?;
+
+    if (subtitlesRaw == null || subtitlesRaw.isEmpty) {
+      debugPrint('StremioSubtitleService: ${addon.name} returned no subtitles');
+      return [];
+    }
+
+    final subtitles = subtitlesRaw
+        .map((s) => StremioSubtitle.fromJson(
+              s as Map<String, dynamic>,
+              addon.name,
+            ))
+        .where((s) => s.url.isNotEmpty)
+        .toList();
+
+    debugPrint(
+        'StremioSubtitleService: ${addon.name} returned ${subtitles.length} subtitles');
+    return subtitles;
   }
 
   /// Check if any subtitle addons are available
