@@ -2423,6 +2423,17 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
       return _PlaybackContentType.series;
     }
+    // Caller explicitly declared a series episode with full context
+    // (imdbId + season + episode). Quick Play from TorrentSearchScreen hits
+    // this path: one torrent, but we already know the show IMDb ID and S/E,
+    // so the native player needs series mode to enable Trakt scrobble,
+    // next-episode navigation, and series-aware subtitle fetching.
+    if (args.contentType == 'series' &&
+        args.contentImdbId != null &&
+        args.contentSeason != null &&
+        args.contentEpisode != null) {
+      return _PlaybackContentType.series;
+    }
     if (entries.length > 1) {
       return _PlaybackContentType.collection;
     }
