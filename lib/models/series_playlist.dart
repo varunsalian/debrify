@@ -226,6 +226,9 @@ class SeriesPlaylist {
   /// TVMaze show ID discovered during fetchEpisodeInfo (for SeriesBrowser reuse)
   int? tvmazeShowId;
 
+  /// Show poster URL discovered during fetchEpisodeInfo
+  String? showPosterUrl;
+
   /// Per-item IMDB IDs for movie collections
   /// Key: index in allEpisodes, Value: IMDB ID
   /// Used when each item in a collection is a different movie
@@ -761,6 +764,12 @@ class SeriesPlaylist {
       // Found series info (no log needed, success assumed)
     } catch (e) {
       debugPrint('TVMaze: Series lookup failed: $e');
+    }
+
+    // Extract show poster URL for playlist item updates
+    if (showInfo != null && showInfo['image'] != null) {
+      showPosterUrl = showInfo['image']['original'] as String? ??
+          showInfo['image']['medium'] as String?;
     }
 
     // Fetch all episodes upfront when we have a show ID (much more efficient than per-episode API calls)

@@ -2030,6 +2030,57 @@ class StorageService {
     return true;
   }
 
+  static Future<bool> updatePlaylistItemImdbId(
+    String imdbId, {
+    String? rdTorrentId,
+    String? torboxTorrentId,
+    String? pikpakCollectionId,
+    bool force = false,
+  }) async {
+    final items = await getPlaylistItemsRaw();
+    int itemIndex = -1;
+
+    if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
+      );
+    }
+
+    if (itemIndex == -1 && torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
+      for (int i = 0; i < items.length; i++) {
+        final torboxId = items[i]['torboxTorrentId'];
+        if (torboxId != null && torboxId.toString() == torboxTorrentId.toString()) {
+          itemIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (itemIndex == -1 && pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+      itemIndex = items.indexWhere((item) {
+        final pikpakFileId = item['pikpakFileId'] as String?;
+        if (pikpakFileId == pikpakCollectionId) return true;
+        final pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+        if (pikpakFileIds != null && pikpakFileIds.isNotEmpty) {
+          return pikpakFileIds[0].toString() == pikpakCollectionId;
+        }
+        return false;
+      });
+    }
+
+    if (itemIndex == -1) return false;
+
+    if (!force) {
+      final existing = items[itemIndex]['imdbId'] as String?;
+      if (existing != null && existing.isNotEmpty) return true;
+    }
+
+    items[itemIndex]['imdbId'] = imdbId;
+    await savePlaylistItemsRaw(items);
+    debugPrint('StorageService: Saved imdbId $imdbId to playlist item "${items[itemIndex]['title']}"');
+    return true;
+  }
+
   /// Get saved view mode for a playlist item
   /// Returns null if no view mode has been saved for this item
   static Future<String?> getPlaylistItemViewMode(Map<String, dynamic> item) async {

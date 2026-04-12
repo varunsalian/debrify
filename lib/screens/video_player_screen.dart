@@ -2877,6 +2877,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             imdbId: widget.contentImdbId,
           )
           .then((_) async {
+            // Save discovered IMDB ID back to playlist item for future direct plays
+            await _saveImdbIdToPlaylist(seriesPlaylist);
+
             // Extract poster URL from series data and save to playlist
             await _saveSeriesPosterToPlaylist(seriesPlaylist);
 
@@ -2961,6 +2964,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  Future<void> _saveImdbIdToPlaylist(SeriesPlaylist seriesPlaylist) async {
+    final imdbId = seriesPlaylist.imdbId;
+    if (imdbId == null || !imdbId.startsWith('tt')) return;
+    if (widget.contentImdbId != null) return;
+
+    await StorageService.updatePlaylistItemImdbId(
+      imdbId,
+      rdTorrentId: widget.rdTorrentId,
+      torboxTorrentId: widget.torboxTorrentId,
+      pikpakCollectionId: widget.pikpakCollectionId,
+    );
+  }
+
   /// Save series poster URL to playlist item
   Future<void> _saveSeriesPosterToPlaylist(
     SeriesPlaylist seriesPlaylist,
@@ -2990,53 +3006,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    // Try to get series info to extract poster URL
+    final posterUrl = seriesPlaylist.showPosterUrl;
+    if (posterUrl == null || posterUrl.isEmpty) {
+      print('  ⚠️ No poster URL from fetchEpisodeInfo');
+      return;
+    }
+
+    print('  Poster URL: $posterUrl');
     try {
-      print('  Fetching series info from TVMaze...');
-      final seriesInfo = await EpisodeInfoService.getSeriesInfo(
-        seriesPlaylist.seriesTitle!,
-      );
-
-      if (seriesInfo != null && seriesInfo['image'] != null) {
-        final posterUrl =
-            seriesInfo['image']['original'] ?? seriesInfo['image']['medium'];
-        print('  Poster URL from TVMaze: $posterUrl');
-
-        if (posterUrl != null && posterUrl.isNotEmpty) {
-          // Save poster URL to playlist item (supports RealDebrid, Torbox, and PikPak)
-          if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-            print('  Saving poster for RealDebrid item...');
-            final success = await StorageService.updatePlaylistItemPoster(
-              posterUrl,
-              rdTorrentId: rdTorrentId,
-            );
-            print('  RealDebrid poster save: ${success ? "SUCCESS" : "FAILED"}');
-          }
-          if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-            print('  Saving poster for Torbox item...');
-            final success = await StorageService.updatePlaylistItemPoster(
-              posterUrl,
-              torboxTorrentId: torboxTorrentId,
-            );
-            print('  Torbox poster save: ${success ? "SUCCESS" : "FAILED"}');
-          }
-          if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-            print('  Saving poster for PikPak item...');
-            final success = await StorageService.updatePlaylistItemPoster(
-              posterUrl,
-              pikpakCollectionId: pikpakCollectionId,
-            );
-            print('  PikPak poster save: ${success ? "SUCCESS" : "FAILED"}');
-          }
-        } else {
-          print('  ⚠️ No poster URL found in series info');
-        }
-      } else {
-        print('  ⚠️ No series info or image found from TVMaze');
+      if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          rdTorrentId: rdTorrentId,
+        );
+      }
+      if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          torboxTorrentId: torboxTorrentId,
+        );
+      }
+      if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          pikpakCollectionId: pikpakCollectionId,
+        );
       }
     } catch (e) {
       print('  ❌ Error saving poster: $e');
-      // Silently fail - poster is optional
     }
   }
 

@@ -284,6 +284,25 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         showName: selectedShow['name'] as String,
       );
 
+      // Save IMDB ID from the selected show's externals
+      final externals = selectedShow['externals'];
+      if (externals is Map<String, dynamic>) {
+        final imdbId = externals['imdb'];
+        if (imdbId is String && imdbId.startsWith('tt')) {
+          widget.seriesPlaylist.imdbId = imdbId;
+          final rdId = widget.playlistItem?['rdTorrentId'] as String?;
+          final torboxId = widget.playlistItem?['torboxTorrentId']?.toString();
+          final pikpakId = widget.playlistItem?['pikpakFileId'] as String?;
+          await StorageService.updatePlaylistItemImdbId(
+            imdbId,
+            rdTorrentId: rdId,
+            torboxTorrentId: torboxId,
+            pikpakCollectionId: pikpakId,
+            force: true,
+          );
+        }
+      }
+
       // Update playlist item poster/cover image
       await _updatePlaylistPoster(selectedShow);
 
@@ -366,7 +385,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           }
         }
       } else if (provider.toLowerCase() == 'pikpak') {
-        final pikpakCollectionId = widget.playlistItem!['pikpakCollectionId'] as String?;
+        final pikpakCollectionId = widget.playlistItem!['pikpakFileId'] as String?;
         if (pikpakCollectionId != null) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,

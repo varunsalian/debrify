@@ -1306,6 +1306,17 @@ class VideoPlayerLauncher {
         await seriesPlaylist.fetchEpisodeInfo(imdbId: contentImdbId);
         debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
 
+        // Save discovered IMDB ID back to playlist item for future direct plays
+        final seriesImdbId = seriesPlaylist.imdbId;
+        if (seriesImdbId != null && seriesImdbId.startsWith('tt') && contentImdbId == null) {
+          await StorageService.updatePlaylistItemImdbId(
+            seriesImdbId,
+            rdTorrentId: rdTorrentId,
+            torboxTorrentId: torboxTorrentId,
+            pikpakCollectionId: pikpakCollectionId,
+          );
+        }
+
         // Save series poster to playlist item (if we have series info)
         await _saveSeriesPosterToPlaylist(
           seriesPlaylist,
@@ -1385,86 +1396,36 @@ class VideoPlayerLauncher {
     String? torboxTorrentId,
     String? pikpakCollectionId,
   }) async {
-    debugPrint('🎬 _saveSeriesPosterToPlaylist (Android TV) called');
-    debugPrint('  seriesTitle: ${seriesPlaylist.seriesTitle}');
+    final posterUrl = seriesPlaylist.showPosterUrl;
+    if (posterUrl == null || posterUrl.isEmpty) return;
 
-    if (seriesPlaylist.seriesTitle == null) {
-      debugPrint('  ⚠️ No series title, skipping poster save');
-      return;
-    }
-
-    debugPrint('  rdTorrentId: $rdTorrentId');
-    debugPrint('  torboxTorrentId: $torboxTorrentId');
-    debugPrint('  pikpakCollectionId: $pikpakCollectionId');
-
-    // Need at least one identifier to save poster
     if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
         (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
         (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
-      debugPrint('  ⚠️ No valid identifier found, skipping poster save');
       return;
     }
 
-    // Try to get series info to extract poster URL
     try {
-      debugPrint('  Fetching series info from TVMaze...');
-      final seriesInfo = await EpisodeInfoService.getSeriesInfo(
-        seriesPlaylist.seriesTitle!,
-      );
-
-      if (seriesInfo != null && seriesInfo['image'] != null) {
-        final posterUrl =
-            seriesInfo['image']['original'] ?? seriesInfo['image']['medium'];
-        debugPrint('  Poster URL from TVMaze: $posterUrl');
-
-        if (posterUrl != null && posterUrl.isNotEmpty) {
-          // Find the playlist item by ID
-          debugPrint('  Looking for playlist item...');
-          final items = await StorageService.getPlaylistItemsRaw();
-          Map<String, dynamic>? targetItem;
-
-          for (final item in items) {
-            bool matches = false;
-
-            if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-              matches = (item['rdTorrentId'] as String?) == rdTorrentId;
-            } else if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-              final torboxId = item['torboxTorrentId'];
-              matches = torboxId != null && torboxId.toString() == torboxTorrentId.toString();
-            } else if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-              final pikpakFileId = item['pikpakFileId'] as String?;
-              final pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
-              matches = pikpakFileId == pikpakCollectionId ||
-                        (pikpakFileIds != null && pikpakFileIds.isNotEmpty &&
-                         pikpakFileIds[0].toString() == pikpakCollectionId);
-            }
-
-            if (matches) {
-              targetItem = item;
-              debugPrint('  ✅ Found playlist item');
-              break;
-            }
-          }
-
-          if (targetItem != null) {
-            debugPrint('  Saving poster override...');
-            await StorageService.savePlaylistPosterOverride(
-              playlistItem: targetItem,
-              posterUrl: posterUrl,
-            );
-            debugPrint('  ✅ Poster save SUCCESS');
-          } else {
-            debugPrint('  ❌ Playlist item not found');
-          }
-        } else {
-          debugPrint('  ⚠️ No poster URL found in series info');
-        }
-      } else {
-        debugPrint('  ⚠️ No series info or image found from TVMaze');
+      if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          rdTorrentId: rdTorrentId,
+        );
+      }
+      if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          torboxTorrentId: torboxTorrentId,
+        );
+      }
+      if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          pikpakCollectionId: pikpakCollectionId,
+        );
       }
     } catch (e) {
-      debugPrint('  ❌ Error saving poster: $e');
-      // Silently fail - poster is optional
+      debugPrint('Error saving poster: $e');
     }
   }
 

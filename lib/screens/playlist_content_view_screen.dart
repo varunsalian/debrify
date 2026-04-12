@@ -1798,6 +1798,24 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Parse series playlist from current view nodes
+  Future<void> _saveImdbIdToPlaylist({bool force = false}) async {
+    final imdbId = _seriesPlaylist?.imdbId;
+    if (imdbId == null || !imdbId.startsWith('tt')) return;
+    if (!force && (widget.playlistItem?['imdbId'] as String?) != null) return;
+
+    final rdTorrentId = widget.playlistItem?['rdTorrentId'] as String?;
+    final torboxTorrentId = widget.playlistItem?['torboxTorrentId']?.toString();
+    final pikpakCollectionId = widget.playlistItem?['pikpakFileId'] as String?;
+
+    await StorageService.updatePlaylistItemImdbId(
+      imdbId,
+      rdTorrentId: rdTorrentId,
+      torboxTorrentId: torboxTorrentId,
+      pikpakCollectionId: pikpakCollectionId,
+      force: force,
+    );
+  }
+
   Future<void> _parseSeriesPlaylist() async {
     if (_rootContent == null) return;
 
@@ -1885,7 +1903,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
             )
-            .then((_) {
+            .then((_) async {
+              await _saveImdbIdToPlaylist();
               if (mounted) {
                 setState(() {
                   _isLoadingSeriesMetadata = false;
@@ -1975,7 +1994,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
             )
-            .then((_) {
+            .then((_) async {
+              await _saveImdbIdToPlaylist(force: true);
               if (mounted) {
                 setState(() {
                   _isLoadingSeriesMetadata = false;
@@ -2052,7 +2072,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         }
       } else if (provider.toLowerCase() == 'pikpak') {
         final pikpakCollectionId =
-            widget.playlistItem['pikpakCollectionId'] as String?;
+            widget.playlistItem['pikpakFileId'] as String?;
         if (pikpakCollectionId != null) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
@@ -3318,7 +3338,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         subtitle: '${entries.length} episodes',
         playlist: entries,
         startIndex: startIndex,
-        pikpakCollectionId: widget.playlistItem['pikpakCollectionId'] as String?,
+        pikpakCollectionId: widget.playlistItem['pikpakFileId'] as String?,
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup

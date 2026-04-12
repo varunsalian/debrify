@@ -26,18 +26,27 @@ class PlaylistPlayerService {
   static Future<void> play(BuildContext context, Map<String, dynamic> item) async {
     await StorageService.updatePlaylistItemLastPlayed(item);
 
-    final String title = (item['title'] as String?) ?? 'Video';
+    // Re-read from storage to pick up any fields saved by other screens
+    // (e.g. imdbId saved by View Files or video player)
+    final freshItems = await StorageService.getPlaylistItemsRaw();
+    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+    final freshItem = freshItems.firstWhere(
+      (e) => StorageService.computePlaylistDedupeKey(e) == dedupeKey,
+      orElse: () => item,
+    );
+
+    final String title = (freshItem['title'] as String?) ?? 'Video';
     final String provider =
-        ((item['provider'] as String?) ?? 'realdebrid').toLowerCase();
+        ((freshItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
     if (provider == 'torbox') {
-      await _playTorboxItem(context, item, fallbackTitle: title);
+      await _playTorboxItem(context, freshItem, fallbackTitle: title);
       return;
     }
     if (provider == 'pikpak') {
-      await _playPikPakItem(context, item, fallbackTitle: title);
+      await _playPikPakItem(context, freshItem, fallbackTitle: title);
       return;
     }
-    await _playRealDebridItem(context, item, title: title);
+    await _playRealDebridItem(context, freshItem, title: title);
   }
 
   // ── Real-Debrid ──────────────────────────────────────────────────────────

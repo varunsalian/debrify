@@ -56,11 +56,14 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     }
 
     final now = DateTime.now();
+    final prevMonthStart = DateTime(now.year, now.month - 1, 1);
     final thisMonthStart = DateTime(now.year, now.month, 1);
     final nextMonthStart = DateTime(now.year, now.month + 1, 1);
-    // Fetch current + next month upfront. Previous months are loaded lazily
-    // via _prependPreviousMonth when the user scrolls near the top.
-    final rangeStart = thisMonthStart;
+    // Load 3 months (prev + current + next) so the total content height always
+    // exceeds the phone viewport (~700px). With only 2 months the content can
+    // fit on screen, leaving maxScrollExtent ≈ 0 and making touch scroll
+    // impossible until a lazy-load completes.
+    final rangeStart = prevMonthStart;
     final rangeEnd = DateTime(now.year, now.month + 2, 0);
 
     final grouped = await TraktCalendarService.instance.getRange(rangeStart, rangeEnd);
@@ -72,9 +75,21 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       _monthStarts
         ..clear()
         ..addAll([
+          prevMonthStart,
           thisMonthStart,
           nextMonthStart,
         ]);
+    });
+
+    // Scroll to the current month so the user doesn't land on the previous
+    // month (which is only loaded to ensure enough content for scrolling).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final key = _monthKeys[thisMonthStart];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, alignment: 0.0);
+      }
     });
   }
 
@@ -139,6 +154,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
     return ListView.builder(
       controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: _monthStarts.length,
       itemBuilder: (ctx, index) {
         final monthStart = _monthStarts[index];
@@ -202,11 +218,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final max = _scrollController.position.maxScrollExtent;
     final pos = _scrollController.position.pixels;
 
-    if (pos > max - 600) {
-      _appendNextMonth();
-    }
+    // Use else-if so only ONE direction fires per scroll event. Without this,
+    // both can start concurrently (both conditions are true when content fits
+    // the viewport), racing on _monthStarts / setState and causing scroll jumps.
     if (pos < 600) {
       _prependPreviousMonth();
+    } else if (pos > max - 600) {
+      _appendNextMonth();
     }
   }
 
@@ -527,7 +545,7 @@ class _DayCellState extends State<_DayCell> {
                           )
                       : null,
                   child: Padding(
-                    padding: EdgeInsets.all(widget.cellWidth > 140 ? 8 : 4),
+                    padding: EdgeInsets.all(widget.cellWidth > 120 ? 8 : 4),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -537,15 +555,15 @@ class _DayCellState extends State<_DayCell> {
                             color: isToday
                                 ? const Color(0xFF60A5FA)
                                 : Colors.white70,
-                            fontSize: widget.cellWidth > 140 ? 15 : 11,
+                            fontSize: widget.cellWidth > 120 ? 15 : 11,
                             fontWeight: isToday
                                 ? FontWeight.w700
-                                : (widget.cellWidth > 140
+                                : (widget.cellWidth > 120
                                     ? FontWeight.w600
                                     : FontWeight.w400),
                           ),
                         ),
-                        SizedBox(height: widget.cellWidth > 140 ? 6 : 0),
+                        SizedBox(height: widget.cellWidth > 120 ? 6 : 0),
                         if (entries.isNotEmpty)
                           Expanded(
                             child: _DayCellSummary(
@@ -604,7 +622,9 @@ class _DayCellSummary extends StatelessWidget {
     }
 
     // Wide: rich chips with mini poster + bigger text.
-    if (cellWidth > 140) {
+    // Threshold is 120 (not higher) because Android TV at 1080p density 2.0
+    // yields ~132px logical cells — needs to land in this tier, not bars.
+    if (cellWidth > 120) {
       final visible = entries.take(2).toList();
       final overflow = entries.length > 2 ? entries.length - 2 : 0;
       return Column(
@@ -615,7 +635,7 @@ class _DayCellSummary extends StatelessWidget {
           for (final e in visible)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: _RichChip(entry: e, accent: _colorForShow(e.showTitle)),
+              child: _RichChip(entry: e, accent: _colorForShow(e.showTitle), cellWidth: cellWidth),
             ),
           if (overflow > 0)
             Padding(
@@ -633,44 +653,43 @@ class _DayCellSummary extends StatelessWidget {
       );
     }
 
-    // Medium: compact chips with truncated show name.
-    final maxName = cellWidth > 100 ? 16 : 8;
-    final visible = entries.take(2).toList();
-    final overflow = entries.length > 2 ? entries.length - 2 : 0;
+    // Medium (phones): colored bars at the bottom — one per episode, full
+    // width, 3px tall. Same approach as Google Calendar's event indicators.
+    // Text/images are unreadable at this cell size; color-coding is enough
+    // to communicate "which shows, how many" at a glance.
+    final maxBars = cellWidth > 80 ? 4 : 3;
+    final visible = entries.take(maxBars).toList();
+    final overflow = entries.length > maxBars ? entries.length - maxBars : 0;
 
-    return Align(
-      alignment: Alignment.bottomLeft,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final e in visible)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: _colorForShow(e.showTitle),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
-                  _truncate(e.showTitle, maxName),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 9),
-                ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final e in visible)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Container(
+              height: 3,
+              decoration: BoxDecoration(
+                color: _colorForShow(e.showTitle),
+                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
-          if (overflow > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                '+$overflow',
-                style: const TextStyle(color: Colors.white54, fontSize: 9),
+          ),
+        if (overflow > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              '+$overflow',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 7,
+                fontWeight: FontWeight.w700,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -691,64 +710,103 @@ class _DayCellSummary extends StatelessWidget {
     }
     return palette[hash % palette.length];
   }
-
-  static String _truncate(String s, int max) {
-    if (s.length <= max) return s;
-    return '${s.substring(0, max - 1)}…';
-  }
 }
 
 /// Rich chip for wide-screen day cells — mini poster + show name + episode label
 /// on a show-colored accent background.
 class _RichChip extends StatelessWidget {
-  const _RichChip({required this.entry, required this.accent});
+  const _RichChip({
+    required this.entry,
+    required this.accent,
+    required this.cellWidth,
+  });
 
   final TraktCalendarEntry entry;
   final Color accent;
+  final double cellWidth;
 
   @override
   Widget build(BuildContext context) {
+    // Scale poster + text to the available cell space.
+    // 140-200: compact rich. 200-280: medium. 280+: TV-scale.
+    final double posterW;
+    final double posterH;
+    final double titleSize;
+    final double epSize;
+    final double iconSize;
+    final double gap;
+    final double padH;
+    final double padV;
+    final double radius;
+
+    if (cellWidth > 250) {
+      // TV / very wide — big and readable from across the room
+      posterW = 48;
+      posterH = 72;
+      titleSize = 16;
+      epSize = 13;
+      iconSize = 22;
+      gap = 12;
+      padH = 10;
+      padV = 8;
+      radius = 10;
+    } else if (cellWidth > 170) {
+      // Desktop / large tablet
+      posterW = 36;
+      posterH = 54;
+      titleSize = 14;
+      epSize = 11;
+      iconSize = 18;
+      gap = 10;
+      padH = 8;
+      padV = 6;
+      radius = 8;
+    } else {
+      // TV at high density / smaller wide screens (120-170)
+      posterW = 26;
+      posterH = 38;
+      titleSize = 12;
+      epSize = 10;
+      iconSize = 14;
+      gap = 8;
+      padH = 6;
+      padV = 4;
+      radius = 6;
+    }
+
+    final placeholder = Container(
+      width: posterW,
+      height: posterH,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(radius * 0.5),
+      ),
+      child: Icon(Icons.tv_rounded, size: iconSize, color: Colors.white70),
+    );
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+      padding: EdgeInsets.fromLTRB(padV, padV, padH, padV),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(radius * 0.5),
             child: entry.posterUrl != null
                 ? Image.network(
                     entry.posterUrl!,
-                    width: 26,
-                    height: 38,
+                    width: posterW,
+                    height: posterH,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 26,
-                      height: 38,
-                      color: Colors.black.withValues(alpha: 0.25),
-                      child: const Icon(
-                        Icons.tv_rounded,
-                        size: 14,
-                        color: Colors.white70,
-                      ),
-                    ),
+                    errorBuilder: (_, __, ___) => placeholder,
                   )
-                : Container(
-                    width: 26,
-                    height: 38,
-                    color: Colors.black.withValues(alpha: 0.25),
-                    child: const Icon(
-                      Icons.tv_rounded,
-                      size: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
+                : placeholder,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: gap),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -759,20 +817,20 @@ class _RichChip extends StatelessWidget {
                   entry.showTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: titleSize,
                     fontWeight: FontWeight.w700,
                     height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: cellWidth > 200 ? 4 : 2),
                 Text(
                   'S${entry.seasonNumber.toString().padLeft(2, '0')}E${entry.episodeNumber.toString().padLeft(2, '0')}',
                   maxLines: 1,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 10,
+                    fontSize: epSize,
                     fontWeight: FontWeight.w500,
                     height: 1.0,
                   ),
