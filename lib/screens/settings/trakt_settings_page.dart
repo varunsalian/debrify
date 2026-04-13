@@ -92,7 +92,10 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(Duration(seconds: _pollInterval), (_) => _pollOnce());
+    _pollTimer = Timer.periodic(
+      Duration(seconds: _pollInterval),
+      (_) => _pollOnce(),
+    );
   }
 
   Future<void> _pollOnce() async {
@@ -112,9 +115,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _isConnected = true;
         _isConnecting = false;
         _username = username;
+        _syncCatalogItems = true;
         _resetDeviceCodeState();
       });
-      _showSnackBar('Connected to Trakt as ${username ?? 'unknown'}', isError: false);
+      await StorageService.setTraktSyncCatalogItems(true);
+      _showSnackBar(
+        'Connected to Trakt as ${username ?? 'unknown'}',
+        isError: false,
+      );
       return;
     }
 
@@ -235,7 +243,9 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                   Row(
                     children: [
                       Icon(
-                        _isConnected ? Icons.check_circle : Icons.circle_outlined,
+                        _isConnected
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
                         color: _isConnected ? Colors.green : Colors.grey,
                       ),
                       const SizedBox(width: 12),
@@ -314,7 +324,11 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline, size: 18, color: Colors.blue.shade300),
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.blue.shade300,
+                      ),
                       const SizedBox(width: 8),
                       const Text(
                         'How it works',
