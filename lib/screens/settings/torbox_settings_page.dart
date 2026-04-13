@@ -19,9 +19,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   final FocusNode _logoutButtonFocusNode = FocusNode();
   static const Map<ShortcutActivator, Intent> _dpadShortcuts =
       <ShortcutActivator, Intent>{
-    SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-    SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-  };
+        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
+      };
 
   String? _savedApiKey;
   bool _isEditing = false;
@@ -110,6 +110,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       _saving = false;
       _apiKeyController.clear();
     });
+    if (!_checkCacheBeforeSearch) {
+      await _updateCacheCheck(true);
+    }
     debugPrint('TorboxSettingsPage: API key saved successfully.');
     _snack('Torbox connected successfully');
     MainPageBridge.notifyIntegrationChanged();
@@ -278,8 +281,10 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
               subtitle: const Text(
                 'Turn this off to hide Torbox options across the app.',
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 4,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -301,7 +306,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                       children: [
                         SwitchListTile(
                           value: _hiddenFromNav,
-                          onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
+                          onChanged: _savedApiKey != null
+                              ? _toggleHideFromNav
+                              : null,
                           title: const Text(
                             'Hide from Navigation',
                             style: TextStyle(fontWeight: FontWeight.w500),
@@ -310,12 +317,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                             _savedApiKey == null
                                 ? 'Login to enable this option'
                                 : _hiddenFromNav
-                                    ? 'Torbox is hidden from navigation'
-                                    : 'Show/hide Torbox tab from navigation bar',
+                                ? 'Torbox is hidden from navigation'
+                                : 'Show/hide Torbox tab from navigation bar',
                             style: const TextStyle(fontSize: 13),
                           ),
                           secondary: Icon(
-                            _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                            _hiddenFromNav
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                             color: _hiddenFromNav ? Colors.amber : null,
                           ),
                           contentPadding: const EdgeInsets.symmetric(
@@ -374,20 +383,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                             children: [
                               Icon(
                                 Icons.key,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary,
+                                color: Theme.of(context).colorScheme.primary,
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 'API Key',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
                               ),
                               const Spacer(),
                               if (_savedApiKey != null && !_isEditing)
@@ -397,12 +400,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color:
-                                        Colors.green.withValues(alpha: 0.1),
+                                    color: Colors.green.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(
-                                      color: Colors.green
-                                          .withValues(alpha: 0.3),
+                                      color: Colors.green.withValues(
+                                        alpha: 0.3,
+                                      ),
                                     ),
                                   ),
                                   child: const Row(
@@ -432,18 +435,22 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                               shortcuts: _dpadShortcuts,
                               child: Actions(
                                 actions: <Type, Action<Intent>>{
-                                  NextFocusIntent: CallbackAction<NextFocusIntent>(
-                                    onInvoke: (intent) {
-                                      FocusScope.of(context).nextFocus();
-                                      return null;
-                                    },
-                                  ),
-                                  PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                                    onInvoke: (intent) {
-                                      FocusScope.of(context).previousFocus();
-                                      return null;
-                                    },
-                                  ),
+                                  NextFocusIntent:
+                                      CallbackAction<NextFocusIntent>(
+                                        onInvoke: (intent) {
+                                          FocusScope.of(context).nextFocus();
+                                          return null;
+                                        },
+                                      ),
+                                  PreviousFocusIntent:
+                                      CallbackAction<PreviousFocusIntent>(
+                                        onInvoke: (intent) {
+                                          FocusScope.of(
+                                            context,
+                                          ).previousFocus();
+                                          return null;
+                                        },
+                                      ),
                                 },
                                 child: TextField(
                                   focusNode: _apiKeyFocusNode,
@@ -460,15 +467,15 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                             ? Icons.visibility
                                             : Icons.visibility_off,
                                       ),
-                                      onPressed: () => setState(
-                                        () => _obscure = !_obscure,
-                                      ),
+                                      onPressed: () =>
+                                          setState(() => _obscure = !_obscure),
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  onSubmitted: (_) => _saving ? null : _saveKey(),
+                                  onSubmitted: (_) =>
+                                      _saving ? null : _saveKey(),
                                 ),
                               ),
                             ),
@@ -495,9 +502,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                     onPressed: _saving
                                         ? null
                                         : () => setState(() {
-                                              _isEditing = false;
-                                              _apiKeyController.clear();
-                                            }),
+                                            _isEditing = false;
+                                            _apiKeyController.clear();
+                                          }),
                                     child: const Text('Cancel'),
                                   ),
                                 ),
@@ -510,17 +517,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                 decoration: BoxDecoration(
                                   color: Colors.grey[100],
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.grey[300]!,
-                                  ),
+                                  border: Border.all(color: Colors.grey[300]!),
                                 ),
                                 child: Row(
                                   children: [
                                     const Expanded(
                                       child: Text(
                                         '••••••••••••••••••••••••••••••••',
-                                        style:
-                                            TextStyle(color: Colors.grey),
+                                        style: TextStyle(color: Colors.grey),
                                       ),
                                     ),
                                     Icon(
@@ -552,8 +556,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                     _isEditing = true;
                                     _apiKeyController.clear();
                                   });
-                                  WidgetsBinding.instance
-                                      .addPostFrameCallback((_) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
                                     if (mounted) {
                                       _apiKeyFocusNode.requestFocus();
                                     }
@@ -562,7 +567,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                 icon: const Icon(Icons.add),
                                 label: const Text('Add API Key'),
                               ),
-                            ]
+                            ],
                           ],
                         ],
                       ),
@@ -594,9 +599,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                           ),
                           child: Text(
                             'Requires a Torbox API key. Debrify issues a fast cache check after each search; if anything fails, Torbox buttons remain enabled so your search flow continues.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: Colors.grey[600]),
                           ),
                         ),
@@ -733,20 +736,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                               children: [
                                 Icon(
                                   Icons.account_circle,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Account Information',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -772,20 +769,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                             children: [
                               Icon(
                                 Icons.help_outline,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary,
+                                color: Theme.of(context).colorScheme.primary,
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 'How to get your Torbox API key',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -795,9 +786,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                             '2. Log in and open Account Settings\n'
                             '3. Locate the API section\n'
                             '4. Copy the API key and paste it above',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Colors.grey[600],
                                   height: 1.5,
