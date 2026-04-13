@@ -65,6 +65,7 @@ class MainActivity : FlutterActivity() {
 					val fileName = call.argument<String>("fileName") ?: "download"
 					val subDir = call.argument<String>("subDir") ?: "Debrify"
 					val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
+					val markAsUpdate = call.argument<Boolean>("markAsUpdate") ?: false
 					@Suppress("UNCHECKED_CAST")
 					val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
 
@@ -73,7 +74,8 @@ class MainActivity : FlutterActivity() {
 						return@setMethodCallHandler
 					}
 
-					val taskId = System.currentTimeMillis().toString()
+					val baseId = System.currentTimeMillis().toString()
+					val taskId = if (markAsUpdate) "update-$baseId" else baseId
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_START
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)

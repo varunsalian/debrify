@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/main_page_bridge.dart';
@@ -16,6 +20,7 @@ import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
+import '../services/update_service.dart';
 import '../widgets/shimmer.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -68,6 +73,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _traktCaption = 'Tap to connect';
 
   String _appVersion = '';
+  String _currentVersionName = '';
+  bool _checkingUpdates = false;
+  String _updateSubtitle = 'Check for new builds from GitHub releases';
+  StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
+  String? _updateDownloadTaskId;
 
   @override
   void initState() {
@@ -84,9 +94,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(8, _tvContentFocusHandler!);
+      MainPageBridge.unregisterTvContentFocusHandler(
+        8,
+        _tvContentFocusHandler!,
+      );
     }
     _firstCardFocusNode.dispose();
+    _updateDownloadSub?.cancel();
     super.dispose();
   }
 
@@ -148,12 +162,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (traktToken != null && traktToken.isNotEmpty) {
-      final traktExpired = traktExpiry != null &&
+      final traktExpired =
+          traktExpiry != null &&
           DateTime.now().millisecondsSinceEpoch >= traktExpiry;
       if (!traktExpired) {
         _traktConnected = true;
         _traktStatus = 'Active';
-        _traktCaption = traktUsername != null ? 'Logged in as $traktUsername' : 'Logged in';
+        _traktCaption = traktUsername != null
+            ? 'Logged in as $traktUsername'
+            : 'Logged in';
       } else {
         _traktStatus = 'Expired';
         _traktCaption = 'Tap to reconnect';
@@ -161,6 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
+    _currentVersionName = packageInfo.version;
     _isAndroidTv = isAndroidTv;
     _loading = false;
 
@@ -294,6 +312,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onClearPlayback: _clearPlaybackData,
       onDangerAction: _resetAppData,
       appVersion: _appVersion,
+      onCheckForUpdates: _checkForAppUpdates,
+      updateSubtitle: _updateSubtitle,
+      checkingUpdates: _checkingUpdates,
     );
   }
 
@@ -322,9 +343,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPikPakSettings() async {
-    final loggedOut = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const PikPakSettingsPage()),
-    );
+    final loggedOut = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const PikPakSettingsPage()));
     if (!mounted) return;
     await _loadSummaries();
     if (loggedOut == true) {
@@ -373,9 +394,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openExternalPlayerSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ExternalPlayerSettingsPage()));
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ExternalPlayerSettingsPage()),
+    );
     if (!mounted) return;
     setState(() {});
   }
@@ -424,9 +445,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorboxSettings() async {
-    final loggedOut = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const TorboxSettingsPage()),
-    );
+    final loggedOut = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const TorboxSettingsPage()));
     if (!mounted) return;
     await _loadSummaries();
     if (loggedOut == true) {
@@ -558,6 +579,346 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadSummaries();
   }
 
+  Future<void> _checkForAppUpdates() async {
+    if (_checkingUpdates) return;
+    if (_currentVersionName.isEmpty) return;
+
+    setState(() {
+      _checkingUpdates = true;
+      _updateSubtitle = 'Checking GitHub releases...';
+    });
+
+    try {
+      final summary = await UpdateService.checkForUpdates(
+        currentVersion: _currentVersionName,
+      );
+      if (!mounted) return;
+      setState(() {
+        _updateSubtitle = summary.updateAvailable
+            ? 'Update available (${summary.release.versionLabel})'
+            : 'You are on the latest build';
+        _checkingUpdates = false;
+      });
+      await _showReleaseDetails(summary);
+    } on UpdateException catch (err) {
+      _showSnack(err.message);
+      if (mounted) {
+        setState(() {
+          _updateSubtitle = 'Unable to reach GitHub releases';
+          _checkingUpdates = false;
+        });
+      }
+    } catch (_) {
+      _showSnack('Could not check for updates. Please try again later.');
+      if (mounted) {
+        setState(() {
+          _updateSubtitle = 'Unable to reach GitHub releases';
+          _checkingUpdates = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showReleaseDetails(UpdateSummary summary) async {
+    if (!mounted) return;
+    final release = summary.release;
+    final theme = Theme.of(context);
+    final bool isAndroidDevice = !kIsWeb && Platform.isAndroid;
+    final bool canInstallDirectly =
+        summary.updateAvailable &&
+        isAndroidDevice &&
+        release.androidApkAsset != null;
+    final String latestLabel = release.versionLabel.isNotEmpty
+        ? release.versionLabel
+        : 'Latest release';
+    final String notes = release.body.trim().isNotEmpty
+        ? release.body.trim()
+        : 'Release notes will appear here once published.';
+    final String? publishedLabel = release.publishedAt != null
+        ? DateFormat.yMMMd().format(release.publishedAt!.toLocal())
+        : null;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        final baseTheme = Theme.of(sheetContext);
+        final textTheme = baseTheme.textTheme;
+        final Color bodyColor = Colors.white.withValues(alpha: 0.85);
+        final markdownStyle = MarkdownStyleSheet.fromTheme(baseTheme).copyWith(
+          h1: textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+          h2: textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+          h3: textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          p: textTheme.bodyMedium?.copyWith(color: bodyColor, height: 1.45),
+          strong: const TextStyle(fontWeight: FontWeight.w700),
+          listBullet: textTheme.bodyMedium?.copyWith(color: bodyColor),
+          blockquote: textTheme.bodyMedium?.copyWith(
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
+        );
+        return FractionallySizedBox(
+          heightFactor: 0.9,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    summary.updateAvailable
+                        ? 'Update available'
+                        : 'You are up to date',
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Installed: $_appVersion',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Latest: $latestLabel',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  if (publishedLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Published $publishedLabel',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'Release notes',
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: MarkdownBody(
+                        data: notes,
+                        selectable: true,
+                        onTapLink: (text, href, title) {
+                          if (href == null) return;
+                          final uri = Uri.tryParse(href);
+                          if (uri != null) {
+                            launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
+                        styleSheet: markdownStyle,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      if (canInstallDirectly)
+                        FilledButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _startAndroidUpdateDownload(release);
+                          },
+                          icon: const Icon(Icons.system_update_alt_rounded),
+                          label: const Text('Download & Install'),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          _openReleasesPage(release.htmlUrl);
+                        },
+                        icon: const Icon(Icons.open_in_new_rounded),
+                        label: const Text('Open Releases Page'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _startAndroidUpdateDownload(AppRelease release) async {
+    if (kIsWeb) {
+      await _openReleasesPage(release.htmlUrl);
+      return;
+    }
+    if (!Platform.isAndroid) {
+      await _openReleasesPage(release.htmlUrl);
+      return;
+    }
+    if (_updateDownloadTaskId != null) {
+      _showSnack('An update download is already running.');
+      return;
+    }
+    final asset = release.androidApkAsset;
+    if (asset == null) {
+      _showSnack('No Android APK is attached to this release yet.');
+      await _openReleasesPage(release.htmlUrl);
+      return;
+    }
+    final hasPermission = await _ensureInstallPermission();
+    if (!hasPermission) return;
+
+    if (mounted) {
+      setState(() {
+        _updateSubtitle = 'Downloading ${release.versionLabel}...';
+      });
+    }
+
+    String? taskId;
+    const mime = 'application/vnd.android.package-archive';
+    try {
+      taskId = await AndroidNativeDownloader.startUpdate(
+        url: asset.downloadUrl.toString(),
+        fileName: asset.name.isNotEmpty
+            ? asset.name
+            : 'Debrify-${release.versionLabel}.apk',
+        subDir: 'Debrify/Updates',
+        mimeType: mime,
+      );
+    } catch (_) {
+      taskId = null;
+    }
+
+    if (taskId == null) {
+      _showSnack(
+        'Could not start the update download. Please try again later.',
+      );
+      if (mounted) {
+        setState(() {
+          _updateSubtitle = 'Download failed to start';
+        });
+      }
+      return;
+    }
+
+    _updateDownloadTaskId = taskId;
+    _updateDownloadSub?.cancel();
+    _updateDownloadSub = AndroidNativeDownloader.events.listen((event) async {
+      final String eventTaskId = (event['taskId'] ?? '').toString();
+      if (eventTaskId != _updateDownloadTaskId) return;
+      final type = event['type']?.toString();
+      if (type == 'complete') {
+        final contentUri = (event['contentUri'] ?? '').toString();
+        final eventMime = (event['mimeType'] ?? '').toString().isNotEmpty
+            ? (event['mimeType'] ?? '').toString()
+            : mime;
+        try {
+          _showSnack('Update downloaded. Opening installer...');
+          if (contentUri.isNotEmpty) {
+            final ok = await AndroidNativeDownloader.openContentUri(
+              contentUri,
+              eventMime,
+            );
+            if (!ok) {
+              _showSnack('Installer was opened from Downloads instead.');
+            }
+          }
+        } catch (_) {
+          _showSnack(
+            'Could not launch the installer. Check your Downloads app.',
+          );
+        } finally {
+          _clearUpdateDownloadListener();
+          if (mounted) {
+            setState(() {
+              _updateSubtitle = 'Installer ready for ${release.versionLabel}';
+            });
+          }
+        }
+      } else if (type == 'error' || type == 'canceled') {
+        _showSnack('Update download did not finish. Please try again.');
+        _clearUpdateDownloadListener();
+        if (mounted) {
+          setState(() {
+            _updateSubtitle = 'Download failed';
+          });
+        }
+      }
+    });
+
+    _showSnack(
+      'Downloading the update in the background. Check notifications for progress.',
+    );
+  }
+
+  Future<bool> _ensureInstallPermission() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    final currentStatus = await Permission.requestInstallPackages.status;
+    if (currentStatus.isGranted) return true;
+    final result = await Permission.requestInstallPackages.request();
+    if (result.isGranted) return true;
+    if (result.isPermanentlyDenied || result.isRestricted) {
+      _showSnack('Allow Debrify to install apps from your settings.');
+      unawaited(openAppSettings());
+    } else {
+      _showSnack('Permission required to install the downloaded update.');
+    }
+    return false;
+  }
+
+  Future<void> _openReleasesPage(Uri url) async {
+    final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      _showSnack('Unable to open the releases page right now.');
+    }
+  }
+
+  void _clearUpdateDownloadListener() {
+    _updateDownloadSub?.cancel();
+    _updateDownloadSub = null;
+    _updateDownloadTaskId = null;
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   DateTime? _tryParseDate(String value) {
     try {
       return DateTime.parse(value);
@@ -589,6 +950,9 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onClearPlayback;
   final Future<void> Function() onDangerAction;
   final String appVersion;
+  final Future<void> Function() onCheckForUpdates;
+  final String updateSubtitle;
+  final bool checkingUpdates;
 
   const _SettingsLayout({
     required this.connections,
@@ -608,6 +972,9 @@ class _SettingsLayout extends StatelessWidget {
     required this.onClearPlayback,
     required this.onDangerAction,
     required this.appVersion,
+    required this.onCheckForUpdates,
+    required this.updateSubtitle,
+    required this.checkingUpdates,
   });
 
   @override
@@ -759,24 +1126,43 @@ class _SettingsLayout extends StatelessWidget {
             title: 'About',
             children: [
               _SettingsTile(
+                icon: Icons.system_update_rounded,
+                title: 'Check for Updates',
+                subtitle: updateSubtitle,
+                onTap: onCheckForUpdates,
+                iconColor: const Color(0xFF22C55E),
+                tag: 'New',
+                trailing: checkingUpdates
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    : null,
+              ),
+              _SettingsTile(
                 icon: Icons.forum_rounded,
                 title: 'Reddit Community',
                 subtitle: 'r/debrify - Questions, tips, and discussion',
-                onTap: () => launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
+                onTap: () =>
+                    launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
                 iconColor: const Color(0xFFFF4500),
               ),
               _SettingsTile(
                 icon: Icons.chat_rounded,
                 title: 'Discord',
                 subtitle: 'Join for help, updates, and discussion',
-                onTap: () => launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
+                onTap: () =>
+                    launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
                 iconColor: const Color(0xFF5865F2),
               ),
               _SettingsTile(
                 icon: Icons.code_rounded,
                 title: 'GitHub',
                 subtitle: 'Source code and contributions',
-                onTap: () => launchUrl(Uri.parse('https://github.com/varunsalian/debrify')),
+                onTap: () => launchUrl(
+                  Uri.parse('https://github.com/varunsalian/debrify'),
+                ),
                 iconColor: const Color(0xFF10B981),
               ),
               _InfoTile(
@@ -835,7 +1221,11 @@ class _SettingsHeader extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.settings_rounded, color: Colors.white, size: 24),
+            child: const Icon(
+              Icons.settings_rounded,
+              color: Colors.white,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1146,15 +1536,19 @@ class _ConnectionCard extends StatelessWidget {
                       gradient: LinearGradient(
                         colors: info.connected && active
                             ? [const Color(0xFF059669), const Color(0xFF10B981)]
-                            : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+                            : [
+                                const Color(0xFF6366F1),
+                                const Color(0xFF8B5CF6),
+                              ],
                       ),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: (info.connected && active
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF6366F1))
-                              .withValues(alpha: 0.3),
+                          color:
+                              (info.connected && active
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF6366F1))
+                                  .withValues(alpha: 0.3),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -1186,7 +1580,9 @@ class _ConnectionCard extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: indicatorColor.withValues(alpha: 0.5),
+                                    color: indicatorColor.withValues(
+                                      alpha: 0.5,
+                                    ),
                                     blurRadius: 6,
                                   ),
                                 ],
@@ -1200,7 +1596,9 @@ class _ConnectionCard extends StatelessWidget {
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: info.connected
-                                ? (active ? const Color(0xFF34D399) : Colors.red)
+                                ? (active
+                                      ? const Color(0xFF34D399)
+                                      : Colors.red)
                                 : theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
@@ -1215,8 +1613,10 @@ class _ConnectionCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Icon(Icons.chevron_right_rounded,
-                      color: Colors.white.withValues(alpha: 0.3)),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
                 ],
               ),
             ),
@@ -1299,6 +1699,7 @@ class _SettingsTile extends StatelessWidget {
   final Future<void> Function() onTap;
   final String? tag;
   final Color iconColor;
+  final Widget? trailing;
 
   const _SettingsTile({
     required this.icon,
@@ -1307,6 +1708,7 @@ class _SettingsTile extends StatelessWidget {
     required this.onTap,
     this.tag,
     this.iconColor = const Color(0xFF6366F1),
+    this.trailing,
   });
 
   @override
@@ -1350,7 +1752,9 @@ class _SettingsTile extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.tertiary.withValues(alpha: 0.15),
+                            color: theme.colorScheme.tertiary.withValues(
+                              alpha: 0.15,
+                            ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1375,8 +1779,11 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: 0.3)),
+            trailing ??
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
           ],
         ),
       ),
@@ -1510,9 +1917,7 @@ class _SkeletonSection extends StatelessWidget {
               colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Column(
             children: const [
