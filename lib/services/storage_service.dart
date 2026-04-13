@@ -18,10 +18,8 @@ class StorageService {
       'real_debrid_hidden_from_nav';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
-  static const String _torboxHiddenFromNavKey =
-      'torbox_hidden_from_nav';
-  static const String _pikpakHiddenFromNavKey =
-      'pikpak_hidden_from_nav';
+  static const String _torboxHiddenFromNavKey = 'torbox_hidden_from_nav';
+  static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
       'torbox_post_torrent_action';
@@ -61,17 +59,22 @@ class StorageService {
   static const String _homeDefaultSourceTypeKey = 'home_default_source_type';
   static const String _homeDefaultAddonUrlKey = 'home_default_addon_url';
   static const String _homeDefaultCatalogIdKey = 'home_default_catalog_id';
-  static const String _homeDefaultTraktListTypeKey = 'home_default_trakt_list_type';
-  static const String _homeDefaultTraktContentTypeKey = 'home_default_trakt_content_type';
+  static const String _homeDefaultTraktListTypeKey =
+      'home_default_trakt_list_type';
+  static const String _homeDefaultTraktContentTypeKey =
+      'home_default_trakt_content_type';
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
-  static const String _homeContinueWatchingEnabledKey = 'home_continue_watching_enabled';
-  static const String _homeFavoritesOpenFolderKey = 'home_favorites_open_folder';
+  static const String _homeContinueWatchingEnabledKey =
+      'home_continue_watching_enabled';
+  static const String _homeFavoritesOpenFolderKey =
+      'home_favorites_open_folder';
 
   // Startup settings
   static const String _startupAutoLaunchEnabledKey =
       'startup_auto_launch_enabled';
   static const String _startupChannelIdKey = 'startup_channel_id';
-  static const String _startupModeKey = 'startup_mode'; // 'channel' or 'playlist'
+  static const String _startupModeKey =
+      'startup_mode'; // 'channel' or 'playlist'
   static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
 
   // Reddit settings
@@ -83,32 +86,46 @@ class StorageService {
   static const String _redditLastSubredditKey = 'reddit_last_subreddit';
   static const String _redditRecentSubredditsKey = 'reddit_recent_subreddits';
   static const String _redditAllowNsfwKey = 'reddit_allow_nsfw';
-  static const String _redditFavoriteSubredditsKey = 'reddit_favorite_subreddits';
+  static const String _redditFavoriteSubredditsKey =
+      'reddit_favorite_subreddits';
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
+  static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
+  static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
   // External Player settings
   // Default player mode: 'debrify' (app player), 'external' (external player), 'deovr' (DeoVR on Android)
   static const String _defaultPlayerModeKey = 'default_player_mode';
   static const String _externalPlayerPreferredKey = 'external_player_preferred';
-  static const String _externalPlayerCustomPathKey = 'external_player_custom_path';
-  static const String _externalPlayerCustomNameKey = 'external_player_custom_name';
-  static const String _externalPlayerCustomCommandKey = 'external_player_custom_command';
+  static const String _externalPlayerCustomPathKey =
+      'external_player_custom_path';
+  static const String _externalPlayerCustomNameKey =
+      'external_player_custom_name';
+  static const String _externalPlayerCustomCommandKey =
+      'external_player_custom_command';
   // iOS External Player settings
-  static const String _iosExternalPlayerPreferredKey = 'ios_external_player_preferred';
-  static const String _iosCustomSchemeTemplateKey = 'ios_custom_scheme_template';
+  static const String _iosExternalPlayerPreferredKey =
+      'ios_external_player_preferred';
+  static const String _iosCustomSchemeTemplateKey =
+      'ios_custom_scheme_template';
   // Linux External Player settings
-  static const String _linuxExternalPlayerPreferredKey = 'linux_external_player_preferred';
+  static const String _linuxExternalPlayerPreferredKey =
+      'linux_external_player_preferred';
   static const String _linuxCustomCommandKey = 'linux_custom_command';
   // Windows External Player settings
-  static const String _windowsExternalPlayerPreferredKey = 'windows_external_player_preferred';
+  static const String _windowsExternalPlayerPreferredKey =
+      'windows_external_player_preferred';
   static const String _windowsCustomCommandKey = 'windows_custom_command';
 
   // Debrify Player default settings
-  static const String _playerDefaultAspectIndexKey = 'player_default_aspect_index';
-  static const String _playerDefaultAspectIndexTvKey = 'player_default_aspect_index_tv';
+  static const String _playerDefaultAspectIndexKey =
+      'player_default_aspect_index';
+  static const String _playerDefaultAspectIndexTvKey =
+      'player_default_aspect_index_tv';
   static const String _playerNightModeIndexKey = 'player_night_mode_index';
-  static const String _playerDefaultSubtitleLanguageKey = 'player_default_subtitle_language';
-  static const String _playerDefaultAudioLanguageKey = 'player_default_audio_language';
+  static const String _playerDefaultSubtitleLanguageKey =
+      'player_default_subtitle_language';
+  static const String _playerDefaultAudioLanguageKey =
+      'player_default_audio_language';
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -131,15 +148,15 @@ class StorageService {
       'pikpak_restricted_folder_id';
   static const String _pikpakRestrictedFolderNameKey =
       'pikpak_restricted_folder_name';
-  static const String _pikpakTorrentsFolderIdKey =
-      'pikpak_torrents_folder_id';
+  static const String _pikpakTorrentsFolderIdKey = 'pikpak_torrents_folder_id';
   static const String _pikpakTvFolderIdKey = 'pikpak_tv_folder_id';
 
   // TVMaze series mapping keys
   static const String _tvMazeSeriesMappingKey = 'tvmaze_series_mappings';
 
   // Playlist poster override storage key
-  static const String _playlistPosterOverridesKey = 'playlist_poster_overrides_v1';
+  static const String _playlistPosterOverridesKey =
+      'playlist_poster_overrides_v1';
 
   // Debrify TV search engine settings
   static const String _debrifyTvUseTorrentsCsvKey =
@@ -184,8 +201,7 @@ class StorageService {
       'debrify_tv_min_torrents_per_keyword';
   static const String _debrifyTvFavoriteChannelsKey =
       'debrify_tv_favorite_channels_v1';
-  static const String _iptvFavoriteChannelsKey =
-      'iptv_favorite_channels_v1';
+  static const String _iptvFavoriteChannelsKey = 'iptv_favorite_channels_v1';
 
   // Stremio TV settings
   static const String _stremioTvRotationMinutesKey =
@@ -217,28 +233,37 @@ class StorageService {
 
   // Torrent Search History
   static const String _torrentSearchHistoryKey = 'torrent_search_history_v1';
-  static const String _torrentSearchHistoryEnabledKey = 'torrent_search_history_enabled';
+  static const String _torrentSearchHistoryEnabledKey =
+      'torrent_search_history_enabled';
 
   // Default Torrent Filter Settings
-  static const String _defaultFilterQualitiesKey = 'default_filter_qualities_v1';
-  static const String _defaultFilterRipSourcesKey = 'default_filter_rip_sources_v1';
-  static const String _defaultFilterLanguagesKey = 'default_filter_languages_v1';
+  static const String _defaultFilterQualitiesKey =
+      'default_filter_qualities_v1';
+  static const String _defaultFilterRipSourcesKey =
+      'default_filter_rip_sources_v1';
+  static const String _defaultFilterLanguagesKey =
+      'default_filter_languages_v1';
 
   // Default Torrent Provider Settings
   // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
-  static const String _defaultTorrentProviderKey = 'default_torrent_provider_v1';
+  static const String _defaultTorrentProviderKey =
+      'default_torrent_provider_v1';
 
   // Quick Play VR Settings
   // VR Player Mode: 'disabled' (always regular player), 'auto' (detect VR content), 'always' (always use DeoVR)
   static const String _quickPlayVrModeKey = 'quick_play_vr_mode';
-  static const String _quickPlayVrDefaultScreenTypeKey = 'quick_play_vr_default_screen_type';
-  static const String _quickPlayVrDefaultStereoModeKey = 'quick_play_vr_default_stereo_mode';
-  static const String _quickPlayVrAutoDetectFormatKey = 'quick_play_vr_auto_detect_format';
+  static const String _quickPlayVrDefaultScreenTypeKey =
+      'quick_play_vr_default_screen_type';
+  static const String _quickPlayVrDefaultStereoModeKey =
+      'quick_play_vr_default_stereo_mode';
+  static const String _quickPlayVrAutoDetectFormatKey =
+      'quick_play_vr_auto_detect_format';
   static const String _quickPlayVrShowDialogKey = 'quick_play_vr_show_dialog';
 
   // Quick Play Cache Fallback Settings
   // When enabled, if first torrent is not cached, try next torrents until one works
-  static const String _quickPlayTryMultipleTorrentsKey = 'quick_play_try_multiple_torrents';
+  static const String _quickPlayTryMultipleTorrentsKey =
+      'quick_play_try_multiple_torrents';
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
 
   // Trakt settings
@@ -278,7 +303,8 @@ class StorageService {
   static Future<String> getRdEndpoint() async {
     final prefs = await SharedPreferences.getInstance();
     // Default to primary endpoint
-    return prefs.getString(_rdEndpointKey) ?? 'https://api.real-debrid.com/rest/1.0';
+    return prefs.getString(_rdEndpointKey) ??
+        'https://api.real-debrid.com/rest/1.0';
   }
 
   static Future<void> saveRdEndpoint(String endpoint) async {
@@ -519,8 +545,15 @@ class StorageService {
     if (raw == null || raw.isEmpty) return [];
     try {
       final List<dynamic> list = jsonDecode(raw);
-      final items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
-      items.sort((a, b) => ((b['updatedAt'] as int?) ?? 0).compareTo((a['updatedAt'] as int?) ?? 0));
+      final items = list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      items.sort(
+        (a, b) => ((b['updatedAt'] as int?) ?? 0).compareTo(
+          (a['updatedAt'] as int?) ?? 0,
+        ),
+      );
       return items;
     } catch (_) {
       return [];
@@ -544,7 +577,10 @@ class StorageService {
     if (raw != null && raw.isNotEmpty) {
       try {
         final List<dynamic> list = jsonDecode(raw);
-        items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
+        items = list
+            .whereType<Map<String, dynamic>>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       } catch (_) {}
     }
 
@@ -575,7 +611,10 @@ class StorageService {
     if (raw == null || raw.isEmpty) return;
     try {
       final List<dynamic> list = jsonDecode(raw);
-      final items = list.whereType<Map<String, dynamic>>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final items = list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
       items.removeWhere((e) => e['imdbId'] == imdbId);
       await prefs.setString(_continueWatchingKey, jsonEncode(items));
     } catch (_) {}
@@ -600,7 +639,8 @@ class StorageService {
     final map = await _getPlaybackStateMap();
     final keysToRemove = <String>[];
     for (final entry in map.entries) {
-      if (entry.value is Map<String, dynamic> && entry.value['imdbId'] == imdbId) {
+      if (entry.value is Map<String, dynamic> &&
+          entry.value['imdbId'] == imdbId) {
         keysToRemove.add(entry.key);
       }
     }
@@ -609,7 +649,9 @@ class StorageService {
       map.remove(key);
     }
     await _savePlaybackStateMap(map);
-    debugPrint('StorageService: Cleared ${keysToRemove.length} playback state entries for "$imdbId"');
+    debugPrint(
+      'StorageService: Cleared ${keysToRemove.length} playback state entries for "$imdbId"',
+    );
   }
 
   static Future<void> _savePlaybackStateMap(Map<String, dynamic> map) async {
@@ -712,7 +754,8 @@ class StorageService {
       seriesData['seasons'][season.toString()] = {};
     }
 
-    final episodeData = seriesData['seasons'][season.toString()][episode.toString()];
+    final episodeData =
+        seriesData['seasons'][season.toString()][episode.toString()];
 
     if (episodeData == null) {
       // Episode was never played - add dummy data to mark as watched
@@ -880,7 +923,9 @@ class StorageService {
 
   /// Get episode progress by IMDB ID (scans playback state for matching imdbId)
   /// Also checks single-file video entries and parses season/episode from title.
-  static Future<Map<String, Map<String, dynamic>>> getEpisodeProgressByImdbId(String imdbId) async {
+  static Future<Map<String, Map<String, dynamic>>> getEpisodeProgressByImdbId(
+    String imdbId,
+  ) async {
     final map = await _getPlaybackStateMap();
 
     // Find series entry with matching imdbId, track most recent video fallback
@@ -1014,7 +1059,9 @@ class StorageService {
   }
 
   /// Get video playback state by IMDB ID (scans all video entries, returns most recent).
-  static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(String imdbId) async {
+  static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(
+    String imdbId,
+  ) async {
     final map = await _getPlaybackStateMap();
     Map<String, dynamic>? best;
     int bestUpdatedAt = -1;
@@ -1079,7 +1126,9 @@ class StorageService {
 
   /// Get all episode watch progress for a series by IMDB ID.
   /// Returns a map of "season-episode" → progress percentage (0-100).
-  static Future<Map<String, double>> getEpisodeWatchProgressByImdbId(String imdbId) async {
+  static Future<Map<String, double>> getEpisodeWatchProgressByImdbId(
+    String imdbId,
+  ) async {
     final map = await _getPlaybackStateMap();
     final result = <String, double>{};
 
@@ -1122,7 +1171,8 @@ class StorageService {
 
     // Aggregate progress across ALL matching series entries
     for (final seriesData in seriesEntries) {
-      final finishedMap = seriesData['finishedEpisodes'] as Map<String, dynamic>?;
+      final finishedMap =
+          seriesData['finishedEpisodes'] as Map<String, dynamic>?;
 
       final seasons = seriesData['seasons'] as Map<String, dynamic>? ?? {};
       for (final seasonEntry in seasons.entries) {
@@ -1163,7 +1213,9 @@ class StorageService {
   /// Scans all series entries for a matching imdbId field.
   /// Also checks single-file video entries (type=video) as a fallback,
   /// parsing season/episode from the title.
-  static Future<Map<String, dynamic>?> getLastPlayedEpisodeByImdbId(String imdbId) async {
+  static Future<Map<String, dynamic>?> getLastPlayedEpisodeByImdbId(
+    String imdbId,
+  ) async {
     final map = await _getPlaybackStateMap();
 
     // Find ALL series entries with matching imdbId (different season packs may
@@ -1189,7 +1241,8 @@ class StorageService {
     if (seriesEntries.isNotEmpty) {
       // Find most recently updated episode across ALL matching series entries
       Map<String, dynamic>? lastEpisode;
-      Map<String, dynamic>? lastEpisodeSeriesData; // track which entry it came from
+      Map<String, dynamic>?
+      lastEpisodeSeriesData; // track which entry it came from
       int lastUpdated = 0;
 
       for (final seriesData in seriesEntries) {
@@ -1205,7 +1258,11 @@ class StorageService {
 
             if (updatedAt > lastUpdated) {
               lastUpdated = updatedAt;
-              lastEpisode = {'season': season, 'episode': episode, ...episodeData};
+              lastEpisode = {
+                'season': season,
+                'episode': episode,
+                ...episodeData,
+              };
               lastEpisodeSeriesData = seriesData;
             }
           }
@@ -1214,10 +1271,14 @@ class StorageService {
 
       if (lastEpisode != null && lastEpisodeSeriesData != null) {
         // Check if this episode is marked as finished (in its own series entry)
-        final finishedEpisodes = lastEpisodeSeriesData['finishedEpisodes'] as Map<String, dynamic>?;
+        final finishedEpisodes =
+            lastEpisodeSeriesData['finishedEpisodes'] as Map<String, dynamic>?;
         if (finishedEpisodes != null) {
-          final seasonFinished = finishedEpisodes[lastEpisode['season'].toString()] as Map<String, dynamic>?;
-          if (seasonFinished != null && seasonFinished.containsKey(lastEpisode['episode'].toString())) {
+          final seasonFinished =
+              finishedEpisodes[lastEpisode['season'].toString()]
+                  as Map<String, dynamic>?;
+          if (seasonFinished != null &&
+              seasonFinished.containsKey(lastEpisode['episode'].toString())) {
             lastEpisode['finished'] = true;
           }
         }
@@ -1286,9 +1347,7 @@ class StorageService {
   }
 
   /// Clear all progress data for a specific playlist/series
-  static Future<void> clearPlaylistProgress({
-    required String title,
-  }) async {
+  static Future<void> clearPlaylistProgress({required String title}) async {
     final map = await _getPlaybackStateMap();
 
     debugPrint('StorageService: clearPlaylistProgress called for "$title"');
@@ -1299,29 +1358,55 @@ class StorageService {
     // Try multiple title variations to find all matching entries
 
     // Variation 1: Use the full playlist item title
-    final fullTitleKey = 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    final fullVideoKey = 'video_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final fullTitleKey =
+        'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final fullVideoKey =
+        'video_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
     // Variation 2: Try extracting clean title (like "breaking bad" from "Breaking.Bad.SEASON.01.S01...")
     // This matches how SeriesPlaylist extracts the title
     String cleanedTitle = title;
 
     // Remove common patterns to extract series name
-    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.S\d{2}.*', caseSensitive: false), ''); // Remove S01-S08 and everything after
-    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.Season\..*', caseSensitive: false), ''); // Remove Season.1-8
-    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(1080p|720p|2160p|4k).*', caseSensitive: false), ''); // Remove quality
-    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(x264|x265|h264|h265).*', caseSensitive: false), ''); // Remove codec
-    cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(BluRay|WEB|HDTV|WEBRip).*', caseSensitive: false), ''); // Remove source
+    cleanedTitle = cleanedTitle.replaceAll(
+      RegExp(r'\.S\d{2}.*', caseSensitive: false),
+      '',
+    ); // Remove S01-S08 and everything after
+    cleanedTitle = cleanedTitle.replaceAll(
+      RegExp(r'\.Season\..*', caseSensitive: false),
+      '',
+    ); // Remove Season.1-8
+    cleanedTitle = cleanedTitle.replaceAll(
+      RegExp(r'\.(1080p|720p|2160p|4k).*', caseSensitive: false),
+      '',
+    ); // Remove quality
+    cleanedTitle = cleanedTitle.replaceAll(
+      RegExp(r'\.(x264|x265|h264|h265).*', caseSensitive: false),
+      '',
+    ); // Remove codec
+    cleanedTitle = cleanedTitle.replaceAll(
+      RegExp(r'\.(BluRay|WEB|HDTV|WEBRip).*', caseSensitive: false),
+      '',
+    ); // Remove source
     cleanedTitle = cleanedTitle.replaceAll('.', ' ').trim();
 
-    final cleanTitleKey = 'series_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    final cleanVideoKey = 'video_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final cleanTitleKey =
+        'series_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final cleanVideoKey =
+        'video_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
-    debugPrint('StorageService: checking keys - full: $fullTitleKey / $fullVideoKey, clean: $cleanTitleKey / $cleanVideoKey');
+    debugPrint(
+      'StorageService: checking keys - full: $fullTitleKey / $fullVideoKey, clean: $cleanTitleKey / $cleanVideoKey',
+    );
     debugPrint('StorageService: available keys: ${map.keys.toList()}');
 
     // Check for exact key matches first
-    for (final key in [cleanTitleKey, cleanVideoKey, fullTitleKey, fullVideoKey]) {
+    for (final key in [
+      cleanTitleKey,
+      cleanVideoKey,
+      fullTitleKey,
+      fullVideoKey,
+    ]) {
       if (map.containsKey(key) && !keysToRemove.contains(key)) {
         keysToRemove.add(key);
         debugPrint('StorageService: exact key match: "$key"');
@@ -1335,8 +1420,8 @@ class StorageService {
       if ((entry.key.startsWith('series_') || entry.key.startsWith('video_')) &&
           entry.value is Map<String, dynamic> &&
           !keysToRemove.contains(entry.key)) {
-
-        final storedTitle = (entry.value['title'] as String?)?.toLowerCase() ?? '';
+        final storedTitle =
+            (entry.value['title'] as String?)?.toLowerCase() ?? '';
         if (storedTitle.isEmpty) continue;
 
         final titleLower = title.toLowerCase();
@@ -1348,9 +1433,12 @@ class StorageService {
         // 3. Cleaned title contains the stored series title
         if (storedTitle == cleanedTitleLower ||
             storedTitle == titleLower ||
-            (titleLower.contains(storedTitle) && storedTitle.split(' ').length >= 2)) {
+            (titleLower.contains(storedTitle) &&
+                storedTitle.split(' ').length >= 2)) {
           keysToRemove.add(entry.key);
-          debugPrint('StorageService: stored title match - key: "${entry.key}", storedTitle: "$storedTitle"');
+          debugPrint(
+            'StorageService: stored title match - key: "${entry.key}", storedTitle: "$storedTitle"',
+          );
         }
       }
     }
@@ -1364,7 +1452,9 @@ class StorageService {
     // Save the updated map if anything was removed
     if (keysToRemove.isNotEmpty) {
       await _savePlaybackStateMap(map);
-      debugPrint('StorageService: clearPlaylistProgress completed - removed ${keysToRemove.length} entries for "$title"');
+      debugPrint(
+        'StorageService: clearPlaylistProgress completed - removed ${keysToRemove.length} entries for "$title"',
+      );
     } else {
       debugPrint('StorageService: no progress data found for "$title"');
     }
@@ -1982,8 +2072,11 @@ class StorageService {
       for (int i = 0; i < items.length; i++) {
         final item = items[i];
         final torboxId = item['torboxTorrentId'];
-        print('    Item[$i] torboxTorrentId: $torboxId (type: ${torboxId.runtimeType})');
-        if (torboxId != null && torboxId.toString() == torboxTorrentId.toString()) {
+        print(
+          '    Item[$i] torboxTorrentId: $torboxId (type: ${torboxId.runtimeType})',
+        );
+        if (torboxId != null &&
+            torboxId.toString() == torboxTorrentId.toString()) {
           itemIndex = i;
           print('  ✅ Found item by torboxTorrentId at index $itemIndex');
           break;
@@ -2046,17 +2139,22 @@ class StorageService {
       );
     }
 
-    if (itemIndex == -1 && torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
+    if (itemIndex == -1 &&
+        torboxTorrentId != null &&
+        torboxTorrentId.isNotEmpty) {
       for (int i = 0; i < items.length; i++) {
         final torboxId = items[i]['torboxTorrentId'];
-        if (torboxId != null && torboxId.toString() == torboxTorrentId.toString()) {
+        if (torboxId != null &&
+            torboxId.toString() == torboxTorrentId.toString()) {
           itemIndex = i;
           break;
         }
       }
     }
 
-    if (itemIndex == -1 && pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
+    if (itemIndex == -1 &&
+        pikpakCollectionId != null &&
+        pikpakCollectionId.isNotEmpty) {
       itemIndex = items.indexWhere((item) {
         final pikpakFileId = item['pikpakFileId'] as String?;
         if (pikpakFileId == pikpakCollectionId) return true;
@@ -2077,13 +2175,17 @@ class StorageService {
 
     items[itemIndex]['imdbId'] = imdbId;
     await savePlaylistItemsRaw(items);
-    debugPrint('StorageService: Saved imdbId $imdbId to playlist item "${items[itemIndex]['title']}"');
+    debugPrint(
+      'StorageService: Saved imdbId $imdbId to playlist item "${items[itemIndex]['title']}"',
+    );
     return true;
   }
 
   /// Get saved view mode for a playlist item
   /// Returns null if no view mode has been saved for this item
-  static Future<String?> getPlaylistItemViewMode(Map<String, dynamic> item) async {
+  static Future<String?> getPlaylistItemViewMode(
+    Map<String, dynamic> item,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final viewModesJson = prefs.getString(_playlistViewModesKey);
 
@@ -2100,7 +2202,10 @@ class StorageService {
   }
 
   /// Save view mode for a playlist item
-  static Future<void> savePlaylistItemViewMode(Map<String, dynamic> item, String viewMode) async {
+  static Future<void> savePlaylistItemViewMode(
+    Map<String, dynamic> item,
+    String viewMode,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final viewModesJson = prefs.getString(_playlistViewModesKey);
 
@@ -2137,7 +2242,10 @@ class StorageService {
   }
 
   /// Set favorite status for a playlist item
-  static Future<void> setPlaylistItemFavorited(Map<String, dynamic> item, bool isFavorited) async {
+  static Future<void> setPlaylistItemFavorited(
+    Map<String, dynamic> item,
+    bool isFavorited,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final favoritesJson = prefs.getString(_playlistFavoritesKey);
 
@@ -2316,7 +2424,8 @@ class StorageService {
   }
 
   /// Get all favorite IPTV channel URLs with metadata
-  static Future<Map<String, Map<String, dynamic>>> getIptvFavoriteChannels() async {
+  static Future<Map<String, Map<String, dynamic>>>
+  getIptvFavoriteChannels() async {
     final prefs = await SharedPreferences.getInstance();
     final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
 
@@ -2324,10 +2433,14 @@ class StorageService {
 
     try {
       final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-      return favorites.map((key, value) => MapEntry(
-        key,
-        value is Map<String, dynamic> ? value : {'name': '', 'logoUrl': '', 'group': ''},
-      ));
+      return favorites.map(
+        (key, value) => MapEntry(
+          key,
+          value is Map<String, dynamic>
+              ? value
+              : {'name': '', 'logoUrl': '', 'group': ''},
+        ),
+      );
     } catch (e) {
       debugPrint('Error reading IPTV channel favorites: $e');
       return {};
@@ -2356,7 +2469,8 @@ class StorageService {
       Map<String, dynamic>? progressData;
 
       // Check if it's stored as a video (single file)
-      final videoKey = 'video_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+      final videoKey =
+          'video_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
       final videoState = playbackStateMap[videoKey];
       if (videoState != null && videoState['type'] == 'video') {
         progressData = {
@@ -2373,38 +2487,60 @@ class StorageService {
         Map<String, dynamic>? seriesState;
 
         // Variation 1: Use the full playlist item title
-        final fullTitleKey = 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+        final fullTitleKey =
+            'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
         // Variation 2: Try extracting clean title (like "game of thrones" from torrent name)
         // This matches how SeriesPlaylist extracts the title
         String cleanedTitle = title;
 
         // Remove common patterns to extract series name
-        cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.S\d{2}.*', caseSensitive: false), ''); // Remove S01-S08 and everything after
-        cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.Season\..*', caseSensitive: false), ''); // Remove Season.1-8
-        cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(1080p|720p|2160p|4k).*', caseSensitive: false), ''); // Remove quality
-        cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(x264|x265|h264|h265).*', caseSensitive: false), ''); // Remove codec
-        cleanedTitle = cleanedTitle.replaceAll(RegExp(r'\.(BluRay|WEB|HDTV|WEBRip).*', caseSensitive: false), ''); // Remove source
+        cleanedTitle = cleanedTitle.replaceAll(
+          RegExp(r'\.S\d{2}.*', caseSensitive: false),
+          '',
+        ); // Remove S01-S08 and everything after
+        cleanedTitle = cleanedTitle.replaceAll(
+          RegExp(r'\.Season\..*', caseSensitive: false),
+          '',
+        ); // Remove Season.1-8
+        cleanedTitle = cleanedTitle.replaceAll(
+          RegExp(r'\.(1080p|720p|2160p|4k).*', caseSensitive: false),
+          '',
+        ); // Remove quality
+        cleanedTitle = cleanedTitle.replaceAll(
+          RegExp(r'\.(x264|x265|h264|h265).*', caseSensitive: false),
+          '',
+        ); // Remove codec
+        cleanedTitle = cleanedTitle.replaceAll(
+          RegExp(r'\.(BluRay|WEB|HDTV|WEBRip).*', caseSensitive: false),
+          '',
+        ); // Remove source
         cleanedTitle = cleanedTitle.replaceAll('.', ' ').trim();
 
-        final cleanTitleKey = 'series_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+        final cleanTitleKey =
+            'series_${cleanedTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
         // Try both variations - PRIORITIZE clean title first (where playback state is actually saved)
-        if (playbackStateMap[cleanTitleKey] != null && playbackStateMap[cleanTitleKey]['type'] == 'series') {
+        if (playbackStateMap[cleanTitleKey] != null &&
+            playbackStateMap[cleanTitleKey]['type'] == 'series') {
           matchingSeriesKey = cleanTitleKey;
           seriesState = playbackStateMap[cleanTitleKey] as Map<String, dynamic>;
-        } else if (playbackStateMap[fullTitleKey] != null && playbackStateMap[fullTitleKey]['type'] == 'series') {
+        } else if (playbackStateMap[fullTitleKey] != null &&
+            playbackStateMap[fullTitleKey]['type'] == 'series') {
           matchingSeriesKey = fullTitleKey;
           seriesState = playbackStateMap[fullTitleKey] as Map<String, dynamic>;
         } else {
           // Fallback: Search through all series entries for a partial match
           for (final entry in playbackStateMap.entries) {
-            if (entry.key.startsWith('series_') && entry.value['type'] == 'series') {
-              final seriesTitle = (entry.value['title'] as String?)?.toLowerCase() ?? '';
+            if (entry.key.startsWith('series_') &&
+                entry.value['type'] == 'series') {
+              final seriesTitle =
+                  (entry.value['title'] as String?)?.toLowerCase() ?? '';
               final itemTitleLower = title.toLowerCase();
 
               // Check if the series title is contained in the item title or vice versa
-              if (itemTitleLower.contains(seriesTitle) || seriesTitle.contains(cleanedTitle.toLowerCase())) {
+              if (itemTitleLower.contains(seriesTitle) ||
+                  seriesTitle.contains(cleanedTitle.toLowerCase())) {
                 matchingSeriesKey = entry.key;
                 seriesState = entry.value as Map<String, dynamic>;
                 break;
@@ -2414,12 +2550,15 @@ class StorageService {
         }
 
         if (seriesState != null && matchingSeriesKey != null) {
-          debugPrint('📺 Matched series state for "$title" using key: $matchingSeriesKey');
+          debugPrint(
+            '📺 Matched series state for "$title" using key: $matchingSeriesKey',
+          );
 
           // Calculate overall series progress (Option 2)
           // Formula: (finished episodes + partial episode progress) / total episodes
 
-          int totalEpisodes = (item['fileCount'] as int?) ?? (item['count'] as int?) ?? 0;
+          int totalEpisodes =
+              (item['fileCount'] as int?) ?? (item['count'] as int?) ?? 0;
           if (totalEpisodes == 0) {
             // Try to count from the playlist item structure
             totalEpisodes = 1; // Fallback to at least 1
@@ -2431,7 +2570,8 @@ class StorageService {
           int finishedEpisodeCount = 0;
 
           // First, count episodes explicitly marked as finished (TV series)
-          final finishedEpisodes = seriesState['finishedEpisodes'] as Map<String, dynamic>?;
+          final finishedEpisodes =
+              seriesState['finishedEpisodes'] as Map<String, dynamic>?;
           if (finishedEpisodes != null) {
             for (final seasonEntry in finishedEpisodes.entries) {
               final seasonKey = seasonEntry.key;
@@ -2485,10 +2625,13 @@ class StorageService {
           // Calculate partial progress from latest episode ONLY if not already counted as finished
           double partialEpisodeProgress = 0.0;
           bool hasPartialProgress = false;
-          if (latestDuration > 0 && latestPosition > 0 && latestEpisodeKey != null) {
+          if (latestDuration > 0 &&
+              latestPosition > 0 &&
+              latestEpisodeKey != null) {
             partialEpisodeProgress = latestPosition / latestDuration;
             // Only count as partial if < 95% (not already counted as finished)
-            if (partialEpisodeProgress < 0.95 && !finishedEpisodeKeys.contains(latestEpisodeKey)) {
+            if (partialEpisodeProgress < 0.95 &&
+                !finishedEpisodeKeys.contains(latestEpisodeKey)) {
               hasPartialProgress = true;
             }
           }
@@ -2501,7 +2644,8 @@ class StorageService {
             }
 
             // Create synthetic position/duration representing series progress
-            final syntheticDuration = totalEpisodes * 1000000; // 1M ms per episode (arbitrary)
+            final syntheticDuration =
+                totalEpisodes * 1000000; // 1M ms per episode (arbitrary)
             final syntheticPosition = (totalEpisodesWatched * 1000000).toInt();
 
             progressData = {
@@ -2525,7 +2669,9 @@ class StorageService {
       }
     }
 
-    debugPrint('StorageService: Built progress map with ${progressMap.length} entries');
+    debugPrint(
+      'StorageService: Built progress map with ${progressMap.length} entries',
+    );
     return progressMap;
   }
 
@@ -2753,7 +2899,8 @@ class StorageService {
 
   static Future<String> getStartupMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_startupModeKey) ?? 'channel'; // Default to channel for backward compatibility
+    return prefs.getString(_startupModeKey) ??
+        'channel'; // Default to channel for backward compatibility
   }
 
   static Future<void> setStartupMode(String mode) async {
@@ -3038,7 +3185,9 @@ class StorageService {
     return prefs.getStringList(_redditFavoriteSubredditsKey) ?? [];
   }
 
-  static Future<void> setRedditFavoriteSubreddits(List<String> subreddits) async {
+  static Future<void> setRedditFavoriteSubreddits(
+    List<String> subreddits,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_redditFavoriteSubredditsKey, subreddits);
   }
@@ -3278,7 +3427,12 @@ class StorageService {
       return 'pikpak_${playlistItem['pikpakFileId']}';
     }
     // Fallback to title if nothing else is available
-    final title = (playlistItem['title'] as String?)?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_') ?? 'unknown';
+    final title =
+        (playlistItem['title'] as String?)?.toLowerCase().replaceAll(
+          RegExp(r'[^a-z0-9]'),
+          '_',
+        ) ??
+        'unknown';
     return 'title_$title';
   }
 
@@ -3308,11 +3462,15 @@ class StorageService {
     };
 
     await prefs.setString(_tvMazeSeriesMappingKey, jsonEncode(mappings));
-    print('✅ Saved TVMaze mapping for $key -> Show ID: $tvmazeShowId ($showName)');
+    print(
+      '✅ Saved TVMaze mapping for $key -> Show ID: $tvmazeShowId ($showName)',
+    );
   }
 
   /// Get TVMaze series mapping for a playlist item
-  static Future<Map<String, dynamic>?> getTVMazeSeriesMapping(Map<String, dynamic> playlistItem) async {
+  static Future<Map<String, dynamic>?> getTVMazeSeriesMapping(
+    Map<String, dynamic> playlistItem,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final mappingsJson = prefs.getString(_tvMazeSeriesMappingKey);
 
@@ -3324,7 +3482,9 @@ class StorageService {
       final mapping = mappings[key];
 
       if (mapping != null && mapping is Map<String, dynamic>) {
-        print('✅ Found TVMaze mapping for $key -> Show ID: ${mapping['tvmazeShowId']} (${mapping['showName']})');
+        print(
+          '✅ Found TVMaze mapping for $key -> Show ID: ${mapping['tvmazeShowId']} (${mapping['showName']})',
+        );
         return mapping;
       }
     } catch (e) {
@@ -3335,7 +3495,9 @@ class StorageService {
   }
 
   /// Clear TVMaze series mapping for a playlist item
-  static Future<void> clearTVMazeSeriesMapping(Map<String, dynamic> playlistItem) async {
+  static Future<void> clearTVMazeSeriesMapping(
+    Map<String, dynamic> playlistItem,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final mappingsJson = prefs.getString(_tvMazeSeriesMappingKey);
 
@@ -3394,7 +3556,9 @@ class StorageService {
 
   /// Get poster URL override for a playlist item
   /// Returns null if no override exists
-  static Future<String?> getPlaylistPosterOverride(Map<String, dynamic> playlistItem) async {
+  static Future<String?> getPlaylistPosterOverride(
+    Map<String, dynamic> playlistItem,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
 
@@ -3430,7 +3594,8 @@ class StorageService {
       final result = <String, String>{};
       for (final entry in overrides.entries) {
         if (entry.value is Map<String, dynamic>) {
-          final posterUrl = (entry.value as Map<String, dynamic>)['posterUrl'] as String?;
+          final posterUrl =
+              (entry.value as Map<String, dynamic>)['posterUrl'] as String?;
           if (posterUrl != null && posterUrl.isNotEmpty) {
             result[entry.key] = posterUrl;
           }
@@ -3448,7 +3613,9 @@ class StorageService {
       _getPlaylistItemUniqueKey(item);
 
   /// Clear poster URL override for a playlist item
-  static Future<void> clearPlaylistPosterOverride(Map<String, dynamic> playlistItem) async {
+  static Future<void> clearPlaylistPosterOverride(
+    Map<String, dynamic> playlistItem,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
 
@@ -3460,7 +3627,10 @@ class StorageService {
 
       if (overrides.containsKey(key)) {
         overrides.remove(key);
-        await prefs.setString(_playlistPosterOverridesKey, jsonEncode(overrides));
+        await prefs.setString(
+          _playlistPosterOverridesKey,
+          jsonEncode(overrides),
+        );
         print('✅ Cleared poster override for $key');
       }
     } catch (e) {
@@ -3565,7 +3735,9 @@ class StorageService {
     return List<String>.from(jsonDecode(json));
   }
 
-  static Future<void> setDefaultFilterRipSources(List<String> ripSources) async {
+  static Future<void> setDefaultFilterRipSources(
+    List<String> ripSources,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_defaultFilterRipSourcesKey, jsonEncode(ripSources));
   }
@@ -3831,7 +4003,8 @@ class StorageService {
   /// Get preferred Linux external player key
   static Future<String> getPreferredLinuxExternalPlayer() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_linuxExternalPlayerPreferredKey) ?? 'system_default';
+    return prefs.getString(_linuxExternalPlayerPreferredKey) ??
+        'system_default';
   }
 
   /// Set preferred Linux external player key
@@ -3864,11 +4037,14 @@ class StorageService {
   /// Get preferred Windows external player key
   static Future<String> getPreferredWindowsExternalPlayer() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_windowsExternalPlayerPreferredKey) ?? 'system_default';
+    return prefs.getString(_windowsExternalPlayerPreferredKey) ??
+        'system_default';
   }
 
   /// Set preferred Windows external player key
-  static Future<void> setPreferredWindowsExternalPlayer(String playerKey) async {
+  static Future<void> setPreferredWindowsExternalPlayer(
+    String playerKey,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_windowsExternalPlayerPreferredKey, playerKey);
   }
@@ -3986,15 +4162,18 @@ class StorageService {
   static Future<List<IptvPlaylist>> getIptvPlaylists() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList(_iptvPlaylistsKey) ?? [];
-    return jsonList.map((json) {
-      try {
-        return IptvPlaylist.fromJson(
-          Map<String, dynamic>.from(jsonDecode(json) as Map),
-        );
-      } catch (e) {
-        return null;
-      }
-    }).whereType<IptvPlaylist>().toList();
+    return jsonList
+        .map((json) {
+          try {
+            return IptvPlaylist.fromJson(
+              Map<String, dynamic>.from(jsonDecode(json) as Map),
+            );
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<IptvPlaylist>()
+        .toList();
   }
 
   /// Save IPTV playlists
@@ -4040,6 +4219,32 @@ class StorageService {
   static Future<bool> getRemoteControlEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_remoteControlEnabledKey) ?? true;
+  }
+
+  static Future<bool> getUpdateAutoCheckEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_updateAutoCheckEnabledKey) ?? true;
+  }
+
+  static Future<void> setUpdateAutoCheckEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_updateAutoCheckEnabledKey, enabled);
+  }
+
+  static Future<String?> getIgnoredUpdateVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_updateIgnoredVersionKey);
+    if (value == null || value.trim().isEmpty) return null;
+    return value;
+  }
+
+  static Future<void> setIgnoredUpdateVersion(String? version) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (version == null || version.trim().isEmpty) {
+      await prefs.remove(_updateIgnoredVersionKey);
+    } else {
+      await prefs.setString(_updateIgnoredVersionKey, version);
+    }
   }
 
   /// Set whether remote control feature is enabled
@@ -4238,8 +4443,7 @@ class StorageService {
       favorites.remove(channelId);
     }
 
-    await prefs.setString(
-        _stremioTvFavoriteChannelsKey, jsonEncode(favorites));
+    await prefs.setString(_stremioTvFavoriteChannelsKey, jsonEncode(favorites));
   }
 
   /// Get all favorite Stremio TV channel IDs
@@ -4285,10 +4489,7 @@ class StorageService {
     if (catalogs.isEmpty) {
       await prefs.remove(_stremioTvLocalCatalogsKey);
     } else {
-      await prefs.setString(
-        _stremioTvLocalCatalogsKey,
-        jsonEncode(catalogs),
-      );
+      await prefs.setString(_stremioTvLocalCatalogsKey, jsonEncode(catalogs));
     }
   }
 

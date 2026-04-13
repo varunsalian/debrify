@@ -78,6 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _updateSubtitle = 'Check for new builds from GitHub releases';
   StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
   String? _updateDownloadTaskId;
+  bool _autoUpdateChecksEnabled = true;
 
   @override
   void initState() {
@@ -115,6 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTraktUsername(),
       PackageInfo.fromPlatform(),
       AndroidNativeDownloader.isTelevision(),
+      StorageService.getUpdateAutoCheckEnabled(),
     ]);
 
     if (!mounted) return;
@@ -127,6 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final traktUsername = results[5] as String?;
     final packageInfo = results[6] as PackageInfo;
     final isAndroidTv = results[7] as bool;
+    final autoCheckEnabled = results[8] as bool;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -181,6 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _currentVersionName = packageInfo.version;
     _isAndroidTv = isAndroidTv;
     _loading = false;
+    _autoUpdateChecksEnabled = autoCheckEnabled;
 
     setState(() {});
 
@@ -315,6 +319,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onCheckForUpdates: _checkForAppUpdates,
       updateSubtitle: _updateSubtitle,
       checkingUpdates: _checkingUpdates,
+      autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
+      onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
     );
   }
 
@@ -582,6 +588,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _checkForAppUpdates() async {
     if (_checkingUpdates) return;
     if (_currentVersionName.isEmpty) return;
+    await StorageService.setIgnoredUpdateVersion(null);
 
     setState(() {
       _checkingUpdates = true;
@@ -779,6 +786,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _toggleAutoUpdateChecks(bool enabled) async {
+    setState(() {
+      _autoUpdateChecksEnabled = enabled;
+    });
+    await StorageService.setUpdateAutoCheckEnabled(enabled);
+  }
+
   Future<void> _startAndroidUpdateDownload(AppRelease release) async {
     if (kIsWeb) {
       await _openReleasesPage(release.htmlUrl);
@@ -953,6 +967,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onCheckForUpdates;
   final String updateSubtitle;
   final bool checkingUpdates;
+  final bool autoUpdateChecksEnabled;
+  final ValueChanged<bool> onToggleAutoUpdateChecks;
 
   const _SettingsLayout({
     required this.connections,
@@ -975,6 +991,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onCheckForUpdates,
     required this.updateSubtitle,
     required this.checkingUpdates,
+    required this.autoUpdateChecksEnabled,
+    required this.onToggleAutoUpdateChecks,
   });
 
   @override
@@ -1125,6 +1143,14 @@ class _SettingsLayout extends StatelessWidget {
           _SettingsSection(
             title: 'About',
             children: [
+              _SettingsToggleTile(
+                icon: Icons.notifications_active_rounded,
+                title: 'Auto Check for Updates',
+                subtitle: 'Notify about new releases on startup',
+                value: autoUpdateChecksEnabled,
+                onChanged: onToggleAutoUpdateChecks,
+                iconColor: const Color(0xFF0EA5E9),
+              ),
               _SettingsTile(
                 icon: Icons.system_update_rounded,
                 title: 'Check for Updates',
@@ -1784,6 +1810,70 @@ class _SettingsTile extends StatelessWidget {
                   Icons.chevron_right_rounded,
                   color: Colors.white.withValues(alpha: 0.3),
                 ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsToggleTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Color iconColor;
+
+  const _SettingsToggleTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+    this.iconColor = const Color(0xFF06B6D4),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(value: value, onChanged: onChanged),
           ],
         ),
       ),
