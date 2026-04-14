@@ -96,6 +96,7 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 - **Multi-engine search** — Query multiple sources simultaneously
 - **Smart filtering** — Filter by quality, size, seeders, and more
 - **One-click add** — Send results directly to your debrid provider
+- **Build your own** — Follow the [custom engine guide](docs/engines/creating-custom-engines.md)
 
 </td>
 </tr>
