@@ -112,10 +112,30 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 </td>
 <td width="50%">
 
-### External Players
-- **Player choice** — Use your preferred video player app
-- **VR support** — Stream to DeoVR for immersive playback
-- **One-tap handoff** — Send any stream to external apps
+### Stremio TV
+- **TV guide experience** — Addon catalogs as live TV channels
+- **Auto-rotation** — "Now playing" rotates on a configurable schedule
+- **Channel filters** — Filter by addon or content type
+- **Favorites** — Pin channels to home screen
+- **Catalog importer** — Bring in JSON catalogs from files, URLs, repos, or Trakt lists (with one-tap refresh)
+- **Build your own** — Follow the [Stremio catalog guide](docs/stremio/building-local-catalogs.md)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Trakt Integration
+- **In-player scrobbling** — Debrify's video player reports start/pause/stop heartbeats to Trakt so your progress stays in sync everywhere
+- **Now playing card** — Home screen tile mirrors your live Trakt scrobble and gives you a one-tap resume button
+- **Upcoming calendar** — Dedicated Trakt calendar screen highlights the next episodes on your schedule with quick playback/mark-watched actions
+
+</td>
+<td width="50%">
+
+### Reddit Videos
+- **Audio merged** — Plays videos with audio properly combined
+- **Download support** — Save Reddit videos locally
 
 </td>
 </tr>
@@ -130,23 +150,10 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 </td>
 <td width="50%">
 
-### Stremio TV *(Beta)*
-- **TV guide experience** — Addon catalogs as live TV channels
-- **Auto-rotation** — "Now playing" rotates on a configurable schedule
-- **Channel filters** — Filter by addon or content type
-- **Favorites** — Pin channels to home screen
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Reddit Videos
-- **Audio merged** — Plays videos with audio properly combined
-- **Download support** — Save Reddit videos locally
-
-</td>
-<td width="50%">
+### External Players
+- **Player choice** — Use your preferred video player app
+- **VR support** — Stream to DeoVR for immersive playback
+- **One-tap handoff** — Send any stream to external apps
 
 </td>
 </tr>
@@ -154,7 +161,7 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 
 ---
 
-## 📺 Android TV Mode
+## 📺 Android TV
 
 A dedicated lean-back experience for your living room.
 
@@ -258,15 +265,6 @@ flutter build windows --release          # Windows
 flutter build macos --release            # macOS
 flutter build linux --release            # Linux
 ```
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Enhanced desktop UX
-- [ ] In-app update notifications
-- [ ] More search engine plugins
-- [ ] Improved test coverage
 
 ---
 
