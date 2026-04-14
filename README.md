@@ -125,17 +125,19 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 <tr>
 <td width="50%">
 
-### Trakt Integration
-- **In-player scrobbling** — Debrify's video player reports start/pause/stop heartbeats to Trakt so your progress stays in sync everywhere
-- **Now playing card** — Home screen tile mirrors your live Trakt scrobble and gives you a one-tap resume button
-- **Upcoming calendar** — Dedicated Trakt calendar screen highlights the next episodes on your schedule with quick playback/mark-watched actions
+### Debrify TV
+- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, and PikPak engines to auto-build always-on channels
+- **Quick Play & auto-launch** — Instant channel playback with random starts, resume buttons, and optional auto-launch overlay
+- **Smart caching & rotation** — Caches torrents per channel and rotates movies/series so the lineup stays fresh all day
+- **Import/Export** — ZIP/YAML packs, community collections, and remote-control export keep channels in sync across devices
 
 </td>
 <td width="50%">
 
-### Reddit Videos
-- **Audio merged** — Plays videos with audio properly combined
-- **Download support** — Save Reddit videos locally
+### Trakt Integration
+- **In-player scrobbling** — Debrify's video player reports start/pause/stop heartbeats to Trakt so your progress stays in sync everywhere
+- **Now playing card** — Home screen tile mirrors your live Trakt scrobble and gives you a one-tap resume button
+- **Upcoming calendar** — Dedicated Trakt calendar screen highlights the next episodes on your schedule with quick playback/mark-watched actions
 
 </td>
 </tr>
@@ -154,6 +156,18 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 - **Player choice** — Use your preferred video player app
 - **VR support** — Stream to DeoVR for immersive playback
 - **One-tap handoff** — Send any stream to external apps
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Reddit Videos
+- **Audio merged** — Plays videos with audio properly combined
+- **Download support** — Save Reddit videos locally
+
+</td>
+<td width="50%">
 
 </td>
 </tr>
