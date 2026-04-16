@@ -41,8 +41,25 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
   bool _isAuth = false;
   bool _isLoading = true;
   Map<DateTime, List<TraktCalendarEntry>> _grouped = const {};
-  final FocusNode _cardFocusNode =
-      FocusNode(debugLabel: 'home-today-calendar-card');
+  final FocusNode _cardFocusNode = FocusNode(
+    debugLabel: 'home-today-calendar-card',
+  );
+
+  void _onFocusChange(bool focused) {
+    if (!focused || !widget.isTelevision) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final context = _cardFocusNode.context;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -221,14 +238,15 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
     final badge = featured.isNewShow
         ? 'NEW SHOW'
         : featured.isSeasonPremiere
-            ? 'SEASON PREMIERE'
-            : null;
+        ? 'SEASON PREMIERE'
+        : null;
     final fanartUrl = _fanartUrlFor(featured);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Focus(
         focusNode: _cardFocusNode,
+        onFocusChange: _onFocusChange,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
           final key = event.logicalKey;
@@ -348,7 +366,10 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                                 if (wide) const Spacer(),
                                 // Chevron on far right
                                 Padding(
-                                  padding: const EdgeInsets.only(right: 12, left: 6),
+                                  padding: const EdgeInsets.only(
+                                    right: 12,
+                                    left: 6,
+                                  ),
                                   child: Icon(
                                     Icons.chevron_right,
                                     color: Colors.white.withValues(alpha: 0.6),
@@ -387,9 +408,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
           // Label row
           Row(
             children: [
-              Flexible(
-                child: _pill(label, accent: _kNetflixRed),
-              ),
+              Flexible(child: _pill(label, accent: _kNetflixRed)),
               if (extraOnDay > 0) ...[
                 const SizedBox(width: 6),
                 _pill(
@@ -452,11 +471,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
         color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Icon(
-        Icons.tv_rounded,
-        size: big ? 28 : 20,
-        color: Colors.white30,
-      ),
+      child: Icon(Icons.tv_rounded, size: big ? 28 : 20, color: Colors.white30),
     );
     if (e.posterUrl == null) return placeholder;
     return ClipRRect(
@@ -471,7 +486,12 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
     );
   }
 
-  Widget _pill(String text, {required Color accent, bool muted = false, bool dense = false}) {
+  Widget _pill(
+    String text, {
+    required Color accent,
+    bool muted = false,
+    bool dense = false,
+  }) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: dense ? 5 : 6,
@@ -597,4 +617,3 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
     return palette[hash % palette.length];
   }
 }
-
