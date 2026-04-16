@@ -400,14 +400,14 @@ class VideoPlayerLauncher {
             addonId: args.addonId,
           );
           // Clean up any existing local Continue Watching entry (Trakt tracks it now)
-          StorageService.removeContinueWatchingItem(args.contentImdbId!);
+          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
       }
     }
 
-    // Save to continue watching (fire-and-forget, non-blocking)
+    // Persist before launching playback so Android TV handoff cannot race the write.
     // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
     if (args.contentImdbId != null && args.contentType != null && !args.traktScrobble && args.stremioTvChannels == null) {
-      StorageService.saveContinueWatchingItem(
+      await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
         title: args.contentTitle ?? args.title,
         contentType: args.contentType!,

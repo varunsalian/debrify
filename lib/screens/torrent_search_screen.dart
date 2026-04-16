@@ -2418,6 +2418,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
 
+    final preserveTraktContext =
+        _activeAdvancedSelection?.imdbId == _selectedImdbTitle!.imdbId;
+
     final selection = AdvancedSearchSelection(
       imdbId: _selectedImdbTitle!.imdbId,
       isSeries: _isSeries,
@@ -2427,11 +2430,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       episode: episode,
       contentType: _selectedImdbTitle!.contentType,
       posterUrl: _selectedImdbTitle!.posterUrl,
-      traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
-      traktSource: _activeAdvancedSelection?.traktSource ?? false,
+      traktProgressPercent: preserveTraktContext
+          ? _activeAdvancedSelection?.traktProgressPercent
+          : null,
+      traktSource: preserveTraktContext
+          ? _activeAdvancedSelection?.traktSource ?? false
+          : false,
     );
 
-    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}');
+    debugPrint('TorrentSearchScreen: Creating AdvancedSearchSelection - isSeries=${selection.isSeries}, title=${selection.title}, imdbId=${selection.imdbId}, season=$season, episode=$episode, contentType=${selection.contentType}, traktSource=${selection.traktSource}');
 
     setState(() {
       _activeAdvancedSelection = selection;

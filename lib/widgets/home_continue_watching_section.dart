@@ -977,20 +977,11 @@ class _HomeContinueWatchingSectionState
                 ),
 
               // Play overlay on hover/focus
-              if (widget.isTelevision && isActive)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    child: Center(
-                      child: _buildPlayButton(),
-                    ),
-                  ),
-                )
-              else if (!widget.isTelevision)
               Positioned.fill(
                 child: AnimatedOpacity(
                         opacity: isActive ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
                         child: Container(
                           color: Colors.black.withValues(alpha: 0.25),
                           child: Center(
@@ -1018,38 +1009,23 @@ class _HomeContinueWatchingSectionState
                 : Colors.white.withValues(alpha: 0.08),
             width: isActive ? 1.5 : 0.5,
           ),
-          boxShadow: widget.isTelevision
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
-                    blurRadius: isActive ? 30 : 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-        );
-
-        if (widget.isTelevision) {
-          return Transform.scale(
-            scale: isActive ? 1.05 : 1.0,
-            child: Container(
-              width: cardWidth,
-              height: cardHeight,
-              clipBehavior: Clip.hardEdge,
-              decoration: cardDecoration,
-              child: cardStack,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isActive ? 0.5 : 0.3),
+              blurRadius: isActive ? 30 : 16,
+              offset: Offset(0, isActive ? 8 : 4),
             ),
-          );
-        }
+          ],
+        );
 
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutBack,
           builder: (context, scale, child) =>
               Transform.scale(scale: scale, child: child),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             width: cardWidth,
             height: cardHeight,
