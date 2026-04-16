@@ -89,11 +89,15 @@ Future<String> _resolveRedirectUrl(String url) async {
       host.contains('pikpak') ||
       host.contains('1fichier') ||
       host.contains('rapidgator')) {
-    debugPrint('[RedirectResolver] SKIP: Known debrid CDN domain, using original');
+    debugPrint(
+      '[RedirectResolver] SKIP: Known debrid CDN domain, using original',
+    );
     return url;
   }
 
-  debugPrint('[RedirectResolver] Attempting HEAD request to resolve redirects...');
+  debugPrint(
+    '[RedirectResolver] Attempting HEAD request to resolve redirects...',
+  );
 
   try {
     // Use a client that doesn't follow redirects automatically
@@ -104,9 +108,9 @@ Future<String> _resolveRedirectUrl(String url) async {
       request.headers['User-Agent'] =
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-      final response = await client.send(request).timeout(
-        const Duration(seconds: 5),
-      );
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 5));
 
       debugPrint('[RedirectResolver] Response status: ${response.statusCode}');
       debugPrint('[RedirectResolver] Response headers: ${response.headers}');
@@ -124,16 +128,22 @@ Future<String> _resolveRedirectUrl(String url) async {
           // Handle relative URLs
           final resolvedUri = uri.resolve(location);
           final resolvedUrl = resolvedUri.toString();
-          debugPrint('[RedirectResolver] SUCCESS: Resolved $url -> $resolvedUrl');
+          debugPrint(
+            '[RedirectResolver] SUCCESS: Resolved $url -> $resolvedUrl',
+          );
 
           // Cache the result
           _redirectCache[url] = resolvedUrl;
           return resolvedUrl;
         } else {
-          debugPrint('[RedirectResolver] WARNING: Redirect but no Location header');
+          debugPrint(
+            '[RedirectResolver] WARNING: Redirect but no Location header',
+          );
         }
       } else {
-        debugPrint('[RedirectResolver] No redirect (status ${response.statusCode}), using original');
+        debugPrint(
+          '[RedirectResolver] No redirect (status ${response.statusCode}), using original',
+        );
       }
     } finally {
       client.close();
@@ -200,8 +210,10 @@ class VideoPlayerLaunchArgs {
   final int? stremioTvRotationMinutes;
   final int? stremioTvSeriesRotationMinutes;
   final int? stremioTvMixSalt;
-  final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
-  final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
+  final Future<Map<String, dynamic>?> Function(List<String>)?
+  stremioTvGuideDataProvider;
+  final Future<Map<String, dynamic>?> Function(String)?
+  stremioTvChannelSwitchProvider;
   // Trakt scrobble: send playback progress to Trakt
   final bool traktScrobble;
   // Trakt progress: resume fallback when no local resume exists (0-100)
@@ -309,7 +321,10 @@ class VideoPlayerLaunchArgs {
 class VideoPlayerLauncher {
   /// Generate a resume key for a playlist entry.
   /// Used to pre-populate playback state (e.g., from Trakt progress).
-  static String resumeIdForEntry(PlaylistEntry entry, {String fallbackTitle = ''}) {
+  static String resumeIdForEntry(
+    PlaylistEntry entry, {
+    String fallbackTitle = '',
+  }) {
     final provider = entry.provider?.toLowerCase();
     // Torbox
     if (provider == 'torbox') {
@@ -343,7 +358,9 @@ class VideoPlayerLauncher {
   }) async {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
-    if (!args.traktScrobble && args.contentImdbId != null && args.stremioTvChannels == null) {
+    if (!args.traktScrobble &&
+        args.contentImdbId != null &&
+        args.stremioTvChannels == null) {
       final results = await Future.wait([
         StorageService.getTraktSyncCatalogItems(),
         TraktService.instance.isAuthenticated(),
@@ -351,62 +368,65 @@ class VideoPlayerLauncher {
       final syncCatalog = results[0] as bool;
       final isAuth = results[1] as bool;
       if (syncCatalog && isAuth) {
-          args = VideoPlayerLaunchArgs(
-            videoUrl: args.videoUrl,
-            title: args.title,
-            subtitle: args.subtitle,
-            playlist: args.playlist,
-            startIndex: args.startIndex,
-            rdTorrentId: args.rdTorrentId,
-            torboxTorrentId: args.torboxTorrentId,
-            pikpakCollectionId: args.pikpakCollectionId,
-            requestMagicNext: args.requestMagicNext,
-            requestNextChannel: args.requestNextChannel,
-            startFromRandom: args.startFromRandom,
-            randomStartMaxPercent: args.randomStartMaxPercent,
-            startAtPercent: args.startAtPercent,
-            hideSeekbar: args.hideSeekbar,
-            showChannelName: args.showChannelName,
-            channelName: args.channelName,
-            channelNumber: args.channelNumber,
-            showVideoTitle: args.showVideoTitle,
-            hideOptions: args.hideOptions,
-            hideBackButton: args.hideBackButton,
-            isAndroidTvOverride: args.isAndroidTvOverride,
-            disableAutoResume: args.disableAutoResume,
-            viewMode: args.viewMode,
-            contentImdbId: args.contentImdbId,
-            contentType: args.contentType,
-            contentSeason: args.contentSeason,
-            contentEpisode: args.contentEpisode,
-            iptvChannels: args.iptvChannels,
-            iptvStartIndex: args.iptvStartIndex,
-            stremioSources: args.stremioSources,
-            stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
-            resolveStremioSource: args.resolveStremioSource,
-            resolveSourceToPlaylist: args.resolveSourceToPlaylist,
-            stremioTvChannels: args.stremioTvChannels,
-            stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
-            stremioTvRotationMinutes: args.stremioTvRotationMinutes,
-            stremioTvSeriesRotationMinutes: args.stremioTvSeriesRotationMinutes,
-            stremioTvMixSalt: args.stremioTvMixSalt,
-            stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
-            stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
-            traktScrobble: true,
-            traktProgressPercent: args.traktProgressPercent,
-            contentTitle: args.contentTitle,
-            posterUrl: args.posterUrl,
-            contentYear: args.contentYear,
-            addonId: args.addonId,
-          );
-          // Clean up any existing local Continue Watching entry (Trakt tracks it now)
-          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        args = VideoPlayerLaunchArgs(
+          videoUrl: args.videoUrl,
+          title: args.title,
+          subtitle: args.subtitle,
+          playlist: args.playlist,
+          startIndex: args.startIndex,
+          rdTorrentId: args.rdTorrentId,
+          torboxTorrentId: args.torboxTorrentId,
+          pikpakCollectionId: args.pikpakCollectionId,
+          requestMagicNext: args.requestMagicNext,
+          requestNextChannel: args.requestNextChannel,
+          startFromRandom: args.startFromRandom,
+          randomStartMaxPercent: args.randomStartMaxPercent,
+          startAtPercent: args.startAtPercent,
+          hideSeekbar: args.hideSeekbar,
+          showChannelName: args.showChannelName,
+          channelName: args.channelName,
+          channelNumber: args.channelNumber,
+          showVideoTitle: args.showVideoTitle,
+          hideOptions: args.hideOptions,
+          hideBackButton: args.hideBackButton,
+          isAndroidTvOverride: args.isAndroidTvOverride,
+          disableAutoResume: args.disableAutoResume,
+          viewMode: args.viewMode,
+          contentImdbId: args.contentImdbId,
+          contentType: args.contentType,
+          contentSeason: args.contentSeason,
+          contentEpisode: args.contentEpisode,
+          iptvChannels: args.iptvChannels,
+          iptvStartIndex: args.iptvStartIndex,
+          stremioSources: args.stremioSources,
+          stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
+          resolveStremioSource: args.resolveStremioSource,
+          resolveSourceToPlaylist: args.resolveSourceToPlaylist,
+          stremioTvChannels: args.stremioTvChannels,
+          stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
+          stremioTvRotationMinutes: args.stremioTvRotationMinutes,
+          stremioTvSeriesRotationMinutes: args.stremioTvSeriesRotationMinutes,
+          stremioTvMixSalt: args.stremioTvMixSalt,
+          stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
+          stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
+          traktScrobble: true,
+          traktProgressPercent: args.traktProgressPercent,
+          contentTitle: args.contentTitle,
+          posterUrl: args.posterUrl,
+          contentYear: args.contentYear,
+          addonId: args.addonId,
+        );
+        // Clean up any existing local Continue Watching entry (Trakt tracks it now)
+        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
       }
     }
 
     // Persist before launching playback so Android TV handoff cannot race the write.
     // Skip for Trakt content (tracked by Trakt section) and Stremio TV (channel rotation)
-    if (args.contentImdbId != null && args.contentType != null && !args.traktScrobble && args.stremioTvChannels == null) {
+    if (args.contentImdbId != null &&
+        args.contentType != null &&
+        !args.traktScrobble &&
+        args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
         title: args.contentTitle ?? args.title,
@@ -419,10 +439,14 @@ class VideoPlayerLauncher {
 
     // Log playlist entries to trace relativePath
     if (args.playlist != null && args.playlist!.isNotEmpty) {
-      debugPrint('🚀 VideoPlayerLauncher.push: Launching with ${args.playlist!.length} entries');
+      debugPrint(
+        '🚀 VideoPlayerLauncher.push: Launching with ${args.playlist!.length} entries',
+      );
       for (int i = 0; i < args.playlist!.length && i < 5; i++) {
         final entry = args.playlist![i];
-        debugPrint('  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"');
+        debugPrint(
+          '  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"',
+        );
       }
     }
 
@@ -445,7 +469,10 @@ class VideoPlayerLauncher {
 
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
     if (isTv) {
-      final launched = await _launchOnAndroidTv(args, onQuickPlayNextEpisode: onQuickPlayNextEpisode);
+      final launched = await _launchOnAndroidTv(
+        args,
+        onQuickPlayNextEpisode: onQuickPlayNextEpisode,
+      );
       if (launched) {
         return;
       }
@@ -480,7 +507,8 @@ class VideoPlayerLauncher {
         final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           playlist,
           collectionTitle: args.title,
-          forceSeries: args.viewMode?.toForceSeries() ?? (args.contentType == 'series'),
+          forceSeries:
+              args.viewMode?.toForceSeries() ?? (args.contentType == 'series'),
         );
 
         int startIndex = 0;
@@ -493,10 +521,8 @@ class VideoPlayerLauncher {
           if (lastEpisode != null) {
             final lastSeason = lastEpisode['season'] as int;
             final lastEpisodeNum = lastEpisode['episode'] as int;
-            final originalIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
-              lastSeason,
-              lastEpisodeNum,
-            );
+            final originalIndex = seriesPlaylist
+                .findOriginalIndexBySeasonEpisode(lastSeason, lastEpisodeNum);
             if (originalIndex != -1) {
               startIndex = originalIndex;
 
@@ -512,13 +538,19 @@ class VideoPlayerLauncher {
                 final currentEpisodeIdx = seriesPlaylist.allEpisodes.indexWhere(
                   (ep) => ep.originalIndex == originalIndex,
                 );
-                if (currentEpisodeIdx != -1 && currentEpisodeIdx + 1 < seriesPlaylist.allEpisodes.length) {
-                  final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIdx + 1];
+                if (currentEpisodeIdx != -1 &&
+                    currentEpisodeIdx + 1 < seriesPlaylist.allEpisodes.length) {
+                  final nextEpisode =
+                      seriesPlaylist.allEpisodes[currentEpisodeIdx + 1];
                   startIndex = nextEpisode.originalIndex;
-                  debugPrint('ExternalPlayer: E${lastEpisodeNum} finished, advancing to next at index $startIndex');
+                  debugPrint(
+                    'ExternalPlayer: E${lastEpisodeNum} finished, advancing to next at index $startIndex',
+                  );
                 }
               } else {
-                debugPrint('ExternalPlayer: Resuming series at index $startIndex');
+                debugPrint(
+                  'ExternalPlayer: Resuming series at index $startIndex',
+                );
               }
             }
           } else {
@@ -537,27 +569,35 @@ class VideoPlayerLauncher {
           if (resolvedUrl.isNotEmpty) {
             url = resolvedUrl;
             title = targetEntry.title;
-            debugPrint('ExternalPlayer: Using entry $startIndex - ${targetEntry.title}');
+            debugPrint(
+              'ExternalPlayer: Using entry $startIndex - ${targetEntry.title}',
+            );
 
             // Mark episode as watched (external player doesn't provide progress feedback)
             if (seriesPlaylist.isSeries) {
               final episode = seriesPlaylist.allEpisodes.firstWhereOrNull(
                 (ep) => ep.originalIndex == startIndex,
               );
-              if (episode != null && episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+              if (episode != null &&
+                  episode.seriesInfo.season != null &&
+                  episode.seriesInfo.episode != null) {
                 await StorageService.markEpisodeAsFinished(
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                   season: episode.seriesInfo.season!,
                   episode: episode.seriesInfo.episode!,
                   imdbId: seriesPlaylist.imdbId,
                 );
-                debugPrint('ExternalPlayer: Marked S${episode.seriesInfo.season}E${episode.seriesInfo.episode} as watched');
+                debugPrint(
+                  'ExternalPlayer: Marked S${episode.seriesInfo.season}E${episode.seriesInfo.episode} as watched',
+                );
               }
             }
           }
         }
       } catch (e) {
-        debugPrint('ExternalPlayer: Failed to determine start index, using default: $e');
+        debugPrint(
+          'ExternalPlayer: Failed to determine start index, using default: $e',
+        );
       }
     }
 
@@ -572,7 +612,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              content: Text(
+                'Opening with ${result.usedPlayer?.displayName ?? "external player"}...',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -584,7 +626,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              content: Text(
+                result.errorMessage ?? 'Failed to open external player',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -616,7 +660,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              content: Text(
+                'Opening with ${result.usedPlayer?.displayName ?? "external player"}...',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -628,7 +674,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              content: Text(
+                result.errorMessage ?? 'Failed to open external player',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -637,16 +685,19 @@ class VideoPlayerLauncher {
       }
     } else if (Platform.isLinux) {
       // Linux: Use command line to launch preferred external player
-      final result = await LinuxExternalPlayerServiceExtension.launchWithPreferredLinuxPlayer(
-        url,
-        title: title,
-      );
+      final result =
+          await LinuxExternalPlayerServiceExtension.launchWithPreferredLinuxPlayer(
+            url,
+            title: title,
+          );
 
       if (result.success) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              content: Text(
+                'Opening with ${result.usedPlayer?.displayName ?? "external player"}...',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -658,7 +709,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              content: Text(
+                result.errorMessage ?? 'Failed to open external player',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -667,16 +720,19 @@ class VideoPlayerLauncher {
       }
     } else if (Platform.isWindows) {
       // Windows: Use command line to launch preferred external player
-      final result = await WindowsExternalPlayerServiceExtension.launchWithPreferredWindowsPlayer(
-        url,
-        title: title,
-      );
+      final result =
+          await WindowsExternalPlayerServiceExtension.launchWithPreferredWindowsPlayer(
+            url,
+            title: title,
+          );
 
       if (result.success) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Opening with ${result.usedPlayer?.displayName ?? "external player"}...'),
+              content: Text(
+                'Opening with ${result.usedPlayer?.displayName ?? "external player"}...',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -688,7 +744,9 @@ class VideoPlayerLauncher {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.errorMessage ?? 'Failed to open external player'),
+              content: Text(
+                result.errorMessage ?? 'Failed to open external player',
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -712,10 +770,13 @@ class VideoPlayerLauncher {
 
     try {
       // Load VR settings
-      final vrAutoDetectFormat = await StorageService.getQuickPlayVrAutoDetectFormat();
+      final vrAutoDetectFormat =
+          await StorageService.getQuickPlayVrAutoDetectFormat();
       final vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
-      final vrDefaultScreenType = await StorageService.getQuickPlayVrDefaultScreenType();
-      final vrDefaultStereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+      final vrDefaultScreenType =
+          await StorageService.getQuickPlayVrDefaultScreenType();
+      final vrDefaultStereoMode =
+          await StorageService.getQuickPlayVrDefaultStereoMode();
 
       // Detect or use default format
       String selectedScreenType = vrDefaultScreenType;
@@ -779,10 +840,7 @@ class VideoPlayerLauncher {
       final deOvrUri = 'deovr://$jsonUrl';
       debugPrint('Launching DeoVR with URI: $deOvrUri');
 
-      final intent = AndroidIntent(
-        action: 'action_view',
-        data: deOvrUri,
-      );
+      final intent = AndroidIntent(action: 'action_view', data: deOvrUri);
       await intent.launch();
 
       if (context.mounted) {
@@ -810,7 +868,8 @@ class VideoPlayerLauncher {
   }
 
   /// Show DeoVR format selection dialog
-  static Future<({String screenType, String stereoMode})?> _showDeoVRFormatDialog(
+  static Future<({String screenType, String stereoMode})?>
+  _showDeoVRFormatDialog(
     BuildContext context, {
     required String title,
     required String initialScreenType,
@@ -838,34 +897,52 @@ class VideoPlayerLauncher {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 16),
-              const Text('Screen Type', style: TextStyle(fontWeight: FontWeight.w500)),
+              const Text(
+                'Screen Type',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: selectedScreenType,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 items: deovr.screenTypeLabels.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .map(
+                      (e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => selectedScreenType = value);
                 },
               ),
               const SizedBox(height: 16),
-              const Text('Stereo Mode', style: TextStyle(fontWeight: FontWeight.w500)),
+              const Text(
+                'Stereo Mode',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: selectedStereoMode,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 items: deovr.stereoModeLabels.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .map(
+                      (e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => selectedStereoMode = value);
@@ -908,7 +985,8 @@ class VideoPlayerLauncher {
     }
   }
 
-  static Future<bool> _launchOnAndroidTv(VideoPlayerLaunchArgs args, {
+  static Future<bool> _launchOnAndroidTv(
+    VideoPlayerLaunchArgs args, {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
   }) async {
     // Route IPTV playlists to dedicated IPTV launcher
@@ -938,7 +1016,8 @@ class VideoPlayerLauncher {
 
       // Generate a unique session ID for this playback launch
       // This prevents stale metadata from previous sessions being sent to new sessions
-      final sessionId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+      final sessionId =
+          '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
       AndroidTvPlayerBridge.setCurrentSessionId(sessionId);
       debugPrint('VideoPlayerLauncher: Generated session ID: $sessionId');
 
@@ -953,26 +1032,35 @@ class VideoPlayerLauncher {
       if (currentStremioSources.isNotEmpty && currentStremioResolver != null) {
         stremioSourceResolverForTv = (int sourceIndex) async {
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
-            debugPrint('VideoPlayerLauncher: stremio source index out of range: $sourceIndex');
+            debugPrint(
+              'VideoPlayerLauncher: stremio source index out of range: $sourceIndex',
+            );
             return null;
           }
           final torrent = currentStremioSources[sourceIndex];
-          debugPrint('VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}');
+          debugPrint(
+            'VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}',
+          );
           return currentStremioResolver!(torrent);
         };
       }
 
       // Build playlist resolver for Android TV (if resolveSourceToPlaylist is available)
       final resolveSourceToPlaylist = args.resolveSourceToPlaylist;
-      Future<List<Map<String, dynamic>>?> Function(int)? sourcePlaylistResolverForTv;
+      Future<List<Map<String, dynamic>>?> Function(int)?
+      sourcePlaylistResolverForTv;
       if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
         sourcePlaylistResolverForTv = (int sourceIndex) async {
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
-            debugPrint('VideoPlayerLauncher: source playlist index out of range: $sourceIndex');
+            debugPrint(
+              'VideoPlayerLauncher: source playlist index out of range: $sourceIndex',
+            );
             return null;
           }
           final torrent = currentStremioSources[sourceIndex];
-          debugPrint('VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}');
+          debugPrint(
+            'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
+          );
           final playlistEntries = await resolveSourceToPlaylist(torrent);
           if (playlistEntries == null || playlistEntries.isEmpty) return null;
 
@@ -985,21 +1073,26 @@ class VideoPlayerLauncher {
           // when some files are dropped (no S##E## pattern), the index mapping
           // breaks and season filtering hides the unclassified files.
           // Compare against non-sample count (fromPlaylistEntries excludes samples).
-          final nonSampleCount = playlistEntries.where(
-            (e) => !SeriesParser.isSampleFile(e.title),
-          ).length;
-          final isSeries = seriesPlaylist != null
-              && seriesPlaylist.isSeries
-              && episodes != null
-              && episodes.length >= nonSampleCount;
+          final nonSampleCount = playlistEntries
+              .where((e) => !SeriesParser.isSampleFile(e.title))
+              .length;
+          final isSeries =
+              seriesPlaylist != null &&
+              seriesPlaylist.isSeries &&
+              episodes != null &&
+              episodes.length >= nonSampleCount;
 
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
           if (isSeries) {
             try {
               await seriesPlaylist.fetchEpisodeInfo();
-              debugPrint('VideoPlayerLauncher: TVMaze fetch complete for source playlist');
+              debugPrint(
+                'VideoPlayerLauncher: TVMaze fetch complete for source playlist',
+              );
             } catch (e) {
-              debugPrint('VideoPlayerLauncher: TVMaze fetch failed (non-fatal): $e');
+              debugPrint(
+                'VideoPlayerLauncher: TVMaze fetch failed (non-fatal): $e',
+              );
             }
           }
 
@@ -1024,8 +1117,10 @@ class VideoPlayerLauncher {
               'title': episode?.displayTitle ?? entry.title,
               'url': entry.url,
               'index': i,
-              if (episode?.seriesInfo.season != null) 'season': episode!.seriesInfo.season,
-              if (episode?.seriesInfo.episode != null) 'episode': episode!.seriesInfo.episode,
+              if (episode?.seriesInfo.season != null)
+                'season': episode!.seriesInfo.season,
+              if (episode?.seriesInfo.episode != null)
+                'episode': episode!.seriesInfo.episode,
               if (epInfo?.poster != null) 'artwork': epInfo!.poster,
               if (epInfo?.plot != null) 'description': epInfo!.plot,
               if (epInfo?.rating != null) 'rating': epInfo!.rating,
@@ -1036,7 +1131,9 @@ class VideoPlayerLauncher {
               if (entry.provider != null) 'provider': entry.provider,
             });
           }
-          debugPrint('VideoPlayerLauncher: resolved ${items.length} items for source playlist (isSeries=$isSeries)');
+          debugPrint(
+            'VideoPlayerLauncher: resolved ${items.length} items for source playlist (isSeries=$isSeries)',
+          );
 
           // Update the stream resolver so lazy loading works for the new playlist
           resolver.replaceEntries(playlistEntries);
@@ -1061,10 +1158,14 @@ class VideoPlayerLauncher {
 
           // Update mutable sources holder with new channel's sources
           final newSourcesList = switchResult['stremioSources'] as List?;
-          final newResolver = switchResult['sourceResolver'] as Future<String?> Function(Torrent)?;
+          final newResolver =
+              switchResult['sourceResolver']
+                  as Future<String?> Function(Torrent)?;
           if (newSourcesList != null) {
             currentStremioSources = newSourcesList
-                .map((s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)))
+                .map(
+                  (s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)),
+                )
                 .toList();
           }
           if (newResolver != null) {
@@ -1080,7 +1181,8 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
-      if (args.stremioTvChannels != null && args.stremioTvChannels!.isNotEmpty) {
+      if (args.stremioTvChannels != null &&
+          args.stremioTvChannels!.isNotEmpty) {
         payloadMap['stremioTvGuide'] = {
           'channels': args.stremioTvChannels,
           'currentChannelId': args.stremioTvCurrentChannelId,
@@ -1092,7 +1194,8 @@ class VideoPlayerLauncher {
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
-        onProgress: (progress) => _handleProgressUpdate(result.payload, progress),
+        onProgress: (progress) =>
+            _handleProgressUpdate(result.payload, progress),
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
@@ -1108,10 +1211,14 @@ class VideoPlayerLauncher {
             final curEpisode = pending['currentEpisode'] as int?;
             if (imdbId != null && curSeason != null && curEpisode != null) {
               final nextEp = await NextEpisodeService.findNextEpisode(
-                imdbId, curSeason, curEpisode,
+                imdbId,
+                curSeason,
+                curEpisode,
               );
               if (nextEp != null) {
-                debugPrint('VideoPlayerLauncher: Quick Play next → S${nextEp.season}E${nextEp.episode}');
+                debugPrint(
+                  'VideoPlayerLauncher: Quick Play next → S${nextEp.season}E${nextEp.episode}',
+                );
                 await onQuickPlayNextEpisode({
                   'quickPlayNext': true,
                   'imdbId': imdbId,
@@ -1119,25 +1226,34 @@ class VideoPlayerLauncher {
                   'episode': nextEp.episode,
                 });
               } else {
-                debugPrint('VideoPlayerLauncher: No next episode found after S${curSeason}E$curEpisode');
+                debugPrint(
+                  'VideoPlayerLauncher: No next episode found after S${curSeason}E$curEpisode',
+                );
               }
             }
           }
         },
         onRequestStream: resolver.handleRequest,
-        onRequestMovieMetadata: result.payload.contentType != _PlaybackContentType.series
+        onRequestMovieMetadata:
+            result.payload.contentType != _PlaybackContentType.series
             ? (index, filename) async {
-                debugPrint('MovieMetadataCallback: index=$index, filename=$filename');
+                debugPrint(
+                  'MovieMetadataCallback: index=$index, filename=$filename',
+                );
                 final movieInfo = MovieParser.parseFilename(filename);
                 if (!movieInfo.hasYear || movieInfo.title == null) {
-                  debugPrint('MovieMetadataCallback: No year pattern in filename');
+                  debugPrint(
+                    'MovieMetadataCallback: No year pattern in filename',
+                  );
                   return null;
                 }
                 final metadata = await MovieMetadataService.lookupMovie(
                   movieInfo.title!,
                   movieInfo.year,
                 );
-                debugPrint('MovieMetadataCallback: Lookup result imdbId=${metadata?.imdbId}');
+                debugPrint(
+                  'MovieMetadataCallback: Lookup result imdbId=${metadata?.imdbId}',
+                );
                 return metadata?.imdbId;
               }
             : null,
@@ -1232,18 +1348,26 @@ class VideoPlayerLauncher {
     String? contentType,
   }) {
     debugPrint('TVMazeAsync: _fetchAndPushMetadataAsync CALLED');
-    debugPrint('TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}');
-    debugPrint('TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode, imdbId=$contentImdbId');
+    debugPrint(
+      'TVMazeAsync: contentType=${payload.contentType}, title=${payload.title}',
+    );
+    debugPrint(
+      'TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode, imdbId=$contentImdbId',
+    );
 
     if (payload.contentType != _PlaybackContentType.series) {
-      debugPrint('TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})');
+      debugPrint(
+        'TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})',
+      );
       return;
     }
 
     // Create SeriesPlaylist for TVMaze lookup
     final playlistEntries = entries.map((e) => e.entry).toList();
     if (playlistEntries.length < 2) {
-      debugPrint('TVMazeAsync: SKIPPED - less than 2 entries (${playlistEntries.length})');
+      debugPrint(
+        'TVMazeAsync: SKIPPED - less than 2 entries (${playlistEntries.length})',
+      );
       return;
     }
 
@@ -1258,28 +1382,40 @@ class VideoPlayerLauncher {
           forceSeries = contentType == 'series';
         }
 
-        debugPrint('TVMazeAsync: Creating SeriesPlaylist from ${playlistEntries.length} entries');
+        debugPrint(
+          'TVMazeAsync: Creating SeriesPlaylist from ${playlistEntries.length} entries',
+        );
         final seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
           playlistEntries,
           collectionTitle: payload.title,
           forceSeries: forceSeries,
         );
 
-        debugPrint('TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}');
-        debugPrint('TVMazeAsync: allEpisodes.length=${seriesPlaylist.allEpisodes.length}');
+        debugPrint(
+          'TVMazeAsync: SeriesPlaylist created - isSeries=${seriesPlaylist.isSeries}, seriesTitle=${seriesPlaylist.seriesTitle}',
+        );
+        debugPrint(
+          'TVMazeAsync: allEpisodes.length=${seriesPlaylist.allEpisodes.length}',
+        );
 
         if (!seriesPlaylist.isSeries) {
           // For non-series content, try to fetch movie metadata to get IMDB ID
-          debugPrint('MovieAsync: Not a series, attempting movie metadata fetch');
+          debugPrint(
+            'MovieAsync: Not a series, attempting movie metadata fetch',
+          );
           await seriesPlaylist.fetchMovieMetadata();
 
           final discoveredImdbId = seriesPlaylist.imdbId;
           if (discoveredImdbId != null) {
-            debugPrint('MovieAsync: Found IMDB ID $discoveredImdbId, pushing to native player');
+            debugPrint(
+              'MovieAsync: Found IMDB ID $discoveredImdbId, pushing to native player',
+            );
 
             // Check if this session is still current
             if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
-              debugPrint('MovieAsync: DISCARDED - session $sessionId is no longer current');
+              debugPrint(
+                'MovieAsync: DISCARDED - session $sessionId is no longer current',
+              );
               return;
             }
 
@@ -1297,18 +1433,24 @@ class VideoPlayerLauncher {
             );
             debugPrint('MovieAsync: IMDB ID pushed to native player');
           } else {
-            debugPrint('MovieAsync: No IMDB ID discovered, cannot fetch subtitles');
+            debugPrint(
+              'MovieAsync: No IMDB ID discovered, cannot fetch subtitles',
+            );
           }
           return;
         }
 
-        debugPrint('TVMazeAsync: Calling fetchEpisodeInfo() with imdbId=$contentImdbId');
+        debugPrint(
+          'TVMazeAsync: Calling fetchEpisodeInfo() with imdbId=$contentImdbId',
+        );
         await seriesPlaylist.fetchEpisodeInfo(imdbId: contentImdbId);
         debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
 
         // Save discovered IMDB ID back to playlist item for future direct plays
         final seriesImdbId = seriesPlaylist.imdbId;
-        if (seriesImdbId != null && seriesImdbId.startsWith('tt') && contentImdbId == null) {
+        if (seriesImdbId != null &&
+            seriesImdbId.startsWith('tt') &&
+            contentImdbId == null) {
           await StorageService.updatePlaylistItemImdbId(
             seriesImdbId,
             rdTorrentId: rdTorrentId,
@@ -1346,27 +1488,37 @@ class VideoPlayerLauncher {
           });
         }
 
-        debugPrint('TVMazeAsync: Episodes with info=$episodesWithInfo, without info=$episodesWithoutInfo');
+        debugPrint(
+          'TVMazeAsync: Episodes with info=$episodesWithInfo, without info=$episodesWithoutInfo',
+        );
 
         // Get discovered IMDB ID from TVMaze (may have been extracted from externals)
         final discoveredImdbId = seriesPlaylist.imdbId;
-        debugPrint('TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId');
+        debugPrint(
+          'TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId',
+        );
 
         if (metadataUpdates.isEmpty && discoveredImdbId == null) {
-          debugPrint('TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID');
+          debugPrint(
+            'TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID',
+          );
           return;
         }
 
         // Check if this session is still current before sending metadata
         // This prevents stale metadata from Series A being sent to Series B
         if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
-          debugPrint('TVMazeAsync: DISCARDED - session $sessionId is no longer current (current: ${AndroidTvPlayerBridge.currentSessionId})');
+          debugPrint(
+            'TVMazeAsync: DISCARDED - session $sessionId is no longer current (current: ${AndroidTvPlayerBridge.currentSessionId})',
+          );
           return;
         }
 
         // Store pending updates for fallback (in case broadcast arrives before receiver is registered)
         // AND push directly to native player
-        debugPrint('TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback (imdbId=$discoveredImdbId)');
+        debugPrint(
+          'TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback (imdbId=$discoveredImdbId)',
+        );
         AndroidTvPlayerBridge.storePendingMetadataUpdates(
           metadataUpdates,
           sessionId: sessionId,
@@ -1375,7 +1527,9 @@ class VideoPlayerLauncher {
 
         // Push metadata updates directly to native player (don't wait for request)
         // Include discovered IMDB ID for Stremio subtitle fetching
-        debugPrint('TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player (imdbId=$discoveredImdbId)');
+        debugPrint(
+          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player (imdbId=$discoveredImdbId)',
+        );
         await AndroidTvPlayerBridge.updateEpisodeMetadata(
           metadataUpdates,
           sessionId: sessionId,
@@ -1450,21 +1604,33 @@ class VideoPlayerLauncher {
       // Trakt scrobble for Android TV player (movies and series)
       if (payload.traktScrobble && payload.imdbId != null && durationMs > 0) {
         // Treat buffering as still playing — ExoPlayer sets isPlaying=false during buffer
-        final isPlaying = progress['isPlaying'] == true || progress['isBuffering'] == true;
+        final isPlaying =
+            progress['isPlaying'] == true || progress['isBuffering'] == true;
         final traktProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
         final imdbId = payload.imdbId!;
         // For series, read season/episode from Kotlin progress update
         // For non-series, ignore parsed values — avoids filename false positives (e.g. "5.1" surround → S5E1)
-        final season = payload.contentType == _PlaybackContentType.series ? progress['season'] as int? : null;
-        final episode = payload.contentType == _PlaybackContentType.series ? progress['episode'] as int? : null;
+        final season = payload.contentType == _PlaybackContentType.series
+            ? progress['season'] as int?
+            : null;
+        final episode = payload.contentType == _PlaybackContentType.series
+            ? progress['episode'] as int?
+            : null;
 
         // Detect episode switch — scrobble stop for the old episode
-        if (_traktLastKnownSeason != null && _traktLastKnownEpisode != null &&
-            (season != _traktLastKnownSeason || episode != _traktLastKnownEpisode) &&
+        if (_traktLastKnownSeason != null &&
+            _traktLastKnownEpisode != null &&
+            (season != _traktLastKnownSeason ||
+                episode != _traktLastKnownEpisode) &&
             _traktLastScrobbleAction != 'stop') {
           _traktHeartbeatTimer?.cancel();
           _traktHeartbeatTimer = null;
-          TraktService.instance.scrobbleStop(imdbId, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
+          TraktService.instance.scrobbleStop(
+            imdbId,
+            _traktLastKnownProgress,
+            season: _traktLastKnownSeason,
+            episode: _traktLastKnownEpisode,
+          );
           _traktLastScrobbleAction = 'stop';
         }
 
@@ -1472,53 +1638,101 @@ class VideoPlayerLauncher {
         _traktLastKnownSeason = season;
         _traktLastKnownEpisode = episode;
         // Recover session if stopped at >80% and user sought back under 80%
-        if (_traktLastScrobbleAction == 'stop' && isPlaying && traktProgress <= 80 && !completed) {
+        if (_traktLastScrobbleAction == 'stop' &&
+            isPlaying &&
+            traktProgress <= 80 &&
+            !completed) {
           _traktLastScrobbleAction = null;
         }
         if (completed && _traktLastScrobbleAction != 'stop') {
           _traktLastScrobbleAction = 'stop';
           _traktHeartbeatTimer?.cancel();
           _traktHeartbeatTimer = null;
-          TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
-        } else if (isPlaying && _traktLastScrobbleAction != 'start' && _traktLastScrobbleAction != 'stop') {
+          TraktService.instance.scrobbleStop(
+            imdbId,
+            traktProgress,
+            season: season,
+            episode: episode,
+          );
+        } else if (isPlaying &&
+            _traktLastScrobbleAction != 'start' &&
+            _traktLastScrobbleAction != 'stop') {
           // Trakt rejects start above 80% — send stop instead, no heartbeat needed
           if (traktProgress > 80) {
             _traktLastScrobbleAction = 'stop';
-            TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
+            TraktService.instance.scrobbleStop(
+              imdbId,
+              traktProgress,
+              season: season,
+              episode: episode,
+            );
           } else {
             _traktLastScrobbleAction = 'start';
-            TraktService.instance.scrobbleStart(imdbId, traktProgress, season: season, episode: episode);
+            TraktService.instance.scrobbleStart(
+              imdbId,
+              traktProgress,
+              season: season,
+              episode: episode,
+            );
             // Start heartbeat timer to checkpoint progress every 2 minutes
             _traktHeartbeatTimer?.cancel();
-            _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+            _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
+              _,
+            ) {
               if (payload.imdbId == null) return;
               // Trakt rejects start/pause above 80% — send stop and end heartbeat
               if (_traktLastKnownProgress > 80) {
                 _traktLastScrobbleAction = 'stop';
-                TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress,
-                    season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
-                debugPrint('Trakt: Heartbeat stop at ${_traktLastKnownProgress.toStringAsFixed(1)}% (>80%)');
+                TraktService.instance.scrobbleStop(
+                  payload.imdbId!,
+                  _traktLastKnownProgress,
+                  season: _traktLastKnownSeason,
+                  episode: _traktLastKnownEpisode,
+                );
+                debugPrint(
+                  'Trakt: Heartbeat stop at ${_traktLastKnownProgress.toStringAsFixed(1)}% (>80%)',
+                );
                 _traktHeartbeatTimer?.cancel();
                 _traktHeartbeatTimer = null;
                 return;
               }
               // Use latest known progress/season/episode
               _traktLastScrobbleAction = 'start';
-              TraktService.instance.scrobbleStart(payload.imdbId!, _traktLastKnownProgress,
-                  season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
-              debugPrint('Trakt: Heartbeat scrobble at ${_traktLastKnownProgress.toStringAsFixed(1)}%');
+              TraktService.instance.scrobbleStart(
+                payload.imdbId!,
+                _traktLastKnownProgress,
+                season: _traktLastKnownSeason,
+                episode: _traktLastKnownEpisode,
+              );
+              debugPrint(
+                'Trakt: Heartbeat scrobble at ${_traktLastKnownProgress.toStringAsFixed(1)}%',
+              );
             });
           }
-        } else if (!isPlaying && !completed && _traktLastScrobbleAction != null && _traktLastScrobbleAction != 'pause' && _traktLastScrobbleAction != 'stop') {
+        } else if (!isPlaying &&
+            !completed &&
+            _traktLastScrobbleAction != null &&
+            _traktLastScrobbleAction != 'pause' &&
+            _traktLastScrobbleAction != 'stop') {
           // Trakt rejects pause when progress > 80% — send stop instead
           _traktHeartbeatTimer?.cancel();
           _traktHeartbeatTimer = null;
           if (traktProgress > 80) {
             _traktLastScrobbleAction = 'stop';
-            TraktService.instance.scrobbleStop(imdbId, traktProgress, season: season, episode: episode);
+            TraktService.instance.scrobbleStop(
+              imdbId,
+              traktProgress,
+              season: season,
+              episode: episode,
+            );
           } else {
             _traktLastScrobbleAction = 'pause';
-            TraktService.instance.scrobblePause(imdbId, traktProgress, season: season, episode: episode);
+            TraktService.instance.scrobblePause(
+              imdbId,
+              traktProgress,
+              season: season,
+              episode: episode,
+            );
           }
         }
       }
@@ -1550,12 +1764,15 @@ class VideoPlayerLauncher {
         }
 
         if (resumeId != null && payload.items.isNotEmpty) {
-          final fallbackIndex = itemIndex.clamp(0, payload.items.length - 1).toInt();
+          final fallbackIndex = itemIndex
+              .clamp(0, payload.items.length - 1)
+              .toInt();
           final item = payload.items.firstWhere(
             (i) => i.resumeId == resumeId,
             orElse: () => payload.items[fallbackIndex],
           );
-          final persistedUrl = progressUrl ??
+          final persistedUrl =
+              progressUrl ??
               (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
               item.url;
 
@@ -1584,7 +1801,8 @@ class VideoPlayerLauncher {
           : items[fallbackIndex];
 
       final videoTitle = item.resumeId ?? item.title;
-      final persistedUrl = progressUrl ??
+      final persistedUrl =
+          progressUrl ??
           (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
           item.url;
 
@@ -1612,7 +1830,9 @@ class VideoPlayerLauncher {
       // This allows the playlist screen to display progress indicators for collections
       if (payload.contentType == _PlaybackContentType.collection &&
           payload.seriesTitle != null) {
-        debugPrint('📺 AndroidTV Collection Save Check: seriesTitle="${payload.seriesTitle}", itemIndex=$fallbackIndex');
+        debugPrint(
+          '📺 AndroidTV Collection Save Check: seriesTitle="${payload.seriesTitle}", itemIndex=$fallbackIndex',
+        );
 
         await StorageService.saveSeriesPlaybackState(
           seriesTitle: payload.seriesTitle!,
@@ -1625,7 +1845,9 @@ class VideoPlayerLauncher {
           imdbId: payload.imdbId,
         );
 
-        debugPrint('✅ AndroidTV Collection Save: title="${payload.seriesTitle}" S0E${fallbackIndex + 1} pos=${positionMs}ms');
+        debugPrint(
+          '✅ AndroidTV Collection Save: title="${payload.seriesTitle}" S0E${fallbackIndex + 1} pos=${positionMs}ms',
+        );
 
         // Mark as finished if completed
         if (completed) {
@@ -1635,7 +1857,9 @@ class VideoPlayerLauncher {
             episode: fallbackIndex + 1,
             imdbId: payload.imdbId,
           );
-          debugPrint('✅ AndroidTV Collection: Marked S0E${fallbackIndex + 1} as finished');
+          debugPrint(
+            '✅ AndroidTV Collection: Marked S0E${fallbackIndex + 1} as finished',
+          );
         }
       }
     } catch (e) {
@@ -1654,8 +1878,16 @@ class VideoPlayerLauncher {
     // created the playback entry — sending stop would create a duplicate)
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = null;
-    if (payload.traktScrobble && payload.imdbId != null && _traktLastScrobbleAction != 'stop' && _traktLastScrobbleAction != 'pause') {
-      TraktService.instance.scrobbleStop(payload.imdbId!, _traktLastKnownProgress, season: _traktLastKnownSeason, episode: _traktLastKnownEpisode);
+    if (payload.traktScrobble &&
+        payload.imdbId != null &&
+        _traktLastScrobbleAction != 'stop' &&
+        _traktLastScrobbleAction != 'pause') {
+      TraktService.instance.scrobbleStop(
+        payload.imdbId!,
+        _traktLastKnownProgress,
+        season: _traktLastKnownSeason,
+        episode: _traktLastKnownEpisode,
+      );
     }
     _traktLastScrobbleAction = null;
     _traktLastKnownProgress = 0.0;
@@ -1679,7 +1911,9 @@ class VideoPlayerLauncher {
     final hasTorboxWebDownloadMetadata =
         entry.torboxWebDownloadId != null && entry.torboxFileId != null;
 
-    if (provider == 'torbox' || hasTorboxMetadata || hasTorboxWebDownloadMetadata) {
+    if (provider == 'torbox' ||
+        hasTorboxMetadata ||
+        hasTorboxWebDownloadMetadata) {
       final torrentId = entry.torboxTorrentId;
       final webDownloadId = entry.torboxWebDownloadId;
       final fileId = entry.torboxFileId;
@@ -1815,7 +2049,9 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
-      if (traktProgressPercent != null && traktProgressPercent! > 0 && traktProgressPercent! < 100)
+      if (traktProgressPercent != null &&
+          traktProgressPercent! > 0 &&
+          traktProgressPercent! < 100)
         'traktProgressPercent': traktProgressPercent,
     };
   }
@@ -1901,10 +2137,7 @@ class _AndroidTvCollectionGroup {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'fileIndices': fileIndices,
-    };
+    return {'name': name, 'fileIndices': fileIndices};
   }
 }
 
@@ -1979,41 +2212,60 @@ class _AndroidTvPlaylistResolver {
         resumeId: '${entry.title}_$i',
       );
     }).toList();
-    debugPrint('AndroidTvPlaylistResolver: replaced entries with ${entries.length} new entries');
+    debugPrint(
+      'AndroidTvPlaylistResolver: replaced entries with ${entries.length} new entries',
+    );
   }
 
   Future<Map<String, dynamic>?> handleRequest(
     Map<String, dynamic> request,
   ) async {
-    debugPrint('AndroidTvPlaylistResolver: handleRequest called with: $request');
+    debugPrint(
+      'AndroidTvPlaylistResolver: handleRequest called with: $request',
+    );
     debugPrint('AndroidTvPlaylistResolver: total entries: ${entries.length}');
 
     _LauncherEntry? target;
     final resumeId = request['resumeId'] as String?;
     final index = request['index'] as int?;
 
-    debugPrint('AndroidTvPlaylistResolver: looking for - resumeId: $resumeId, index: $index');
+    debugPrint(
+      'AndroidTvPlaylistResolver: looking for - resumeId: $resumeId, index: $index',
+    );
 
     if (resumeId != null) {
       target = entries.firstWhereOrNull((entry) => entry.resumeId == resumeId);
-      debugPrint('AndroidTvPlaylistResolver: found by resumeId: ${target != null}');
+      debugPrint(
+        'AndroidTvPlaylistResolver: found by resumeId: ${target != null}',
+      );
     }
-    if (target == null && index != null && index >= 0 && index < entries.length) {
+    if (target == null &&
+        index != null &&
+        index >= 0 &&
+        index < entries.length) {
       target = entries[index];
-      debugPrint('AndroidTvPlaylistResolver: found by index: ${target != null}, entry: ${target?.entry.title}');
+      debugPrint(
+        'AndroidTvPlaylistResolver: found by index: ${target != null}, entry: ${target?.entry.title}',
+      );
     }
     if (target == null) {
       debugPrint('AndroidTvPlaylistResolver: ERROR - target not found!');
       debugPrint('AndroidTvPlaylistResolver: Available entries:');
       for (int i = 0; i < entries.length; i++) {
-        debugPrint('  [$i] resumeId=${entries[i].resumeId}, title=${entries[i].entry.title}');
+        debugPrint(
+          '  [$i] resumeId=${entries[i].resumeId}, title=${entries[i].entry.title}',
+        );
       }
       return null;
     }
 
-    debugPrint('AndroidTvPlaylistResolver: resolving entry for: ${target.entry.title}');
+    debugPrint(
+      'AndroidTvPlaylistResolver: resolving entry for: ${target.entry.title}',
+    );
     final url = await resolveEntry(target.entry);
-    debugPrint('AndroidTvPlaylistResolver: resolved URL: ${url.isNotEmpty ? url.substring(0, min(50, url.length)) : "EMPTY"}');
+    debugPrint(
+      'AndroidTvPlaylistResolver: resolved URL: ${url.isNotEmpty ? url.substring(0, min(50, url.length)) : "EMPTY"}',
+    );
 
     if (url.isEmpty) {
       debugPrint('AndroidTvPlaylistResolver: ERROR - resolved URL is empty!');
@@ -2021,7 +2273,9 @@ class _AndroidTvPlaylistResolver {
     }
 
     _cacheResolvedStream(target.resumeId, url);
-    debugPrint('AndroidTvPlaylistResolver: returning success - url length: ${url.length}');
+    debugPrint(
+      'AndroidTvPlaylistResolver: returning success - url length: ${url.length}',
+    );
     return {
       'url': url,
       'resumeId': target.resumeId,
@@ -2078,13 +2332,16 @@ class _AndroidTvPlaybackPayloadBuilder {
           (episode) => episode.originalIndex == i,
         );
       }
-      episodeInfo ??= SeriesEpisode(
-        url: entry.url,
-        title: entry.title,
-        filename: entry.title,
-        seriesInfo: SeriesParser.parseFilename(entry.title),
-        originalIndex: i,
-      );
+      if (episodeInfo == null) {
+        final fallbackInfo = SeriesParser.parseFilename(entry.title);
+        episodeInfo = SeriesEpisode(
+          url: entry.url,
+          title: entry.title,
+          filename: entry.title,
+          seriesInfo: fallbackInfo,
+          originalIndex: i,
+        );
+      }
 
       // Use TVMaze episode title if available, otherwise fallback to entry title
       final displayTitle = episodeInfo.episodeInfo?.title?.isNotEmpty == true
@@ -2117,7 +2374,8 @@ class _AndroidTvPlaybackPayloadBuilder {
 
     // Build collection groups for movie collections
     List<_AndroidTvCollectionGroup>? collectionGroups;
-    if (contentType == _PlaybackContentType.collection && launcherEntries.isNotEmpty) {
+    if (contentType == _PlaybackContentType.collection &&
+        launcherEntries.isNotEmpty) {
       // Extract PlaylistEntry objects from _LauncherEntry wrappers
       final playlistEntries = launcherEntries.map((e) => e.entry).toList();
 
@@ -2125,7 +2383,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       // - Raw: Preserve folder structure as-is
       // - Sorted: Files are already sorted A-Z in playlist, create single group
       // - Series/Other: Use Main/Extras grouping (40% threshold)
-      debugPrint('🎬 MovieCollection: viewMode=${args.viewMode}, contentType=$contentType');
+      debugPrint(
+        '🎬 MovieCollection: viewMode=${args.viewMode}, contentType=$contentType',
+      );
       final MovieCollection movieCollection;
       if (args.viewMode == PlaylistViewMode.raw) {
         debugPrint('🎬 Using fromFolderStructure (Raw mode)');
@@ -2140,7 +2400,9 @@ class _AndroidTvPlaybackPayloadBuilder {
           title: args.title,
         );
       } else {
-        debugPrint('🎬 Using fromPlaylistWithMainExtras (Main/Extras mode) - viewMode is ${args.viewMode}');
+        debugPrint(
+          '🎬 Using fromPlaylistWithMainExtras (Main/Extras mode) - viewMode is ${args.viewMode}',
+        );
         movieCollection = MovieCollection.fromPlaylistWithMainExtras(
           playlist: playlistEntries,
           title: args.title,
@@ -2149,14 +2411,20 @@ class _AndroidTvPlaybackPayloadBuilder {
 
       // Convert to Android TV collection groups
       collectionGroups = movieCollection.groups
-          .where((group) => group.fileIndices.isNotEmpty) // Only include non-empty groups
-          .map((group) => _AndroidTvCollectionGroup(
-                name: group.name,
-                fileIndices: group.fileIndices,
-              ))
+          .where(
+            (group) => group.fileIndices.isNotEmpty,
+          ) // Only include non-empty groups
+          .map(
+            (group) => _AndroidTvCollectionGroup(
+              name: group.name,
+              fileIndices: group.fileIndices,
+            ),
+          )
           .toList();
 
-      debugPrint('VideoPlayerLauncher: Created ${collectionGroups.length} collection groups for Android TV');
+      debugPrint(
+        'VideoPlayerLauncher: Created ${collectionGroups.length} collection groups for Android TV',
+      );
       for (final group in collectionGroups) {
         debugPrint('  - ${group.name}: ${group.fileIndices.length} files');
       }
@@ -2225,7 +2493,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       return null;
     }
 
-    debugPrint('AndroidTV MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year}');
+    debugPrint(
+      'AndroidTV MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year}',
+    );
 
     try {
       final metadata = await MovieMetadataService.lookupMovie(
@@ -2234,7 +2504,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       );
 
       if (metadata != null) {
-        debugPrint('AndroidTV MovieMetadata: Found IMDB ID "${metadata.imdbId}"');
+        debugPrint(
+          'AndroidTV MovieMetadata: Found IMDB ID "${metadata.imdbId}"',
+        );
         return metadata.imdbId;
       } else {
         debugPrint('AndroidTV MovieMetadata: No match found in Cinemeta');
@@ -2287,7 +2559,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       }
     }
 
-    debugPrint('VideoPlayerLauncher: Built navigation maps - next: ${nextMap.length}, prev: ${prevMap.length}');
+    debugPrint(
+      'VideoPlayerLauncher: Built navigation maps - next: ${nextMap.length}, prev: ${prevMap.length}',
+    );
     return _NavigationMaps(nextMap: nextMap, prevMap: prevMap);
   }
 
@@ -2296,12 +2570,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (playlist != null && playlist.isNotEmpty) {
       return playlist;
     }
-    return [
-      PlaylistEntry(
-        url: args.videoUrl,
-        title: args.title,
-      ),
-    ];
+    return [PlaylistEntry(url: args.videoUrl, title: args.title)];
   }
 
   Future<List<PlaylistEntry>> _prepareEntries(
@@ -2314,7 +2583,10 @@ class _AndroidTvPlaybackPayloadBuilder {
 
       // For start index entry, always resolve (handles redirects for direct streams)
       if (i == startIndex) {
-        final resolved = await VideoPlayerLauncher._resolveEntryUrl(entry, args);
+        final resolved = await VideoPlayerLauncher._resolveEntryUrl(
+          entry,
+          args,
+        );
         if (resolved.isEmpty) {
           throw Exception('Failed to resolve initial stream');
         }
@@ -2374,7 +2646,9 @@ class _AndroidTvPlaybackPayloadBuilder {
     );
   }
 
-  Future<SeriesPlaylist?> _buildSeriesPlaylist(List<PlaylistEntry> entries) async {
+  Future<SeriesPlaylist?> _buildSeriesPlaylist(
+    List<PlaylistEntry> entries,
+  ) async {
     if (entries.length < 2) {
       return null;
     }
@@ -2388,7 +2662,8 @@ class _AndroidTvPlaybackPayloadBuilder {
 
       final playlist = SeriesPlaylist.fromPlaylistEntries(
         entries,
-        collectionTitle: args.title, // Pass collection/torrent title as fallback
+        collectionTitle:
+            args.title, // Pass collection/torrent title as fallback
         forceSeries: forceSeries,
       );
       // DO NOT await fetchEpisodeInfo() here - TVMaze loading is now async
@@ -2443,7 +2718,9 @@ class _AndroidTvPlaybackPayloadBuilder {
   Future<int> _determineSeriesStartIndex(SeriesPlaylist? playlist) async {
     // If auto-resume is disabled, use startIndex directly
     if (args.disableAutoResume) {
-      debugPrint('AndroidTV: auto-resume disabled, using startIndex=${args.startIndex ?? 0}');
+      debugPrint(
+        'AndroidTV: auto-resume disabled, using startIndex=${args.startIndex ?? 0}',
+      );
       return args.startIndex ?? 0;
     }
 
@@ -2454,10 +2731,13 @@ class _AndroidTvPlaybackPayloadBuilder {
     // Target episode override (e.g. Trakt Quick Play next episode)
     if (args.contentSeason != null && args.contentEpisode != null) {
       final targetIndex = playlist.findOriginalIndexBySeasonEpisode(
-        args.contentSeason!, args.contentEpisode!,
+        args.contentSeason!,
+        args.contentEpisode!,
       );
       if (targetIndex != -1) {
-        debugPrint('AndroidTV: target episode S${args.contentSeason}E${args.contentEpisode} → index=$targetIndex');
+        debugPrint(
+          'AndroidTV: target episode S${args.contentSeason}E${args.contentEpisode} → index=$targetIndex',
+        );
         return targetIndex;
       }
     }
@@ -2496,7 +2776,9 @@ class _AndroidTvPlaybackPayloadBuilder {
   ) {
     // If auto-resume is disabled, use explicit start index
     if (args.disableAutoResume) {
-      debugPrint('AndroidTV: auto-resume disabled for collection, using startIndex=${args.startIndex ?? 0}');
+      debugPrint(
+        'AndroidTV: auto-resume disabled for collection, using startIndex=${args.startIndex ?? 0}',
+      );
       return args.startIndex ?? 0;
     }
 
@@ -2592,9 +2874,11 @@ class _AndroidTvPlaybackPayloadBuilder {
   /// Generate resume ID for a playlist entry - MUST match mobile video_player_screen.dart
   /// This ensures Android TV and mobile share the same resume state
   String _resumeIdForEntry(PlaylistEntry entry) {
-    return VideoPlayerLauncher.resumeIdForEntry(entry, fallbackTitle: args.title);
+    return VideoPlayerLauncher.resumeIdForEntry(
+      entry,
+      fallbackTitle: args.title,
+    );
   }
-
 }
 
 class _PerItemState {
@@ -2615,8 +2899,5 @@ class _NavigationMaps {
   final Map<int, int> nextMap;
   final Map<int, int> prevMap;
 
-  const _NavigationMaps({
-    required this.nextMap,
-    required this.prevMap,
-  });
+  const _NavigationMaps({required this.nextMap, required this.prevMap});
 }

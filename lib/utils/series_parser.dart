@@ -4,17 +4,17 @@ import 'package:flutter/foundation.dart';
 
 /// Classification of playlist content type
 enum PlaylistClassification {
-  SERIES,     // High confidence it's a TV series
-  MOVIES,     // High confidence it's a movie collection
-  AMBIGUOUS,  // Could be either
+  SERIES, // High confidence it's a TV series
+  MOVIES, // High confidence it's a movie collection
+  AMBIGUOUS, // Could be either
 }
 
 /// Analysis result for playlist content
 class PlaylistAnalysis {
-  final double confidenceScore;      // 0-100
+  final double confidenceScore; // 0-100
   final PlaylistClassification classification;
-  final String detectionMethod;      // Primary method used for detection
-  final Map<String, double> scores;  // Individual score breakdown
+  final String detectionMethod; // Primary method used for detection
+  final Map<String, double> scores; // Individual score breakdown
 
   const PlaylistAnalysis({
     required this.confidenceScore,
@@ -35,8 +35,8 @@ class SeriesInfo {
   final String? videoCodec;
   final String? group;
   final bool isSeries;
-  final double? confidence;  // Confidence score for series detection
-  final int? fileSize;        // File size in bytes for duplicate resolution
+  final double? confidence; // Confidence score for series detection
+  final int? fileSize; // File size in bytes for duplicate resolution
 
   const SeriesInfo({
     this.title,
@@ -93,36 +93,87 @@ class SeriesInfo {
 
 class SeriesParser {
   // Special content keywords for Season 0 detection
-  static const DELETED_KEYWORDS = ['deleted', 'deletedscenes', 'deleted.scenes', 'deleted_scenes'];
-  static const BEHIND_KEYWORDS = ['behind', 'behindthescenes', 'behind.the.scenes',
-                                   'making.of', 'makingof', 'making_of', 'bts'];
+  static const DELETED_KEYWORDS = [
+    'deleted',
+    'deletedscenes',
+    'deleted.scenes',
+    'deleted_scenes',
+  ];
+  static const BEHIND_KEYWORDS = [
+    'behind',
+    'behindthescenes',
+    'behind.the.scenes',
+    'making.of',
+    'makingof',
+    'making_of',
+    'bts',
+  ];
   // Note: 'extended' removed - it's commonly used in movie names like "Extended Edition"
   // and would cause false positives. Only standalone "Extras" folders/files should match.
   static const EXTRAS_KEYWORDS = ['extras', 'bonus', 'special', 'feature'];
   static const INTERVIEW_KEYWORDS = ['interview', 'featurette', 'interviews'];
-  static const BLOOPER_KEYWORDS = ['bloopers', 'gag.reel', 'gagreel', 'outtakes', 'mistakes'];
-  static const COMMENTARY_KEYWORDS = ['commentary', 'directors.cut', 'directors_cut'];
+  static const BLOOPER_KEYWORDS = [
+    'bloopers',
+    'gag.reel',
+    'gagreel',
+    'outtakes',
+    'mistakes',
+  ];
+  static const COMMENTARY_KEYWORDS = [
+    'commentary',
+    'directors.cut',
+    'directors_cut',
+  ];
   static const SAMPLE_KEYWORDS = ['sample', 'trailer', 'preview'];
 
   // Movie false positive patterns
   static const MOVIE_EPISODE_PATTERNS = [
-    'star.wars.episode', 'star_wars_episode',
-    'episode.i', 'episode.ii', 'episode.iii', 'episode.iv', 'episode.v',
-    'episode.vi', 'episode.vii', 'episode.viii', 'episode.ix',
-    'part.i', 'part.ii', 'part.iii', 'part.iv', 'part.v',
-    'chapter.1', 'chapter.2', 'chapter.3', 'chapter.4',
+    'star.wars.episode',
+    'star_wars_episode',
+    'episode.i',
+    'episode.ii',
+    'episode.iii',
+    'episode.iv',
+    'episode.v',
+    'episode.vi',
+    'episode.vii',
+    'episode.viii',
+    'episode.ix',
+    'part.i',
+    'part.ii',
+    'part.iii',
+    'part.iv',
+    'part.v',
+    'chapter.1',
+    'chapter.2',
+    'chapter.3',
+    'chapter.4',
   ];
 
   // Movie collection indicators - patterns that suggest a movie collection
   static const MOVIE_COLLECTION_KEYWORDS = [
-    'collection', 'complete.collection', 'box.set', 'boxset',
-    'trilogy', 'quadrilogy', 'saga', 'anthology',
-    'part.1', 'part.2', 'part.one', 'part.two',
-    'vol.1', 'vol.2', 'volume.1', 'volume.2',
+    'collection',
+    'complete.collection',
+    'box.set',
+    'boxset',
+    'trilogy',
+    'quadrilogy',
+    'saga',
+    'anthology',
+    'part.1',
+    'part.2',
+    'part.one',
+    'part.two',
+    'vol.1',
+    'vol.2',
+    'volume.1',
+    'volume.2',
   ];
 
   // Year pattern for detecting movies (movies typically have years, episodes don't)
-  static final RegExp _movieYearPattern = RegExp(r'[\.\s_\-\(](?:19|20)\d{2}[\.\s_\-\)]');
+  static final RegExp _movieYearPattern = RegExp(
+    r'[\.\s_\-\(](?:19|20)\d{2}[\.\s_\-\)]',
+  );
 
   static final List<RegExp> _seasonEpisodePatterns = [
     // Bracket notation: [S.E] or [S.E.E] (MUST BE FIRST for priority)
@@ -170,16 +221,16 @@ class SeriesParser {
     RegExp(r'^(.+?)[\s._-]EP?\d{3}', caseSensitive: false),
   ];
 
-  // Single-release product/catalog codes shaped as 2-6 uppercase letters,
-  // dash, 3-5 digits. These must not be parsed as series or anime — they
-  // otherwise collide with the generic "prefix separator N-digits" anime
-  // fallback pattern.
-  static final RegExp _productCodePattern = RegExp(r'\b[A-Z]{2,6}-\d{3,5}\b');
-
   static final RegExp _yearPattern = RegExp(r'\((\d{4})\)');
-  static final RegExp _qualityPattern = RegExp(r'(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)');
-  static final RegExp _audioCodecPattern = RegExp(r'(AAC|AC3|DTS|FLAC|MP3|OGG)');
-  static final RegExp _videoCodecPattern = RegExp(r'(H\.264|H\.265|HEVC|AVC|XVID|DIVX)');
+  static final RegExp _qualityPattern = RegExp(
+    r'(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)',
+  );
+  static final RegExp _audioCodecPattern = RegExp(
+    r'(AAC|AC3|DTS|FLAC|MP3|OGG)',
+  );
+  static final RegExp _videoCodecPattern = RegExp(
+    r'(H\.264|H\.265|HEVC|AVC|XVID|DIVX)',
+  );
   static final RegExp _groupPattern = RegExp(r'-([A-Za-z0-9]+)$');
 
   /// Validate if a series title is valid and usable
@@ -194,17 +245,26 @@ class SeriesParser {
 
     // Reject titles starting with season/episode patterns
     if (RegExp(r'^[Ss]\d{1,2}[\s\-]*[Ee]\d{1,3}').hasMatch(title)) return false;
-    if (RegExp(r'^[Ss]\d{1,2}[\s\-]+[Ee]pisode', caseSensitive: false).hasMatch(title)) return false;
+    if (RegExp(
+      r'^[Ss]\d{1,2}[\s\-]+[Ee]pisode',
+      caseSensitive: false,
+    ).hasMatch(title))
+      return false;
     if (RegExp(r'^\d{1,2}[xX]\d{1,3}').hasMatch(title)) return false;
-    if (RegExp(r'^[Ss]eason\s+\d', caseSensitive: false).hasMatch(title)) return false;
-    if (RegExp(r'^[Ee]pisode\s+\d', caseSensitive: false).hasMatch(title)) return false;
+    if (RegExp(r'^[Ss]eason\s+\d', caseSensitive: false).hasMatch(title))
+      return false;
+    if (RegExp(r'^[Ee]pisode\s+\d', caseSensitive: false).hasMatch(title))
+      return false;
 
     // Reject titles that are mostly quality/codec tags
     final qualityTagCount = RegExp(
       r'\b(1080p|720p|480p|2160p|4K|BluRay|WEBRip|HDTV|x264|x265|HEVC|AAC|AC3|DTS)\b',
-      caseSensitive: false
+      caseSensitive: false,
     ).allMatches(title).length;
-    final wordCount = title.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final wordCount = title
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .length;
     if (wordCount > 0 && qualityTagCount > wordCount / 2) return false;
 
     return true;
@@ -217,11 +277,15 @@ class SeriesParser {
 
     // Parse all filenames and extract titles
     final titles = <String>[];
-    for (final filename in filenames.take(10)) { // Limit to first 10 for performance
+    for (final filename in filenames.take(10)) {
+      // Limit to first 10 for performance
       final info = parseFilename(filename);
       if (info.title != null && info.title!.isNotEmpty) {
         // Clean up trailing separators from extracted titles
-        final cleanedTitle = info.title!.toLowerCase().trim().replaceAll(RegExp(r'[\s\-_\+]+$'), '');
+        final cleanedTitle = info.title!.toLowerCase().trim().replaceAll(
+          RegExp(r'[\s\-_\+]+$'),
+          '',
+        );
         if (cleanedTitle.isNotEmpty) {
           titles.add(cleanedTitle);
         }
@@ -235,7 +299,9 @@ class SeriesParser {
     if (uniqueTitles.length == 1) {
       final commonTitle = titles.first;
       if (isValidSeriesTitle(commonTitle)) {
-        debugPrint('SeriesParser: Found common title (all same): "$commonTitle"');
+        debugPrint(
+          'SeriesParser: Found common title (all same): "$commonTitle"',
+        );
         return commonTitle;
       }
     }
@@ -254,7 +320,9 @@ class SeriesParser {
       }
     }
 
-    debugPrint('SeriesParser: No common title found (${uniqueTitles.length} unique titles)');
+    debugPrint(
+      'SeriesParser: No common title found (${uniqueTitles.length} unique titles)',
+    );
     return null;
   }
 
@@ -301,14 +369,29 @@ class SeriesParser {
     // Remove common file metadata emojis and everything after them
     cleaned = cleaned.replaceAll(RegExp(r'[👤💾⚙️📁📂🎬🎥🎞️📽️🎦]+.*$'), '');
     // Remove any remaining emoji characters
-    cleaned = cleaned.replaceAll(RegExp(r'[\u{1F300}-\u{1F9FF}]', unicode: true), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(r'[\u{1F300}-\u{1F9FF}]', unicode: true),
+      '',
+    );
     // Remove emoji variation selectors and other unicode symbols
-    cleaned = cleaned.replaceAll(RegExp(r'[\u{2600}-\u{26FF}]', unicode: true), '');
-    cleaned = cleaned.replaceAll(RegExp(r'[\u{2700}-\u{27BF}]', unicode: true), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(r'[\u{2600}-\u{26FF}]', unicode: true),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'[\u{2700}-\u{27BF}]', unicode: true),
+      '',
+    );
 
     // 3. Remove file paths (anything with forward/back slashes)
     // Match patterns like "Season 1/file.mkv" or " /folder/file"
-    cleaned = cleaned.replaceAll(RegExp(r'[/\\][^/\\]+\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v).*$', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(
+        r'[/\\][^/\\]+\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v).*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
     cleaned = cleaned.replaceAll(RegExp(r'\s*[/\\].+$'), '');
 
     // 4. Trim and remove trailing numbers that are leftovers (like "HEVC 1" → "1")
@@ -461,17 +544,38 @@ class SeriesParser {
     text = text.replaceAll(RegExp(r'\b[57]\s+1\b'), ' ');
 
     // Also remove common quality indicators in brackets
-    text = text.replaceAll(RegExp(r'\[(?:1080p|720p|480p|2160p|4K|BluRay|WEB-DL|x264|x265|HEVC|HDR)\]', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\[(?:1080p|720p|480p|2160p|4K|BluRay|WEB-DL|x264|x265|HEVC|HDR)\]',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     // Remove file size indicators: "59GB", "1.5GB", "100MB", etc.
-    text = text.replaceAll(RegExp(r'\b\d+(?:\.\d+)?\s*(?:GB|MB|TB)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\b\d+(?:\.\d+)?\s*(?:GB|MB|TB)\b', caseSensitive: false),
+      ' ',
+    );
 
     // Remove percentage indicators: "100%", "50% English", etc.
     text = text.replaceAll(RegExp(r'\b\d+%\b'), ' ');
 
     // Remove audio/subtitle metadata
-    text = text.replaceAll(RegExp(r'\b(?:English|Multi|Dual)\s+(?:Audio|Subs?|Subtitles?)\b', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\b\d+%\s+(?:English|Multi|Dual)\s+(?:Audio|Subs?)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\b(?:English|Multi|Dual)\s+(?:Audio|Subs?|Subtitles?)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(
+        r'\b\d+%\s+(?:English|Multi|Dual)\s+(?:Audio|Subs?)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     // Remove standalone release group names at end (all caps, 2-5 chars)
     // But DON'T remove country codes (US, UK, AU, CA, NZ)
@@ -484,34 +588,73 @@ class SeriesParser {
   static String _removeSeasonMetadata(String text) {
     // CRITICAL: Handle "The Complete Series/Collection" FIRST before other patterns
     // Remove with optional preceding space/paren
-    text = text.replaceAll(RegExp(r'[\s\)]+The\s+Complete\s+(?:Series|Collection)', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'[\s\)]+The\s+Complete\s+(?:Series|Collection)',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     // PHASE 2: Extended season keywords (Full, Entire, Box Set)
     // "Full Series", "Entire Series", "Complete Box Set", "Full Collection"
     // Also handles "The Complete Series", "The Full Collection", etc.
-    text = text.replaceAll(RegExp(r'\b(?:The\s+)?(?:Full|Entire|Complete)\s+(?:Series|Collection)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\b(?:The\s+)?(?:Full|Entire|Complete)\s+(?:Series|Collection)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
     text = text.replaceAll(RegExp(r'\bBox\s+Set\b', caseSensitive: false), ' ');
 
     // PHASE 2: Alternative season range formats
     // "Seasons 1 to 9", "Seasons 1 through 9", "Seasons 1 thru 9"
     // Note: Using looser word boundary to handle edge cases
-    text = text.replaceAll(RegExp(r'\bSeasons?\s+\d+\s+(?:to|through|thru)\s+\d+(?:\s|$)', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\bSeasons?\s+\d+\s+(?:to|through|thru)\s+\d+(?:\s|$)',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     // Space-separated season list: "S01 S02 S03" (at least 2 instances)
-    text = text.replaceAll(RegExp(r'(?:S\d{1,2}\s+){2,}', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'(?:S\d{1,2}\s+){2,}', caseSensitive: false),
+      ' ',
+    );
 
     // "Complete Season 1-9", "Complete Series", "All Seasons", "All Episodes"
-    text = text.replaceAll(RegExp(r'\b(?:Complete\s+)?(?:Season|Series|Collection)s?\s*\d*\s*-?\s*\d*\b', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\bAll\s+(?:Seasons?|Episodes?)\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\b(?:Complete\s+)?(?:Season|Series|Collection)s?\s*\d*\s*-?\s*\d*\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(r'\bAll\s+(?:Seasons?|Episodes?)\b', caseSensitive: false),
+      ' ',
+    );
 
     // "S01-S09", "S1-S9", "S01 - S09"
-    text = text.replaceAll(RegExp(r'\bS\d{1,2}\s*-\s*S\d{1,2}\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\bS\d{1,2}\s*-\s*S\d{1,2}\b', caseSensitive: false),
+      ' ',
+    );
 
     // "Season 1-9", "Seasons 1-9", "Series 1-9"
-    text = text.replaceAll(RegExp(r'\b(?:Season|Series)s?\s+\d+\s*-\s*\d+\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\b(?:Season|Series)s?\s+\d+\s*-\s*\d+\b', caseSensitive: false),
+      ' ',
+    );
 
     // Handle "Complete" followed by "+" - remove "Complete" in this context
-    text = text.replaceAll(RegExp(r'\bComplete\s+\+', caseSensitive: false), ' +');
+    text = text.replaceAll(
+      RegExp(r'\bComplete\s+\+', caseSensitive: false),
+      ' +',
+    );
 
     // Remove everything from first "+" to end (simplest approach)
     // This handles "+ Movies + Specials + STAR WARS + Special Features" etc.
@@ -519,7 +662,10 @@ class SeriesParser {
 
     // Standalone "COMPLETE" as a keyword (but not when it's part of a title like "Complete Saga")
     // Remove if at the end OR followed by year/punctuation (like "Complete (2011)")
-    text = text.replaceAll(RegExp(r'\bComplete\s*(?=\(|\[|$)', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\bComplete\s*(?=\(|\[|$)', caseSensitive: false),
+      ' ',
+    );
 
     return text;
   }
@@ -530,7 +676,10 @@ class SeriesParser {
     // [US], (US), {US}, <US> → " US "
     // Supports: US, UK, AU, CA, NZ, IN, BR, FR, DE, JP, KR
     text = text.replaceAllMapped(
-      RegExp(r'[\[{(<](US|UK|AU|CA|NZ|IN|BR|FR|DE|JP|KR)[\]}>)]', caseSensitive: false),
+      RegExp(
+        r'[\[{(<](US|UK|AU|CA|NZ|IN|BR|FR|DE|JP|KR)[\]}>)]',
+        caseSensitive: false,
+      ),
       (match) => ' ${match.group(1)!.toUpperCase()} ',
     );
 
@@ -568,7 +717,10 @@ class SeriesParser {
     // Remove platform tags in brackets (also covers regional variants)
     // [NETFLIX], [AMAZON], [HULU], [DISNEY+], [HBO]
     text = text.replaceAll(
-      RegExp(r'\[(?:NETFLIX|AMAZON|HULU|DISNEY\+?|HBO|APPLE)\]', caseSensitive: false),
+      RegExp(
+        r'\[(?:NETFLIX|AMAZON|HULU|DISNEY\+?|HBO|APPLE)\]',
+        caseSensitive: false,
+      ),
       ' ',
     );
 
@@ -658,25 +810,61 @@ class SeriesParser {
   static String _removeCollectionPartIndicators(String text) {
     // Remove collection part indicators in square brackets
     // [Part X], [Part 1], [Part One], etc.
-    text = text.replaceAll(RegExp(r'\[Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\]', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\[Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\]',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     // Remove volume indicators
     // [Vol X], [Vol. X], [Volume X], etc.
-    text = text.replaceAll(RegExp(r'\[Vol(?:ume)?\.?\s+\d+\]', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\[Vol(?:ume)?\.?\s+\d+\]', caseSensitive: false),
+      ' ',
+    );
 
     // Remove disc/disk indicators
     // [Disc X], [Disk X], [DVD X], [CD X]
-    text = text.replaceAll(RegExp(r'\[(?:Disc|Disk|DVD|CD)\s+\d+\]', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(r'\[(?:Disc|Disk|DVD|CD)\s+\d+\]', caseSensitive: false),
+      ' ',
+    );
 
     // Also remove these patterns in parentheses
-    text = text.replaceAll(RegExp(r'\(Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\)', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\(Vol(?:ume)?\.?\s+\d+\)', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\((?:Disc|Disk|DVD|CD)\s+\d+\)', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\(Part\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\)',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(r'\(Vol(?:ume)?\.?\s+\d+\)', caseSensitive: false),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(r'\((?:Disc|Disk|DVD|CD)\s+\d+\)', caseSensitive: false),
+      ' ',
+    );
 
     // Remove these patterns without brackets too (at word boundaries)
-    text = text.replaceAll(RegExp(r'\bPart\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\b', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\bVol(?:ume)?\.?\s+\d+\b', caseSensitive: false), ' ');
-    text = text.replaceAll(RegExp(r'\b(?:Disc|Disk|DVD|CD)\s+\d+\b', caseSensitive: false), ' ');
+    text = text.replaceAll(
+      RegExp(
+        r'\bPart\s+(?:\d+|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|I{1,3}|IV|V|VI{1,3}|IX|X)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(r'\bVol(?:ume)?\.?\s+\d+\b', caseSensitive: false),
+      ' ',
+    );
+    text = text.replaceAll(
+      RegExp(r'\b(?:Disc|Disk|DVD|CD)\s+\d+\b', caseSensitive: false),
+      ' ',
+    );
 
     return text;
   }
@@ -696,13 +884,6 @@ class SeriesParser {
         isMoviePattern = true;
         break;
       }
-    }
-
-    // Short-prefix release codes otherwise get picked up by the generic anime
-    // "prefix + 3-digits" pattern and mis-classified as anime.
-    if (!isMoviePattern && _productCodePattern.hasMatch(nameWithoutExt)) {
-      debugPrint('SeriesParser: Detected product/release code, treating as non-series');
-      isMoviePattern = true;
     }
 
     // Check if it's a sample file
@@ -748,11 +929,18 @@ class SeriesParser {
               final bracketEnd = match.end;
               String? extractedTitle;
               if (bracketEnd < nameWithoutExt.length) {
-                final afterBracket = nameWithoutExt.substring(bracketEnd).trim();
+                final afterBracket = nameWithoutExt
+                    .substring(bracketEnd)
+                    .trim();
                 if (afterBracket.isNotEmpty) {
                   // Clean up the title
-                  extractedTitle = afterBracket.replaceAll(RegExp(r'[._]'), ' ').trim();
-                  extractedTitle = extractedTitle.replaceAll(RegExp(r'\s+'), ' ');
+                  extractedTitle = afterBracket
+                      .replaceAll(RegExp(r'[._]'), ' ')
+                      .trim();
+                  extractedTitle = extractedTitle.replaceAll(
+                    RegExp(r'\s+'),
+                    ' ',
+                  );
                   if (extractedTitle.isEmpty) {
                     extractedTitle = null;
                   }
@@ -765,7 +953,8 @@ class SeriesParser {
                 if (endEpisode != null) {
                   // For multi-episode, append the range to the title
                   if (extractedTitle != null) {
-                    episodeTitle = '$extractedTitle (Episodes $episode-$endEpisode)';
+                    episodeTitle =
+                        '$extractedTitle (Episodes $episode-$endEpisode)';
                   } else {
                     episodeTitle = 'Episodes $episode-$endEpisode';
                   }
@@ -777,13 +966,17 @@ class SeriesParser {
                 episodeTitle = extractedTitle;
               }
 
-              debugPrint('SeriesParser: Bracket notation [$season.$episode${match.group(3) != null ? ".${match.group(3)}" : ""}] → title: "${episodeTitle ?? "none"}"');
+              debugPrint(
+                'SeriesParser: Bracket notation [$season.$episode${match.group(3) != null ? ".${match.group(3)}" : ""}] → title: "${episodeTitle ?? "none"}"',
+              );
             }
           } else if (match.groupCount >= 1) {
             // For patterns like "Episode 2" or "E02", we need to infer season
             episode = int.tryParse(match.group(1) ?? '');
             // Try to find season from other patterns
-            final seasonMatch = RegExp(r'[Ss](\d{1,2})').firstMatch(nameWithoutExt);
+            final seasonMatch = RegExp(
+              r'[Ss](\d{1,2})',
+            ).firstMatch(nameWithoutExt);
             if (seasonMatch != null) {
               season = int.tryParse(seasonMatch.group(1) ?? '');
             }
@@ -939,7 +1132,10 @@ class SeriesParser {
   /// Use this for Magic TV and other streaming/browsing contexts where
   /// conservative classification is preferred. Use the standard parseFilename()
   /// for playlist management and progress tracking.
-  static SeriesInfo parseFilenameConservative(String filename, {int? fileSize}) {
+  static SeriesInfo parseFilenameConservative(
+    String filename, {
+    int? fileSize,
+  }) {
     // Remove file extension
     final nameWithoutExt = _removeExtension(filename);
     final lowerName = nameWithoutExt.toLowerCase();
@@ -951,19 +1147,13 @@ class SeriesParser {
     // Check for existing movie patterns
     for (final pattern in MOVIE_EPISODE_PATTERNS) {
       if (lowerName.contains(pattern)) {
-        debugPrint('SeriesParser (Conservative): Movie pattern detected: $pattern');
+        debugPrint(
+          'SeriesParser (Conservative): Movie pattern detected: $pattern',
+        );
         isLikelyMovie = true;
         movieReason = 'movie episode pattern';
         break;
       }
-    }
-
-    // Short-prefix release codes are single-release identifiers that
-    // otherwise get matched by the generic anime "prefix + 3-digits" regex.
-    if (!isLikelyMovie && _productCodePattern.hasMatch(nameWithoutExt)) {
-      debugPrint('SeriesParser (Conservative): Product/release code detected');
-      isLikelyMovie = true;
-      movieReason = 'product/release code';
     }
 
     // Check for multi-part movie indicators (CD/Disc/Part)
@@ -986,7 +1176,9 @@ class SeriesParser {
         caseSensitive: false,
       );
       if (romanNumeralPattern.hasMatch(nameWithoutExt)) {
-        debugPrint('SeriesParser (Conservative): Roman numeral sequel detected');
+        debugPrint(
+          'SeriesParser (Conservative): Roman numeral sequel detected',
+        );
         isLikelyMovie = true;
         movieReason = 'roman numeral sequel';
       }
@@ -999,7 +1191,9 @@ class SeriesParser {
         caseSensitive: false,
       );
       if (yearQualityPattern.hasMatch(nameWithoutExt)) {
-        debugPrint('SeriesParser (Conservative): Year-quality pattern detected (movie)');
+        debugPrint(
+          'SeriesParser (Conservative): Year-quality pattern detected (movie)',
+        );
         isLikelyMovie = true;
         movieReason = 'year-quality pattern';
       }
@@ -1050,25 +1244,34 @@ class SeriesParser {
             // Reject if episode > 500
             if (potentialSeason != null && potentialSeason > 50) {
               // Check if this is explicit S##E## format
-              final isExplicitFormat = nameWithoutExt.contains(RegExp(r'[Ss]\d+[Ee]\d+'));
+              final isExplicitFormat = nameWithoutExt.contains(
+                RegExp(r'[Ss]\d+[Ee]\d+'),
+              );
               if (!isExplicitFormat) {
-                debugPrint('SeriesParser (Conservative): Rejected season=$potentialSeason (too high)');
+                debugPrint(
+                  'SeriesParser (Conservative): Rejected season=$potentialSeason (too high)',
+                );
                 continue;
               }
             }
             if (potentialEpisode != null && potentialEpisode > 500) {
-              debugPrint('SeriesParser (Conservative): Rejected episode=$potentialEpisode (too high)');
+              debugPrint(
+                'SeriesParser (Conservative): Rejected episode=$potentialEpisode (too high)',
+              );
               continue;
             }
 
             // Additional check: If pattern is the digits.digits form, reject
             // matches that come directly after a 4-digit year (likely a
             // quality or version number, not a real season.episode).
-            if (pattern == _seasonEpisodePatterns[4]) { // (\d{1,2})\.(\d{2,3})
+            if (pattern == _seasonEpisodePatterns[4]) {
+              // (\d{1,2})\.(\d{2,3})
               final yearBeforePattern = RegExp(r'(?:19|20)\d{2}[\s\._-]*$');
               final textBeforeMatch = nameWithoutExt.substring(0, match.start);
               if (yearBeforePattern.hasMatch(textBeforeMatch)) {
-                debugPrint('SeriesParser (Conservative): Rejected pattern after year (likely quality)');
+                debugPrint(
+                  'SeriesParser (Conservative): Rejected pattern after year (likely quality)',
+                );
                 continue;
               }
             }
@@ -1083,10 +1286,17 @@ class SeriesParser {
               final bracketEnd = match.end;
               String? extractedTitle;
               if (bracketEnd < nameWithoutExt.length) {
-                final afterBracket = nameWithoutExt.substring(bracketEnd).trim();
+                final afterBracket = nameWithoutExt
+                    .substring(bracketEnd)
+                    .trim();
                 if (afterBracket.isNotEmpty) {
-                  extractedTitle = afterBracket.replaceAll(RegExp(r'[._]'), ' ').trim();
-                  extractedTitle = extractedTitle.replaceAll(RegExp(r'\s+'), ' ');
+                  extractedTitle = afterBracket
+                      .replaceAll(RegExp(r'[._]'), ' ')
+                      .trim();
+                  extractedTitle = extractedTitle.replaceAll(
+                    RegExp(r'\s+'),
+                    ' ',
+                  );
                   if (extractedTitle.isEmpty) {
                     extractedTitle = null;
                   }
@@ -1097,7 +1307,8 @@ class SeriesParser {
                 final endEpisode = int.tryParse(match.group(3) ?? '');
                 if (endEpisode != null) {
                   if (extractedTitle != null) {
-                    episodeTitle = '$extractedTitle (Episodes $episode-$endEpisode)';
+                    episodeTitle =
+                        '$extractedTitle (Episodes $episode-$endEpisode)';
                   } else {
                     episodeTitle = 'Episodes $episode-$endEpisode';
                   }
@@ -1112,7 +1323,9 @@ class SeriesParser {
             // For patterns like "Episode 2" or "E02"
             episode = int.tryParse(match.group(1) ?? '');
             if (episode != null && episode <= 500) {
-              final seasonMatch = RegExp(r'[Ss](\d{1,2})').firstMatch(nameWithoutExt);
+              final seasonMatch = RegExp(
+                r'[Ss](\d{1,2})',
+              ).firstMatch(nameWithoutExt);
               if (seasonMatch != null) {
                 season = int.tryParse(seasonMatch.group(1) ?? '');
                 foundValidPattern = true;
@@ -1157,9 +1370,10 @@ class SeriesParser {
 
     // PHASE 4: SERIES CLASSIFICATION WITH CONSERVATIVE LOGIC
     // Only mark as series if we have STRONG evidence AND no movie indicators
-    final isSeries = foundValidPattern &&
-                     (season != null || episode != null) &&
-                     !isLikelyMovie;
+    final isSeries =
+        foundValidPattern &&
+        (season != null || episode != null) &&
+        !isLikelyMovie;
 
     double confidence = 50.0;
     if (isSeries) {
@@ -1234,7 +1448,9 @@ class SeriesParser {
     final group = _extractGroup(nameWithoutExt);
 
     if (isLikelyMovie && movieReason != null) {
-      debugPrint('SeriesParser (Conservative): Classified as MOVIE ($movieReason): $filename');
+      debugPrint(
+        'SeriesParser (Conservative): Classified as MOVIE ($movieReason): $filename',
+      );
     }
 
     return SeriesInfo(
@@ -1289,11 +1505,16 @@ class SeriesParser {
     return match?.group(1);
   }
 
-  static List<SeriesInfo> parsePlaylist(List<String> filenames, {List<int>? fileSizes}) {
+  static List<SeriesInfo> parsePlaylist(
+    List<String> filenames, {
+    List<int>? fileSizes,
+  }) {
     return filenames.asMap().entries.map((entry) {
       final index = entry.key;
       final filename = entry.value;
-      final fileSize = fileSizes != null && index < fileSizes.length ? fileSizes[index] : null;
+      final fileSize = fileSizes != null && index < fileSizes.length
+          ? fileSizes[index]
+          : null;
       return parseFilename(filename, fileSize: fileSize);
     }).toList();
   }
@@ -1306,7 +1527,6 @@ class SeriesParser {
 
   /// Analyze a playlist to determine confidence it's a series vs movie collection
   static PlaylistAnalysis analyzePlaylistConfidence(List<String> filenames) {
-
     if (filenames.isEmpty) {
       return const PlaylistAnalysis(
         confidenceScore: 0,
@@ -1481,7 +1701,9 @@ class SeriesParser {
     }
 
     // Single consolidated log with all important info
-    debugPrint('SeriesParser: ${filenames.length} files → Score: ${totalScore.toStringAsFixed(0)}/100 (Pattern:${patternScore.toStringAsFixed(0)} Count:${fileCountScore.toStringAsFixed(0)} Consistency:${consistencyScore.toStringAsFixed(0)}) → $classification');
+    debugPrint(
+      'SeriesParser: ${filenames.length} files → Score: ${totalScore.toStringAsFixed(0)}/100 (Pattern:${patternScore.toStringAsFixed(0)} Count:${fileCountScore.toStringAsFixed(0)} Consistency:${consistencyScore.toStringAsFixed(0)}) → $classification',
+    );
 
     return PlaylistAnalysis(
       confidenceScore: totalScore,
@@ -1528,7 +1750,10 @@ class SeriesParser {
   /// Get special content type for Season 0 organization
   /// IMPORTANT: Only detects special content for files WITHOUT valid S##E## patterns
   /// This prevents moving actual episodes like "S01E15 Special Operations Squad" to Season 0
-  static String? getSpecialContentType(String filename, {SeriesInfo? parsedInfo}) {
+  static String? getSpecialContentType(
+    String filename, {
+    SeriesInfo? parsedInfo,
+  }) {
     final lower = filename.toLowerCase();
 
     // CRITICAL: If file has a valid season AND episode number (and it's NOT Season 0),

@@ -14,7 +14,8 @@ class DuplicateGroup {
   final List<int> indices;
   final List<int> fileSizes;
   final List<bool> isAuxiliary; // Track if each file is in auxiliary folder
-  final List<bool> isDeletedScenes; // Track if each file is a deleted scenes file
+  final List<bool>
+  isDeletedScenes; // Track if each file is a deleted scenes file
 
   DuplicateGroup({
     required this.season,
@@ -109,27 +110,33 @@ class EpisodeInfo {
     this.country,
   });
 
-  factory EpisodeInfo.fromTVMaze(Map<String, dynamic> json, {Map<String, dynamic>? showInfo}) {
+  factory EpisodeInfo.fromTVMaze(
+    Map<String, dynamic> json, {
+    Map<String, dynamic>? showInfo,
+  }) {
     // Extract genres from the show info if available
     List<String> genres = [];
     if (showInfo != null && showInfo['genres'] != null) {
       genres = List<String>.from(showInfo['genres']);
     }
-    
+
     // Extract language and country from show info
     String? language;
     String? country;
     String? network;
-    
+
     if (showInfo != null) {
       language = showInfo['language'];
       country = showInfo['network']?['country']?['name'];
       network = showInfo['network']?['name'];
     }
-    
+
     return EpisodeInfo(
       title: json['name'],
-      plot: json['summary']?.toString().replaceAll(RegExp(r'<[^>]*>'), ''), // Remove HTML tags
+      plot: json['summary']?.toString().replaceAll(
+        RegExp(r'<[^>]*>'),
+        '',
+      ), // Remove HTML tags
       poster: json['image']?['medium'],
       rating: json['rating']?['average']?.toDouble(),
       year: json['airdate']?.toString().substring(0, 4),
@@ -169,12 +176,16 @@ class SeriesEpisode {
     }
 
     // For Season 0 content (extras, alternate versions), use the episodeTitle
-    if (seriesInfo.season == 0 && seriesInfo.episodeTitle != null && seriesInfo.episodeTitle!.isNotEmpty) {
+    if (seriesInfo.season == 0 &&
+        seriesInfo.episodeTitle != null &&
+        seriesInfo.episodeTitle!.isNotEmpty) {
       return seriesInfo.episodeTitle!;
     }
 
     // Fallback to episode number for series
-    if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
+    if (seriesInfo.isSeries &&
+        seriesInfo.season != null &&
+        seriesInfo.episode != null) {
       return 'Episode ${seriesInfo.episode}';
     }
 
@@ -183,7 +194,9 @@ class SeriesEpisode {
   }
 
   String get seasonEpisodeString {
-    if (seriesInfo.isSeries && seriesInfo.season != null && seriesInfo.episode != null) {
+    if (seriesInfo.isSeries &&
+        seriesInfo.season != null &&
+        seriesInfo.episode != null) {
       return 'S${seriesInfo.season.toString().padLeft(2, '0')}E${seriesInfo.episode.toString().padLeft(2, '0')}';
     }
     return '';
@@ -205,7 +218,9 @@ class SeriesSeason {
 
   SeriesEpisode? getEpisode(int episodeNumber) {
     try {
-      return episodes.firstWhere((ep) => ep.seriesInfo.episode == episodeNumber);
+      return episodes.firstWhere(
+        (ep) => ep.seriesInfo.episode == episodeNumber,
+      );
     } catch (e) {
       return null;
     }
@@ -280,7 +295,9 @@ class SeriesPlaylist {
     String? collectionTitle,
     bool? forceSeries,
   }) {
-    debugPrint('SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}${forceSeries != null ? ", forceSeries: $forceSeries" : ""}');
+    debugPrint(
+      'SeriesPlaylist: Processing ${entries.length} entries${collectionTitle != null ? ", collection: \"$collectionTitle\"" : ""}${forceSeries != null ? ", forceSeries: $forceSeries" : ""}',
+    );
 
     // Use filenames for parsing (existing regex patterns expect just filenames)
     // Path info is available in entries[i].relativePath for future enhancements
@@ -288,7 +305,9 @@ class SeriesPlaylist {
 
     // Log first 2 filenames for debugging
     if (filenames.length >= 2) {
-      debugPrint('SeriesPlaylist: Samples: [0] ${filenames[0]}, [1] ${filenames[1]}${filenames.length > 2 ? " ... +${filenames.length - 2} more" : ""}');
+      debugPrint(
+        'SeriesPlaylist: Samples: [0] ${filenames[0]}, [1] ${filenames[1]}${filenames.length > 2 ? " ... +${filenames.length - 2} more" : ""}',
+      );
     } else if (filenames.length == 1) {
       debugPrint('SeriesPlaylist: Single file: ${filenames[0]}');
     }
@@ -314,7 +333,9 @@ class SeriesPlaylist {
           validFileSizes.add(0); // Default size if not provided
         }
       } else {
-        debugPrint('SeriesPlaylist: Filtering out SAMPLE file: ${filenames[i]}');
+        debugPrint(
+          'SeriesPlaylist: Filtering out SAMPLE file: ${filenames[i]}',
+        );
       }
     }
 
@@ -329,12 +350,19 @@ class SeriesPlaylist {
     }
 
     // Parse with file sizes for duplicate resolution
-    final seriesInfos = SeriesParser.parsePlaylist(validFilenames, fileSizes: validFileSizes);
+    final seriesInfos = SeriesParser.parsePlaylist(
+      validFilenames,
+      fileSizes: validFileSizes,
+    );
     final analysis = SeriesParser.analyzePlaylistConfidence(validFilenames);
     // Use forceSeries if provided, otherwise use auto-detection
-    final isSeries = forceSeries ?? (analysis.classification == PlaylistClassification.SERIES);
+    final isSeries =
+        forceSeries ??
+        (analysis.classification == PlaylistClassification.SERIES);
 
-    debugPrint('SeriesPlaylist: Playlist classification: ${analysis.classification} (confidence: ${analysis.confidenceScore})');
+    debugPrint(
+      'SeriesPlaylist: Playlist classification: ${analysis.classification} (confidence: ${analysis.confidenceScore})',
+    );
 
     if (!isSeries) {
       debugPrint('SeriesPlaylist: Treating as movie collection');
@@ -342,10 +370,14 @@ class SeriesPlaylist {
       // For collections, use the collectionTitle if provided
       String? collectionSeriesTitle = collectionTitle;
       if (collectionSeriesTitle != null) {
-        debugPrint('SeriesPlaylist: Using collection title for movie collection: "$collectionSeriesTitle"');
+        debugPrint(
+          'SeriesPlaylist: Using collection title for movie collection: "$collectionSeriesTitle"',
+        );
       } else if (seriesInfos.firstOrNull?.title != null) {
         collectionSeriesTitle = seriesInfos.firstOrNull!.title;
-        debugPrint('SeriesPlaylist: Using extracted title from first file: "$collectionSeriesTitle"');
+        debugPrint(
+          'SeriesPlaylist: Using extracted title from first file: "$collectionSeriesTitle"',
+        );
       } else {
         debugPrint('SeriesPlaylist: No title available for collection');
       }
@@ -378,9 +410,14 @@ class SeriesPlaylist {
     }
 
     // Detect and resolve duplicates
-    final duplicateGroups = _detectDuplicates(seriesInfos, validFileSizes, validEntries);
+    final duplicateGroups = _detectDuplicates(
+      seriesInfos,
+      validFileSizes,
+      validEntries,
+    );
     final indicesToKeep = <int>{};
-    final duplicateIndicesToMoveSeason0 = <int, String>{}; // index -> original S##E## label
+    final duplicateIndicesToMoveSeason0 =
+        <int, String>{}; // index -> original S##E## label
 
     for (final group in duplicateGroups.values) {
       if (group.indices.length > 1) {
@@ -393,7 +430,9 @@ class SeriesPlaylist {
         final keptIsDeletedScenes = group.isDeletedScenes[keptLocalIdx];
 
         // Count categories
-        final hasRealEpisode = !group.isAuxiliary.every((v) => v) && !group.isDeletedScenes.every((v) => v);
+        final hasRealEpisode =
+            !group.isAuxiliary.every((v) => v) &&
+            !group.isDeletedScenes.every((v) => v);
         final hasDeletedScenes = group.isDeletedScenes.contains(true);
         final hasAuxiliary = group.isAuxiliary.contains(true);
 
@@ -402,20 +441,27 @@ class SeriesPlaylist {
           if (hasDeletedScenes || hasAuxiliary) {
             reason = 'real episode over bonus content';
           }
-        } else if (hasDeletedScenes && keptIsDeletedScenes && !keptIsAuxiliary) {
+        } else if (hasDeletedScenes &&
+            keptIsDeletedScenes &&
+            !keptIsAuxiliary) {
           reason = 'deleted scenes (no real episode found)';
         } else if (keptIsAuxiliary) {
           reason = 'auxiliary content (no better option)';
         }
 
-        debugPrint('SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping $reason (index $keepIndex, ${validFileSizes[keepIndex]} bytes)');
+        debugPrint(
+          'SeriesPlaylist: Found duplicate S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')} - keeping $reason (index $keepIndex, ${validFileSizes[keepIndex]} bytes)',
+        );
 
         // Track other duplicates to move to Season 0
         for (final idx in group.indices) {
           if (idx != keepIndex) {
-            final label = 'S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')}';
+            final label =
+                'S${group.season.toString().padLeft(2, '0')}E${group.episode.toString().padLeft(2, '0')}';
             duplicateIndicesToMoveSeason0[idx] = label;
-            debugPrint('SeriesPlaylist: Will move duplicate to Season 0: ${validFilenames[idx]}');
+            debugPrint(
+              'SeriesPlaylist: Will move duplicate to Season 0: ${validFilenames[idx]}',
+            );
           }
         }
       } else {
@@ -438,42 +484,59 @@ class SeriesPlaylist {
     String? collectionDerivedTitle;
 
     // Strategy 1: Extract common title from ALL filenames
-    debugPrint('SeriesPlaylist: Attempting common title extraction from ${validFilenames.length} files');
+    debugPrint(
+      'SeriesPlaylist: Attempting common title extraction from ${validFilenames.length} files',
+    );
     extractedTitle = SeriesParser.extractCommonSeriesTitle(validFilenames);
 
     if (extractedTitle != null) {
-      debugPrint('SeriesPlaylist: Extracted common title from filenames: "$extractedTitle"');
+      debugPrint(
+        'SeriesPlaylist: Extracted common title from filenames: "$extractedTitle"',
+      );
     }
 
     // Strategy 2: Prepare collection-derived title
     if (collectionTitle != null) {
-      collectionDerivedTitle = SeriesParser.cleanCollectionTitle(collectionTitle);
+      collectionDerivedTitle = SeriesParser.cleanCollectionTitle(
+        collectionTitle,
+      );
       if (SeriesParser.isValidSeriesTitle(collectionDerivedTitle)) {
-        debugPrint('SeriesPlaylist: Cleaned collection title: "$collectionDerivedTitle"');
+        debugPrint(
+          'SeriesPlaylist: Cleaned collection title: "$collectionDerivedTitle"',
+        );
       } else {
-        debugPrint('SeriesPlaylist: Collection title invalid after cleaning: "$collectionDerivedTitle"');
+        debugPrint(
+          'SeriesPlaylist: Collection title invalid after cleaning: "$collectionDerivedTitle"',
+        );
         collectionDerivedTitle = null;
       }
     }
 
     // Strategy 3: Decision logic - choose the best title
     String? seriesTitle;
-    if (extractedTitle != null && SeriesParser.isValidSeriesTitle(extractedTitle)) {
+    if (extractedTitle != null &&
+        SeriesParser.isValidSeriesTitle(extractedTitle)) {
       // Extracted title is valid, use it
       seriesTitle = extractedTitle;
       debugPrint('SeriesPlaylist: Using extracted title: "$seriesTitle"');
     } else if (collectionDerivedTitle != null) {
       // Fallback to collection title
       seriesTitle = collectionDerivedTitle;
-      debugPrint('SeriesPlaylist: Using collection title: "$seriesTitle" (original: "$collectionTitle")');
+      debugPrint(
+        'SeriesPlaylist: Using collection title: "$seriesTitle" (original: "$collectionTitle")',
+      );
     } else if (extractedTitle != null) {
       // Last resort: use extracted even if validation is weak
       seriesTitle = extractedTitle;
-      debugPrint('SeriesPlaylist: Using extracted title (weak validation): "$seriesTitle"');
+      debugPrint(
+        'SeriesPlaylist: Using extracted title (weak validation): "$seriesTitle"',
+      );
     } else {
       // No title available
       seriesTitle = null;
-      debugPrint('SeriesPlaylist: No valid title found from filenames or collection');
+      debugPrint(
+        'SeriesPlaylist: No valid title found from filenames or collection',
+      );
     }
 
     // Group episodes by season, handling Season 0 for special content
@@ -495,7 +558,9 @@ class SeriesPlaylist {
         parsedInfo: seriesInfo,
       );
       if (specialType != null) {
-        debugPrint('SeriesPlaylist: Moving \'$specialType\' to Season 0: ${validFilenames[i]}');
+        debugPrint(
+          'SeriesPlaylist: Moving \'$specialType\' to Season 0: ${validFilenames[i]}',
+        );
         // Update series info to Season 0
         seriesInfo = seriesInfo.copyWith(
           season: 0,
@@ -510,13 +575,15 @@ class SeriesPlaylist {
         // No need to extract per-file anymore
 
         seasonMap.putIfAbsent(seasonNumber, () => []);
-        seasonMap[seasonNumber]!.add(SeriesEpisode(
-          url: entry.url,
-          title: entry.title,
-          filename: entry.title,
-          seriesInfo: seriesInfo,
-          originalIndex: validIndices[i],
-        ));
+        seasonMap[seasonNumber]!.add(
+          SeriesEpisode(
+            url: entry.url,
+            title: entry.title,
+            filename: entry.title,
+            seriesInfo: seriesInfo,
+            originalIndex: validIndices[i],
+          ),
+        );
       }
     }
 
@@ -542,13 +609,16 @@ class SeriesPlaylist {
           // Extract folder name for auxiliary content
           final parts = playlistEntry.relativePath!.split('/');
           if (parts.length > 1) {
-            final folderName = parts[parts.length - 2]; // Folder before filename
-            episodeTitle = '$folderName - $originalLabel (${validFilenames[idx]})';
+            final folderName =
+                parts[parts.length - 2]; // Folder before filename
+            episodeTitle =
+                '$folderName - $originalLabel (${validFilenames[idx]})';
           } else {
             episodeTitle = 'Extra - $originalLabel (${validFilenames[idx]})';
           }
         } else {
-          episodeTitle = 'Alternate Version - $originalLabel (${validFilenames[idx]})';
+          episodeTitle =
+              'Alternate Version - $originalLabel (${validFilenames[idx]})';
         }
 
         final alternateSeriesInfo = originalInfo.copyWith(
@@ -557,15 +627,19 @@ class SeriesPlaylist {
           episodeTitle: episodeTitle,
         );
 
-        seasonMap[0]!.add(SeriesEpisode(
-          url: playlistEntry.url,
-          title: playlistEntry.title,
-          filename: playlistEntry.title,
-          seriesInfo: alternateSeriesInfo,
-          originalIndex: validIndices[idx],
-        ));
+        seasonMap[0]!.add(
+          SeriesEpisode(
+            url: playlistEntry.url,
+            title: playlistEntry.title,
+            filename: playlistEntry.title,
+            seriesInfo: alternateSeriesInfo,
+            originalIndex: validIndices[idx],
+          ),
+        );
 
-        debugPrint('SeriesPlaylist: Added ${isAux ? "auxiliary content" : "alternate version"} to S00E${alternateEpisodeNum.toString().padLeft(2, '0')}: $episodeTitle');
+        debugPrint(
+          'SeriesPlaylist: Added ${isAux ? "auxiliary content" : "alternate version"} to S00E${alternateEpisodeNum.toString().padLeft(2, '0')}: $episodeTitle',
+        );
         alternateEpisodeNum++;
       }
     }
@@ -575,7 +649,9 @@ class SeriesPlaylist {
 
     if (seasonMap.isEmpty) {
       // Detected as series but no season numbers were parsed; fallback to a single implicit season.
-      debugPrint('SeriesPlaylist: No seasons detected, using fallback to Season 1');
+      debugPrint(
+        'SeriesPlaylist: No seasons detected, using fallback to Season 1',
+      );
       final fallbackEpisodes = validEntries.asMap().entries.map((entry) {
         final index = entry.key;
         final entryData = entry.value;
@@ -706,7 +782,9 @@ class SeriesPlaylist {
         final mapping = await _getTVMazeMapping(playlistItem);
         if (mapping != null && mapping['tvmazeShowId'] != null) {
           overrideShowId = mapping['tvmazeShowId'] as int;
-          debugPrint('TVMaze: Using saved mapping - Show ID $overrideShowId (${mapping['showName']})');
+          debugPrint(
+            'TVMaze: Using saved mapping - Show ID $overrideShowId (${mapping['showName']})',
+          );
         }
       } catch (e) {
         debugPrint('TVMaze: Error loading saved mapping: $e');
@@ -732,19 +810,25 @@ class SeriesPlaylist {
           // Extract show ID for subsequent episode lookups (avoids title-based searches)
           if (showInfo['id'] != null) {
             overrideShowId = showInfo['id'] as int;
-            debugPrint('TVMaze: Extracted show ID $overrideShowId from IMDB lookup');
+            debugPrint(
+              'TVMaze: Extracted show ID $overrideShowId from IMDB lookup',
+            );
           }
           // Extract IMDB ID from externals (in case it differs or wasn't passed)
           _extractImdbFromExternals(showInfo);
         } else {
           // Fallback to title search if IMDB lookup fails
-          debugPrint('TVMaze: IMDB lookup failed, falling back to title search');
+          debugPrint(
+            'TVMaze: IMDB lookup failed, falling back to title search',
+          );
           if (validSearchTitle.isNotEmpty) {
             showInfo = await EpisodeInfoService.getSeriesInfo(validSearchTitle);
             // Extract show ID for subsequent episode lookups
             if (showInfo != null && showInfo['id'] != null) {
               overrideShowId = showInfo['id'] as int;
-              debugPrint('TVMaze: Extracted show ID $overrideShowId from title fallback');
+              debugPrint(
+                'TVMaze: Extracted show ID $overrideShowId from title fallback',
+              );
             }
             // Extract IMDB ID from externals for subtitle fetching
             _extractImdbFromExternals(showInfo);
@@ -756,7 +840,9 @@ class SeriesPlaylist {
         // Extract show ID for subsequent episode lookups
         if (showInfo != null && showInfo['id'] != null) {
           overrideShowId = showInfo['id'] as int;
-          debugPrint('TVMaze: Extracted show ID $overrideShowId from title search');
+          debugPrint(
+            'TVMaze: Extracted show ID $overrideShowId from title search',
+          );
         }
         // Extract IMDB ID from externals for subtitle fetching
         _extractImdbFromExternals(showInfo);
@@ -768,7 +854,8 @@ class SeriesPlaylist {
 
     // Extract show poster URL for playlist item updates
     if (showInfo != null && showInfo['image'] != null) {
-      showPosterUrl = showInfo['image']['original'] as String? ??
+      showPosterUrl =
+          showInfo['image']['original'] as String? ??
           showInfo['image']['medium'] as String?;
     }
 
@@ -779,7 +866,9 @@ class SeriesPlaylist {
       tvmazeShowId = overrideShowId;
       try {
         allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
-        debugPrint('TVMaze: Fetched ${allTVMazeEpisodes.length} episodes upfront for show ID $overrideShowId');
+        debugPrint(
+          'TVMaze: Fetched ${allTVMazeEpisodes.length} episodes upfront for show ID $overrideShowId',
+        );
       } catch (e) {
         debugPrint('TVMaze: Episode list failed: $e');
       }
@@ -794,7 +883,8 @@ class SeriesPlaylist {
           continue;
         }
 
-        if (episode.seriesInfo.season != null && episode.seriesInfo.episode != null) {
+        if (episode.seriesInfo.season != null &&
+            episode.seriesInfo.episode != null) {
           // Standard episode with S##E## format
           try {
             Map<String, dynamic>? episodeData;
@@ -802,7 +892,8 @@ class SeriesPlaylist {
             if (allTVMazeEpisodes.isNotEmpty) {
               // Use pre-fetched episodes list (efficient - no API call per episode)
               for (final ep in allTVMazeEpisodes) {
-                if (ep['season'] == episode.seriesInfo.season && ep['number'] == episode.seriesInfo.episode) {
+                if (ep['season'] == episode.seriesInfo.season &&
+                    ep['number'] == episode.seriesInfo.episode) {
                   episodeData = ep;
                   break;
                 }
@@ -817,7 +908,10 @@ class SeriesPlaylist {
             }
 
             if (episodeData != null) {
-              episode.episodeInfo = EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
+              episode.episodeInfo = EpisodeInfo.fromTVMaze(
+                episodeData,
+                showInfo: showInfo,
+              );
             }
           } catch (e) {
             // Silently fail - episode info is optional
@@ -832,14 +926,18 @@ class SeriesPlaylist {
             final tvTitle = (tvEpisode['name'] ?? '').toString().toLowerCase();
             final score = _calculateTitleSimilarity(filename, tvTitle);
 
-            if (score > bestScore && score > 0.6) { // 60% similarity threshold
+            if (score > bestScore && score > 0.6) {
+              // 60% similarity threshold
               bestScore = score;
               bestMatch = tvEpisode;
             }
           }
 
           if (bestMatch != null) {
-            episode.episodeInfo = EpisodeInfo.fromTVMaze(bestMatch, showInfo: showInfo);
+            episode.episodeInfo = EpisodeInfo.fromTVMaze(
+              bestMatch,
+              showInfo: showInfo,
+            );
             // Update the SeriesInfo with matched S##E##
             final matchedSeason = bestMatch['season'] as int?;
             final matchedEpisode = bestMatch['number'] as int?;
@@ -848,7 +946,9 @@ class SeriesPlaylist {
                 season: matchedSeason,
                 episode: matchedEpisode,
               );
-              debugPrint('TVMaze: Title match "${episode.filename}" → S${matchedSeason.toString().padLeft(2, '0')}E${matchedEpisode.toString().padLeft(2, '0')} (${(bestScore * 100).toStringAsFixed(0)}%)');
+              debugPrint(
+                'TVMaze: Title match "${episode.filename}" → S${matchedSeason.toString().padLeft(2, '0')}E${matchedEpisode.toString().padLeft(2, '0')} (${(bestScore * 100).toStringAsFixed(0)}%)',
+              );
             }
           }
           // No match - skip logging for cleaner output
@@ -858,22 +958,31 @@ class SeriesPlaylist {
 
     // If TVMaze fetch failed completely, log fallback
     if (showInfo == null && isSeries) {
-      debugPrint('SeriesPlaylist: TVMaze unavailable, treating as MOVIE_COLLECTION fallback');
+      debugPrint(
+        'SeriesPlaylist: TVMaze unavailable, treating as MOVIE_COLLECTION fallback',
+      );
     }
-   }
+  }
 
   /// Get episode information for a specific episode
-  Future<EpisodeInfo?> getEpisodeInfoForEpisode(String seriesTitle, int season, int episode) async {
+  Future<EpisodeInfo?> getEpisodeInfoForEpisode(
+    String seriesTitle,
+    int season,
+    int episode,
+  ) async {
     try {
       // Get show information first
       final showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle);
-      
-      final episodeData = await EpisodeInfoService.getEpisodeInfo(seriesTitle, season, episode);
+
+      final episodeData = await EpisodeInfoService.getEpisodeInfo(
+        seriesTitle,
+        season,
+        episode,
+      );
       if (episodeData != null) {
         return EpisodeInfo.fromTVMaze(episodeData, showInfo: showInfo);
       }
-    } catch (e) {
-    }
+    } catch (e) {}
     return null;
   }
 
@@ -908,7 +1017,8 @@ class SeriesPlaylist {
 
     // Fallback to Season 0 if no regular seasons exist
     final firstEpisode = allEpisodes.first;
-    if (firstEpisode.seriesInfo.season != null && firstEpisode.seriesInfo.episode != null) {
+    if (firstEpisode.seriesInfo.season != null &&
+        firstEpisode.seriesInfo.episode != null) {
       return firstEpisode.originalIndex;
     }
     return -1;
@@ -921,20 +1031,35 @@ class SeriesPlaylist {
 
     // Define auxiliary folder patterns (case-insensitive)
     const auxiliaryPatterns = [
-      'extras', 'extra',
-      'behind the scenes', 'bts', 'behind-the-scenes',
-      'deleted scenes', 'deleted',
-      'bonus', 'bonus content', 'bonus material',
-      'featurettes', 'featurette',
-      'interviews', 'interview',
-      'after party', 'afterparty',
-      'making of', 'making-of',
-      'bloopers', 'blooper',
-      'gag reel', 'gag-reel',
-      'trailers', 'trailer',
+      'extras',
+      'extra',
+      'behind the scenes',
+      'bts',
+      'behind-the-scenes',
+      'deleted scenes',
+      'deleted',
+      'bonus',
+      'bonus content',
+      'bonus material',
+      'featurettes',
+      'featurette',
+      'interviews',
+      'interview',
+      'after party',
+      'afterparty',
+      'making of',
+      'making-of',
+      'bloopers',
+      'blooper',
+      'gag reel',
+      'gag-reel',
+      'trailers',
+      'trailer',
       'scenes',
-      'documentary', 'documentaries',
-      'commentary', 'commentaries',
+      'documentary',
+      'documentaries',
+      'commentary',
+      'commentaries',
     ];
 
     // Extract folders from path (exclude filename)
@@ -1076,7 +1201,9 @@ class SeriesPlaylist {
 
   /// Helper method to get TVMaze mapping from storage
   /// Note: This needs to import StorageService
-  static Future<Map<String, dynamic>?> _getTVMazeMapping(Map<String, dynamic> playlistItem) async {
+  static Future<Map<String, dynamic>?> _getTVMazeMapping(
+    Map<String, dynamic> playlistItem,
+  ) async {
     // Import at top of file: import '../services/storage_service.dart';
     try {
       // Dynamically import to avoid circular dependency
@@ -1123,13 +1250,17 @@ class SeriesPlaylist {
     // Check if we already have IMDB ID for this index
     if (_movieImdbIds.containsKey(index)) {
       final cachedId = _movieImdbIds[index];
-      debugPrint('MovieMetadata: Using cached IMDB ID for index $index: $cachedId');
+      debugPrint(
+        'MovieMetadata: Using cached IMDB ID for index $index: $cachedId',
+      );
       return cachedId;
     }
 
     // Validate index
     if (index < 0 || index >= allEpisodes.length) {
-      debugPrint('MovieMetadata: Invalid index $index (total: ${allEpisodes.length})');
+      debugPrint(
+        'MovieMetadata: Invalid index $index (total: ${allEpisodes.length})',
+      );
       return null;
     }
 
@@ -1142,16 +1273,22 @@ class SeriesPlaylist {
 
     // Only proceed if filename has year pattern
     if (!movieInfo.hasYear) {
-      debugPrint('MovieMetadata: No year pattern found at index $index, skipping lookup');
+      debugPrint(
+        'MovieMetadata: No year pattern found at index $index, skipping lookup',
+      );
       return null;
     }
 
     if (movieInfo.title == null || movieInfo.title!.isEmpty) {
-      debugPrint('MovieMetadata: Could not extract title from filename at index $index');
+      debugPrint(
+        'MovieMetadata: Could not extract title from filename at index $index',
+      );
       return null;
     }
 
-    debugPrint('MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year} (index $index)');
+    debugPrint(
+      'MovieMetadata: Parsed title="${movieInfo.title}", year=${movieInfo.year} (index $index)',
+    );
 
     // Look up movie in Cinemeta
     try {
@@ -1165,10 +1302,14 @@ class SeriesPlaylist {
         _movieImdbIds[index] = metadata.imdbId;
         // Also set shared imdbId for backward compatibility (first successful lookup)
         imdbId ??= metadata.imdbId;
-        debugPrint('MovieMetadata: Found IMDB ID "${metadata.imdbId}" for "${metadata.title}" (index $index)');
+        debugPrint(
+          'MovieMetadata: Found IMDB ID "${metadata.imdbId}" for "${metadata.title}" (index $index)',
+        );
         return metadata.imdbId;
       } else {
-        debugPrint('MovieMetadata: No match found in Cinemeta for index $index');
+        debugPrint(
+          'MovieMetadata: No match found in Cinemeta for index $index',
+        );
         return null;
       }
     } catch (e) {
@@ -1191,7 +1332,9 @@ class SeriesPlaylist {
         // Only update if we don't already have an IMDB ID
         if (imdbId == null || imdbId!.isEmpty) {
           imdbId = externalImdbId;
-          debugPrint('TVMaze: Extracted IMDB ID "$externalImdbId" from externals');
+          debugPrint(
+            'TVMaze: Extracted IMDB ID "$externalImdbId" from externals',
+          );
         }
       }
     }
@@ -1208,7 +1351,9 @@ class SeriesPlaylist {
   }
 
   /// Helper method to get episodes by show ID from TVMaze
-  static Future<List<Map<String, dynamic>>> _getEpisodesByShowId(int showId) async {
+  static Future<List<Map<String, dynamic>>> _getEpisodesByShowId(
+    int showId,
+  ) async {
     try {
       return await EpisodeInfoService.getEpisodesByShowId(showId);
     } catch (e) {
