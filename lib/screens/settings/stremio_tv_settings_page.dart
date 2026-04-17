@@ -29,12 +29,16 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     setState(() => _loading = true);
 
     try {
-      final rotationMinutes = await StorageService.getStremioTvRotationMinutes();
-      final seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
+      final rotationMinutes =
+          await StorageService.getStremioTvRotationMinutes();
+      final seriesRotationMinutes =
+          await StorageService.getStremioTvSeriesRotationMinutes();
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
-      final preferredQuality = await StorageService.getStremioTvPreferredQuality();
+      final preferredQuality =
+          await StorageService.getStremioTvPreferredQuality();
       final debridProvider = await StorageService.getStremioTvDebridProvider();
-      final maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
+      final maxStartPercent =
+          await StorageService.getStremioTvMaxStartPercent();
       final hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
       final randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
 
@@ -74,9 +78,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load settings: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load settings: $e')));
       }
     }
   }
@@ -87,9 +91,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _rotationMinutes = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -100,9 +104,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _seriesRotationMinutes = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -113,9 +117,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _autoRefresh = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -126,9 +130,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _preferredQuality = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -139,9 +143,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _maxStartPercent = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -152,9 +156,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _randomEpisodes = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -165,9 +169,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _hideNowPlaying = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -178,9 +182,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       setState(() => _debridProvider = value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -262,11 +266,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     ),
                                     Text(
                                       'How often the "now playing" item changes',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -318,11 +323,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     ),
                                     Text(
                                       'How often the episode changes on series channels',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -405,11 +411,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     ),
                                     Text(
                                       'Prioritize streams matching this quality',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -457,11 +464,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     ),
                                     Text(
                                       'Where to begin playback within the current slot',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -521,9 +529,10 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                         'Which provider to use for torrent streams',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                          color: theme
-                                              .colorScheme.onSurfaceVariant,
-                                        ),
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -538,11 +547,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                         'Auto (${_availableProviders.first.value})',
                                       ),
                                     ),
-                                    ..._availableProviders
-                                        .map((p) => DropdownMenuItem(
-                                              value: p.key,
-                                              child: Text(p.value),
-                                            )),
+                                    ..._availableProviders.map(
+                                      (p) => DropdownMenuItem(
+                                        value: p.key,
+                                        child: Text(p.value),
+                                      ),
+                                    ),
                                   ],
                                   onChanged: (value) {
                                     if (value != null) {
@@ -560,8 +570,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                   const SizedBox(height: 16),
                   // Info card
                   Card(
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -589,7 +600,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             '- Each Stremio addon catalog becomes a TV channel\n'
                             '- The "now playing" item rotates deterministically based on time\n'
                             '- Start Position controls where playback begins within the slot\n'
-                            '- Long press a channel to favorite/unfavorite it\n'
+                            '- Use the Favorite button on a channel row, or long press, to favorite/unfavorite it\n'
                             '- Favorites appear pinned at the top and on the home screen\n'
                             '- Install more catalog addons (like Cinemeta) for more channels\n'
                             '- Manage local catalogs from the 3-dot menu on the Stremio TV screen',

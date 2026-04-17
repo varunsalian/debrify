@@ -78,16 +78,35 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
 
   void _onScrobbleChange() {
     if (!mounted) return;
+    final scrobbleActive = HomeTraktNowPlayingCard.isScrobbleActive.value;
+    final visible = !scrobbleActive && _grouped.isNotEmpty;
+    final hadFocus = _cardFocusNode.hasFocus;
     setState(() {}); // rebuild to hide/show based on scrobble state
     // Keep focus registration in sync so DPAD navigation skips the card when
     // it's hidden.
-    final scrobbleActive = HomeTraktNowPlayingCard.isScrobbleActive.value;
-    final visible = !scrobbleActive && _grouped.isNotEmpty;
     widget.focusController.registerSection(
       HomeSection.todayCalendar,
       hasItems: visible,
       focusNodes: visible ? [_cardFocusNode] : const [],
     );
+    if (hadFocus && !visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final next = widget.focusController.getNextSection(
+          HomeSection.todayCalendar,
+        );
+        if (next != null) {
+          widget.focusController.focusSection(next);
+          return;
+        }
+        final previous = widget.focusController.getPreviousSection(
+          HomeSection.todayCalendar,
+        );
+        if (previous != null) {
+          widget.focusController.focusSection(previous);
+        }
+      });
+    }
   }
 
   Future<void> _loadData() async {
@@ -123,10 +142,12 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
       _grouped = grouped;
     });
 
+    final scrobbleActive = HomeTraktNowPlayingCard.isScrobbleActive.value;
+    final visible = !scrobbleActive && grouped.isNotEmpty;
     widget.focusController.registerSection(
       HomeSection.todayCalendar,
-      hasItems: grouped.isNotEmpty,
-      focusNodes: grouped.isNotEmpty ? [_cardFocusNode] : const [],
+      hasItems: visible,
+      focusNodes: visible ? [_cardFocusNode] : const [],
     );
   }
 

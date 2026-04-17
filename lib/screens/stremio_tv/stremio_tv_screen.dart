@@ -148,14 +148,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       MainPageBridge.watchStremioTvChannel = null;
     }
     if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(9, _tvContentFocusHandler!);
+      MainPageBridge.unregisterTvContentFocusHandler(
+        9,
+        _tvContentFocusHandler!,
+      );
     }
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
     _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
-    _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
+    _seriesRotationMinutes =
+        await StorageService.getStremioTvSeriesRotationMinutes();
     _randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
@@ -327,7 +331,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   Future<void> _importFromTrakt() async {
-    final imported = await StremioTvLocalCatalogsDialog.importFromTrakt(context);
+    final imported = await StremioTvLocalCatalogsDialog.importFromTrakt(
+      context,
+    );
     if (imported && mounted) _refresh();
   }
 
@@ -404,7 +410,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // Playback
   // ============================================================================
 
-
   /// Extract normalized quality from a stream/torrent name.
   /// Returns '2160p', '1080p', '720p', '480p', or null.
   static final RegExp _qualityPattern = RegExp(
@@ -452,38 +457,49 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         for (int i = 0; i < 5; i++) {
           final request = http.Request('HEAD', Uri.parse(currentUrl));
           request.followRedirects = false;
-          final streamed = await client.send(request).timeout(
-                const Duration(seconds: 5),
-              );
+          final streamed = await client
+              .send(request)
+              .timeout(const Duration(seconds: 5));
           // Drain response stream to release resources
           await streamed.stream.drain();
 
           if (streamed.statusCode >= 300 && streamed.statusCode < 400) {
             final location = streamed.headers['location'];
             if (location == null || location.isEmpty) {
-              debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode} (redirect, no location)');
+              debugPrint(
+                'StremioTV: HEAD $currentUrl → ${streamed.statusCode} (redirect, no location)',
+              );
               return false;
             }
             // Resolve relative redirects
             currentUrl = Uri.parse(currentUrl).resolve(location).toString();
-            debugPrint('StremioTV: HEAD → ${streamed.statusCode}, following redirect');
+            debugPrint(
+              'StremioTV: HEAD → ${streamed.statusCode}, following redirect',
+            );
             continue;
           }
 
           // Reject non-2xx responses
           if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-            debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, rejecting non-2xx');
+            debugPrint(
+              'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, rejecting non-2xx',
+            );
             return false;
           }
 
-          final contentLength =
-              int.tryParse(streamed.headers['content-length'] ?? '');
+          final contentLength = int.tryParse(
+            streamed.headers['content-length'] ?? '',
+          );
           if (contentLength == null) {
-            debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, no content-length');
+            debugPrint(
+              'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, no content-length',
+            );
             return false;
           }
           final sizeMb = (contentLength / (1024 * 1024)).toStringAsFixed(1);
-          debugPrint('StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB');
+          debugPrint(
+            'StremioTV: HEAD $currentUrl → ${streamed.statusCode}, size: ${sizeMb}MB',
+          );
           return contentLength >= _minContentBytes;
         }
         // Too many redirects
@@ -545,7 +561,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     int? episode;
     if (item.type.toLowerCase() == 'series') {
       if (!mounted) return;
-      showPsychLoading(context, 'Spinning the wheel of fate for ${item.name}...');
+      showPsychLoading(
+        context,
+        'Spinning the wheel of fate for ${item.name}...',
+      );
 
       final episodeSeed = _randomEpisodes
           ? '${channel.id}:${DateTime.now().millisecondsSinceEpoch}'
@@ -606,12 +625,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
 
       // For series, retry with episode 1 if the picked episode returns no streams
-      if (!isMovie &&
-          episode != null &&
-          episode != 1) {
+      if (!isMovie && episode != null && episode != 1) {
         final torrents = results['torrents'] as List<Torrent>? ?? [];
         if (torrents.isEmpty) {
-          debugPrint('StremioTV: No streams for S${season}E$episode, retrying with E1');
+          debugPrint(
+            'StremioTV: No streams for S${season}E$episode, retrying with E1',
+          );
           final retryResults = await TorrentService.searchByImdbWithStremio(
             item.effectiveImdbId ?? item.id,
             isMovie: false,
@@ -619,9 +638,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             episode: 1,
             contentType: item.type,
             stremioTimeout: const Duration(seconds: 7),
-        engineTimeout: const Duration(seconds: 10),
+            engineTimeout: const Duration(seconds: 10),
           );
-          final retryTorrents = retryResults['torrents'] as List<Torrent>? ?? [];
+          final retryTorrents =
+              retryResults['torrents'] as List<Torrent>? ?? [];
           if (retryTorrents.isNotEmpty) {
             results = retryResults;
             episode = 1;
@@ -640,17 +660,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       final torrents = results['torrents'] as List<Torrent>? ?? [];
       final directCount = torrents.where((t) => t.isDirectStream).length;
-      final torrentCount = torrents.where((t) => !t.isDirectStream && !t.isExternalStream).length;
-      loadingStatus.value = 'Found $directCount direct + $torrentCount torrent streams, resolving...';
+      final torrentCount = torrents
+          .where((t) => !t.isDirectStream && !t.isExternalStream)
+          .length;
+      loadingStatus.value =
+          'Found $directCount direct + $torrentCount torrent streams, resolving...';
 
       if (torrents.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No streams found for ${item.name}'),
-            ),
+            SnackBar(content: Text('No streams found for ${item.name}')),
           );
         }
         return;
@@ -662,7 +683,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       var playableSources = torrents
           .where((t) => !t.isExternalStream)
           .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
-          .where((t) => t.streamType != StreamType.torrent || _extractQuality(t.name) != '480p')
+          .where(
+            (t) =>
+                t.streamType != StreamType.torrent ||
+                _extractQuality(t.name) != '480p',
+          )
           .toList();
 
       // For TorBox, filter torrent sources to only cached ones
@@ -689,8 +714,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             );
             // Keep direct streams + only cached torrents
             playableSources = playableSources
-                .where((t) => t.streamType != StreamType.torrent ||
-                    cachedSet.contains(t.infohash.trim().toLowerCase()))
+                .where(
+                  (t) =>
+                      t.streamType != StreamType.torrent ||
+                      cachedSet.contains(t.infohash.trim().toLowerCase()),
+                )
                 .toList();
           }
         }
@@ -701,7 +729,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No playable streams found for ${item.name}')),
+            SnackBar(
+              content: Text('No playable streams found for ${item.name}'),
+            ),
           );
         }
         return;
@@ -728,8 +758,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         if (!mounted || _playGeneration != myGeneration) return;
         if (valid) {
           firstPlayableUrl = stream.directUrl!;
-          firstPlayableIndex = playableSources.indexWhere((t) =>
-              t.directUrl == stream.directUrl && t.name == stream.name);
+          firstPlayableIndex = playableSources.indexWhere(
+            (t) => t.directUrl == stream.directUrl && t.name == stream.name,
+          );
           if (firstPlayableIndex < 0) firstPlayableIndex = 0;
           break;
         }
@@ -742,18 +773,26 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (firstPlayableUrl == null) {
         // TorBox torrents are already filtered to cached-only in playableSources
         final torrentStreams = _sortStreamsByQuality(
-          playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
+          playableSources
+              .where((t) => t.streamType == StreamType.torrent)
+              .toList(),
         );
 
         final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
         for (int i = 0; i < maxTorrentAttempts; i++) {
           if (!mounted || _playGeneration != myGeneration) return;
-          final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
+          final url = await _resolveTorrentUrl(
+            torrentStreams[i],
+            item,
+            _debridProvider,
+          );
           if (url != null && url.isNotEmpty) {
             firstPlayableUrl = url;
-            firstPlayableIndex = playableSources.indexWhere((t) =>
-                t.infohash == torrentStreams[i].infohash &&
-                t.name == torrentStreams[i].name);
+            firstPlayableIndex = playableSources.indexWhere(
+              (t) =>
+                  t.infohash == torrentStreams[i].infohash &&
+                  t.name == torrentStreams[i].name,
+            );
             if (firstPlayableIndex < 0) firstPlayableIndex = 0;
             break;
           }
@@ -769,9 +808,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
           // Show source picker so user can manually select
-          final result = await _showManualSourcePicker(
-            playableSources, item,
-          );
+          final result = await _showManualSourcePicker(playableSources, item);
           if (result != null && mounted) {
             await VideoPlayerLauncher.push(
               context,
@@ -833,15 +870,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         _dialogGeneration = -1;
         Navigator.of(context).pop();
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error searching streams: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error searching streams: $e')));
     }
   }
 
   /// Resolves a channel to a playable URL without any UI interactions.
   /// Used by the in-player channel guide for background channel switching.
-  Future<_ChannelPlaybackResult?> _resolveChannelPlayback(StremioTvChannel channel) async {
+  Future<_ChannelPlaybackResult?> _resolveChannelPlayback(
+    StremioTvChannel channel,
+  ) async {
     // Ensure items are loaded
     if (!channel.hasItems) {
       await _ensureChannelItemsLoaded(channel);
@@ -895,7 +934,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (!isMovie && episode != null && episode != 1) {
       final torrents = results['torrents'] as List<Torrent>? ?? [];
       if (torrents.isEmpty) {
-        debugPrint('StremioTV guide: No streams for S${season}E$episode, retrying E1');
+        debugPrint(
+          'StremioTV guide: No streams for S${season}E$episode, retrying E1',
+        );
         final retryResults = await TorrentService.searchByImdbWithStremio(
           item.effectiveImdbId ?? item.id,
           isMovie: false,
@@ -903,7 +944,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           episode: 1,
           contentType: item.type,
           stremioTimeout: const Duration(seconds: 7),
-        engineTimeout: const Duration(seconds: 10),
+          engineTimeout: const Duration(seconds: 10),
         );
         if ((retryResults['torrents'] as List<Torrent>? ?? []).isNotEmpty) {
           results = retryResults;
@@ -919,7 +960,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     var playableSources = torrents
         .where((t) => !t.isExternalStream)
         .where((t) => !t.isDirectStream || t.sizeBytes >= 5 * 1024 * 1024)
-        .where((t) => t.streamType != StreamType.torrent || _extractQuality(t.name) != '480p')
+        .where(
+          (t) =>
+              t.streamType != StreamType.torrent ||
+              _extractQuality(t.name) != '480p',
+        )
         .toList();
 
     // TorBox cache filter
@@ -936,10 +981,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             apiKey: tbKey,
             infoHashes: torrentHashes,
           );
-          final cachedSet = cachedHashes.map((h) => h.trim().toLowerCase()).toSet();
+          final cachedSet = cachedHashes
+              .map((h) => h.trim().toLowerCase())
+              .toSet();
           playableSources = playableSources
-              .where((t) => t.streamType != StreamType.torrent ||
-                  cachedSet.contains(t.infohash.trim().toLowerCase()))
+              .where(
+                (t) =>
+                    t.streamType != StreamType.torrent ||
+                    cachedSet.contains(t.infohash.trim().toLowerCase()),
+              )
               .toList();
         }
       }
@@ -961,8 +1011,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final valid = await _isValidStreamUrl(stream.directUrl!);
       if (valid) {
         firstPlayableUrl = stream.directUrl!;
-        firstPlayableIndex = playableSources.indexWhere((t) =>
-            t.directUrl == stream.directUrl && t.name == stream.name);
+        firstPlayableIndex = playableSources.indexWhere(
+          (t) => t.directUrl == stream.directUrl && t.name == stream.name,
+        );
         if (firstPlayableIndex < 0) firstPlayableIndex = 0;
         break;
       }
@@ -971,15 +1022,23 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // Try torrents via debrid
     if (firstPlayableUrl == null) {
       final torrentStreams = _sortStreamsByQuality(
-        playableSources.where((t) => t.streamType == StreamType.torrent).toList(),
+        playableSources
+            .where((t) => t.streamType == StreamType.torrent)
+            .toList(),
       );
       for (int i = 0; i < torrentStreams.length.clamp(0, 20); i++) {
-        final url = await _resolveTorrentUrl(torrentStreams[i], item, _debridProvider);
+        final url = await _resolveTorrentUrl(
+          torrentStreams[i],
+          item,
+          _debridProvider,
+        );
         if (url != null && url.isNotEmpty) {
           firstPlayableUrl = url;
-          firstPlayableIndex = playableSources.indexWhere((t) =>
-              t.infohash == torrentStreams[i].infohash &&
-              t.name == torrentStreams[i].name);
+          firstPlayableIndex = playableSources.indexWhere(
+            (t) =>
+                t.infohash == torrentStreams[i].infohash &&
+                t.name == torrentStreams[i].name,
+          );
           if (firstPlayableIndex < 0) firstPlayableIndex = 0;
           break;
         }
@@ -1022,10 +1081,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   /// Returns true if playback was launched successfully, false on failure.
-  Future<bool> _playTorrentViaDebrid(
-    Torrent torrent,
-    StremioMeta item,
-  ) async {
+  Future<bool> _playTorrentViaDebrid(Torrent torrent, StremioMeta item) async {
     // Try the selected provider first
     if (_debridProvider == 'realdebrid') {
       final rdKey = await StorageService.getApiKey();
@@ -1094,10 +1150,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
 
       final links = result['links'] as List<dynamic>? ?? [];
-      final updatedInfo =
-          result['updatedInfo'] as Map<String, dynamic>? ?? {};
-      final files =
-          updatedInfo['files'] as List<dynamic>? ?? [];
+      final updatedInfo = result['updatedInfo'] as Map<String, dynamic>? ?? {};
+      final files = updatedInfo['files'] as List<dynamic>? ?? [];
 
       if (!mounted) return false;
       Navigator.of(context).pop();
@@ -1159,10 +1213,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<bool> _playViaTorbox(
-    Torrent torrent,
-    StremioMeta item,
-  ) async {
+  Future<bool> _playViaTorbox(Torrent torrent, StremioMeta item) async {
     bool dialogShown = false;
     try {
       if (!mounted) return false;
@@ -1234,7 +1285,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       final downloadLink = await TorboxService.requestFileDownloadLink(
         apiKey: tbKey,
-        torrentId: torrentId is int ? torrentId : int.parse(torrentId.toString()),
+        torrentId: torrentId is int
+            ? torrentId
+            : int.parse(torrentId.toString()),
         fileId: targetFile.id,
       );
 
@@ -1261,10 +1314,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<bool> _playViaPikPak(
-    Torrent torrent,
-    StremioMeta item,
-  ) async {
+  Future<bool> _playViaPikPak(Torrent torrent, StremioMeta item) async {
     bool dialogShown = false;
     try {
       if (!mounted) return false;
@@ -1289,8 +1339,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       String? streamUrl = prepared['url'] as String?;
 
       // For multi-file torrents (folders), pick the largest video file for movies
-      final allVideoFiles =
-          prepared['allVideoFiles'] as List<dynamic>?;
+      final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
       if (allVideoFiles != null &&
           allVideoFiles.isNotEmpty &&
           item.type.toLowerCase() == 'movie') {
@@ -1336,11 +1385,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             contentTitle: item.name,
             contentType: item.type,
             playlist: [
-              PlaylistEntry(
-                url: streamUrl,
-                title: title,
-                provider: 'pikpak',
-              ),
+              PlaylistEntry(url: streamUrl, title: title, provider: 'pikpak'),
             ],
             startIndex: 0,
           ),
@@ -1419,8 +1464,16 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       };
       if (ch.hasItems) {
         final rotation = _rotationFor(ch);
-        final np = _service.getNowPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
-        final next = _service.getNextPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        final np = _service.getNowPlaying(
+          ch,
+          rotationMinutes: rotation,
+          salt: _mixSalt,
+        );
+        final next = _service.getNextPlaying(
+          ch,
+          rotationMinutes: rotation,
+          salt: _mixSalt,
+        );
         if (np != null) {
           data['nowPlaying'] = {
             'title': np.item.name,
@@ -1447,7 +1500,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   /// Creates a guide data provider closure for lazy-loading channel data.
-  Future<Map<String, dynamic>?> Function(List<String>) _createGuideDataProvider() {
+  Future<Map<String, dynamic>?> Function(List<String>)
+  _createGuideDataProvider() {
     return (List<String> channelIds) async {
       final result = <String, dynamic>{};
       for (final id in channelIds) {
@@ -1456,25 +1510,35 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         if (!ch.hasItems) await _service.loadChannelItems(ch);
         if (!ch.hasItems) continue;
         final rotation = _rotationFor(ch);
-        final np = _service.getNowPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
-        final next = _service.getNextPlaying(ch, rotationMinutes: rotation, salt: _mixSalt);
+        final np = _service.getNowPlaying(
+          ch,
+          rotationMinutes: rotation,
+          salt: _mixSalt,
+        );
+        final next = _service.getNextPlaying(
+          ch,
+          rotationMinutes: rotation,
+          salt: _mixSalt,
+        );
         result[id] = {
-          if (np != null) 'nowPlaying': {
-            'title': np.item.name,
-            'poster': np.item.poster,
-            'year': np.item.year,
-            'rating': np.item.imdbRating,
-            'type': np.item.type,
-            'slotEndMs': np.slotEnd.millisecondsSinceEpoch,
-            'progress': np.progress,
-          },
-          if (next != null) 'nextUp': {
-            'title': next.item.name,
-            'poster': next.item.poster,
-            'year': next.item.year,
-            'rating': next.item.imdbRating,
-            'type': next.item.type,
-          },
+          if (np != null)
+            'nowPlaying': {
+              'title': np.item.name,
+              'poster': np.item.poster,
+              'year': np.item.year,
+              'rating': np.item.imdbRating,
+              'type': np.item.type,
+              'slotEndMs': np.slotEnd.millisecondsSinceEpoch,
+              'progress': np.progress,
+            },
+          if (next != null)
+            'nextUp': {
+              'title': next.item.name,
+              'poster': next.item.poster,
+              'year': next.item.year,
+              'rating': next.item.imdbRating,
+              'type': next.item.type,
+            },
         };
       }
       return result;
@@ -1482,7 +1546,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   /// Creates a channel switch provider closure for the in-player guide.
-  Future<Map<String, dynamic>?> Function(String) _createChannelSwitchProvider() {
+  Future<Map<String, dynamic>?> Function(String)
+  _createChannelSwitchProvider() {
     return (String channelId) async {
       final ch = _channels.firstWhereOrNull((c) => c.id == channelId);
       if (ch == null) return null;
@@ -1494,7 +1559,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         'contentType': result.contentType,
         'contentImdbId': result.contentImdbId,
         'startAtPercent': result.startAtPercent,
-        'stremioSources': result.playableSources.map((t) => t.toJson()).toList(),
+        'stremioSources': result.playableSources
+            .map((t) => t.toJson())
+            .toList(),
         'stremioCurrentSourceIndex': result.sourceIndex,
         'sourceResolver': result.sourceResolver,
       };
@@ -1502,7 +1569,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   /// Resolve a torrent to a playable URL via the given debrid provider.
-  Future<String?> _resolveTorrentUrl(Torrent torrent, StremioMeta item, String debridProvider) async {
+  Future<String?> _resolveTorrentUrl(
+    Torrent torrent,
+    StremioMeta item,
+    String debridProvider,
+  ) async {
     // Try the selected provider first
     if (debridProvider == 'realdebrid') {
       final rdKey = await StorageService.getApiKey();
@@ -1552,10 +1623,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       );
 
       final links = result['links'] as List<dynamic>? ?? [];
-      final updatedInfo =
-          result['updatedInfo'] as Map<String, dynamic>? ?? {};
-      final files =
-          updatedInfo['files'] as List<dynamic>? ?? [];
+      final updatedInfo = result['updatedInfo'] as Map<String, dynamic>? ?? {};
+      final files = updatedInfo['files'] as List<dynamic>? ?? [];
 
       if (links.isEmpty) return null;
 
@@ -1589,10 +1658,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<String?> _resolveViaTorbox(
-    Torrent torrent,
-    String apiKey,
-  ) async {
+  Future<String?> _resolveViaTorbox(Torrent torrent, String apiKey) async {
     try {
       final magnet =
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
@@ -1634,7 +1700,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       return await TorboxService.requestFileDownloadLink(
         apiKey: apiKey,
-        torrentId: torrentId is int ? torrentId : int.parse(torrentId.toString()),
+        torrentId: torrentId is int
+            ? torrentId
+            : int.parse(torrentId.toString()),
         fileId: targetFile.id,
       );
     } catch (e) {
@@ -1643,10 +1711,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<String?> _resolveViaPikPak(
-    Torrent torrent,
-    StremioMeta item,
-  ) async {
+  Future<String?> _resolveViaPikPak(Torrent torrent, StremioMeta item) async {
     try {
       final prepared = await PikPakTvService.instance.prepareTorrent(
         infohash: torrent.infohash.trim().toLowerCase(),
@@ -1657,8 +1722,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       String? streamUrl = prepared['url'] as String?;
 
-      final allVideoFiles =
-          prepared['allVideoFiles'] as List<dynamic>?;
+      final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
       if (allVideoFiles != null &&
           allVideoFiles.isNotEmpty &&
           item.type.toLowerCase() == 'movie') {
@@ -1745,13 +1809,27 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // ============================================================================
 
   Future<void> _toggleFavorite(StremioTvChannel channel) async {
+    final focusedChannelId = _currentFocusedChannelId();
     final newState = !channel.isFavorite;
     await StorageService.setStremioTvChannelFavorited(channel.id, newState);
     if (!mounted) return;
+    final previousChannels = List<StremioTvChannel>.from(_channels);
     setState(() {
       channel.isFavorite = newState;
       _channels = _sortedChannels(_channels);
+      _reorderRowFocusNodes(previousChannels, _channels);
     });
+    if (focusedChannelId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final newIndex = _channels.indexWhere(
+          (ch) => ch.id == focusedChannelId,
+        );
+        if (newIndex >= 0 && newIndex < _rowFocusNodes.length) {
+          _rowFocusNodes[newIndex].requestFocus();
+        }
+      });
+    }
   }
 
   // ============================================================================
@@ -1770,12 +1848,53 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }).toList();
   }
 
+  String? _currentFocusedChannelId() {
+    final focusedNodeIndex = _rowFocusNodes.indexWhere((node) => node.hasFocus);
+    if (focusedNodeIndex >= 0 && focusedNodeIndex < _channels.length) {
+      return _channels[focusedNodeIndex].id;
+    }
+    if (_focusedIndex >= 0 && _focusedIndex < _channels.length) {
+      return _channels[_focusedIndex].id;
+    }
+    return null;
+  }
+
+  void _reorderRowFocusNodes(
+    List<StremioTvChannel> previousChannels,
+    List<StremioTvChannel> reorderedChannels,
+  ) {
+    final nodeByChannelId = <String, FocusNode>{};
+    final previousLength = previousChannels.length < _rowFocusNodes.length
+        ? previousChannels.length
+        : _rowFocusNodes.length;
+    for (int i = 0; i < previousLength; i++) {
+      nodeByChannelId[previousChannels[i].id] = _rowFocusNodes[i];
+    }
+
+    final reorderedNodes = <FocusNode>[];
+    for (int i = 0; i < reorderedChannels.length; i++) {
+      reorderedNodes.add(
+        nodeByChannelId.remove(reorderedChannels[i].id) ??
+            FocusNode(debugLabel: 'stremioTvRow$i'),
+      );
+    }
+
+    for (final leftover in nodeByChannelId.values) {
+      leftover.dispose();
+    }
+
+    _rowFocusNodes
+      ..clear()
+      ..addAll(reorderedNodes);
+  }
+
   KeyEventResult _handleSearchKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final text = _searchController.text;
     final selection = _searchController.selection;
-    final isAtStart = !selection.isValid ||
+    final isAtStart =
+        !selection.isValid ||
         (selection.baseOffset == 0 && selection.extentOffset == 0);
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -1831,283 +1950,354 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
-                  children: [
-                    // Controls row — search + settings centered
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+              children: [
+                // Controls row — search + settings centered
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Collapsible search field
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        alignment: Alignment.topCenter,
+                        child: _showSearchField
+                            ? Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search channels...',
+                                    hintStyle: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                    prefixIcon: Icon(
+                                      Icons.search_rounded,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.35,
+                                      ),
+                                    ),
+                                    suffixIcon: _searchQuery.isNotEmpty
+                                        ? IconButton(
+                                            icon: Icon(
+                                              Icons.close_rounded,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              setState(() {
+                                                _showSearchField = false;
+                                              });
+                                            },
+                                          )
+                                        : null,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white.withValues(
+                                      alpha: 0.07,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                  textInputAction: TextInputAction.search,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      // Centered search + settings buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Collapsible search field
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                            alignment: Alignment.topCenter,
-                            child: _showSearchField
-                                ? Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: TextField(
-                                      controller: _searchController,
-                                      focusNode: _searchFocusNode,
-                                      style: const TextStyle(color: Colors.white),
-                                      decoration: InputDecoration(
-                                        hintText: 'Search channels...',
-                                        hintStyle: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.3),
-                                        ),
-                                        prefixIcon: Icon(
-                                          Icons.search_rounded,
-                                          color: Colors.white.withValues(alpha: 0.35),
-                                        ),
-                                        suffixIcon: _searchQuery.isNotEmpty
-                                            ? IconButton(
-                                                icon: Icon(
-                                                  Icons.close_rounded,
-                                                  color: Colors.white.withValues(alpha: 0.5),
-                                                ),
-                                                onPressed: () {
-                                                  _searchController.clear();
-                                                  setState(() {
-                                                    _showSearchField = false;
-                                                  });
-                                                },
-                                              )
-                                            : null,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: BorderSide(
-                                            color: Colors.white.withValues(alpha: 0.15),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        filled: true,
-                                        fillColor: Colors.white.withValues(alpha: 0.07),
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 14,
-                                        ),
-                                      ),
-                                      textInputAction: TextInputAction.search,
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          // Centered search + settings buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Search toggle button
-                              Focus(
-                                focusNode: _searchBtnFocusNode,
-                                onKeyEvent: (node, event) {
-                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                    _menuFocusNode.requestFocus();
-                                    return KeyEventResult.handled;
+                          // Search toggle button
+                          Focus(
+                            focusNode: _searchBtnFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent)
+                                return KeyEventResult.ignored;
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowRight) {
+                                _menuFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowLeft) {
+                                MainPageBridge.focusTvSidebar?.call();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowUp) {
+                                if (_showSearchField) {
+                                  _searchFocusNode.requestFocus();
+                                }
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                final filtered = _filteredChannels;
+                                if (filtered.isNotEmpty &&
+                                    _rowFocusNodes.isNotEmpty) {
+                                  final firstIdx = _channels.indexOf(
+                                    filtered.first,
+                                  );
+                                  if (firstIdx >= 0 &&
+                                      firstIdx < _rowFocusNodes.length) {
+                                    _rowFocusNodes[firstIdx].requestFocus();
                                   }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                    MainPageBridge.focusTvSidebar?.call();
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                    if (_showSearchField) {
-                                      _searchFocusNode.requestFocus();
-                                    }
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                    final filtered = _filteredChannels;
-                                    if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
-                                      final firstIdx = _channels.indexOf(filtered.first);
-                                      if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-                                        _rowFocusNodes[firstIdx].requestFocus();
-                                      }
-                                    }
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.select ||
-                                      event.logicalKey == LogicalKeyboardKey.enter) {
-                                    setState(() {
-                                      _showSearchField = !_showSearchField;
-                                    });
-                                    if (_showSearchField) {
-                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                        _searchFocusNode.requestFocus();
-                                      });
-                                    }
-                                    return KeyEventResult.handled;
-                                  }
-                                  return KeyEventResult.ignored;
-                                },
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _showSearchField = !_showSearchField;
-                                    });
-                                    if (_showSearchField) {
-                                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                                        _searchFocusNode.requestFocus();
-                                      });
-                                    }
-                                  },
-                                  child: ListenableBuilder(
-                                    listenable: _searchBtnFocusNode,
-                                    builder: (context, _) => Container(
-                                      height: 40,
-                                      width: 40,
-                                      decoration: BoxDecoration(
-                                        color: _searchBtnFocusNode.hasFocus
-                                            ? Colors.white.withValues(alpha: 0.15)
-                                            : const Color(0xFF141414),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: _searchBtnFocusNode.hasFocus
-                                            ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
-                                            : null,
-                                      ),
-                                      child: Icon(
-                                        Icons.search_rounded,
-                                        size: 20,
-                                        color: (_searchBtnFocusNode.hasFocus || _showSearchField || _searchQuery.isNotEmpty)
-                                            ? Colors.white
-                                            : Colors.white.withValues(alpha: 0.5),
-                                      ),
-                                    ),
+                                }
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.select ||
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.enter) {
+                                setState(() {
+                                  _showSearchField = !_showSearchField;
+                                });
+                                if (_showSearchField) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    _searchFocusNode.requestFocus();
+                                  });
+                                }
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _showSearchField = !_showSearchField;
+                                });
+                                if (_showSearchField) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    _searchFocusNode.requestFocus();
+                                  });
+                                }
+                              },
+                              child: ListenableBuilder(
+                                listenable: _searchBtnFocusNode,
+                                builder: (context, _) => Container(
+                                  height: 40,
+                                  width: 40,
+                                  decoration: BoxDecoration(
+                                    color: _searchBtnFocusNode.hasFocus
+                                        ? Colors.white.withValues(alpha: 0.15)
+                                        : const Color(0xFF141414),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: _searchBtnFocusNode.hasFocus
+                                        ? Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                            width: 2,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    size: 20,
+                                    color:
+                                        (_searchBtnFocusNode.hasFocus ||
+                                            _showSearchField ||
+                                            _searchQuery.isNotEmpty)
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              // Settings/options button
-                              Focus(
-                                focusNode: _menuFocusNode,
-                                onKeyEvent: (node, event) {
-                                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                                  if (_menuController.isOpen) {
-                                    if (event.logicalKey == LogicalKeyboardKey.escape ||
-                                        event.logicalKey == LogicalKeyboardKey.goBack) {
-                                      _menuController.close();
-                                      _menuFocusNode.requestFocus();
-                                      return KeyEventResult.handled;
-                                    }
-                                    return KeyEventResult.ignored;
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Settings/options button
+                          Focus(
+                            focusNode: _menuFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent)
+                                return KeyEventResult.ignored;
+                              if (_menuController.isOpen) {
+                                if (event.logicalKey ==
+                                        LogicalKeyboardKey.escape ||
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.goBack) {
+                                  _menuController.close();
+                                  _menuFocusNode.requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowUp) {
+                                if (_showSearchField) {
+                                  _searchFocusNode.requestFocus();
+                                }
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowRight) {
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowLeft) {
+                                _searchBtnFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                final filtered = _filteredChannels;
+                                if (filtered.isNotEmpty &&
+                                    _rowFocusNodes.isNotEmpty) {
+                                  final firstIdx = _channels.indexOf(
+                                    filtered.first,
+                                  );
+                                  if (firstIdx >= 0 &&
+                                      firstIdx < _rowFocusNodes.length) {
+                                    _rowFocusNodes[firstIdx].requestFocus();
                                   }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                                    if (_showSearchField) {
-                                      _searchFocusNode.requestFocus();
-                                    }
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                                    _searchBtnFocusNode.requestFocus();
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                                    final filtered = _filteredChannels;
-                                    if (filtered.isNotEmpty && _rowFocusNodes.isNotEmpty) {
-                                      final firstIdx = _channels.indexOf(filtered.first);
-                                      if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
-                                        _rowFocusNodes[firstIdx].requestFocus();
-                                      }
-                                    }
-                                    return KeyEventResult.handled;
-                                  }
-                                  if (event.logicalKey == LogicalKeyboardKey.select ||
-                                      event.logicalKey == LogicalKeyboardKey.enter) {
-                                    _menuController.open();
-                                    return KeyEventResult.handled;
-                                  }
-                                  return KeyEventResult.ignored;
-                                },
-                                child: ListenableBuilder(
-                                  listenable: _menuFocusNode,
-                                  builder: (context, child) => MenuAnchor(
-                                    controller: _menuController,
+                                }
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.select ||
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.enter) {
+                                _menuController.open();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: ListenableBuilder(
+                              listenable: _menuFocusNode,
+                              builder: (context, child) => MenuAnchor(
+                                controller: _menuController,
+                                menuChildren: [
+                                  MenuItemButton(
+                                    autofocus: true,
+                                    leadingIcon: const Icon(
+                                      Icons.shuffle_rounded,
+                                    ),
+                                    onPressed: () {
+                                      setState(
+                                        () => _mixSalt = (_mixSalt + 1) % 10,
+                                      );
+                                    },
+                                    child: Text(
+                                      'Shuffle (Mix ${_mixSalt + 1})',
+                                    ),
+                                  ),
+                                  MenuItemButton(
+                                    leadingIcon: const Icon(
+                                      Icons.refresh_rounded,
+                                    ),
+                                    onPressed: _refreshing
+                                        ? null
+                                        : () => _refresh(),
+                                    child: const Text('Refresh'),
+                                  ),
+                                  MenuItemButton(
+                                    leadingIcon: const Icon(Icons.tune_rounded),
+                                    onPressed: () => _openChannelFilter(),
+                                    child: const Text('Filter channels'),
+                                  ),
+                                  SubmenuButton(
+                                    focusNode: _submenuFocusNode,
+                                    leadingIcon: const Icon(
+                                      Icons.playlist_add_rounded,
+                                    ),
                                     menuChildren: [
-                                      MenuItemButton(
+                                      _submenuItem(
                                         autofocus: true,
-                                        leadingIcon: const Icon(Icons.shuffle_rounded),
-                                        onPressed: () {
-                                          setState(() => _mixSalt = (_mixSalt + 1) % 10);
-                                        },
-                                        child: Text('Shuffle (Mix ${_mixSalt + 1})'),
+                                        icon: Icons.list_rounded,
+                                        label: 'Manage',
+                                        onPressed: _openLocalCatalogs,
                                       ),
-                                      MenuItemButton(
-                                        leadingIcon: const Icon(Icons.refresh_rounded),
-                                        onPressed: _refreshing ? null : () => _refresh(),
-                                        child: const Text('Refresh'),
+                                      _submenuItem(
+                                        icon: Icons.file_upload_outlined,
+                                        label: 'From File',
+                                        onPressed: _importFromFile,
                                       ),
-                                      MenuItemButton(
-                                        leadingIcon: const Icon(Icons.tune_rounded),
-                                        onPressed: () => _openChannelFilter(),
-                                        child: const Text('Filter channels'),
+                                      _submenuItem(
+                                        icon: Icons.link_rounded,
+                                        label: 'From URL',
+                                        onPressed: _importFromUrl,
                                       ),
-                                      SubmenuButton(
-                                        focusNode: _submenuFocusNode,
-                                        leadingIcon: const Icon(Icons.playlist_add_rounded),
-                                        menuChildren: [
-                                          _submenuItem(
-                                            autofocus: true,
-                                            icon: Icons.list_rounded,
-                                            label: 'Manage',
-                                            onPressed: _openLocalCatalogs,
-                                          ),
-                                          _submenuItem(
-                                            icon: Icons.file_upload_outlined,
-                                            label: 'From File',
-                                            onPressed: _importFromFile,
-                                          ),
-                                          _submenuItem(
-                                            icon: Icons.link_rounded,
-                                            label: 'From URL',
-                                            onPressed: _importFromUrl,
-                                          ),
-                                          _submenuItem(
-                                            icon: Icons.data_object_rounded,
-                                            label: 'Paste JSON',
-                                            onPressed: _importFromJson,
-                                          ),
-                                          _submenuItem(
-                                            icon: Icons.source_rounded,
-                                            label: 'From Repository',
-                                            onPressed: _importFromRepo,
-                                          ),
-                                          _submenuItem(
-                                            icon: Icons.movie_filter_rounded,
-                                            label: 'From Trakt',
-                                            onPressed: _importFromTrakt,
-                                          ),
-                                        ],
-                                        child: const Text('Import'),
+                                      _submenuItem(
+                                        icon: Icons.data_object_rounded,
+                                        label: 'Paste JSON',
+                                        onPressed: _importFromJson,
+                                      ),
+                                      _submenuItem(
+                                        icon: Icons.source_rounded,
+                                        label: 'From Repository',
+                                        onPressed: _importFromRepo,
+                                      ),
+                                      _submenuItem(
+                                        icon: Icons.movie_filter_rounded,
+                                        label: 'From Trakt',
+                                        onPressed: _importFromTrakt,
                                       ),
                                     ],
-                                    builder: (context, controller, child) => Container(
+                                    child: const Text('Import'),
+                                  ),
+                                ],
+                                builder: (context, controller, child) =>
+                                    Container(
                                       height: 40,
                                       width: 40,
                                       decoration: BoxDecoration(
                                         color: _menuFocusNode.hasFocus
-                                            ? Colors.white.withValues(alpha: 0.15)
+                                            ? Colors.white.withValues(
+                                                alpha: 0.15,
+                                              )
                                             : const Color(0xFF141414),
                                         borderRadius: BorderRadius.circular(20),
                                         border: _menuFocusNode.hasFocus
-                                            ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                                            ? Border.all(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.6,
+                                                ),
+                                                width: 2,
+                                              )
                                             : null,
                                       ),
                                       child: IconButton(
-                                        icon: const Icon(Icons.settings_rounded, size: 20),
+                                        icon: const Icon(
+                                          Icons.settings_rounded,
+                                          size: 20,
+                                        ),
                                         padding: EdgeInsets.zero,
                                         color: _menuFocusNode.hasFocus
                                             ? Colors.white
-                                            : Colors.white.withValues(alpha: 0.5),
+                                            : Colors.white.withValues(
+                                                alpha: 0.5,
+                                              ),
                                         onPressed: () {
                                           if (controller.isOpen) {
                                             controller.close();
@@ -2117,115 +2307,114 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         },
                                       ),
                                     ),
-                                  ),
-                                ),
                               ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    // Channel list
-                    Expanded(
-                      child: Builder(
-                        builder: (context) {
-                          if (_channels.isEmpty) {
-                            return const StremioTvEmptyState();
-                          }
-                          final filtered = _filteredChannels;
-                          if (filtered.isEmpty && _searchQuery.isNotEmpty) {
-                            return Center(
-                              child: Text(
-                                'No channels match "$_searchQuery"',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            );
-                          }
-                          return ListView.builder(
-                            padding:
-                                const EdgeInsets.only(top: 8, bottom: 16),
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final channel = filtered[index];
-                              final realIndex = _channels.indexOf(channel);
+                    ],
+                  ),
+                ),
+                // Channel list
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      if (_channels.isEmpty) {
+                        return const StremioTvEmptyState();
+                      }
+                      final filtered = _filteredChannels;
+                      if (filtered.isEmpty && _searchQuery.isNotEmpty) {
+                        return Center(
+                          child: Text(
+                            'No channels match "$_searchQuery"',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(top: 8, bottom: 16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final channel = filtered[index];
+                          final realIndex = _channels.indexOf(channel);
 
-                              // Trigger lazy load for visible channels
-                              if (!channel.hasItems &&
-                                  !_loadingChannelIds
-                                      .contains(channel.id)) {
-                                _ensureChannelItemsLoaded(channel);
-                              }
+                          // Trigger lazy load for visible channels
+                          if (!channel.hasItems &&
+                              !_loadingChannelIds.contains(channel.id)) {
+                            _ensureChannelItemsLoaded(channel);
+                          }
 
-                              final nowPlaying = _service.getNowPlaying(
-                                channel,
-                                rotationMinutes: _rotationFor(channel),
-                                salt: _mixSalt,
+                          final nowPlaying = _service.getNowPlaying(
+                            channel,
+                            rotationMinutes: _rotationFor(channel),
+                            salt: _mixSalt,
+                          );
+                          // Compute display progress (capped/randomized per settings)
+                          double? cappedProgress;
+                          if (nowPlaying != null) {
+                            if (_maxStartPercent == 0) {
+                              cappedProgress = 0.0;
+                            } else {
+                              cappedProgress = _computeStartProgress(
+                                channel.id,
+                                nowPlaying.progress,
                               );
-                              // Compute display progress (capped/randomized per settings)
-                              double? cappedProgress;
-                              if (nowPlaying != null) {
-                                if (_maxStartPercent == 0) {
-                                  cappedProgress = 0.0;
-                                } else {
-                                  cappedProgress = _computeStartProgress(
-                                    channel.id,
-                                    nowPlaying.progress,
-                                  );
-                                }
-                              }
-                              final isLoading =
-                                  _loadingChannelIds.contains(channel.id);
-                              final focusNode =
-                                  realIndex < _rowFocusNodes.length
-                                      ? _rowFocusNodes[realIndex]
-                                      : FocusNode();
+                            }
+                          }
+                          final isLoading = _loadingChannelIds.contains(
+                            channel.id,
+                          );
+                          final focusNode = realIndex < _rowFocusNodes.length
+                              ? _rowFocusNodes[realIndex]
+                              : FocusNode();
 
-                              return ListenableBuilder(
-                                listenable: focusNode,
-                                builder: (context, _) {
-                                  if (focusNode.hasFocus &&
-                                      _focusedIndex != realIndex) {
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                      if (mounted) {
-                                        setState(() =>
-                                            _focusedIndex = realIndex);
-                                      }
-                                    });
+                          return ListenableBuilder(
+                            listenable: focusNode,
+                            builder: (context, _) {
+                              if (focusNode.hasFocus &&
+                                  _focusedIndex != realIndex) {
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  if (mounted) {
+                                    setState(() => _focusedIndex = realIndex);
                                   }
-                                  return StremioTvChannelRow(
-                                    channel: channel,
-                                    nowPlaying: nowPlaying,
-                                    isLoading: isLoading,
-                                    isFocused: focusNode.hasFocus,
-                                    focusNode: focusNode,
-                                    hideNowPlaying: _hideNowPlaying,
-                                    onTap: () => _playChannel(channel),
-                                    onLongPress: () =>
-                                        _toggleFavorite(channel),
-                                    onGuidePressed: _hideNowPlaying
-                                        ? null
-                                        : () => _showGuide(channel),
-                                    onLeftPress:
-                                        MainPageBridge.focusTvSidebar,
-                                    onUpPress: index == 0
-                                        ? () {
-                                            _searchBtnFocusNode.requestFocus();
-                                          }
-                                        : null,
-                                    displayProgress: cappedProgress,
-                                  );
-                                },
+                                });
+                              }
+                              return StremioTvChannelRow(
+                                key: ValueKey(channel.id),
+                                channel: channel,
+                                nowPlaying: nowPlaying,
+                                isLoading: isLoading,
+                                isFocused: focusNode.hasFocus,
+                                focusNode: focusNode,
+                                hideNowPlaying: _hideNowPlaying,
+                                onTap: () => _playChannel(channel),
+                                onLongPress: () => _toggleFavorite(channel),
+                                onFavoritePressed: () =>
+                                    _toggleFavorite(channel),
+                                onGuidePressed: _hideNowPlaying
+                                    ? null
+                                    : () => _showGuide(channel),
+                                onLeftPress: MainPageBridge.focusTvSidebar,
+                                onUpPress: index == 0
+                                    ? () {
+                                        _searchBtnFocusNode.requestFocus();
+                                      }
+                                    : null,
+                                displayProgress: cappedProgress,
                               );
                             },
                           );
                         },
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }
@@ -2262,7 +2451,9 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
   void initState() {
     super.initState();
     _directSources = widget.sources.where((t) => t.isDirectStream).toList();
-    _torrentSources = widget.sources.where((t) => t.streamType == StreamType.torrent).toList();
+    _torrentSources = widget.sources
+        .where((t) => t.streamType == StreamType.torrent)
+        .toList();
     // Auto-focus first item after build (for DPAD)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _firstItemFocusNode.requestFocus();
@@ -2289,7 +2480,10 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
 
   String _parseQuality(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('2160p') || lower.contains('4k') || lower.contains('uhd')) return '4K';
+    if (lower.contains('2160p') ||
+        lower.contains('4k') ||
+        lower.contains('uhd'))
+      return '4K';
     if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
     if (lower.contains('720p')) return '720p';
     if (lower.contains('480p') || lower.contains('sd')) return '480p';
@@ -2351,7 +2545,12 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
     }
   }
 
-  Widget _buildTab(String label, int count, int tabIndex, {FocusNode? focusNode}) {
+  Widget _buildTab(
+    String label,
+    int count,
+    int tabIndex, {
+    FocusNode? focusNode,
+  }) {
     final isActive = _activeTab == tabIndex;
     return _SourcePickerTab(
       focusNode: focusNode,
@@ -2398,8 +2597,11 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber_rounded,
-                    color: Color(0xFFFFB74D), size: 22),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFFFB74D),
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
@@ -2419,7 +2621,12 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
             child: Row(
               children: [
-                _buildTab('All', widget.sources.length, 0, focusNode: _firstTabFocusNode),
+                _buildTab(
+                  'All',
+                  widget.sources.length,
+                  0,
+                  focusNode: _firstTabFocusNode,
+                ),
                 const SizedBox(width: 8),
                 if (_directSources.isNotEmpty) ...[
                   _buildTab('Direct', _directSources.length, 1),
@@ -2542,15 +2749,15 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
             color: widget.isActive
                 ? const Color(0xFF536DFE)
                 : _focused
-                    ? const Color(0xFF536DFE).withValues(alpha: 0.15)
-                    : Colors.transparent,
+                ? const Color(0xFF536DFE).withValues(alpha: 0.15)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: _focused
                   ? const Color(0xFF536DFE).withValues(alpha: 0.7)
                   : widget.isActive
-                      ? Colors.transparent
-                      : Colors.white12,
+                  ? Colors.transparent
+                  : Colors.white12,
               width: _focused ? 1.5 : 1,
             ),
           ),
@@ -2661,13 +2868,11 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
             children: [
               // Quality badge
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: qColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                      color: qColor.withValues(alpha: 0.4)),
+                  border: Border.all(color: qColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   widget.quality,
@@ -2715,12 +2920,17 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
                   ),
                 )
               else if (widget.isFailed)
-                const Icon(Icons.error_outline,
-                    color: Color(0xFFEF5350), size: 22)
+                const Icon(
+                  Icons.error_outline,
+                  color: Color(0xFFEF5350),
+                  size: 22,
+                )
               else
-                Icon(Icons.play_circle_outline,
-                    color: _focused ? Colors.white54 : Colors.white24,
-                    size: 22),
+                Icon(
+                  Icons.play_circle_outline,
+                  color: _focused ? Colors.white54 : Colors.white24,
+                  size: 22,
+                ),
             ],
           ),
         ),

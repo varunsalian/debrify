@@ -10,8 +10,8 @@ import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 /// A single channel row in the Stremio TV guide.
 ///
 /// Premium TV-style card with backdrop poster, channel badge, metadata overlay.
-/// Tap to play, long press to favorite/unfavorite.
-/// DPAD: right arrow switches to guide icon, select triggers it.
+/// Tap to play, favorite via explicit button or long press.
+/// DPAD: left/right moves across Play, Favorite, and Guide actions.
 class StremioTvChannelRow extends StatefulWidget {
   final StremioTvChannel channel;
   final StremioTvNowPlaying? nowPlaying;
@@ -20,6 +20,7 @@ class StremioTvChannelRow extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback onFavoritePressed;
   final VoidCallback? onGuidePressed;
   final VoidCallback? onLeftPress;
   final VoidCallback? onUpPress;
@@ -35,6 +36,7 @@ class StremioTvChannelRow extends StatefulWidget {
     required this.focusNode,
     required this.onTap,
     required this.onLongPress,
+    required this.onFavoritePressed,
     this.onGuidePressed,
     this.onLeftPress,
     this.onUpPress,
@@ -47,13 +49,22 @@ class StremioTvChannelRow extends StatefulWidget {
 }
 
 class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
-  bool _guideActive = false;
+  int _selectedActionIndex = 0;
+
+  int get _guideActionIndex => 1;
+
+  int get _favoriteActionIndex => widget.onGuidePressed != null ? 2 : 1;
+
+  int get _maxActionIndex => _favoriteActionIndex;
 
   @override
   void didUpdateWidget(StremioTvChannelRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.isFocused && oldWidget.isFocused) {
-      _guideActive = false;
+      _selectedActionIndex = 0;
+    }
+    if (_selectedActionIndex > _maxActionIndex) {
+      _selectedActionIndex = _maxActionIndex;
     }
   }
 
@@ -68,7 +79,10 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
 
         if (event.logicalKey == LogicalKeyboardKey.select ||
             event.logicalKey == LogicalKeyboardKey.enter) {
-          if (_guideActive) {
+          if (_selectedActionIndex == _favoriteActionIndex) {
+            widget.onFavoritePressed();
+          } else if (widget.onGuidePressed != null &&
+              _selectedActionIndex == _guideActionIndex) {
             widget.onGuidePressed?.call();
           } else {
             widget.onTap();
@@ -76,16 +90,16 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
           return KeyEventResult.handled;
         }
 
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight && hasGuide) {
-          if (!_guideActive) {
-            setState(() => _guideActive = true);
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (_selectedActionIndex < _maxActionIndex) {
+            setState(() => _selectedActionIndex += 1);
           }
           return KeyEventResult.handled;
         }
 
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          if (_guideActive) {
-            setState(() => _guideActive = false);
+          if (_selectedActionIndex > 0) {
+            setState(() => _selectedActionIndex -= 1);
             return KeyEventResult.handled;
           }
           widget.onLeftPress?.call();
@@ -189,14 +203,18 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                                       imageUrl: posterUrl,
                                       memCacheWidth: 300,
                                       fit: BoxFit.cover,
-                                      placeholder: (_, __) => _posterPlaceholder(),
+                                      placeholder: (_, __) =>
+                                          _posterPlaceholder(),
                                       errorWidget: (_, __, ___) =>
                                           _posterPlaceholder(),
                                     )
                                   : _posterPlaceholder();
                               if (!widget.hideNowPlaying) return image;
                               return ImageFiltered(
-                                imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: 20,
+                                  sigmaY: 20,
+                                ),
                                 child: image,
                               );
                             },
@@ -249,7 +267,8 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                           Text(
                             widget.hideNowPlaying
                                 ? _buildTeaserTitle(
-                                    nowPlaying?.item.type ?? 'movie')
+                                    nowPlaying?.item.type ?? 'movie',
+                                  )
                                 : nowPlaying?.item.name ?? 'No content',
                             style: const TextStyle(
                               fontSize: 16,
@@ -296,31 +315,50 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                           const Spacer(),
                           // Progress bar
                           if (progress != null && nowPlaying != null)
-                            _buildProgressBar(progress, nowPlaying.progressText),
+                            _buildProgressBar(
+                              progress,
+                              nowPlaying.progressText,
+                            ),
                         ],
                       ),
                     ),
                     // Action buttons
+                    const SizedBox(width: 12),
+                    _buildActionBtn(
+                      icon: Icons.play_arrow_rounded,
+                      label: 'Play',
+                      baseColor: const Color(0xFFDC2626),
+                      dpadSelected:
+                          widget.isFocused && _selectedActionIndex == 0,
+                      onTap: widget.onTap,
+                    ),
                     if (hasGuide) ...[
-                      const SizedBox(width: 12),
-                      _buildActionBtn(
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        baseColor: const Color(0xFFDC2626),
-                        dpadSelected:
-                            widget.isFocused && !_guideActive,
-                        onTap: widget.onTap,
-                      ),
                       const SizedBox(width: 8),
                       _buildActionBtn(
                         icon: Icons.list_rounded,
                         label: 'Guide',
                         baseColor: const Color(0xFF818CF8),
                         dpadSelected:
-                            widget.isFocused && _guideActive,
+                            widget.isFocused &&
+                            _selectedActionIndex == _guideActionIndex,
                         onTap: widget.onGuidePressed,
                       ),
                     ],
+                    const SizedBox(width: 8),
+                    _buildIconActionBtn(
+                      icon: widget.channel.isFavorite
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      tooltip: widget.channel.isFavorite
+                          ? 'Unfavorite'
+                          : 'Favorite',
+                      baseColor: const Color(0xFFF59E0B),
+                      dpadSelected:
+                          widget.isFocused &&
+                          _selectedActionIndex == _favoriteActionIndex,
+                      filled: widget.channel.isFavorite,
+                      onTap: widget.onFavoritePressed,
+                    ),
                   ],
                 ),
               ),
@@ -371,8 +409,11 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                     _buildTypePill(),
                     if (widget.channel.isFavorite) ...[
                       const SizedBox(width: 6),
-                      Icon(Icons.star_rounded,
-                          size: 14, color: Colors.amber.shade600),
+                      Icon(
+                        Icons.star_rounded,
+                        size: 14,
+                        color: Colors.amber.shade600,
+                      ),
                     ],
                     const Spacer(),
                     // Channel info
@@ -423,17 +464,20 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                           child: Builder(
                             builder: (context) {
                               final image = posterUrl != null
-                                ? CachedNetworkImage(
-                                    imageUrl: posterUrl,
-                                    memCacheWidth: 150,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        _posterPlaceholder(),
-                                  )
-                                : _posterPlaceholder();
+                                  ? CachedNetworkImage(
+                                      imageUrl: posterUrl,
+                                      memCacheWidth: 150,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (_, __, ___) =>
+                                          _posterPlaceholder(),
+                                    )
+                                  : _posterPlaceholder();
                               if (!widget.hideNowPlaying) return image;
                               return ImageFiltered(
-                                imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: 20,
+                                  sigmaY: 20,
+                                ),
                                 child: image,
                               );
                             },
@@ -479,35 +523,55 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                             const SizedBox(height: 6),
                             if (progress != null)
                               _buildProgressBar(
-                                  progress, nowPlaying.progressText),
+                                progress,
+                                nowPlaying.progressText,
+                              ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  if (hasGuide) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildActionBtn(
-                          icon: Icons.play_arrow_rounded,
-                          label: 'Play',
-                          baseColor: const Color(0xFFDC2626),
-                          dpadSelected: widget.isFocused && !_guideActive,
-                          onTap: widget.onTap,
-                        ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildActionBtn(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        baseColor: const Color(0xFFDC2626),
+                        dpadSelected:
+                            widget.isFocused && _selectedActionIndex == 0,
+                        onTap: widget.onTap,
+                      ),
+                      if (hasGuide) ...[
                         const SizedBox(width: 8),
                         _buildActionBtn(
                           icon: Icons.list_rounded,
                           label: 'Guide',
                           baseColor: const Color(0xFF818CF8),
-                          dpadSelected: widget.isFocused && _guideActive,
+                          dpadSelected:
+                              widget.isFocused &&
+                              _selectedActionIndex == _guideActionIndex,
                           onTap: widget.onGuidePressed,
                         ),
                       ],
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      _buildIconActionBtn(
+                        icon: widget.channel.isFavorite
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        tooltip: widget.channel.isFavorite
+                            ? 'Unfavorite'
+                            : 'Favorite',
+                        baseColor: const Color(0xFFF59E0B),
+                        dpadSelected:
+                            widget.isFocused &&
+                            _selectedActionIndex == _favoriteActionIndex,
+                        filled: widget.channel.isFavorite,
+                        onTap: widget.onFavoritePressed,
+                      ),
+                    ],
+                  ),
                 ] else if (widget.isLoading)
                   Row(
                     children: [
@@ -665,7 +729,12 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: baseColor,
+              color: dpadSelected
+                  ? baseColor
+                  : Color.alphaBlend(
+                      Colors.white.withValues(alpha: 0.06),
+                      baseColor.withValues(alpha: 0.78),
+                    ),
               border: dpadSelected
                   ? Border.all(color: Colors.white, width: 2)
                   : null,
@@ -684,6 +753,50 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIconActionBtn({
+    required IconData icon,
+    required String tooltip,
+    required Color baseColor,
+    required bool dpadSelected,
+    required bool filled,
+    VoidCallback? onTap,
+  }) {
+    final backgroundColor = dpadSelected
+        ? baseColor
+        : filled
+        ? baseColor.withValues(alpha: 0.2)
+        : Colors.white.withValues(alpha: 0.08);
+    final iconColor = dpadSelected || filled ? Colors.white : baseColor;
+
+    return Tooltip(
+      message: tooltip,
+      child: ExcludeFocus(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: backgroundColor,
+                border: Border.all(
+                  color: dpadSelected
+                      ? Colors.white
+                      : baseColor.withValues(alpha: filled ? 0.35 : 0.18),
+                  width: dpadSelected ? 2 : 1,
+                ),
+              ),
+              child: Icon(icon, size: 18, color: iconColor),
             ),
           ),
         ),

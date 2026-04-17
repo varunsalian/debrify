@@ -16901,6 +16901,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     const contentSections = <HomeSection>[
       HomeSection.todayCalendar,
+      HomeSection.traktNowPlaying,
       HomeSection.continueWatching,
       HomeSection.traktContinueWatchingMovies,
       HomeSection.traktContinueWatchingShows,
@@ -16958,7 +16959,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         // Now Playing (Trakt live scrobble) — self-hides when nothing is playing
         RepaintBoundary(
-          child: HomeTraktNowPlayingCard(isTelevision: _isTelevision),
+          child: HomeTraktNowPlayingCard(
+            isTelevision: _isTelevision,
+            focusController: _homeFocusController,
+            onRequestFocusAbove: () {
+              final prev = _homeFocusController.getPreviousSection(
+                HomeSection.traktNowPlaying,
+              );
+              if (prev != null) {
+                _homeFocusController.focusSection(prev);
+              } else {
+                _focusControlRow();
+              }
+            },
+            onRequestFocusBelow: () {
+              final next = _homeFocusController.getNextSection(
+                HomeSection.traktNowPlaying,
+              );
+              if (next != null) {
+                _homeFocusController.focusSection(next);
+              }
+            },
+            onItemSelected: (meta) {
+              final isSeries = meta.type == 'series';
+              final selection = AdvancedSearchSelection(
+                imdbId: meta.imdbId ?? meta.id,
+                isSeries: isSeries,
+                title: meta.name,
+                contentType: isSeries ? 'series' : 'movie',
+                posterUrl: meta.poster,
+                year: meta.year,
+              );
+              _handleCatalogItemSelected(selection, updateSearchText: true);
+            },
+          ),
         ),
         // Continue Watching (local progress)
         if (_continueWatchingEnabled)

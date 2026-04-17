@@ -5,6 +5,7 @@ enum HomeSection {
   sources,
   emptyState,
   todayCalendar,
+  traktNowPlaying,
   continueWatching,
   traktContinueWatchingMovies,
   traktContinueWatchingShows,
@@ -30,6 +31,7 @@ class HomeFocusController extends ChangeNotifier {
   final Map<HomeSection, int> _lastFocusedIndex = {
     HomeSection.emptyState: 0,
     HomeSection.todayCalendar: 0,
+    HomeSection.traktNowPlaying: 0,
     HomeSection.continueWatching: 0,
     HomeSection.traktContinueWatchingMovies: 0,
     HomeSection.traktContinueWatchingShows: 0,
@@ -46,6 +48,7 @@ class HomeFocusController extends ChangeNotifier {
     HomeSection.sources: true, // Sources accordion is always present
     HomeSection.emptyState: false,
     HomeSection.todayCalendar: false,
+    HomeSection.traktNowPlaying: false,
     HomeSection.continueWatching: false,
     HomeSection.traktContinueWatchingMovies: false,
     HomeSection.traktContinueWatchingShows: false,

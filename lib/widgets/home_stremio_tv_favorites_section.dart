@@ -1,7 +1,10 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/stremio_addon.dart';
 import '../models/stremio_tv/stremio_tv_channel.dart';
 import '../screens/stremio_tv/stremio_tv_service.dart';
 import '../services/main_page_bridge.dart';
@@ -30,6 +33,7 @@ class HomeStremioTvFavoritesSection extends StatefulWidget {
 
 class _HomeStremioTvFavoritesSectionState
     extends State<HomeStremioTvFavoritesSection> {
+  static const _accentColor = Color(0xFFED1C24);
   List<StremioTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
   int _rotationMinutes = 90;
@@ -67,8 +71,7 @@ class _HomeStremioTvFavoritesSectionState
 
   @override
   void dispose() {
-    widget.focusController
-        ?.unregisterSection(HomeSection.stremioTvFavorites);
+    widget.focusController?.unregisterSection(HomeSection.stremioTvFavorites);
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -95,9 +98,9 @@ class _HomeStremioTvFavoritesSectionState
 
     try {
       _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
-      _seriesRotationMinutes = await StorageService.getStremioTvSeriesRotationMinutes();
-      final favoriteIds =
-          await StorageService.getStremioTvFavoriteChannelIds();
+      _seriesRotationMinutes =
+          await StorageService.getStremioTvSeriesRotationMinutes();
+      final favoriteIds = await StorageService.getStremioTvFavoriteChannelIds();
 
       if (favoriteIds.isEmpty) {
         if (mounted) {
@@ -115,12 +118,11 @@ class _HomeStremioTvFavoritesSectionState
         return;
       }
 
-      // Discover all channels and filter to favorites
       final allChannels = await _service.discoverChannels();
-      final favorites =
-          allChannels.where((ch) => favoriteIds.contains(ch.id)).toList();
+      final favorites = allChannels
+          .where((ch) => favoriteIds.contains(ch.id))
+          .toList();
 
-      // Load items for favorite channels
       await _service.loadAllChannelItems(favorites);
 
       if (mounted) {
@@ -134,8 +136,9 @@ class _HomeStremioTvFavoritesSectionState
           hasItems: _favoriteChannels.isNotEmpty,
           focusNodes: _cardFocusNodes,
         );
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _updateScrollIndicators());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _updateScrollIndicators(),
+        );
       }
     } catch (e) {
       debugPrint('Error loading Stremio TV favorites: $e');
@@ -159,8 +162,7 @@ class _HomeStremioTvFavoritesSectionState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove from Favorites?'),
-        content:
-            Text('Remove "${channel.displayName}" from your favorites?'),
+        content: Text('Remove "${channel.displayName}" from your favorites?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -187,9 +189,8 @@ class _HomeStremioTvFavoritesSectionState
       return;
     }
 
-    // StremioTvScreen not mounted — notify and switch tab
     MainPageBridge.notifyStremioTvChannelToAutoPlay(channel.id);
-    MainPageBridge.switchTab?.call(9); // Stremio TV tab
+    MainPageBridge.switchTab?.call(9);
   }
 
   @override
@@ -198,72 +199,40 @@ class _HomeStremioTvFavoritesSectionState
       return const SizedBox.shrink();
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final rowHeight = isMobile ? 200.0 : 220.0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Builder(
-            builder: (context) {
-              final primary = Theme.of(context).colorScheme.primary;
-              return Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Stremio TV',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.75),
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_favoriteChannels.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.white.withValues(alpha: 0.3),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+        _buildSectionHeader(),
         const SizedBox(height: 8),
-        // Horizontal scrolling favorites
         SizedBox(
-          height: 115,
+          height: rowHeight,
           child: Stack(
             children: [
-              // Skip ShaderMask on TV for GPU performance
               if (widget.isTelevision)
                 ListView.builder(
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.only(left: 16),
+                  padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                   clipBehavior: Clip.none,
                   itemCount: _favoriteChannels.length,
                   itemBuilder: (context, index) {
                     final channel = _favoriteChannels[index];
-                    final focusNode = index < _cardFocusNodes.length
-                        ? _cardFocusNodes[index]
-                        : null;
-                    return _buildChannelCard(
-                      channel,
-                      index: index,
-                      focusNode: focusNode,
-                      onLongPress: () => _confirmRemoveFavorite(channel),
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        right: index < _favoriteChannels.length - 1 ? 16 : 0,
+                      ),
+                      child: _buildChannelCard(
+                        channel,
+                        index: index,
+                        focusNode: index < _cardFocusNodes.length
+                            ? _cardFocusNodes[index]
+                            : null,
+                        onLongPress: () => _confirmRemoveFavorite(channel),
+                      ),
                     );
                   },
                 )
@@ -281,8 +250,8 @@ class _HomeStremioTvFavoritesSectionState
                       ],
                       stops: [
                         0.0,
-                        _canScrollLeft ? 0.03 : 0.0,
-                        _canScrollRight ? 0.97 : 1.0,
+                        _canScrollLeft ? 0.015 : 0.0,
+                        _canScrollRight ? 0.985 : 1.0,
                         1.0,
                       ],
                     ).createShader(bounds);
@@ -291,58 +260,92 @@ class _HomeStremioTvFavoritesSectionState
                   child: ListView.builder(
                     controller: _scrollController,
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(left: 16),
+                    padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
                     clipBehavior: Clip.none,
                     itemCount: _favoriteChannels.length,
                     itemBuilder: (context, index) {
                       final channel = _favoriteChannels[index];
-                      final focusNode = index < _cardFocusNodes.length
-                          ? _cardFocusNodes[index]
-                          : null;
-                      return _buildChannelCard(
-                        channel,
-                        index: index,
-                        focusNode: focusNode,
-                        onLongPress: () => _confirmRemoveFavorite(channel),
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: index < _favoriteChannels.length - 1 ? 16 : 0,
+                        ),
+                        child: _buildChannelCard(
+                          channel,
+                          index: index,
+                          focusNode: index < _cardFocusNodes.length
+                              ? _cardFocusNodes[index]
+                              : null,
+                          onLongPress: () => _confirmRemoveFavorite(channel),
+                        ),
                       );
                     },
                   ),
                 ),
-              // Scroll indicators
               if (_canScrollLeft)
-                Positioned(
+                const Positioned(
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  child: Center(
-                    child: Icon(
-                      Icons.chevron_left_rounded,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
+                  child: _StremioScrollIndicator(
+                    direction: _ScrollDirection.left,
                   ),
                 ),
               if (_canScrollRight)
-                Positioned(
+                const Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
-                  child: Center(
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
+                  child: _StremioScrollIndicator(
+                    direction: _ScrollDirection.right,
                   ),
                 ),
             ],
           ),
         ),
         const SizedBox(height: 10),
-        Padding(
+        const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24),
           child: Divider(height: 1, thickness: 0.5, color: Color(0x14FFFFFF)),
         ),
         const SizedBox(height: 10),
       ],
+    );
+  }
+
+  Widget _buildSectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 4,
+            decoration: const BoxDecoration(
+              color: _accentColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Stremio TV - Favorites',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.75),
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_favoriteChannels.length}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: Colors.white.withValues(alpha: 0.3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -352,181 +355,606 @@ class _HomeStremioTvFavoritesSectionState
     FocusNode? focusNode,
     VoidCallback? onLongPress,
   }) {
-    final theme = Theme.of(context);
     final nowPlaying = _service.getNowPlaying(
       channel,
       rotationMinutes: _rotationFor(channel),
     );
+    final item = nowPlaying?.item;
 
-    Widget card = Container(
-      width: 150,
-      margin: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _openChannel(channel),
-          onLongPress: onLongPress,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: theme.colorScheme.surfaceContainerLow,
-              border: Border.all(
-                color:
-                    theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+    return _StremioTvCardWithFocus(
+      onTap: () => _openChannel(channel),
+      onLongPress: onLongPress,
+      focusNode: focusNode,
+      index: index,
+      scrollController: _scrollController,
+      onUpPressed: widget.onRequestFocusAbove,
+      onDownPressed: widget.onRequestFocusBelow,
+      allFocusNodes: _cardFocusNodes,
+      isTelevision: widget.isTelevision,
+      onFocusChanged: (focused, idx) {
+        if (focused) {
+          widget.focusController?.saveLastFocusedIndex(
+            HomeSection.stremioTvFavorites,
+            idx,
+          );
+        }
+      },
+      child: (isFocused, isHovered) {
+        final isActive = isFocused || isHovered;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final isMobile = screenWidth < 600;
+        final isHero = index == 0;
+        final cardWidth = isMobile
+            ? (isHero ? screenWidth * 0.82 : screenWidth * 0.7)
+            : (isHero ? 350.0 : 280.0);
+        final cardHeight = isMobile
+            ? (isHero ? 180.0 : 155.0)
+            : (isHero ? 200.0 : 170.0);
+
+        final year = item?.year ?? '';
+        final rating = item?.imdbRating;
+        final genres = item?.genres;
+        final progress = nowPlaying?.progress;
+        final cardContent = ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildBackdropImage(item),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.1),
+                        Colors.black.withValues(alpha: 0.75),
+                        Colors.black.withValues(alpha: 0.95),
+                      ],
+                      stops: const [0.0, 0.3, 0.65, 1.0],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Poster thumbnail
-                ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: SizedBox(
-                    height: 60,
-                    width: double.infinity,
-                    child: nowPlaying?.item.poster != null
-                        ? CachedNetworkImage(
-                            imageUrl: nowPlaying!.item.poster!,
-                            memCacheWidth: 200,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(
-                              color: theme
-                                  .colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: Icon(Icons.movie_rounded, size: 20),
+              if (!widget.isTelevision)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.3),
+                          Colors.transparent,
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.3, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 10,
+                left: 10,
+                child: _buildTypeBadge(channel.type),
+              ),
+              if (rating != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          size: 10,
+                          color: Color(0xFFFFD700),
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          rating.toStringAsFixed(1),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Positioned(
+                bottom: progress != null ? 5 : 12,
+                left: 12,
+                right: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item?.name ?? channel.displayName,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        height: 1.2,
+                        letterSpacing: -0.2,
+                        shadows: widget.isTelevision
+                            ? null
+                            : const [
+                                Shadow(color: Colors.black, blurRadius: 8),
+                              ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      channel.genre != null
+                          ? 'CH ${channel.channelNumber.toString().padLeft(2, '0')} · ${channel.catalog.name} · ${channel.genre}'
+                          : 'CH ${channel.channelNumber.toString().padLeft(2, '0')} · ${channel.catalog.name}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFFF7A80),
+                        letterSpacing: 0.1,
+                        shadows: widget.isTelevision
+                            ? null
+                            : const [
+                                Shadow(color: Colors.black, blurRadius: 6),
+                              ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (year.isNotEmpty)
+                          Text(
+                            year,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        if (year.isNotEmpty &&
+                            genres != null &&
+                            genres.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Container(
+                              width: 3,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                shape: BoxShape.circle,
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Container(
-                              color: theme
-                                  .colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: Icon(
-                                  Icons.broken_image_rounded,
-                                  size: 20,
+                          ),
+                        if (genres != null && genres.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              genres.take(2).join(' / '),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (nowPlaying != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        nowPlaying.progressText,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (progress != null)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: SizedBox(
+                    height: 3.5,
+                    child: Stack(
+                      children: [
+                        Container(color: Colors.white.withValues(alpha: 0.1)),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [_accentColor, Color(0xFFFF4D4D)],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _accentColor.withValues(alpha: 0.6),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, -1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (widget.isTelevision && isActive)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    child: Center(
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.15),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: ClipOval(
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 30,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (!widget.isTelevision)
+                Positioned.fill(
+                  child: AnimatedOpacity(
+                    opacity: isActive ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      child: Center(
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.85, end: isActive ? 1.0 : 0.85),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutBack,
+                          builder: (context, scale, child) =>
+                              Transform.scale(scale: scale, child: child),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.15),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.4),
+                                  blurRadius: 16,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: 10,
+                                  sigmaY: 10,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 30,
                                 ),
                               ),
                             ),
-                          )
-                        : Container(
-                            color:
-                                theme.colorScheme.surfaceContainerHighest,
-                            child: const Center(
-                              child: Icon(Icons.smart_display_rounded,
-                                  size: 20),
-                            ),
                           ),
-                  ),
-                ),
-                // Channel info
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                          fontSize: 10,
                         ),
                       ),
-                      Text(
-                        nowPlaying?.item.name ?? channel.displayName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ],
+            ],
+          ),
+        );
+
+        final cardDecoration = BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isActive
+                ? Colors.white.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.08),
+            width: isActive ? 1.5 : 0.5,
+          ),
+          boxShadow: widget.isTelevision
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
+                    blurRadius: isActive ? 30 : 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+        );
+
+        if (widget.isTelevision) {
+          return Transform.scale(
+            scale: isActive ? 1.05 : 1.0,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
+              decoration: cardDecoration,
+              child: cardContent,
             ),
+          );
+        }
+
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 1.0, end: isActive ? 1.05 : 1.0),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          builder: (context, scale, child) =>
+              Transform.scale(scale: scale, child: child),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            width: cardWidth,
+            height: cardHeight,
+            decoration: cardDecoration,
+            child: cardContent,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBackdropImage(StremioMeta? item) {
+    final imageUrl = item?.background ?? item?.poster;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        memCacheWidth: 600,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          color: const Color(0xFF0D1117),
+          child: Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Colors.white.withValues(alpha: 0.2),
+                ),
+              ),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => _buildFallbackBackdrop(),
+      );
+    }
+    return _buildFallbackBackdrop();
+  }
+
+  Widget _buildFallbackBackdrop() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF261317), Color(0xFF0D1117)],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.live_tv_rounded,
+          size: 28,
+          color: Colors.white.withValues(alpha: 0.16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeBadge(String type) {
+    final color = type == 'series'
+        ? const Color(0xFFFF6B72)
+        : const Color(0xFFFFA3A8);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        type.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _StremioTvCardWithFocus extends StatefulWidget {
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final FocusNode? focusNode;
+  final int index;
+  final ScrollController? scrollController;
+  final VoidCallback? onUpPressed;
+  final VoidCallback? onDownPressed;
+  final void Function(bool focused, int index)? onFocusChanged;
+  final Widget Function(bool isFocused, bool isHovered) child;
+  final List<FocusNode>? allFocusNodes;
+  final bool isTelevision;
+
+  const _StremioTvCardWithFocus({
+    required this.onTap,
+    required this.child,
+    this.onLongPress,
+    this.focusNode,
+    this.index = 0,
+    this.scrollController,
+    this.onUpPressed,
+    this.onDownPressed,
+    this.onFocusChanged,
+    this.allFocusNodes,
+    this.isTelevision = false,
+  });
+
+  @override
+  State<_StremioTvCardWithFocus> createState() =>
+      _StremioTvCardWithFocusState();
+}
+
+class _StremioTvCardWithFocusState extends State<_StremioTvCardWithFocus> {
+  bool _isFocused = false;
+  bool _isHovered = false;
+  final GlobalKey _cardKey = GlobalKey();
+
+  void _onFocusChange(bool focused) {
+    setState(() => _isFocused = focused);
+    widget.onFocusChanged?.call(focused, widget.index);
+
+    if (focused && widget.scrollController != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _cardKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: widget.isTelevision
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        widget.onUpPressed?.call();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        widget.onDownPressed?.call();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index > 0) {
+            widget.allFocusNodes![widget.index - 1].requestFocus();
+          } else {
+            MainPageBridge.focusTvSidebar?.call();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        if (widget.isTelevision && widget.allFocusNodes != null) {
+          if (widget.index < widget.allFocusNodes!.length - 1) {
+            widget.allFocusNodes![widget.index + 1].requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Focus(
+        focusNode: widget.focusNode,
+        onFocusChange: _onFocusChange,
+        onKeyEvent: _handleKeyEvent,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
+          child: KeyedSubtree(
+            key: _cardKey,
+            child: widget.child(_isFocused, _isHovered),
           ),
         ),
       ),
     );
+  }
+}
 
-    // Wrap with Focus for DPAD navigation
-    if (widget.isTelevision && focusNode != null) {
-      card = Focus(
-        focusNode: focusNode,
-        onFocusChange: (hasFocus) {
-          if (hasFocus) {
-            widget.focusController?.saveLastFocusedIndex(
-              HomeSection.stremioTvFavorites,
-              index,
-            );
-            // Scroll to make visible (post-frame to ensure layout is complete)
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_scrollController.hasClients) {
-                final offset = index * 158.0; // 150 width + 8 margin
-                if (widget.isTelevision) {
-                  _scrollController.jumpTo(
-                    offset.clamp(0, _scrollController.position.maxScrollExtent),
-                  );
-                } else {
-                  _scrollController.animateTo(
-                    offset.clamp(0, _scrollController.position.maxScrollExtent),
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                  );
-                }
-              }
-            });
-          }
-          setState(() {});
-        },
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-              widget.onRequestFocusAbove?.call();
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-              widget.onRequestFocusBelow?.call();
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              if (index > 0 && index - 1 < _cardFocusNodes.length) {
-                _cardFocusNodes[index - 1].requestFocus();
-              } else if (index == 0) {
-                MainPageBridge.focusTvSidebar?.call();
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              if (index < _cardFocusNodes.length - 1) {
-                _cardFocusNodes[index + 1].requestFocus();
-              }
-              return KeyEventResult.handled;
-            }
-            if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter) {
-              _openChannel(channel);
-              return KeyEventResult.handled;
-            }
-          }
-          return KeyEventResult.ignored;
-        },
-        child: widget.isTelevision
-          ? Transform.scale(
-              scale: focusNode.hasFocus ? 1.05 : 1.0,
-              child: card,
-            )
-          : AnimatedScale(
-              scale: focusNode.hasFocus ? 1.05 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              child: card,
-            ),
-      );
-    }
+enum _ScrollDirection { left, right }
 
-    return card;
+class _StremioScrollIndicator extends StatelessWidget {
+  final _ScrollDirection direction;
+
+  const _StremioScrollIndicator({required this.direction});
+
+  @override
+  Widget build(BuildContext context) {
+    final isLeft = direction == _ScrollDirection.left;
+
+    return IgnorePointer(
+      child: Container(
+        width: 36,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+            end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
+            colors: [
+              const Color(0xFF0F0F1A).withValues(alpha: 0.95),
+              Colors.transparent,
+            ],
+          ),
+        ),
+        child: const SizedBox.shrink(),
+      ),
+    );
   }
 }

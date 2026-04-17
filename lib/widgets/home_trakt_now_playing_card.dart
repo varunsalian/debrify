@@ -2,19 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/main_page_bridge.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
+import 'home_focus_controller.dart';
 
 /// Compact "Now Playing" bar — slim music-player style with poster art.
-/// Self-hides when nothing is playing. No DPAD focus (purely informational).
+/// Self-hides when nothing is playing.
 class HomeTraktNowPlayingCard extends StatefulWidget {
   final bool isTelevision;
+  final HomeFocusController? focusController;
+  final VoidCallback? onRequestFocusAbove;
+  final VoidCallback? onRequestFocusBelow;
+  final void Function(StremioMeta meta)? onItemSelected;
 
   const HomeTraktNowPlayingCard({
     super.key,
     this.isTelevision = false,
+    this.focusController,
+    this.onRequestFocusAbove,
+    this.onRequestFocusBelow,
+    this.onItemSelected,
   });
 
   /// True when there's currently an active Trakt scrobble (something playing).
@@ -22,11 +33,13 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
   /// Exposed as a global notifier so sibling Home widgets (like
   /// HomeTodayCalendarCard) can subscribe and adjust their visibility when
   /// the user is actively watching something.
-  static final ValueNotifier<bool> isScrobbleActive =
-      ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> isScrobbleActive = ValueNotifier<bool>(
+    false,
+  );
 
   @override
-  State<HomeTraktNowPlayingCard> createState() => HomeTraktNowPlayingCardState();
+  State<HomeTraktNowPlayingCard> createState() =>
+      HomeTraktNowPlayingCardState();
 }
 
 class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
@@ -36,6 +49,8 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
   Timer? _refreshTimer;
   Timer? _progressTimer;
   final ValueNotifier<double> _progress = ValueNotifier<double>(0);
+  final FocusNode _focusNode = FocusNode(debugLabel: 'home_trakt_now_playing');
+  final GlobalKey _cardKey = GlobalKey();
 
   // Cached auth state — avoid hitting storage on every 30s poll
   bool? _cachedAuth;
@@ -58,6 +73,8 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
     _refreshTimer?.cancel();
     _progressTimer?.cancel();
     _progress.dispose();
+    widget.focusController?.unregisterSection(HomeSection.traktNowPlaying);
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -92,24 +109,32 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
       }
       final raw = await TraktService.instance.fetchNowWatching();
       if (!mounted || gen != _loadGeneration) return;
-      if (raw == null) { _finishEmpty(gen); return; }
+      if (raw == null) {
+        _finishEmpty(gen);
+        return;
+      }
 
       final data = _parseResponse(raw);
       if (!mounted || gen != _loadGeneration) return;
 
-      setState(() { _data = data; _isLoading = false; });
+      setState(() {
+        _data = data;
+        _isLoading = false;
+      });
       HomeTraktNowPlayingCard.isScrobbleActive.value = data != null;
+      widget.focusController?.registerSection(
+        HomeSection.traktNowPlaying,
+        hasItems: data != null,
+        focusNodes: data != null ? [_focusNode] : [],
+      );
 
       _progressTimer?.cancel();
       if (data != null) {
         _progress.value = data.currentProgress;
-        _progressTimer = Timer.periodic(
-          const Duration(seconds: 1),
-          (_) {
-            if (!mounted || _data == null) return;
-            _progress.value = _data!.currentProgress;
-          },
-        );
+        _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (!mounted || _data == null) return;
+          _progress.value = _data!.currentProgress;
+        });
       }
       _scheduleNextLoad(playing: data != null);
     } catch (e) {
@@ -120,9 +145,40 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
 
   void _finishEmpty(int gen) {
     if (!mounted || gen != _loadGeneration) return;
+    final hadFocus = _focusNode.hasFocus;
     _progressTimer?.cancel();
-    setState(() { _data = null; _isLoading = false; });
+    setState(() {
+      _data = null;
+      _isLoading = false;
+    });
     HomeTraktNowPlayingCard.isScrobbleActive.value = false;
+    widget.focusController?.registerSection(
+      HomeSection.traktNowPlaying,
+      hasItems: false,
+      focusNodes: [],
+    );
+    if (hadFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.focusController == null) return;
+        final previous = widget.focusController!.getPreviousSection(
+          HomeSection.traktNowPlaying,
+        );
+        if (previous != null && previous != HomeSection.sources) {
+          widget.focusController!.focusSection(previous);
+          return;
+        }
+        final next = widget.focusController!.getNextSection(
+          HomeSection.traktNowPlaying,
+        );
+        if (next != null) {
+          widget.focusController!.focusSection(next);
+          return;
+        }
+        if (previous != null) {
+          widget.focusController!.focusSection(previous);
+        }
+      });
+    }
     _scheduleNextLoad(playing: false);
   }
 
@@ -147,20 +203,19 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
       }
       if (type == 'episode') {
         final show = raw['show'] as Map<String, dynamic>?;
-        final ep   = raw['episode'] as Map<String, dynamic>?;
+        final ep = raw['episode'] as Map<String, dynamic>?;
         if (show == null || ep == null) return null;
         // Episodes don't have their own art — use the show's metadata
-        final meta = TraktItemTransformer.transformItem(
-          {'show': show},
-          inferredType: 'show',
-        );
+        final meta = TraktItemTransformer.transformItem({
+          'show': show,
+        }, inferredType: 'show');
         if (meta == null) return null;
         return _NowPlayingData(
           meta: meta,
           type: 'episode',
           startedAt: startedAt,
           expiresAt: expiresAt,
-          season:  ep['season'] as int?,
+          season: ep['season'] as int?,
           episode: ep['number'] as int?,
         );
       }
@@ -180,12 +235,66 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
   }
 
   Widget _buildBar(_NowPlayingData data) {
-    final double barHeight   = widget.isTelevision ? 68 : 64;
+    final double barHeight = widget.isTelevision ? 68 : 64;
     final double posterWidth = widget.isTelevision ? 62 : 58;
 
-    return Padding(
+    Widget child = Padding(
       padding: EdgeInsets.fromLTRB(12, widget.isTelevision ? 4 : 3, 12, 0),
       child: _buildBarInner(data, barHeight, posterWidth),
+    );
+
+    return MouseRegion(
+      onEnter: (_) {},
+      child: Focus(
+        focusNode: _focusNode,
+        onFocusChange: (focused) {
+          setState(() {});
+          if (!focused) return;
+          widget.focusController?.saveLastFocusedIndex(
+            HomeSection.traktNowPlaying,
+            0,
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final context = _cardKey.currentContext;
+            if (context != null) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: 0.5,
+                duration: Duration.zero,
+              );
+            }
+          });
+        },
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            widget.onRequestFocusAbove?.call();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            widget.onRequestFocusBelow?.call();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (widget.isTelevision) {
+              MainPageBridge.focusTvSidebar?.call();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+            widget.onItemSelected?.call(data.meta);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: GestureDetector(
+          onTap: () => widget.onItemSelected?.call(data.meta),
+          child: KeyedSubtree(key: _cardKey, child: child),
+        ),
+      ),
     );
   }
 
@@ -194,23 +303,26 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
     double barHeight,
     double posterWidth,
   ) {
+    final isFocused = widget.isTelevision && _focusNode.hasFocus;
     return Container(
       height: barHeight,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        boxShadow: widget.isTelevision ? null : [
-          BoxShadow(
-            color: _red.withValues(alpha: 0.28),
-            blurRadius: 16,
-            spreadRadius: -2,
-            offset: const Offset(0, 5),
-          ),
-          BoxShadow(
-            color: _red.withValues(alpha: 0.10),
-            blurRadius: 30,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: widget.isTelevision
+            ? null
+            : [
+                BoxShadow(
+                  color: _red.withValues(alpha: 0.28),
+                  blurRadius: 16,
+                  spreadRadius: -2,
+                  offset: const Offset(0, 5),
+                ),
+                BoxShadow(
+                  color: _red.withValues(alpha: 0.10),
+                  blurRadius: 30,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -222,7 +334,8 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
                 imageUrl: data.backdropUrl,
                 fit: BoxFit.cover,
                 memCacheWidth: 300,
-                errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF0D1117)),
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFF0D1117)),
               ),
 
             // Single clean left-to-right gradient: solid dark over the text
@@ -247,15 +360,19 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _red.withValues(alpha: 0.25),
-                  width: 1,
+                  color: isFocused
+                      ? Colors.white.withValues(alpha: 0.75)
+                      : _red.withValues(alpha: 0.25),
+                  width: isFocused ? 2 : 1,
                 ),
               ),
             ),
 
             Positioned(
-              left: 0, right: 0,
-              top: 0, bottom: 3,
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 3,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Row(
@@ -318,7 +435,9 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
             ),
 
             Positioned(
-              left: 0, right: 0, bottom: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               child: Stack(
                 children: [
                   Container(
@@ -376,20 +495,25 @@ class _PulsingDotState extends State<_PulsingDot>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _anim = Tween<double>(
+      begin: 0.3,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _anim,
       child: Container(
-        width: 7, height: 7,
+        width: 7,
+        height: 7,
         decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
       ),
     );
