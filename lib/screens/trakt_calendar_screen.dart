@@ -734,72 +734,60 @@ class _AiringDayCard extends StatelessWidget {
         _DayHeaderStrip(
           posterUrl: entries.first.posterUrl,
           accent: accent,
+          compact: true,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _DateBadge(day: day, accent: accent),
-              const SizedBox(width: 18),
+              _DateBadge(day: day, accent: accent, compact: true),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    Text(
+                      _formatHeadline(day),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Expanded(
-                          child: Text(
-                            _formatHeadline(day),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                            ),
+                        _CountPill(count: entries.length, accent: accent),
+                        Text(
+                          entries.length == 1
+                              ? 'One episode scheduled'
+                              : '${entries.length} episodes scheduled',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.62),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        _CountPill(count: entries.length, accent: accent),
                       ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      entries.length == 1
-                          ? 'One episode scheduled'
-                          : '${entries.length} episodes scheduled',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.62),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 14),
-              _PosterThumb(
-                posterUrl: entries.first.posterUrl,
-                width: 56,
-                height: 82,
-                radius: 16,
-              ),
-              const SizedBox(width: 10),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: 0.42),
-                size: 28,
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        for (final entry in entries.take(2))
+        for (final entry in entries.take(3))
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _EpisodeRow(entry: entry),
+            child: _EpisodeRow(entry: entry, roomy: true),
           ),
-        if (entries.length > 2)
+        if (entries.length > 3)
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(
-              '+${entries.length - 2} more episodes',
+              '+${entries.length - 3} more episodes',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.58),
                 fontSize: 12,
@@ -982,7 +970,7 @@ class _CountPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: accent.withValues(alpha: 0.16),
@@ -1001,16 +989,23 @@ class _CountPill extends StatelessWidget {
 }
 
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.entry});
+  const _EpisodeRow({required this.entry, this.roomy = false});
 
   final TraktCalendarEntry entry;
+  final bool roomy;
 
   @override
   Widget build(BuildContext context) {
     final accent = _AiringDayCard._accentFor(entry.showTitle);
     final time = _formatTime(entry.firstAiredLocal);
+    final code =
+        'S${entry.seasonNumber.toString().padLeft(2, '0')}'
+        'E${entry.episodeNumber.toString().padLeft(2, '0')}';
+    final detail = entry.episodeTitle == null || entry.episodeTitle!.isEmpty
+        ? code
+        : '$code · ${entry.episodeTitle}';
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(roomy ? 12 : 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: const Color(0xFF181922),
@@ -1021,42 +1016,63 @@ class _EpisodeRow extends StatelessWidget {
         children: [
           _PosterThumb(
             posterUrl: entry.posterUrl,
-            width: 38,
-            height: 54,
-            radius: 10,
+            width: roomy ? 46 : 38,
+            height: roomy ? 64 : 54,
+            radius: roomy ? 12 : 10,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  entry.showTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.showTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: roomy ? 15 : 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        color: accent.withValues(alpha: 0.14),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Text(
+                        time,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
-                  'S${entry.seasonNumber.toString().padLeft(2, '0')}E${entry.episodeNumber.toString().padLeft(2, '0')} · $time'
-                  '${entry.episodeTitle != null ? ' · ${entry.episodeTitle}' : ''}',
-                  maxLines: 1,
+                  detail,
+                  maxLines: roomy ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.68),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: 28,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(999),
+                    fontSize: roomy ? 12.5 : 12,
+                    height: 1.25,
                   ),
                 ),
               ],
