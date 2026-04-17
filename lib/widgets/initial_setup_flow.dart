@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/account_service.dart';
+import '../services/aptabase_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
@@ -318,7 +319,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (!mounted || node.context == null) return;
 
       try {
-        final RenderBox? renderBox = node.context!.findRenderObject() as RenderBox?;
+        final RenderBox? renderBox =
+            node.context!.findRenderObject() as RenderBox?;
         if (renderBox == null || !renderBox.hasSize) return;
 
         final position = renderBox.localToGlobal(Offset.zero);
@@ -331,7 +333,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
         // Scroll if widget is not fully visible
         if (widgetTop < 100 || widgetBottom > screenHeight - 100) {
-          final scrollOffset = _scrollController.offset + (widgetTop - screenHeight / 2 + size.height / 2);
+          final scrollOffset =
+              _scrollController.offset +
+              (widgetTop - screenHeight / 2 + size.height / 2);
           _scrollController.animateTo(
             scrollOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
             duration: const Duration(milliseconds: 300),
@@ -432,88 +436,100 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ),
                     backgroundColor: Colors.transparent,
                     child: LayoutBuilder(
-                      builder: (BuildContext context, BoxConstraints constraints) {
-                        final maxDialogHeight = screenHeight - (verticalPadding * 2);
-                        final maxDialogWidth = screenWidth - (horizontalPadding * 2);
-                        return ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: maxDialogHeight,
-                            maxWidth: maxDialogWidth.clamp(300.0, 560.0),
-                          ),
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            physics: const BouncingScrollPhysics(),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: maxDialogWidth.clamp(300.0, 560.0),
-                                ),
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(28),
-                                    gradient: const LinearGradient(
-                                      colors: <Color>[
-                                        Color(0xFF0F172A),
-                                        Color(0xFF1F2937),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    boxShadow: <BoxShadow>[
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                        blurRadius: 28,
-                                        offset: const Offset(0, 24),
+                      builder:
+                          (BuildContext context, BoxConstraints constraints) {
+                            final maxDialogHeight =
+                                screenHeight - (verticalPadding * 2);
+                            final maxDialogWidth =
+                                screenWidth - (horizontalPadding * 2);
+                            return ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: maxDialogHeight,
+                                maxWidth: maxDialogWidth.clamp(300.0, 560.0),
+                              ),
+                              child: SingleChildScrollView(
+                                controller: _scrollController,
+                                physics: const BouncingScrollPhysics(),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: maxDialogWidth.clamp(
+                                        300.0,
+                                        560.0,
                                       ),
-                                    ],
-                                  ),
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: innerHorizontalPadding,
-                                      vertical: innerVerticalPadding,
                                     ),
-                                    child: LayoutBuilder(
-                                      builder:
-                                          (
-                                            BuildContext context,
-                                            BoxConstraints innerConstraints,
-                                          ) {
-                                            return AnimatedSwitcher(
-                                              duration: const Duration(
-                                                milliseconds: 250,
-                                              ),
-                                              switchInCurve: Curves.easeOutCubic,
-                                              switchOutCurve: Curves.easeInCubic,
-                                              child: _stepIndex == 0
-                                                  ? _buildWelcomeStep(
-                                                      theme,
-                                                      innerConstraints.maxWidth,
-                                                      screenHeight,
-                                                    )
-                                                  : _stepIndex > _flow.length
-                                                  ? _buildEngineSelectionStep(
-                                                      theme,
-                                                      innerConstraints.maxWidth,
-                                                      screenHeight,
-                                                    )
-                                                  : _buildIntegrationStep(
-                                                      theme,
-                                                      _flow[_stepIndex - 1],
-                                                      innerConstraints.maxWidth,
-                                                      screenHeight,
-                                                    ),
-                                            );
-                                          },
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(28),
+                                        gradient: const LinearGradient(
+                                          colors: <Color>[
+                                            Color(0xFF0F172A),
+                                            Color(0xFF1F2937),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        boxShadow: <BoxShadow>[
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.35,
+                                            ),
+                                            blurRadius: 28,
+                                            offset: const Offset(0, 24),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: innerHorizontalPadding,
+                                          vertical: innerVerticalPadding,
+                                        ),
+                                        child: LayoutBuilder(
+                                          builder:
+                                              (
+                                                BuildContext context,
+                                                BoxConstraints innerConstraints,
+                                              ) {
+                                                return AnimatedSwitcher(
+                                                  duration: const Duration(
+                                                    milliseconds: 250,
+                                                  ),
+                                                  switchInCurve:
+                                                      Curves.easeOutCubic,
+                                                  switchOutCurve:
+                                                      Curves.easeInCubic,
+                                                  child: _stepIndex == 0
+                                                      ? _buildWelcomeStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _stepIndex >
+                                                            _flow.length
+                                                      ? _buildEngineSelectionStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _buildIntegrationStep(
+                                                          theme,
+                                                          _flow[_stepIndex - 1],
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        ),
+                                                );
+                                              },
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        );
-                      },
+                            );
+                          },
                     ),
                   ),
                 ),
@@ -525,7 +541,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildWelcomeStep(ThemeData theme, double availableWidth, double screenHeight) {
+  Widget _buildWelcomeStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
     final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
     final spacing2 = screenHeight < 800 ? 16.0 : 24.0;
     final spacing3 = screenHeight < 800 ? 20.0 : 32.0;
@@ -819,9 +839,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               label: Text(meta.linkLabel),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
-                side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
             ),
           ),
@@ -880,15 +898,20 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     );
   }
 
-  Widget _buildEngineSelectionStep(ThemeData theme, double availableWidth, double screenHeight) {
+  Widget _buildEngineSelectionStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
     // Responsive spacing
     final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
     final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
 
     // Responsive ListView height (30-40% of screen height)
     final listViewMaxHeight = screenHeight < 800
-        ? screenHeight * 0.3  // 30% for small screens
-        : 280.0;  // Fixed 280 for larger screens
+        ? screenHeight *
+              0.3 // 30% for small screens
+        : 280.0; // Fixed 280 for larger screens
 
     return Column(
       key: const ValueKey<String>('engine-selection'),
@@ -1201,6 +1224,10 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _hasConfigured = true;
           _errorMessage = null;
         });
+        AptabaseService.trackInBackground('provider_connected', {
+          'provider': 'pikpak',
+          'surface': 'onboarding',
+        });
         MainPageBridge.notifyIntegrationChanged();
 
         // Ask if user wants to set up folder restriction
@@ -1260,9 +1287,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               actions: [
                 Shortcuts(
                   shortcuts: const <ShortcutActivator, Intent>{
-                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.select):
+                        ActivateIntent(),
                     SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA):
+                        ActivateIntent(),
                   },
                   child: Actions(
                     actions: <Type, Action<Intent>>{
@@ -1284,9 +1313,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 ),
                 Shortcuts(
                   shortcuts: const <ShortcutActivator, Intent>{
-                    SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.select):
+                        ActivateIntent(),
                     SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.gameButtonA):
+                        ActivateIntent(),
                   },
                   child: Actions(
                     actions: <Type, Action<Intent>>{
@@ -1369,7 +1400,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           success = await TorboxAccountService.validateAndGetUserInfo(value);
         }
       } catch (e, stackTrace) {
-        final serviceName = current == _IntegrationType.realDebrid ? 'Real Debrid' : 'Torbox';
+        final serviceName = current == _IntegrationType.realDebrid
+            ? 'Real Debrid'
+            : 'Torbox';
         debugPrint('$serviceName API validation failed: $e');
         if (kDebugMode) {
           debugPrint('Stack trace: $stackTrace');
@@ -1384,6 +1417,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           _isProcessing = false;
           _hasConfigured = true;
           _errorMessage = null;
+        });
+        AptabaseService.trackInBackground('provider_connected', {
+          'provider': current == _IntegrationType.realDebrid
+              ? 'real_debrid'
+              : 'torbox',
+          'surface': 'onboarding',
         });
         MainPageBridge.notifyIntegrationChanged();
         _advanceOrFinish();
@@ -1474,9 +1513,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
       // Create focus nodes for each engine AND register listeners
       for (final engine in engines) {
-        final focusNode = FocusNode(
-          debugLabel: 'engine-${engine.id}',
-        );
+        final focusNode = FocusNode(debugLabel: 'engine-${engine.id}');
         _engineItemFocusNodes[engine.id] = focusNode;
 
         // Create and register listener for auto-scrolling
@@ -1485,6 +1522,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             _scrollToFocusedWidget(focusNode);
           }
         }
+
         _focusListeners[focusNode] = listener;
         focusNode.addListener(listener);
       }
@@ -2002,11 +2040,15 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
             fillColor: Colors.white.withValues(alpha: 0.08),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.2),
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.2),
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

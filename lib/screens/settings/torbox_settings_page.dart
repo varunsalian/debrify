@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
+import '../../services/aptabase_service.dart';
 import '../../widgets/torbox_account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
 
@@ -114,6 +115,10 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       await _updateCacheCheck(true);
     }
     debugPrint('TorboxSettingsPage: API key saved successfully.');
+    AptabaseService.trackInBackground('provider_connected', {
+      'provider': 'torbox',
+      'surface': 'settings',
+    });
     _snack('Torbox connected successfully');
     MainPageBridge.notifyIntegrationChanged();
   }

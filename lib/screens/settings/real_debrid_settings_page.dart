@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
+import '../../services/aptabase_service.dart';
 import '../../widgets/account_status_widget.dart';
 import '../../services/main_page_bridge.dart';
 
@@ -110,6 +111,10 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _savedApiKey = txt;
       _isEditing = false;
       _apiKeyController.clear();
+    });
+    AptabaseService.trackInBackground('provider_connected', {
+      'provider': 'real_debrid',
+      'surface': 'settings',
     });
     _snack('API key saved and validated');
     MainPageBridge.notifyIntegrationChanged();
@@ -302,7 +307,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                         children: [
                           SwitchListTile(
                             value: _hiddenFromNav,
-                            onChanged: _savedApiKey != null ? _toggleHideFromNav : null,
+                            onChanged: _savedApiKey != null
+                                ? _toggleHideFromNav
+                                : null,
                             title: const Text(
                               'Hide from Navigation',
                               style: TextStyle(fontWeight: FontWeight.w500),
@@ -311,12 +318,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                               _savedApiKey == null
                                   ? 'Login to enable this option'
                                   : _hiddenFromNav
-                                      ? 'Real Debrid is hidden from navigation'
-                                      : 'Show/hide Real Debrid tab from navigation bar',
+                                  ? 'Real Debrid is hidden from navigation'
+                                  : 'Show/hide Real Debrid tab from navigation bar',
                               style: const TextStyle(fontSize: 13),
                             ),
                             secondary: Icon(
-                              _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                              _hiddenFromNav
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: _hiddenFromNav ? Colors.amber : null,
                             ),
                             contentPadding: const EdgeInsets.symmetric(

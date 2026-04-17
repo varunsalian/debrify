@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../services/aptabase_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
 
@@ -118,6 +119,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
           _pikpakEnabled = true;
         });
         await StorageService.setPikPakEnabled(true);
+        AptabaseService.trackInBackground('provider_connected', {
+          'provider': 'pikpak',
+          'surface': 'settings',
+        });
 
         // Notify main page to update navigation immediately
         MainPageBridge.notifyIntegrationChanged();
@@ -513,12 +518,14 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               !_isConnected
                                   ? 'Login to enable this option'
                                   : _hiddenFromNav
-                                      ? 'PikPak is hidden from navigation'
-                                      : 'Show/hide PikPak tab from navigation bar',
+                                  ? 'PikPak is hidden from navigation'
+                                  : 'Show/hide PikPak tab from navigation bar',
                               style: const TextStyle(fontSize: 13),
                             ),
                             secondary: Icon(
-                              _hiddenFromNav ? Icons.visibility_off : Icons.visibility,
+                              _hiddenFromNav
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: _hiddenFromNav ? Colors.amber : null,
                             ),
                           ),
@@ -605,7 +612,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                         ),
                         value: _ignoreSmallVideos,
                         onChanged: (value) async {
-                          await StorageService.setPikPakIgnoreSmallVideos(value);
+                          await StorageService.setPikPakIgnoreSmallVideos(
+                            value,
+                          );
                           setState(() {
                             _ignoreSmallVideos = value;
                           });
@@ -739,7 +748,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           ListTile(
                             leading: Icon(
                               Icons.folder_special,
-                              color: _restrictedFolderId != null ? Colors.amber : null,
+                              color: _restrictedFolderId != null
+                                  ? Colors.amber
+                                  : null,
                             ),
                             title: const Text(
                               'Restrict Access to Folder',
@@ -761,10 +772,14 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                   Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(alpha: 0.1),
+                                      color: Colors.amber.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
-                                        color: Colors.amber.withValues(alpha: 0.3),
+                                        color: Colors.amber.withValues(
+                                          alpha: 0.3,
+                                        ),
                                       ),
                                     ),
                                     child: Row(
@@ -793,7 +808,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                       Expanded(
                                         child: OutlinedButton.icon(
                                           onPressed: _selectRestrictedFolder,
-                                          icon: const Icon(Icons.edit, size: 18),
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            size: 18,
+                                          ),
                                           label: const Text('Change'),
                                         ),
                                       ),
@@ -819,7 +837,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                 child: FilledButton.icon(
                                   onPressed: _selectRestrictedFolder,
                                   icon: const Icon(Icons.folder_open, size: 18),
-                                  label: const Text('Select Folder to Restrict'),
+                                  label: const Text(
+                                    'Select Folder to Restrict',
+                                  ),
                                 ),
                               ),
                             ),
@@ -832,10 +852,14 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                     Card(
                       color: _isConnected
                           ? Colors.green.withValues(alpha: 0.15)
-                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          : Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                       child: ListTile(
                         leading: Icon(
-                          _isConnected ? Icons.check_circle : Icons.circle_outlined,
+                          _isConnected
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
                           color: _isConnected
                               ? Colors.green
                               : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -854,7 +878,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               ? 'Connected as: ${_emailController.text}'
                               : 'Login with your PikPak account below',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -864,7 +890,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                     if (!_isConnected) ...[
                       const Text(
                         'PikPak Account',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _TvFriendlyTextField(
@@ -895,7 +924,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.login),
                         label: Text(_isConnecting ? 'Logging in...' : 'Login'),
@@ -905,14 +936,22 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                         focusNode: _resetDeviceIdButtonFocusNode,
                         onPressed: () async {
                           final prefs = await SharedPreferences.getInstance();
-                          final currentDeviceId = prefs.getString('pikpak_device_id');
-                          debugPrint('PikPak: Current device ID: $currentDeviceId');
+                          final currentDeviceId = prefs.getString(
+                            'pikpak_device_id',
+                          );
+                          debugPrint(
+                            'PikPak: Current device ID: $currentDeviceId',
+                          );
                           await prefs.remove('pikpak_device_id');
                           await prefs.remove('pikpak_captcha_token');
                           debugPrint('PikPak: Device ID cleared');
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Device ID cleared. Try logging in again.')),
+                              const SnackBar(
+                                content: Text(
+                                  'Device ID cleared. Try logging in again.',
+                                ),
+                              ),
                             );
                           }
                         },
@@ -934,7 +973,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
                     const Text(
                       'How It Works',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -952,7 +994,10 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
                     const Text(
                       'About PikPak',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
