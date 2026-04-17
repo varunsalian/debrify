@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
 
@@ -119,6 +120,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _resetDeviceCodeState();
       });
       await StorageService.setTraktSyncCatalogItems(true);
+      MainPageBridge.notifyIntegrationChanged();
       _showSnackBar(
         'Connected to Trakt as ${username ?? 'unknown'}',
         isError: false,
@@ -189,6 +191,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       _isConnected = false;
       _username = null;
     });
+    MainPageBridge.notifyIntegrationChanged();
     _showSnackBar('Logged out from Trakt', isError: false);
   }
 

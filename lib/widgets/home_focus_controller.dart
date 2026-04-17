@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 /// Sections in the Home screen that can receive focus
 enum HomeSection {
   sources,
+  emptyState,
   todayCalendar,
   continueWatching,
   traktContinueWatchingMovies,
@@ -27,6 +28,7 @@ class HomeFocusController extends ChangeNotifier {
 
   /// Last focused card index per section
   final Map<HomeSection, int> _lastFocusedIndex = {
+    HomeSection.emptyState: 0,
     HomeSection.todayCalendar: 0,
     HomeSection.continueWatching: 0,
     HomeSection.traktContinueWatchingMovies: 0,
@@ -42,6 +44,7 @@ class HomeFocusController extends ChangeNotifier {
   /// Whether each section has focusable items
   final Map<HomeSection, bool> _sectionHasItems = {
     HomeSection.sources: true, // Sources accordion is always present
+    HomeSection.emptyState: false,
     HomeSection.todayCalendar: false,
     HomeSection.continueWatching: false,
     HomeSection.traktContinueWatchingMovies: false,
@@ -72,6 +75,9 @@ class HomeFocusController extends ChangeNotifier {
     required bool hasItems,
     required List<FocusNode> focusNodes,
   }) {
+    final previousHasItems = _sectionHasItems[section];
+    final previousNodes = _sectionFocusNodes[section];
+
     _sectionHasItems[section] = hasItems;
     _sectionFocusNodes[section] = focusNodes;
 
@@ -80,12 +86,20 @@ class HomeFocusController extends ChangeNotifier {
       final lastIndex = _lastFocusedIndex[section] ?? 0;
       _lastFocusedIndex[section] = lastIndex.clamp(0, focusNodes.length - 1);
     }
+
+    if (previousHasItems != hasItems || !identical(previousNodes, focusNodes)) {
+      notifyListeners();
+    }
   }
 
   /// Unregister a section (e.g., when widget disposes)
   void unregisterSection(HomeSection section) {
+    final hadItems = _sectionHasItems[section] == true;
     _sectionHasItems[section] = false;
     _sectionFocusNodes.remove(section);
+    if (hadItems) {
+      notifyListeners();
+    }
   }
 
   /// Get the next visible section (skipping empty ones)
