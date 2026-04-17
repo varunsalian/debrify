@@ -46,6 +46,7 @@ import 'widgets/tv_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
+import 'services/aptabase_service.dart';
 import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_control_screen.dart';
 import 'utils/platform_util.dart';
@@ -55,6 +56,7 @@ final WindowListener _desktopFullscreenListener = _DesktopFullscreenListener();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AptabaseService.init();
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
@@ -71,6 +73,7 @@ Future<void> main() async {
   await _initOrientation();
   // Clean up old playback state data
   await _cleanupPlaybackState();
+  AptabaseService.trackInBackground('app_started');
   runApp(const DebrifyApp());
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
@@ -466,6 +469,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _remoteControlEnabled = true;
   StreamSubscription<Map<String, dynamic>>? _autoUpdateDownloadSub;
   String? _autoUpdateDownloadTaskId;
+  bool _hasTrackedInitialTab = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(), // 0: Home
@@ -632,6 +636,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         MainPageBridge.focusTvSidebar = () {
           _tvSidebarKey.currentState?.requestFocus();
         };
+      }
+
+      if (!_hasTrackedInitialTab) {
+        _trackCurrentTab();
+        _hasTrackedInitialTab = true;
       }
 
       // Initialize remote control based on device type
@@ -1270,6 +1279,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (!visible.contains(index)) {
       return;
     }
+    final changed = _selectedIndex != index;
     setState(() {
       _selectedIndex = index;
     });
@@ -1294,6 +1304,21 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     // Update active tab for TV sidebar navigation
     MainPageBridge.setActiveTvTab(index);
+
+    if (changed) {
+      _hasTrackedInitialTab = true;
+      _trackCurrentTab();
+    }
+  }
+
+  void _trackCurrentTab() {
+    final title = _titles[_selectedIndex];
+    AptabaseService.trackInBackground('tab_opened', <String, Object?>{
+      'tab': title,
+      'tab_index': _selectedIndex,
+      'platform': AptabaseService.currentPlatformLabel(),
+      'tv_mode': _isAndroidTv,
+    });
   }
 
   void _handleIntegrationChanged() {
