@@ -1832,6 +1832,32 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
+  Future<void> _copyLocalCatalogJson(StremioTvChannel channel) async {
+    final payload = await LocalCatalogExporter.loadCatalog(
+      catalogId: channel.catalog.id,
+      catalogType: channel.type,
+    );
+    if (!mounted) return;
+    if (payload == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Local catalog could not be found'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: payload.json));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied "${payload.name}" JSON to clipboard'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   // ============================================================================
   // Search
   // ============================================================================
@@ -2395,6 +2421,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 onLongPress: () => _toggleFavorite(channel),
                                 onFavoritePressed: () =>
                                     _toggleFavorite(channel),
+                                onExportPressed: channel.isLocal
+                                    ? () => _copyLocalCatalogJson(channel)
+                                    : null,
                                 onGuidePressed: _hideNowPlaying
                                     ? null
                                     : () => _showGuide(channel),

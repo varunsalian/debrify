@@ -11,12 +11,54 @@ import '../../../services/trakt/trakt_item_transformer.dart';
 import '../../../services/trakt/trakt_service.dart';
 import 'stremio_tv_repo_browser_dialog.dart';
 
+class LocalCatalogExportPayload {
+  final String name;
+  final String json;
+
+  const LocalCatalogExportPayload({required this.name, required this.json});
+}
+
+class LocalCatalogExporter {
+  LocalCatalogExporter._();
+
+  static Future<LocalCatalogExportPayload?> loadCatalog({
+    required String catalogId,
+    required String catalogType,
+  }) async {
+    final catalogs = await StorageService.getStremioTvLocalCatalogs();
+    Map<String, dynamic>? catalog;
+    for (final candidate in catalogs) {
+      if (candidate['id'] == catalogId &&
+          (candidate['type'] as String? ?? 'movie') == catalogType) {
+        catalog = candidate;
+        break;
+      }
+    }
+    if (catalog == null) return null;
+
+    final rawName = (catalog['name'] as String? ?? '').trim();
+    final name = rawName.isEmpty ? 'local_catalog' : rawName;
+
+    return LocalCatalogExportPayload(
+      name: name,
+      json: const JsonEncoder.withIndent('  ').convert(catalog),
+    );
+  }
+}
+
 // ─── Import helper ──────────────────────────────────────────────────────────
 
 /// Shared validation and save logic for local catalog imports.
 /// Supports both the native format and Trakt list JSON.
 class LocalCatalogImporter {
   LocalCatalogImporter._();
+
+  static const Set<String> _portableTraktSources = <String>{
+    'trending',
+    'popular',
+    'anticipated',
+    'liked',
+  };
 
   /// Generate a unique catalog ID from the name.
   static String generateId(String name) {
@@ -26,6 +68,30 @@ class LocalCatalogImporter {
         .replaceAll(RegExp(r'^_+|_+$'), '');
     final ts = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
     return '${sanitized}_$ts';
+  }
+
+  static Map<String, dynamic> _portableImportMetadata(
+    Map<String, dynamic> parsed,
+  ) {
+    final source = parsed['traktSource'] as String?;
+    if (source == null || !_portableTraktSources.contains(source)) {
+      return const <String, dynamic>{};
+    }
+
+    if (source == 'liked') {
+      final slug = parsed['traktSlug'] as String?;
+      final owner = parsed['traktOwner'] as String?;
+      if (slug == null || slug.isEmpty || owner == null || owner.isEmpty) {
+        return const <String, dynamic>{};
+      }
+      return <String, dynamic>{
+        'traktSource': source,
+        'traktSlug': slug,
+        'traktOwner': owner,
+      };
+    }
+
+    return <String, dynamic>{'traktSource': source};
   }
 
   /// Check if parsed JSON looks like a Trakt list export.
@@ -61,17 +127,14 @@ class LocalCatalogImporter {
         if (meta.imdbRating != null) 'rating': meta.imdbRating,
         if (meta.poster != null) 'poster': meta.poster,
         if (meta.background != null) 'fanart': meta.background,
-        if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
+        if (meta.genres != null && meta.genres!.isNotEmpty)
+          'genres': meta.genres,
       });
     }
 
     final catalogType = seriesCount > movieCount ? 'series' : 'movie';
 
-    return {
-      'name': catalogName,
-      'type': catalogType,
-      'items': transformed,
-    };
+    return {'name': catalogName, 'type': catalogType, 'items': transformed};
   }
 
   /// Validate JSON catalog content. Returns error message or null if valid.
@@ -102,7 +165,9 @@ class LocalCatalogImporter {
 
   /// Refresh a Trakt-sourced catalog by re-fetching its items.
   /// Returns error message or null on success.
-  static Future<String?> refreshTraktCatalog(Map<String, dynamic> catalog) async {
+  static Future<String?> refreshTraktCatalog(
+    Map<String, dynamic> catalog,
+  ) async {
     final source = catalog['traktSource'] as String?;
     final slug = catalog['traktSlug'] as String?;
     final owner = catalog['traktOwner'] as String?;
@@ -112,8 +177,16 @@ class LocalCatalogImporter {
     final List<dynamic> rawItems;
 
     // Direct sources (watchlist, trending, etc.)
-    const directSources = ['watchlist', 'history', 'collection', 'ratings',
-        'trending', 'popular', 'anticipated', 'recommendations'];
+    const directSources = [
+      'watchlist',
+      'history',
+      'collection',
+      'ratings',
+      'trending',
+      'popular',
+      'anticipated',
+      'recommendations',
+    ];
     if (directSources.contains(source)) {
       final movies = await traktService.fetchList(source, 'movies');
       final shows = await traktService.fetchList(source, 'shows');
@@ -125,8 +198,16 @@ class LocalCatalogImporter {
       rawItems = [...movies, ...shows];
     } else if (source == 'liked' && owner != null && owner.isNotEmpty) {
       if (slug == null || slug.isEmpty) return 'Missing list slug';
-      final movies = await traktService.fetchLikedListItems(owner, slug, 'movies');
-      final shows = await traktService.fetchLikedListItems(owner, slug, 'shows');
+      final movies = await traktService.fetchLikedListItems(
+        owner,
+        slug,
+        'movies',
+      );
+      final shows = await traktService.fetchLikedListItems(
+        owner,
+        slug,
+        'shows',
+      );
       rawItems = [...movies, ...shows];
     } else {
       return 'Unknown Trakt source: $source';
@@ -150,7 +231,8 @@ class LocalCatalogImporter {
         if (meta.imdbRating != null) 'rating': meta.imdbRating,
         if (meta.poster != null) 'poster': meta.poster,
         if (meta.background != null) 'fanart': meta.background,
-        if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
+        if (meta.genres != null && meta.genres!.isNotEmpty)
+          'genres': meta.genres,
       });
     }
 
@@ -231,6 +313,7 @@ class LocalCatalogImporter {
       'type': parsed['type'] as String? ?? 'movie',
       'addedAt': DateTime.now().toIso8601String(),
       'items': parsed['items'],
+      ..._portableImportMetadata(parsed),
     };
 
     await StorageService.addStremioTvLocalCatalog(catalog);
@@ -248,9 +331,7 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
   static Future<bool?> show(BuildContext context) {
     return showDialog<bool>(
       context: context,
-      builder: (context) => const Center(
-        child: StremioTvLocalCatalogsDialog(),
-      ),
+      builder: (context) => const Center(child: StremioTvLocalCatalogsDialog()),
     );
   }
 
@@ -266,14 +347,21 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
 
       final bytes = result.files.first.bytes;
       if (bytes == null) {
-        if (context.mounted) _showSnackBar(context, 'Could not read file', true);
+        if (context.mounted)
+          _showSnackBar(context, 'Could not read file', true);
         return false;
       }
 
       final content = utf8.decode(bytes);
       // Use filename (without extension) as catalog name for Trakt lists
-      final fileName = result.files.first.name.replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
-      final err = await LocalCatalogImporter.import(content, catalogName: fileName);
+      final fileName = result.files.first.name.replaceAll(
+        RegExp(r'\.json$', caseSensitive: false),
+        '',
+      );
+      final err = await LocalCatalogImporter.import(
+        content,
+        catalogName: fileName,
+      );
       if (err != null) {
         if (context.mounted) _showSnackBar(context, err, true);
         return false;
@@ -319,7 +407,11 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
     return result == true;
   }
 
-  static void _showSnackBar(BuildContext context, String message, bool isError) {
+  static void _showSnackBar(
+    BuildContext context,
+    String message,
+    bool isError,
+  ) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -375,8 +467,9 @@ class _StremioTvLocalCatalogsDialogState
 
   void _syncDeleteFocusNodes(int count) {
     while (_deleteFocusNodes.length < count) {
-      _deleteFocusNodes
-          .add(FocusNode(debugLabel: 'del${_deleteFocusNodes.length}'));
+      _deleteFocusNodes.add(
+        FocusNode(debugLabel: 'del${_deleteFocusNodes.length}'),
+      );
     }
     while (_deleteFocusNodes.length > count) {
       _deleteFocusNodes.removeLast().dispose();
@@ -447,13 +540,16 @@ class _StremioTvLocalCatalogsDialogState
     setState(() => _refreshingCatalogId = null);
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Refresh failed: $err'), backgroundColor: Colors.red.shade700),
+        SnackBar(
+          content: Text('Refresh failed: $err'),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
     } else {
       _changed = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"$name" refreshed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('"$name" refreshed')));
       await _loadCatalogs();
     }
   }
@@ -566,16 +662,12 @@ class _StremioTvLocalCatalogsDialogState
                     itemCount: _catalogs.length,
                     itemBuilder: (context, index) {
                       final catalog = _catalogs[index];
-                      final name =
-                          catalog['name'] as String? ?? 'Unknown';
-                      final type =
-                          catalog['type'] as String? ?? 'movie';
-                      final items =
-                          catalog['items'] as List<dynamic>? ?? [];
-                      final deleteFocus =
-                          index < _deleteFocusNodes.length
-                              ? _deleteFocusNodes[index]
-                              : null;
+                      final name = catalog['name'] as String? ?? 'Unknown';
+                      final type = catalog['type'] as String? ?? 'movie';
+                      final items = catalog['items'] as List<dynamic>? ?? [];
+                      final deleteFocus = index < _deleteFocusNodes.length
+                          ? _deleteFocusNodes[index]
+                          : null;
                       final isTrakt = catalog['traktSource'] != null;
 
                       return ListTile(
@@ -588,10 +680,7 @@ class _StremioTvLocalCatalogsDialogState
                           color: theme.colorScheme.primary,
                           size: 20,
                         ),
-                        title: Text(
-                          name,
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                        title: Text(name, style: theme.textTheme.bodyMedium),
                         subtitle: Text(
                           '${items.length} items${isTrakt ? ' · Trakt' : ''}',
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -608,7 +697,9 @@ class _StremioTvLocalCatalogsDialogState
                                       child: SizedBox(
                                         width: 18,
                                         height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
                                       ),
                                     )
                                   : IconButton(
@@ -687,8 +778,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
     });
 
     try {
-      final resp =
-          await http.get(uri).timeout(const Duration(seconds: 15));
+      final resp = await http.get(uri).timeout(const Duration(seconds: 15));
       if (!mounted) return;
 
       if (resp.statusCode != 200) {
@@ -744,8 +834,10 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
                 borderRadius: BorderRadius.circular(12),
               ),
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -758,8 +850,10 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
               ),
               errorText: _error,
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
             autofocus: true,
             onSubmitted: (_) {
@@ -854,8 +948,10 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
                 borderRadius: BorderRadius.circular(12),
               ),
               isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -863,7 +959,8 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
             controller: _jsonController,
             maxLines: 6,
             decoration: InputDecoration(
-              hintText: '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
+              hintText:
+                  '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -913,35 +1010,55 @@ enum _TraktListSource {
 extension _TraktListSourceExt on _TraktListSource {
   String get label {
     switch (this) {
-      case _TraktListSource.watchlist: return 'Watchlist';
-      case _TraktListSource.history: return 'History';
-      case _TraktListSource.collection: return 'Collection';
-      case _TraktListSource.ratings: return 'Ratings';
-      case _TraktListSource.trending: return 'Trending';
-      case _TraktListSource.popular: return 'Popular';
-      case _TraktListSource.anticipated: return 'Anticipated';
-      case _TraktListSource.recommendations: return 'Recommendations';
-      case _TraktListSource.customLists: return 'Custom Lists';
-      case _TraktListSource.likedLists: return 'Liked Lists';
+      case _TraktListSource.watchlist:
+        return 'Watchlist';
+      case _TraktListSource.history:
+        return 'History';
+      case _TraktListSource.collection:
+        return 'Collection';
+      case _TraktListSource.ratings:
+        return 'Ratings';
+      case _TraktListSource.trending:
+        return 'Trending';
+      case _TraktListSource.popular:
+        return 'Popular';
+      case _TraktListSource.anticipated:
+        return 'Anticipated';
+      case _TraktListSource.recommendations:
+        return 'Recommendations';
+      case _TraktListSource.customLists:
+        return 'Custom Lists';
+      case _TraktListSource.likedLists:
+        return 'Liked Lists';
     }
   }
 
   /// Whether this source requires picking a specific list before importing.
   bool get needsListPicker =>
-      this == _TraktListSource.customLists || this == _TraktListSource.likedLists;
+      this == _TraktListSource.customLists ||
+      this == _TraktListSource.likedLists;
 
   /// The API list type value for direct-fetch sources.
   String get apiValue {
     switch (this) {
-      case _TraktListSource.watchlist: return 'watchlist';
-      case _TraktListSource.history: return 'history';
-      case _TraktListSource.collection: return 'collection';
-      case _TraktListSource.ratings: return 'ratings';
-      case _TraktListSource.trending: return 'trending';
-      case _TraktListSource.popular: return 'popular';
-      case _TraktListSource.anticipated: return 'anticipated';
-      case _TraktListSource.recommendations: return 'recommendations';
-      default: return '';
+      case _TraktListSource.watchlist:
+        return 'watchlist';
+      case _TraktListSource.history:
+        return 'history';
+      case _TraktListSource.collection:
+        return 'collection';
+      case _TraktListSource.ratings:
+        return 'ratings';
+      case _TraktListSource.trending:
+        return 'trending';
+      case _TraktListSource.popular:
+        return 'popular';
+      case _TraktListSource.anticipated:
+        return 'anticipated';
+      case _TraktListSource.recommendations:
+        return 'recommendations';
+      default:
+        return '';
     }
   }
 }
@@ -1031,7 +1148,12 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     try {
       // Check for duplicates
       final existing = await StorageService.getStremioTvLocalCatalogs();
-      if (existing.any((c) => c['name'] == name || c['name'] == '$name — Movies' || c['name'] == '$name — Series')) {
+      if (existing.any(
+        (c) =>
+            c['name'] == name ||
+            c['name'] == '$name — Movies' ||
+            c['name'] == '$name — Series',
+      )) {
         setState(() {
           _error = '"$name" already imported';
           _importing = false;
@@ -1044,9 +1166,11 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
       final rawItems = [...movies, ...shows];
 
       if (!mounted) return;
-      await _saveAsCatalog(rawItems, name, traktMeta: {
-        'traktSource': _source.apiValue,
-      });
+      await _saveAsCatalog(
+        rawItems,
+        name,
+        traktMeta: {'traktSource': _source.apiValue},
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1070,7 +1194,12 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     try {
       // Check for duplicates
       final existing = await StorageService.getStremioTvLocalCatalogs();
-      if (existing.any((c) => c['name'] == name || c['name'] == '$name — Movies' || c['name'] == '$name — Series')) {
+      if (existing.any(
+        (c) =>
+            c['name'] == name ||
+            c['name'] == '$name — Movies' ||
+            c['name'] == '$name — Series',
+      )) {
         setState(() {
           _error = '"$name" already imported';
           _importing = false;
@@ -1084,7 +1213,9 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
         final shows = await _traktService.fetchCustomListItems(slug, 'shows');
         rawItems = [...movies, ...shows];
       } else {
-        final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String? ?? '';
+        final owner =
+            (list['user'] as Map<String, dynamic>?)?['username'] as String? ??
+            '';
         if (owner.isEmpty) {
           setState(() {
             _error = 'Missing list owner';
@@ -1092,19 +1223,34 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
           });
           return;
         }
-        final movies = await _traktService.fetchLikedListItems(owner, slug, 'movies');
-        final shows = await _traktService.fetchLikedListItems(owner, slug, 'shows');
+        final movies = await _traktService.fetchLikedListItems(
+          owner,
+          slug,
+          'movies',
+        );
+        final shows = await _traktService.fetchLikedListItems(
+          owner,
+          slug,
+          'shows',
+        );
         rawItems = [...movies, ...shows];
       }
 
       if (!mounted) return;
 
-      final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String?;
-      await _saveAsCatalog(rawItems, name, traktMeta: {
-        'traktSource': _source == _TraktListSource.customLists ? 'custom' : 'liked',
-        'traktSlug': slug,
-        if (owner != null) 'traktOwner': owner,
-      });
+      final owner =
+          (list['user'] as Map<String, dynamic>?)?['username'] as String?;
+      await _saveAsCatalog(
+        rawItems,
+        name,
+        traktMeta: {
+          'traktSource': _source == _TraktListSource.customLists
+              ? 'custom'
+              : 'liked',
+          'traktSlug': slug,
+          if (owner != null) 'traktOwner': owner,
+        },
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1148,7 +1294,8 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
         if (meta.imdbRating != null) 'rating': meta.imdbRating,
         if (meta.poster != null) 'poster': meta.poster,
         if (meta.background != null) 'fanart': meta.background,
-        if (meta.genres != null && meta.genres!.isNotEmpty) 'genres': meta.genres,
+        if (meta.genres != null && meta.genres!.isNotEmpty)
+          'genres': meta.genres,
       });
     }
 
@@ -1192,10 +1339,7 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 
     if (!_authChecked) {
       return const AlertDialog(
-        content: Center(
-          heightFactor: 1,
-          child: CircularProgressIndicator(),
-        ),
+        content: Center(heightFactor: 1, child: CircularProgressIndicator()),
       );
     }
 
@@ -1226,14 +1370,18 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
               value: _source,
               decoration: InputDecoration(
                 labelText: 'List Type',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
-              items: _TraktListSource.values.map((s) => DropdownMenuItem(
-                value: s,
-                child: Text(s.label),
-              )).toList(),
+              items: _TraktListSource.values
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s.label)))
+                  .toList(),
               onChanged: (value) {
                 if (value != null) _onSourceChanged(value);
               },
@@ -1244,7 +1392,10 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   _error!,
-                  style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             // Direct import sources — just show an import button
@@ -1291,7 +1442,9 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
                       final list = _lists[index];
                       final name = list['name'] as String? ?? 'Unknown';
                       final itemCount = list['item_count'] as int?;
-                      final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String?;
+                      final owner =
+                          (list['user'] as Map<String, dynamic>?)?['username']
+                              as String?;
 
                       return ListTile(
                         dense: true,
@@ -1304,7 +1457,9 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
                         title: Text(name, style: theme.textTheme.bodyMedium),
                         subtitle: Text(
                           [
-                            if (owner != null && _source == _TraktListSource.likedLists) 'by $owner',
+                            if (owner != null &&
+                                _source == _TraktListSource.likedLists)
+                              'by $owner',
                             if (itemCount != null) '$itemCount items',
                           ].join(' · '),
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -1315,7 +1470,9 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.add_rounded, size: 20),
                         onTap: _importing ? null : () => _importList(list),

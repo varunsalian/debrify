@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 
-enum _ChannelRowMenuAction { favorite }
+enum _ChannelRowMenuAction { favorite, export }
 
 /// A single channel row in the Stremio TV guide.
 ///
@@ -23,6 +23,7 @@ class StremioTvChannelRow extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onFavoritePressed;
+  final VoidCallback? onExportPressed;
   final VoidCallback? onGuidePressed;
   final VoidCallback? onLeftPress;
   final VoidCallback? onUpPress;
@@ -39,6 +40,7 @@ class StremioTvChannelRow extends StatefulWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onFavoritePressed,
+    this.onExportPressed,
     this.onGuidePressed,
     this.onLeftPress,
     this.onUpPress,
@@ -763,6 +765,9 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
               case _ChannelRowMenuAction.favorite:
                 widget.onFavoritePressed();
                 break;
+              case _ChannelRowMenuAction.export:
+                widget.onExportPressed?.call();
+                break;
             }
           },
           itemBuilder: (context) => [
@@ -782,6 +787,23 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                 ],
               ),
             ),
+            if (widget.channel.isLocal && widget.onExportPressed != null)
+              const PopupMenuDivider(),
+            if (widget.channel.isLocal && widget.onExportPressed != null)
+              const PopupMenuItem<_ChannelRowMenuAction>(
+                value: _ChannelRowMenuAction.export,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.copy_rounded,
+                      size: 18,
+                      color: Color(0xFF60A5FA),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Copy JSON'),
+                  ],
+                ),
+              ),
           ],
           child: Material(
             color: Colors.transparent,
