@@ -2665,6 +2665,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _cameFromCatalogBrowse = true;
     _previousSearchQuery = _searchController.text;
 
+    // Clear any stale season/episode UI state before applying the new
+    // selection. Explicit episode flows re-populate these immediately below.
+    _seasonController.clear();
+    _episodeController.clear();
+
     setState(() {
       _searchMode = SearchMode.catalog;
       _selectedImdbTitle = ImdbTitleResult(
