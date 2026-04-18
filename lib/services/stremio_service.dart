@@ -114,9 +114,7 @@ class StremioService {
 
     // Check if already exists
     final existingAddons = await getAddons();
-    final existing = existingAddons.where(
-      (a) => a.manifestUrl == manifestUrl,
-    );
+    final existing = existingAddons.where((a) => a.manifestUrl == manifestUrl);
     if (existing.isNotEmpty) {
       throw Exception('Addon already exists: ${existing.first.name}');
     }
@@ -204,7 +202,9 @@ class StremioService {
       final response = await http.get(uri).timeout(_requestTimeout);
 
       if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
+        throw Exception(
+          'HTTP ${response.statusCode}: ${response.reasonPhrase}',
+        );
       }
 
       final Map<String, dynamic> manifest = json.decode(response.body);
@@ -270,10 +270,13 @@ class StremioService {
     final applicableAddons = addons.where((a) {
       // Check content type support
       bool supportsType = true;
-      if (type == 'movie') supportsType = a.supportsMovies;
-      else if (type == 'series') supportsType = a.supportsSeries;
+      if (type == 'movie')
+        supportsType = a.supportsMovies;
+      else if (type == 'series')
+        supportsType = a.supportsSeries;
       // For other types (anime, tv, channel, etc.), allow if addon declares that type
-      else supportsType = a.types.contains(type) || a.types.isEmpty;
+      else
+        supportsType = a.types.contains(type) || a.types.isEmpty;
 
       // Check if addon supports the content ID prefix (smart routing)
       final supportsId = a.supportsContentId(imdbId);
@@ -283,7 +286,9 @@ class StremioService {
 
     if (applicableAddons.isEmpty) {
       final prefix = StremioAddon.extractIdPrefix(imdbId);
-      debugPrint('StremioService: No addons support type: $type with ID prefix: $prefix');
+      debugPrint(
+        'StremioService: No addons support type: $type with ID prefix: $prefix',
+      );
       return {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
@@ -293,7 +298,8 @@ class StremioService {
 
     // Check if this is a series search without specific season/episode
     // In this case, use smart fallback logic
-    final bool needsSmartFallback = type == 'series' && season == null && episode == null;
+    final bool needsSmartFallback =
+        type == 'series' && season == null && episode == null;
 
     if (needsSmartFallback) {
       return _searchStreamsWithSmartFallback(
@@ -317,18 +323,20 @@ class StremioService {
       // Use stremio: prefix and lowercase to match Torrent model (which lowercases source)
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
       futures.add(
-        _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout).then((streams) {
-          addonCounts[sourceKey] = streams.length;
-          debugPrint(
-            'StremioService: ${addon.name} returned ${streams.length} streams',
-          );
-          return streams;
-        }).catchError((error, _) {
-          addonCounts[sourceKey] = 0;
-          addonErrors[sourceKey] = error.toString();
-          debugPrint('StremioService: ${addon.name} error: $error');
-          return <StremioStream>[];
-        }),
+        _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout)
+            .then((streams) {
+              addonCounts[sourceKey] = streams.length;
+              debugPrint(
+                'StremioService: ${addon.name} returned ${streams.length} streams',
+              );
+              return streams;
+            })
+            .catchError((error, _) {
+              addonCounts[sourceKey] = 0;
+              addonErrors[sourceKey] = error.toString();
+              debugPrint('StremioService: ${addon.name} error: $error');
+              return <StremioStream>[];
+            }),
       );
     }
 
@@ -376,18 +384,20 @@ class StremioService {
     for (final addon in applicableAddons) {
       final sourceKey = 'stremio:${addon.name}'.toLowerCase();
       initialFutures.add(
-        _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout).then((streams) {
-          addonCounts[sourceKey] = streams.length;
-          debugPrint(
-            'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
-          );
-          return streams;
-        }).catchError((e) {
-          addonCounts[sourceKey] = 0;
-          addonErrors[sourceKey] = e.toString();
-          debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
-          return <StremioStream>[];
-        }),
+        _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout)
+            .then((streams) {
+              addonCounts[sourceKey] = streams.length;
+              debugPrint(
+                'StremioService: ${addon.name} (bare IMDB) returned ${streams.length} streams',
+              );
+              return streams;
+            })
+            .catchError((e) {
+              addonCounts[sourceKey] = 0;
+              addonErrors[sourceKey] = e.toString();
+              debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
+              return <StremioStream>[];
+            }),
       );
     }
 
@@ -400,7 +410,9 @@ class StremioService {
 
     // Convert initial streams to torrents
     List<Torrent> allTorrents = _convertToTorrents(initialStreams);
-    debugPrint('StremioService: Bare IMDB returned ${allTorrents.length} torrents');
+    debugPrint(
+      'StremioService: Bare IMDB returned ${allTorrents.length} torrents',
+    );
 
     // Step 2: Filter to packs only
     List<Torrent> filteredTorrents = _filterToPacksOnly(allTorrents);
@@ -431,8 +443,9 @@ class StremioService {
     const int maxSeasonsToProbe = 10;
     List<int> seasonsToProbe =
         (availableSeasons != null && availableSeasons.isNotEmpty)
-            ? (List<int>.from(availableSeasons)..sort()) // Sort to ensure we get earliest seasons
-            : List.generate(5, (i) => i + 1); // Default to seasons 1-5
+        ? (List<int>.from(availableSeasons)
+            ..sort()) // Sort to ensure we get earliest seasons
+        : List.generate(5, (i) => i + 1); // Default to seasons 1-5
 
     // Cap to first 10 seasons - season packs usually appear in early season searches
     if (seasonsToProbe.length > maxSeasonsToProbe) {
@@ -454,7 +467,12 @@ class StremioService {
 
       for (final addon in applicableAddons) {
         seasonFutures.add(
-          _fetchStreamsFromAddon(addon, 'series', streamId, timeout: timeout).catchError((e) {
+          _fetchStreamsFromAddon(
+            addon,
+            'series',
+            streamId,
+            timeout: timeout,
+          ).catchError((e) {
             debugPrint(
               'StremioService: ${addon.name} error probing S${seasonNum}E1: $e',
             );
@@ -465,7 +483,9 @@ class StremioService {
     }
 
     // Execute all season probes in parallel
-    final List<List<StremioStream>> seasonResults = await Future.wait(seasonFutures);
+    final List<List<StremioStream>> seasonResults = await Future.wait(
+      seasonFutures,
+    );
 
     // Flatten results
     final List<StremioStream> fallbackStreams = [];
@@ -499,7 +519,9 @@ class StremioService {
     }
 
     allTorrents = uniqueTorrents.values.toList();
-    debugPrint('StremioService: Combined total: ${allTorrents.length} unique torrents');
+    debugPrint(
+      'StremioService: Combined total: ${allTorrents.length} unique torrents',
+    );
 
     // Filter combined results to packs only
     filteredTorrents = _filterToPacksOnly(allTorrents);
@@ -537,9 +559,14 @@ class StremioService {
   }
 
   /// Update addon counts based on the final torrent list
-  void _updateAddonCounts(Map<String, int> addonCounts, List<Torrent> torrents) {
+  void _updateAddonCounts(
+    Map<String, int> addonCounts,
+    List<Torrent> torrents,
+  ) {
     for (final key in addonCounts.keys.toList()) {
-      addonCounts[key] = torrents.where((t) => t.source.toLowerCase() == key).length;
+      addonCounts[key] = torrents
+          .where((t) => t.source.toLowerCase() == key)
+          .length;
     }
   }
 
@@ -670,11 +697,13 @@ class StremioService {
       }
 
       return streamsRaw
-          .map((s) => StremioStream.fromJson(
-                s as Map<String, dynamic>,
-                addon.name,
-              ))
-          .where((s) => s.isUsable) // Keep all usable streams (torrent, direct, external)
+          .map(
+            (s) =>
+                StremioStream.fromJson(s as Map<String, dynamic>, addon.name),
+          )
+          .where(
+            (s) => s.isUsable,
+          ) // Keep all usable streams (torrent, direct, external)
           .toList();
     } catch (e) {
       debugPrint('StremioService: Error fetching from ${addon.name}: $e');
@@ -704,13 +733,15 @@ class StremioService {
         withInfoHash++;
       } else if (stream.isExternalUrl) {
         // External URL - opens in browser
-        uniqueKey = 'ext:${stream.externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        uniqueKey =
+            'ext:${stream.externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
         streamType = StreamType.externalUrl;
         directUrl = stream.externalUrl;
         withExternalUrl++;
       } else if (stream.isDirectUrl) {
         // Direct URL - playable without debrid
-        uniqueKey = 'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
+        uniqueKey =
+            'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
         streamType = StreamType.directUrl;
         directUrl = stream.url;
         withDirectUrl++;
@@ -771,7 +802,8 @@ class StremioService {
       // For direct/external URLs, just keep first occurrence
       final existing = uniqueTorrents[uniqueKey];
       if (existing == null ||
-          (streamType == StreamType.torrent && torrent.seeders > existing.seeders)) {
+          (streamType == StreamType.torrent &&
+              torrent.seeders > existing.seeders)) {
         uniqueTorrents[uniqueKey] = torrent;
       }
     }
@@ -797,9 +829,13 @@ class StremioService {
 
     // Log a few samples for debugging
     if (results.isNotEmpty) {
-      final samples = results.take(3).map((t) =>
-        '${t.streamType.name}:${t.infohash.substring(0, 8)}... (${t.source})'
-      ).toList();
+      final samples = results
+          .take(3)
+          .map(
+            (t) =>
+                '${t.streamType.name}:${t.infohash.substring(0, 8)}... (${t.source})',
+          )
+          .toList();
       debugPrint('StremioService: Samples: $samples');
     }
 
@@ -847,14 +883,16 @@ class StremioService {
   /// - Addons with search-only capability (no catalogs but can search)
   Future<List<StremioAddon>> getBrowseableOrSearchableAddons() async {
     final addons = await getEnabledAddons();
-    return addons.where((a) => a.supportsCatalogs || a.hasSearchableCatalogs).toList();
+    return addons
+        .where((a) => a.supportsCatalogs || a.hasSearchableCatalogs)
+        .toList();
   }
 
   /// Get all available catalogs from all enabled catalog addons
   ///
   /// Returns a list of (addon, catalog) pairs for UI display
   Future<List<({StremioAddon addon, StremioAddonCatalog catalog})>>
-      getAllCatalogs() async {
+  getAllCatalogs() async {
     final catalogAddons = await getCatalogAddons();
     final result = <({StremioAddon addon, StremioAddonCatalog catalog})>[];
 
@@ -918,11 +956,15 @@ class StremioService {
         request.followRedirects = true;
         request.maxRedirects = 5;
 
-        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final streamedResponse = await client
+            .send(request)
+            .timeout(_requestTimeout);
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode != 200) {
-          debugPrint('StremioService: Catalog fetch failed: HTTP ${response.statusCode}');
+          debugPrint(
+            'StremioService: Catalog fetch failed: HTTP ${response.statusCode}',
+          );
           return [];
         }
 
@@ -936,11 +978,18 @@ class StremioService {
 
         // Keep all items with valid ID (not just IMDB) - supports TV channels, etc.
         final metas = metasRaw
-            .map((m) => StremioMeta.fromJson(m as Map<String, dynamic>))
+            .map((m) {
+              final meta = StremioMeta.fromJson(m as Map<String, dynamic>);
+              return meta.sourceAddon == null
+                  ? meta.withSourceAddon(addon)
+                  : meta;
+            })
             .where((m) => m.hasValidId)
             .toList();
 
-        debugPrint('StremioService: Catalog returned ${metas.length} valid items');
+        debugPrint(
+          'StremioService: Catalog returned ${metas.length} valid items',
+        );
         return metas;
       } finally {
         client.close();
@@ -961,7 +1010,8 @@ class StremioService {
       return null;
     }
 
-    final url = '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
+    final url =
+        '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
     debugPrint('StremioService: Fetching meta from $url');
 
     try {
@@ -971,11 +1021,15 @@ class StremioService {
         request.followRedirects = true;
         request.maxRedirects = 5;
 
-        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final streamedResponse = await client
+            .send(request)
+            .timeout(_requestTimeout);
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode != 200) {
-          debugPrint('StremioService: Meta fetch failed: HTTP ${response.statusCode}');
+          debugPrint(
+            'StremioService: Meta fetch failed: HTTP ${response.statusCode}',
+          );
           return null;
         }
 
@@ -1080,7 +1134,9 @@ class StremioService {
         items: items.take(limit).toList(),
       );
     } catch (e) {
-      debugPrint('StremioService: Error fetching section ${addon.name}/${catalog.name}: $e');
+      debugPrint(
+        'StremioService: Error fetching section ${addon.name}/${catalog.name}: $e',
+      );
       return null;
     }
   }
@@ -1102,7 +1158,9 @@ class StremioService {
         .toList();
 
     if (searchableCatalogs.isEmpty) {
-      debugPrint('StremioService: Addon ${addon.name} has no searchable catalogs');
+      debugPrint(
+        'StremioService: Addon ${addon.name} has no searchable catalogs',
+      );
       return [];
     }
 
@@ -1123,14 +1181,17 @@ class StremioService {
     for (final catalogResults in results) {
       for (final meta in catalogResults) {
         final existing = seen[meta.id];
-        if (existing == null || _metadataScore(meta) > _metadataScore(existing)) {
+        if (existing == null ||
+            _metadataScore(meta) > _metadataScore(existing)) {
           seen[meta.id] = meta;
         }
       }
     }
 
     final deduped = seen.values.toList();
-    debugPrint('StremioService: Addon search returned ${deduped.length} results');
+    debugPrint(
+      'StremioService: Addon search returned ${deduped.length} results',
+    );
     return deduped;
   }
 
@@ -1151,7 +1212,8 @@ class StremioService {
 
     // Collect all (addon, catalog) pairs that support search
     // Search ALL addons, not just IMDB ones - supports TV channels, anime, etc.
-    final searchableCatalogs = <({StremioAddon addon, StremioAddonCatalog catalog})>[];
+    final searchableCatalogs =
+        <({StremioAddon addon, StremioAddonCatalog catalog})>[];
     for (final addon in catalogAddons) {
       for (final catalog in addon.catalogs) {
         if (catalog.supportsSearch) {
@@ -1173,7 +1235,9 @@ class StremioService {
     final futures = <Future<List<StremioMeta>>>[];
 
     for (final entry in searchableCatalogs) {
-      futures.add(_searchSingleCatalog(entry.addon, entry.catalog, encodedQuery));
+      futures.add(
+        _searchSingleCatalog(entry.addon, entry.catalog, encodedQuery),
+      );
     }
 
     final allResults = await Future.wait(futures);
@@ -1188,7 +1252,9 @@ class StremioService {
         if (meta.id.isEmpty) continue;
 
         // Tag with source addon (prefer addon that supports meta for series drill-down)
-        final tagged = meta.sourceAddon == null ? meta.withSourceAddon(addon) : meta;
+        final tagged = meta.sourceAddon == null
+            ? meta.withSourceAddon(addon)
+            : meta;
 
         final existing = uniqueResults[meta.id];
         if (existing == null) {
@@ -1198,13 +1264,19 @@ class StremioService {
           final existingScore = _metadataScore(existing);
           final newScore = _metadataScore(tagged);
           if (newScore > existingScore) {
-            // Use richer metadata but preserve meta-supporting addon for episode drill-down
-            final bestAddon = (!addon.supportsMeta && existing.sourceAddon?.supportsMeta == true)
-                ? existing.sourceAddon!
+            final taggedSource = tagged.sourceAddon;
+            final existingSource = existing.sourceAddon;
+            final bestAddon = taggedSource != null
+                ? taggedSource
+                : (!addon.supportsMeta && existingSource?.supportsMeta == true)
+                ? existingSource!
                 : addon;
-            uniqueResults[meta.id] = tagged.withSourceAddon(bestAddon);
-          } else if (existing.sourceAddon != null && !existing.sourceAddon!.supportsMeta &&
-                     addon.supportsMeta) {
+            uniqueResults[meta.id] = tagged.sourceAddon == bestAddon
+                ? tagged
+                : tagged.withSourceAddon(bestAddon);
+          } else if (existing.sourceAddon != null &&
+              !existing.sourceAddon!.supportsMeta &&
+              addon.supportsMeta) {
             // Keep existing metadata but upgrade to addon that supports meta
             uniqueResults[meta.id] = existing.withSourceAddon(addon);
           }
@@ -1213,7 +1285,9 @@ class StremioService {
     }
 
     final results = uniqueResults.values.toList();
-    debugPrint('StremioService: Catalog search returned ${results.length} unique results');
+    debugPrint(
+      'StremioService: Catalog search returned ${results.length} unique results',
+    );
 
     return results;
   }
@@ -1228,7 +1302,9 @@ class StremioService {
     final url =
         '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/search=$encodedQuery.json';
 
-    debugPrint('StremioService: Searching catalog ${addon.name}/${catalog.name}');
+    debugPrint(
+      'StremioService: Searching catalog ${addon.name}/${catalog.name}',
+    );
 
     try {
       final client = http.Client();
@@ -1237,7 +1313,9 @@ class StremioService {
         request.followRedirects = true;
         request.maxRedirects = 5;
 
-        final streamedResponse = await client.send(request).timeout(_requestTimeout);
+        final streamedResponse = await client
+            .send(request)
+            .timeout(_requestTimeout);
         final response = await http.Response.fromStream(streamedResponse);
 
         if (response.statusCode != 200) {
@@ -1269,7 +1347,9 @@ class StremioService {
         client.close();
       }
     } catch (e) {
-      debugPrint('StremioService: ${addon.name}/${catalog.name} search error: $e');
+      debugPrint(
+        'StremioService: ${addon.name}/${catalog.name} search error: $e',
+      );
       return [];
     }
   }

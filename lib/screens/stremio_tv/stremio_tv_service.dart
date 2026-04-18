@@ -46,7 +46,6 @@ class StremioTvService {
         if (disabled.contains(addon.id)) continue;
 
         for (final catalog in addon.catalogs) {
-
           // Skip catalog if disabled
           final catalogId = '${addon.id}:${catalog.id}:${catalog.type}';
           if (disabled.contains(catalogId)) continue;
@@ -59,22 +58,26 @@ class StremioTvService {
               final id = '$catalogId:$genre';
               // Skip genre if disabled
               if (disabled.contains(id)) continue;
-              channels.add(StremioTvChannel.fromCatalog(
-                addon: addon,
-                catalog: catalog,
-                channelNumber: channelNumber++,
-                genre: genre,
-                isFavorite: favoriteIds.contains(id),
-              ));
+              channels.add(
+                StremioTvChannel.fromCatalog(
+                  addon: addon,
+                  catalog: catalog,
+                  channelNumber: channelNumber++,
+                  genre: genre,
+                  isFavorite: favoriteIds.contains(id),
+                ),
+              );
             }
           } else {
             // No genres — single channel for the catalog
-            channels.add(StremioTvChannel.fromCatalog(
-              addon: addon,
-              catalog: catalog,
-              channelNumber: channelNumber++,
-              isFavorite: favoriteIds.contains(catalogId),
-            ));
+            channels.add(
+              StremioTvChannel.fromCatalog(
+                addon: addon,
+                catalog: catalog,
+                channelNumber: channelNumber++,
+                isFavorite: favoriteIds.contains(catalogId),
+              ),
+            );
           }
         }
       }
@@ -93,27 +96,26 @@ class StremioTvService {
         }
 
         final rawItems = catalog['items'] as List<dynamic>? ?? [];
-        final items = rawItems
-            .whereType<Map<String, dynamic>>()
-            .map((json) {
-              // Auto-fill type from catalog type if not present in item
-              if (!json.containsKey('type')) {
-                json = {...json, 'type': catalogType};
-              }
-              return StremioMeta.fromJson(json);
-            })
-            .toList();
+        final items = rawItems.whereType<Map<String, dynamic>>().map((json) {
+          // Auto-fill type from catalog type if not present in item
+          if (!json.containsKey('type')) {
+            json = {...json, 'type': catalogType};
+          }
+          return StremioMeta.fromJson(json);
+        }).toList();
 
         if (items.isEmpty) continue;
 
-        channels.add(StremioTvChannel.local(
-          catalogId: catalogId,
-          catalogName: catalogName,
-          catalogType: catalogType,
-          channelNumber: channelNumber++,
-          items: items,
-          isFavorite: favoriteIds.contains(channelId),
-        ));
+        channels.add(
+          StremioTvChannel.local(
+            catalogId: catalogId,
+            catalogName: catalogName,
+            catalogType: catalogType,
+            channelNumber: channelNumber++,
+            items: items,
+            isFavorite: favoriteIds.contains(channelId),
+          ),
+        );
       }
 
       return channels;
@@ -127,12 +129,15 @@ class StremioTvService {
   /// Returns all addons with their catalogs,
   /// plus a synthetic "Local Catalogs" addon entry.
   Future<List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>>
-      getFilterTree() async {
+  getFilterTree() async {
     final addons = await _stremioService.getCatalogAddons();
 
-    final tree = addons.map((addon) {
-      return (addon: addon, catalogs: addon.catalogs.toList());
-    }).where((entry) => entry.catalogs.isNotEmpty).toList();
+    final tree = addons
+        .map((addon) {
+          return (addon: addon, catalogs: addon.catalogs.toList());
+        })
+        .where((entry) => entry.catalogs.isNotEmpty)
+        .toList();
 
     // Append local catalogs as a synthetic addon entry
     final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
@@ -177,7 +182,8 @@ class StremioTvService {
 
     try {
       // Pick a deterministic page based on channel ID + day, so the pool rotates daily
-      final dayKey = DateTime.now().millisecondsSinceEpoch ~/ (24 * 60 * 60 * 1000);
+      final dayKey =
+          DateTime.now().millisecondsSinceEpoch ~/ (24 * 60 * 60 * 1000);
       final pageHash = _djb2('page:${channel.id}:$dayKey');
       final page = pageHash % _maxPages; // 0.._maxPages-1
       final skip = page * _pageSize;
@@ -324,12 +330,14 @@ class StremioTvService {
         slotStartMs + slotDurationMs,
       );
 
-      schedule.add(StremioTvNowPlaying(
-        item: channel.items[index],
-        itemIndex: index,
-        slotStart: slotStart,
-        slotEnd: slotEnd,
-      ));
+      schedule.add(
+        StremioTvNowPlaying(
+          item: channel.items[index],
+          itemIndex: index,
+          slotStart: slotStart,
+          slotEnd: slotEnd,
+        ),
+      );
     }
 
     return schedule;
@@ -391,12 +399,15 @@ class StremioTvService {
     required StremioAddon addon,
     required String seed,
   }) async {
+    final metaAddon = await _resolveMetaAddon(item, addon);
+
     // Try addon's own meta endpoint first (only if it declares meta resource
     // and supports this item's ID prefix to avoid pointless 404s)
-    if (addon.resources.contains('meta') &&
-        addon.baseUrl.isNotEmpty &&
-        addon.supportsContentId(item.id)) {
-      final result = await _resolveViaAddonMeta(item, addon, seed);
+    if (metaAddon != null &&
+        metaAddon.supportsMeta &&
+        metaAddon.baseUrl.isNotEmpty &&
+        metaAddon.supportsContentId(item.id)) {
+      final result = await _resolveViaAddonMeta(item, metaAddon, seed);
       if (result != null) return result;
     }
 
@@ -404,6 +415,45 @@ class StremioTvService {
     final imdbId = item.effectiveImdbId;
     if (imdbId != null) {
       return _resolveViaImdbBot(imdbId, seed);
+    }
+
+    return null;
+  }
+
+  Future<StremioAddon?> _resolveMetaAddon(
+    StremioMeta item,
+    StremioAddon fallbackAddon,
+  ) async {
+    bool supportsEpisodeMeta(StremioAddon addon) =>
+        addon.supportsMeta &&
+        addon.supportsSeries &&
+        addon.supportsContentId(item.id);
+
+    final sourceAddon = item.sourceAddon;
+    if (sourceAddon != null &&
+        sourceAddon.baseUrl.isNotEmpty &&
+        supportsEpisodeMeta(sourceAddon)) {
+      return sourceAddon;
+    }
+
+    final installedAddons = await _stremioService.getEnabledAddons();
+
+    if (sourceAddon != null) {
+      for (final addon in installedAddons) {
+        if (addon.id == sourceAddon.id && supportsEpisodeMeta(addon)) {
+          return addon;
+        }
+      }
+    }
+
+    if (supportsEpisodeMeta(fallbackAddon)) {
+      return fallbackAddon;
+    }
+
+    for (final addon in installedAddons) {
+      if (supportsEpisodeMeta(addon)) {
+        return addon;
+      }
     }
 
     return null;
@@ -417,12 +467,13 @@ class StremioTvService {
     String seed,
   ) async {
     try {
-      final url = '${addon.baseUrl}/meta/series/${Uri.encodeComponent(item.id)}.json';
+      final url =
+          '${addon.baseUrl}/meta/series/${Uri.encodeComponent(item.id)}.json';
       debugPrint('StremioTvService: Fetching meta from $url');
 
-      final response = await http.get(Uri.parse(url)).timeout(
-            const Duration(seconds: 10),
-          );
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return null;
 
       final data = json.decode(response.body) as Map<String, dynamic>?;
@@ -455,7 +506,9 @@ class StremioTvService {
           ? episodeRaw
           : (episodeRaw is num ? episodeRaw.toInt() : 1);
 
-      debugPrint('StremioTvService: Resolved episode via addon meta: S${season}E$episode');
+      debugPrint(
+        'StremioTvService: Resolved episode via addon meta: S${season}E$episode',
+      );
       return (season: season, episode: episode);
     } catch (e) {
       debugPrint('StremioTvService: Addon meta fetch failed: $e');
@@ -470,9 +523,11 @@ class StremioTvService {
     String seed,
   ) async {
     try {
-      final details = await ImdbLookupService.getTitleDetails(imdbId)
-          .timeout(const Duration(seconds: 10));
-      final seasons = details['main']?['episodes']?['seasons'] as List<dynamic>?;
+      final details = await ImdbLookupService.getTitleDetails(
+        imdbId,
+      ).timeout(const Duration(seconds: 10));
+      final seasons =
+          details['main']?['episodes']?['seasons'] as List<dynamic>?;
       if (seasons == null || seasons.isEmpty) return null;
 
       // Extract season numbers, filter out season 0 (specials)
@@ -494,7 +549,9 @@ class StremioTvService {
       final episodeHash = _djb2('episode:$seed');
       final episode = (episodeHash % 5) + 1; // 1-5
 
-      debugPrint('StremioTvService: Resolved episode via IMDbbot: S${season}E$episode');
+      debugPrint(
+        'StremioTvService: Resolved episode via IMDbbot: S${season}E$episode',
+      );
       return (season: season, episode: episode);
     } catch (e) {
       debugPrint('StremioTvService: IMDbbot fallback failed: $e');

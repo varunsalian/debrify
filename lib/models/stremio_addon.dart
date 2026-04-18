@@ -193,6 +193,36 @@ class StremioMeta {
     sourceAddon: addon,
   );
 
+  static StremioAddon? _parseSourceAddon(dynamic raw) {
+    if (raw is! Map) return null;
+    try {
+      final json = Map<String, dynamic>.from(raw);
+      if (json.containsKey('manifest_url') && json.containsKey('base_url')) {
+        return StremioAddon.fromJson(json);
+      }
+      final id = json['id'] as String?;
+      if (id == null || id.isEmpty) return null;
+      return StremioAddon(
+        id: id,
+        name: json['name'] as String? ?? id,
+        manifestUrl: '',
+        baseUrl: '',
+        enabled: json['enabled'] as bool? ?? true,
+        types: (json['types'] as List<dynamic>?)?.cast<String>() ?? const [],
+        resources:
+            (json['resources'] as List<dynamic>?)?.cast<String>() ?? const [],
+        idPrefixes: (json['id_prefixes'] as List<dynamic>?)?.cast<String>(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic>? _sourceAddonToJson(StremioAddon? addon) {
+    if (addon == null) return null;
+    return {'id': addon.id, 'name': addon.name};
+  }
+
   factory StremioMeta.fromJson(Map<String, dynamic> json) {
     // Handle rating - can be string or number
     double? rating;
@@ -255,6 +285,9 @@ class StremioMeta {
       year: year,
       imdbRating: rating,
       genres: (json['genres'] as List<dynamic>?)?.cast<String>(),
+      sourceAddon: _parseSourceAddon(
+        json['source_addon'] ?? json['sourceAddon'],
+      ),
     );
   }
 
@@ -272,6 +305,7 @@ class StremioMeta {
 
   /// Convert to a storage-friendly JSON map for local catalogs.
   Map<String, dynamic> toJson() {
+    final sourceAddonJson = _sourceAddonToJson(sourceAddon);
     return {
       'id': id,
       if (imdbId != null) 'imdb_id': imdbId,
@@ -283,6 +317,7 @@ class StremioMeta {
       if (year != null) 'year': year,
       if (imdbRating != null) 'rating': imdbRating,
       if (genres != null && genres!.isNotEmpty) 'genres': genres,
+      if (sourceAddonJson != null) 'source_addon': sourceAddonJson,
     };
   }
 
