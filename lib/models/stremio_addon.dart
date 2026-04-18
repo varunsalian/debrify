@@ -35,11 +35,11 @@ class StremioExtraParam {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        if (isRequired) 'isRequired': isRequired,
-        if (options != null) 'options': options,
-        if (optionsLimit != null) 'optionsLimit': optionsLimit,
-      };
+    'name': name,
+    if (isRequired) 'isRequired': isRequired,
+    if (options != null) 'options': options,
+    if (optionsLimit != null) 'optionsLimit': optionsLimit,
+  };
 
   @override
   String toString() =>
@@ -78,11 +78,9 @@ class StremioAddonCatalog {
   bool get supportsGenre => extraSupported?.contains('genre') ?? false;
 
   /// Get the genre extra param if available (for options)
-  StremioExtraParam? get genreParam =>
-      extras.cast<StremioExtraParam?>().firstWhere(
-            (e) => e?.name == 'genre',
-            orElse: () => null,
-          );
+  StremioExtraParam? get genreParam => extras
+      .cast<StremioExtraParam?>()
+      .firstWhere((e) => e?.name == 'genre', orElse: () => null);
 
   /// Get available genre options
   List<String> get genreOptions => genreParam?.options ?? [];
@@ -120,12 +118,12 @@ class StremioAddonCatalog {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'name': name,
-        if (extraSupported != null) 'extraSupported': extraSupported,
-        if (extras.isNotEmpty) 'extra': extras.map((e) => e.toJson()).toList(),
-      };
+    'id': id,
+    'type': type,
+    'name': name,
+    if (extraSupported != null) 'extraSupported': extraSupported,
+    if (extras.isNotEmpty) 'extra': extras.map((e) => e.toJson()).toList(),
+  };
 
   @override
   String toString() => 'StremioAddonCatalog(id: $id, type: $type, name: $name)';
@@ -252,7 +250,8 @@ class StremioMeta {
       name: json['name'] as String? ?? json['title'] as String? ?? 'Unknown',
       poster: json['poster'] as String?,
       background: json['background'] as String? ?? json['fanart'] as String?,
-      description: json['description'] as String? ?? json['overview'] as String?,
+      description:
+          json['description'] as String? ?? json['overview'] as String?,
       year: year,
       imdbRating: rating,
       genres: (json['genres'] as List<dynamic>?)?.cast<String>(),
@@ -271,8 +270,25 @@ class StremioMeta {
   /// Check if this is a non-IMDB content type (TV channel, etc.)
   bool get isNonImdb => !hasValidImdbId && hasValidId;
 
+  /// Convert to a storage-friendly JSON map for local catalogs.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      if (imdbId != null) 'imdb_id': imdbId,
+      'type': type,
+      'name': name,
+      if (poster != null) 'poster': poster,
+      if (background != null) 'background': background,
+      if (description != null) 'description': description,
+      if (year != null) 'year': year,
+      if (imdbRating != null) 'rating': imdbRating,
+      if (genres != null && genres!.isNotEmpty) 'genres': genres,
+    };
+  }
+
   @override
-  String toString() => 'StremioMeta(id: $id, imdbId: $imdbId, name: $name, year: $year)';
+  String toString() =>
+      'StremioMeta(id: $id, imdbId: $imdbId, name: $name, year: $year)';
 }
 
 /// Represents a section of catalog content for homepage display
@@ -670,8 +686,7 @@ class StremioStream {
   bool get isTorrent => infoHash != null && infoHash!.isNotEmpty;
 
   /// Whether this is a direct URL stream (has url but no infoHash)
-  bool get isDirectUrl =>
-      !isTorrent && url != null && url!.isNotEmpty;
+  bool get isDirectUrl => !isTorrent && url != null && url!.isNotEmpty;
 
   /// Whether this is an external URL stream (opens in browser)
   bool get isExternalUrl => externalUrl != null && externalUrl!.isNotEmpty;
@@ -722,8 +737,7 @@ class StremioStream {
         final parts = bingeGroup.split('|');
         // Check each part for a valid SHA1 hash (40 hex chars)
         for (final part in parts) {
-          if (part.length == 40 &&
-              RegExp(r'^[a-fA-F0-9]+$').hasMatch(part)) {
+          if (part.length == 40 && RegExp(r'^[a-fA-F0-9]+$').hasMatch(part)) {
             infoHash = part;
             break;
           }
@@ -733,7 +747,8 @@ class StremioStream {
 
     // Get title - try description first (Comet uses this), then title (detailed info
     // with torrent name/size/seeders), then name (short addon label like "Torrentio")
-    String? title = json['description'] as String? ??
+    String? title =
+        json['description'] as String? ??
         json['title'] as String? ??
         json['name'] as String?;
 

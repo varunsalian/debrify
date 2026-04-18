@@ -15,6 +15,7 @@ import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
 import 'trakt/trakt_menu_helpers.dart';
 
@@ -114,11 +115,18 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   final ScrollController _scrollController = ScrollController();
 
   // Focus nodes for TV/DPAD navigation
-  final FocusNode _providerDropdownFocusNode = FocusNode(debugLabel: 'provider_dropdown');
-  final FocusNode _catalogDropdownFocusNode = FocusNode(debugLabel: 'catalog_dropdown');
-  final FocusNode _genreDropdownFocusNode = FocusNode(debugLabel: 'genre_dropdown');
+  final FocusNode _providerDropdownFocusNode = FocusNode(
+    debugLabel: 'provider_dropdown',
+  );
+  final FocusNode _catalogDropdownFocusNode = FocusNode(
+    debugLabel: 'catalog_dropdown',
+  );
+  final FocusNode _genreDropdownFocusNode = FocusNode(
+    debugLabel: 'genre_dropdown',
+  );
   List<FocusNode> _contentFocusNodes = [];
-  int _focusedContentIndex = -1; // Track last focused content item for sidebar navigation
+  int _focusedContentIndex =
+      -1; // Track last focused content item for sidebar navigation
 
   // Focus state trackers for visual indicators
   final ValueNotifier<bool> _providerDropdownFocused = ValueNotifier(false);
@@ -144,8 +152,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   Map<String, double> _episodeWatchProgress = {};
   List<FocusNode> _episodeFocusNodes = [];
   final ScrollController _episodeScrollController = ScrollController();
-  final FocusNode _episodeBackButtonFocusNode = FocusNode(debugLabel: 'catalog-ep-back');
-  final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(debugLabel: 'catalog-ep-season');
+  final FocusNode _episodeBackButtonFocusNode = FocusNode(
+    debugLabel: 'catalog-ep-back',
+  );
+  final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(
+    debugLabel: 'catalog-ep-season',
+  );
 
   /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
@@ -174,7 +186,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       }
       return false;
     }
-    if (_focusedContentIndex >= 0 && _focusedContentIndex < _contentFocusNodes.length) {
+    if (_focusedContentIndex >= 0 &&
+        _focusedContentIndex < _contentFocusNodes.length) {
       _contentFocusNodes[_focusedContentIndex].requestFocus();
       return true;
     }
@@ -223,7 +236,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _providerDropdownFocusNode.onKeyEvent = _handleProviderDropdownKeyEvent;
     _catalogDropdownFocusNode.onKeyEvent = _handleCatalogDropdownKeyEvent;
     _genreDropdownFocusNode.onKeyEvent = _handleGenreDropdownKeyEvent;
-    _episodeSeasonDropdownFocusNode.onKeyEvent = _handleEpisodeSeasonDropdownKeyEvent;
+    _episodeSeasonDropdownFocusNode.onKeyEvent =
+        _handleEpisodeSeasonDropdownKeyEvent;
   }
 
   /// Navigate down from top dropdowns: if in episode mode, go to season dropdown; otherwise content items.
@@ -240,7 +254,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
   }
 
-  KeyEventResult _handleProviderDropdownKeyEvent(FocusNode node, KeyEvent event) {
+  KeyEventResult _handleProviderDropdownKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     // Up arrow: navigate to Sources above
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -260,7 +277,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _handleCatalogDropdownKeyEvent(FocusNode node, KeyEvent event) {
+  KeyEventResult _handleCatalogDropdownKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     // Up arrow: navigate to Sources above
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -412,7 +432,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                       .firstOrNull;
                 }
               }
-              _selectedCatalog = defaultCatalog ?? _selectedAddon!.catalogs.first;
+              _selectedCatalog =
+                  defaultCatalog ?? _selectedAddon!.catalogs.first;
               _loadContent();
             }
           }
@@ -427,7 +448,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             _pendingEpisodeEpisode = null;
             // Schedule after setState completes
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _enterEpisodeMode(pending, initialSeason: pendingSeason, initialEpisode: pendingEpisode);
+              if (mounted)
+                _enterEpisodeMode(
+                  pending,
+                  initialSeason: pendingSeason,
+                  initialEpisode: pendingEpisode,
+                );
             });
           }
         });
@@ -457,7 +483,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   }
 
   Future<void> _loadMoreContent() async {
-    if (_isLoadingContent || !_hasMoreContent || _selectedAddon == null || _selectedCatalog == null) return;
+    if (_isLoadingContent ||
+        !_hasMoreContent ||
+        _selectedAddon == null ||
+        _selectedCatalog == null)
+      return;
     // Set loading flag immediately to prevent race condition from rapid scroll events
     setState(() => _isLoadingContent = true);
     await _fetchContent();
@@ -514,7 +544,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     });
 
     try {
-      final results = await _stremioService.searchAddonCatalogs(_selectedAddon!, query);
+      final results = await _stremioService.searchAddonCatalogs(
+        _selectedAddon!,
+        query,
+      );
 
       if (mounted) {
         setState(() {
@@ -579,7 +612,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     setState(() {
       _selectedAddon = addon;
       // Reset catalog and genre when addon changes
-      _selectedCatalog = addon.catalogs.isNotEmpty ? addon.catalogs.first : null;
+      _selectedCatalog = addon.catalogs.isNotEmpty
+          ? addon.catalogs.first
+          : null;
       _selectedGenre = null;
     });
     if (_selectedCatalog != null) {
@@ -610,7 +645,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     if (widget.onItemSelected == null) return;
 
     // For series, try episode drill-down if addon supports meta
-    if (item.type == 'series' && _selectedAddon != null && _selectedAddon!.supportsMeta) {
+    if (item.type == 'series' &&
+        _selectedAddon != null &&
+        _selectedAddon!.supportsMeta) {
       _enterEpisodeMode(item);
       return;
     }
@@ -637,7 +674,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       // Try IMDB-based lookup first (reliable, no title guessing)
       final imdbId = item.effectiveImdbId;
       if (imdbId != null) {
-        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+          imdbId,
+        );
         if (!mounted) return;
         if (lastPlayed != null) {
           season = lastPlayed['season'] as int?;
@@ -647,7 +686,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
       // Fallback to title-based lookup (for existing data written before imdbId tracking)
       if (season == null || episode == null) {
-        final byTitle = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
+        final byTitle = await StorageService.getLastPlayedEpisode(
+          seriesTitle: item.name,
+        );
         if (!mounted) return;
         if (byTitle != null) {
           season = byTitle['season'] as int?;
@@ -679,7 +720,25 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
   }
 
-  KeyEventResult _handleContentItemKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
+  Future<void> _handleAddToStremioTv(StremioMeta item) async {
+    final result = await StremioTvCatalogPickerDialog.show(context, item: item);
+    if (!mounted || result == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.duplicate
+            ? Colors.orange.shade700
+            : const Color(0xFF34D399),
+      ),
+    );
+  }
+
+  KeyEventResult _handleContentItemKey(
+    int index,
+    KeyEvent event, {
+    bool? isQuickPlayFocused,
+  }) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // List navigation (up/down only)
@@ -711,9 +770,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   @override
   Widget build(BuildContext context) {
     if (_isLoadingAddons) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_addons.isEmpty) {
@@ -769,9 +826,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _buildFiltersRow(),
         const SizedBox(height: 12),
         // Content list
-        Expanded(
-          child: _buildContentList(),
-        ),
+        Expanded(child: _buildContentList()),
       ],
     );
   }
@@ -802,15 +857,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           return Row(
             children: [
               // Catalog dropdown
-              Expanded(
-                child: _buildCatalogDropdown(),
-              ),
+              Expanded(child: _buildCatalogDropdown()),
               // Genre dropdown (if supported)
               if (_selectedCatalog?.supportsGenre ?? false) ...[
                 const SizedBox(width: 12),
-                Expanded(
-                  child: _buildGenreDropdown(),
-                ),
+                Expanded(child: _buildGenreDropdown()),
               ],
             ],
           );
@@ -856,9 +907,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               ),
               hint: Text(
                 'Select Provider',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
               ),
               items: _addons.map((addon) {
                 return DropdownMenuItem(
@@ -928,9 +977,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               ),
               hint: Text(
                 'Select Catalog',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
               ),
               items: catalogs.map((catalog) {
                 return DropdownMenuItem(
@@ -1004,9 +1051,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               ),
               hint: Text(
                 'All Genres',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
               ),
               items: [
                 DropdownMenuItem<String?>(
@@ -1114,7 +1159,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   /// Load bound sources for all currently displayed series and movie items.
   Future<void> _loadBoundSources() async {
-    final items = _content.where((i) => i.type == 'movie' || i.type == 'series');
+    final items = _content.where(
+      (i) => i.type == 'movie' || i.type == 'series',
+    );
     final contentImdbIds = <String>{};
     final sources = <String, List<SeriesSource>>{};
     for (final item in items) {
@@ -1127,7 +1174,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       setState(() {
         // Remove stale entries for content items, then merge new ones
         // Preserves entries for the episode-mode show (not in _content)
-        _boundSources.removeWhere((k, _) => contentImdbIds.contains(k) && !sources.containsKey(k));
+        _boundSources.removeWhere(
+          (k, _) => contentImdbIds.contains(k) && !sources.containsKey(k),
+        );
         _boundSources.addAll(sources);
       });
     }
@@ -1153,7 +1202,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   Future<void> _loadEpisodeWatchProgress(StremioMeta show) async {
     final imdbId = show.effectiveImdbId;
     if (imdbId == null) return;
-    final progress = await StorageService.getEpisodeWatchProgressByImdbId(imdbId);
+    final progress = await StorageService.getEpisodeWatchProgressByImdbId(
+      imdbId,
+    );
     if (mounted) {
       setState(() => _episodeWatchProgress = progress);
     }
@@ -1190,19 +1241,19 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       onTorrentSearch: () => widget.onSelectSource?.call(item),
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: true,
-                torboxEnabled: false,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: true,
+              torboxEnabled: false,
+            )
           : null,
       onTorbox: torboxEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: false,
-                torboxEnabled: true,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: false,
+              torboxEnabled: true,
+            )
           : null,
     );
   }
@@ -1223,9 +1274,14 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           builder: (dialogContext, setDialogState) {
             return Dialog(
               backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                constraints: const BoxConstraints(
+                  maxWidth: 450,
+                  maxHeight: 500,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -1233,10 +1289,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const Icon(
+                            Icons.link_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
+                            isMovie
+                                ? 'Movie Source'
+                                : 'Series Sources (${sources.length})',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -1251,94 +1313,118 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'First match wins — reorder by priority',
-                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
                       const SizedBox(height: 12),
                       Flexible(
                         child: isMovie
-                          ? ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  showDragHandle: false,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                            ? ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    showDragHandle: false,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            )
-                          : ReorderableListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              onReorder: (oldIndex, newIndex) {
-                                if (newIndex > oldIndex) newIndex--;
-                                setDialogState(() {
-                                  final item = sources.removeAt(oldIndex);
-                                  sources.insert(newIndex, item);
-                                });
-                                SeriesSourceService.setSources(imdbId, List.of(sources));
-                                setState(() => _boundSources[imdbId] = List.of(sources));
-                              },
-                              proxyDecorator: (child, index, animation) {
-                                return Material(
-                                  color: Colors.transparent,
-                                  elevation: 4,
-                                  child: child,
-                                );
-                              },
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              )
+                            : ReorderableListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  if (newIndex > oldIndex) newIndex--;
+                                  setDialogState(() {
+                                    final item = sources.removeAt(oldIndex);
+                                    sources.insert(newIndex, item);
+                                  });
+                                  SeriesSourceService.setSources(
+                                    imdbId,
+                                    List.of(sources),
+                                  );
+                                  setState(
+                                    () => _boundSources[imdbId] = List.of(
+                                      sources,
+                                    ),
+                                  );
+                                },
+                                proxyDecorator: (child, index, animation) {
+                                  return Material(
+                                    color: Colors.transparent,
+                                    elevation: 4,
+                                    child: child,
+                                  );
+                                },
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            ),
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -1349,11 +1435,20 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                                 Navigator.of(dialogContext).pop();
                                 widget.onSelectSource?.call(show);
                               },
-                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
-                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                              icon: Icon(
+                                isMovie
+                                    ? Icons.swap_horiz_rounded
+                                    : Icons.add_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isMovie ? 'Change Source' : 'Add Source',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ),
@@ -1362,17 +1457,34 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  await SeriesSourceService.removeAllSources(
+                                    imdbId,
+                                  );
                                   if (mounted) {
-                                    setState(() => _boundSources.remove(imdbId));
+                                    setState(
+                                      () => _boundSources.remove(imdbId),
+                                    );
                                   }
-                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                  if (dialogContext.mounted)
+                                    Navigator.of(dialogContext).pop();
                                 },
-                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_sweep_outlined,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove All',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1382,17 +1494,34 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  await SeriesSourceService.removeAllSources(
+                                    imdbId,
+                                  );
                                   if (mounted) {
-                                    setState(() => _boundSources.remove(imdbId));
+                                    setState(
+                                      () => _boundSources.remove(imdbId),
+                                    );
                                   }
-                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                  if (dialogContext.mounted)
+                                    Navigator.of(dialogContext).pop();
                                 },
-                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1402,13 +1531,18 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                       // Add from Debrid button
                       FutureBuilder<List<bool>>(
                         future: Future.wait([
-                          StorageService.getApiKey().then((k) => k != null && k.isNotEmpty),
-                          StorageService.getTorboxApiKey().then((k) => k != null && k.isNotEmpty),
+                          StorageService.getApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
+                          StorageService.getTorboxApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
                         ]),
                         builder: (context, snapshot) {
                           final rdEnabled = snapshot.data?[0] ?? false;
                           final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled) return const SizedBox.shrink();
+                          if (!rdEnabled && !torboxEnabled)
+                            return const SizedBox.shrink();
 
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -1424,11 +1558,23 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                                     torboxEnabled: torboxEnabled,
                                   );
                                 },
-                                icon: const Icon(Icons.cloud_download_outlined, size: 18, color: Color(0xFF60A5FA)),
-                                label: const Text('Add from Debrid', style: TextStyle(color: Color(0xFF60A5FA))),
+                                icon: const Icon(
+                                  Icons.cloud_download_outlined,
+                                  size: 18,
+                                  color: Color(0xFF60A5FA),
+                                ),
+                                label: const Text(
+                                  'Add from Debrid',
+                                  style: TextStyle(color: Color(0xFF60A5FA)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF60A5FA), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFF60A5FA),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1438,7 +1584,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ),
                     ],
                   ),
@@ -1474,25 +1623,29 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
 
     void pushRd() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DebridDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DebridDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     void pushTorbox() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => TorboxDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TorboxDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     // If only one provider, push directly
@@ -1520,12 +1673,19 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               padding: EdgeInsets.all(16),
               child: Text(
                 'Select Provider',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
-              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Real-Debrid',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushRd();
@@ -1533,7 +1693,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
-              title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'TorBox',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushTorbox();
@@ -1593,7 +1756,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               ),
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: Color(0xFF60A5FA),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1604,34 +1771,53 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               children: [
                 Text(
                   source.torrentName,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: serviceColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
                     serviceLabel,
-                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: serviceColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Color(0xFFEF4444),
+            ),
             onPressed: onDelete,
             tooltip: 'Remove source',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           if (showDragHandle)
-            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+            const Icon(
+              Icons.drag_handle_rounded,
+              size: 18,
+              color: Colors.white24,
+            ),
         ],
       ),
     );
@@ -1654,7 +1840,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected?.call(selection);
   }
 
-  void _enterEpisodeMode(StremioMeta show, {int? initialSeason, int? initialEpisode}) async {
+  void _enterEpisodeMode(
+    StremioMeta show, {
+    int? initialSeason,
+    int? initialEpisode,
+  }) async {
     final generation = ++_episodeModeGeneration;
 
     setState(() {
@@ -1697,11 +1887,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       final seasonMap = <int, List<TraktEpisode>>{};
       for (final v in videos) {
         final seasonRaw = v['season'];
-        final seasonNum = seasonRaw is int ? seasonRaw : (seasonRaw is num ? seasonRaw.toInt() : null);
+        final seasonNum = seasonRaw is int
+            ? seasonRaw
+            : (seasonRaw is num ? seasonRaw.toInt() : null);
         if (seasonNum == null || seasonNum <= 0) continue;
 
         final epRaw = v['number'] ?? v['episode'];
-        final epNum = epRaw is int ? epRaw : (epRaw is num ? epRaw.toInt() : null);
+        final epNum = epRaw is int
+            ? epRaw
+            : (epRaw is num ? epRaw.toInt() : null);
         if (epNum == null) continue;
 
         final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
@@ -1736,11 +1930,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           episodeCount: episodes.length,
           episodes: episodes,
         );
-      }).toList()
-        ..sort((a, b) => a.number.compareTo(b.number));
+      }).toList()..sort((a, b) => a.number.compareTo(b.number));
 
       // Pick the target season: prefer initialSeason if it exists in the data
-      final targetSeason = (initialSeason != null && seasons.any((s) => s.number == initialSeason))
+      final targetSeason =
+          (initialSeason != null &&
+              seasons.any((s) => s.number == initialSeason))
           ? seasons.firstWhere((s) => s.number == initialSeason)
           : seasons.first;
 
@@ -1767,7 +1962,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         if (focusIndex > 0 && _episodeScrollController.hasClients) {
           final offset = focusIndex * 128.0;
           _episodeScrollController.jumpTo(
-            offset.clamp(0.0, _episodeScrollController.position.maxScrollExtent),
+            offset.clamp(
+              0.0,
+              _episodeScrollController.position.maxScrollExtent,
+            ),
           );
         }
         // Focus the episode card after scroll
@@ -1981,22 +2179,25 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             // Select Source button
             if (_selectedShow != null && widget.onSelectSource != null) ...[
               const SizedBox(width: 8),
-              Builder(builder: (context) {
-                final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-                final sourceCount = _boundSources[imdbId]?.length ?? 0;
-                return _CatalogSelectSourceButton(
-                  hasBoundSource: sourceCount > 0,
-                  sourceCount: sourceCount,
-                  onTap: () => _handleSelectSourceAction(_selectedShow!),
-                  onLeftFocus: _episodeSeasons.isNotEmpty
-                      ? _episodeSeasonDropdownFocusNode
-                      : _episodeBackButtonFocusNode,
-                  onDownArrow: _episodeFocusNodes.isNotEmpty
-                      ? () => _episodeFocusNodes.first.requestFocus()
-                      : null,
-                  onUpArrow: () => widget.onRequestFocusAbove?.call(),
-                );
-              }),
+              Builder(
+                builder: (context) {
+                  final imdbId =
+                      _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+                  final sourceCount = _boundSources[imdbId]?.length ?? 0;
+                  return _CatalogSelectSourceButton(
+                    hasBoundSource: sourceCount > 0,
+                    sourceCount: sourceCount,
+                    onTap: () => _handleSelectSourceAction(_selectedShow!),
+                    onLeftFocus: _episodeSeasons.isNotEmpty
+                        ? _episodeSeasonDropdownFocusNode
+                        : _episodeBackButtonFocusNode,
+                    onDownArrow: _episodeFocusNodes.isNotEmpty
+                        ? () => _episodeFocusNodes.first.requestFocus()
+                        : null,
+                    onUpArrow: () => widget.onRequestFocusAbove?.call(),
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -2004,7 +2205,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     );
   }
 
-  KeyEventResult _handleEpisodeSeasonDropdownKeyEvent(FocusNode node, KeyEvent event) {
+  KeyEventResult _handleEpisodeSeasonDropdownKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+  ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       widget.onRequestFocusAbove?.call();
@@ -2042,7 +2246,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             border: Border.all(
               color: hasFocus
                   ? const Color(0xFF60A5FA)
-                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                  : Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.3),
               width: hasFocus ? 2.0 : 1.0,
             ),
             boxShadow: hasFocus
@@ -2127,11 +2333,14 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             child: _CatalogEpisodeCard(
               episode: episode,
               showPosterUrl: _selectedShow?.poster,
-              focusNode: index < _episodeFocusNodes.length ? _episodeFocusNodes[index] : null,
+              focusNode: index < _episodeFocusNodes.length
+                  ? _episodeFocusNodes[index]
+                  : null,
               onBrowse: () => _onEpisodeTap(episode),
               onQuickPlay: () => _onEpisodeQuickPlay(episode),
               showQuickPlay: widget.showQuickPlay,
-              watchProgress: _episodeWatchProgress['${episode.season}-${episode.number}'],
+              watchProgress:
+                  _episodeWatchProgress['${episode.season}-${episode.number}'],
               onKeyEvent: (event) => _handleEpisodeCardKey(index, event),
             ),
           );
@@ -2142,9 +2351,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   Widget _buildContentList() {
     if (_isLoadingContent && _content.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_content.isEmpty) {
@@ -2197,15 +2404,29 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             onQuickPlay: () => _onQuickPlay(item),
             onSources: () => _onItemTap(item),
             onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
-                _handleContentItemKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+                _handleContentItemKey(
+                  index,
+                  event,
+                  isQuickPlayFocused: isQuickPlayFocused,
+                ),
             showQuickPlay: widget.showQuickPlay,
-            onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
-                ? (action) => handleTraktMenuAction(context, item, action,
+            onTraktMenuAction:
+                (item.hasValidImdbId ||
+                    (item.hasValidId &&
+                        (item.type == 'movie' || item.type == 'series')))
+                ? (action) => handleTraktMenuAction(
+                    context,
+                    item,
+                    action,
                     onSelectSource: widget.onSelectSource,
                     onEditSource: _handleSelectSourceAction,
-                    onSearchPacks: widget.onSearchPacks)
+                    onSearchPacks: widget.onSearchPacks,
+                    onAddToStremioTv: _handleAddToStremioTv,
+                  )
                 : null,
-            hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
+            hasBoundSource: _boundSources.containsKey(
+              item.effectiveImdbId ?? item.id,
+            ),
             isTraktAuthenticated: _isTraktAuthenticated,
           ),
         );
@@ -2221,7 +2442,8 @@ class _CatalogItemCard extends StatefulWidget {
   final FocusNode? focusNode;
   final VoidCallback onQuickPlay;
   final VoidCallback onSources;
-  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused})
+  onKeyEvent;
   final bool showQuickPlay;
   final void Function(TraktItemMenuAction action)? onTraktMenuAction;
   final bool hasBoundSource;
@@ -2292,8 +2514,10 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event,
-        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
+    return widget.onKeyEvent(
+      event,
+      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
+    );
   }
 
   /// Strip HTML tags from description text
@@ -2327,115 +2551,120 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
       child: GestureDetector(
         onTap: widget.onSources,
         child: widget.isTelevision
-          ? Container(
-              clipBehavior: Clip.hardEdge,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: _isFocused
-                      ? Colors.white.withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: 0.06),
-                  width: _isFocused ? 1.5 : 1,
+            ? Container(
+                clipBehavior: Clip.hardEdge,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _isFocused
+                        ? Colors.white.withValues(alpha: 0.35)
+                        : Colors.white.withValues(alpha: 0.06),
+                    width: _isFocused ? 1.5 : 1,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _buildBackdropImage(
+                        widget.item.background ?? widget.item.poster,
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.95),
+                              Colors.black.withValues(alpha: 0.8),
+                              Colors.black.withValues(alpha: 0.5),
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final useVerticalLayout = constraints.maxWidth < 500;
+                          return useVerticalLayout
+                              ? _buildVerticalLayout(theme, colorScheme)
+                              : _buildHorizontalLayout(theme, colorScheme);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : AnimatedScale(
+                scale: _isFocused ? 1.02 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _isFocused
+                          ? Colors.white.withValues(alpha: 0.35)
+                          : Colors.white.withValues(alpha: 0.06),
+                      width: _isFocused ? 1.5 : 1,
+                    ),
+                    boxShadow: _isFocused
+                        ? [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              blurRadius: 16,
+                              spreadRadius: 0,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: _buildBackdropImage(
+                            widget.item.background ?? widget.item.poster,
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.95),
+                                  Colors.black.withValues(alpha: 0.8),
+                                  Colors.black.withValues(alpha: 0.5),
+                                ],
+                                stops: const [0.0, 0.5, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final useVerticalLayout =
+                                  constraints.maxWidth < 500;
+                              return useVerticalLayout
+                                  ? _buildVerticalLayout(theme, colorScheme)
+                                  : _buildHorizontalLayout(theme, colorScheme);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
-                  ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.95),
-                            Colors.black.withValues(alpha: 0.8),
-                            Colors.black.withValues(alpha: 0.5),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final useVerticalLayout = constraints.maxWidth < 500;
-                        return useVerticalLayout
-                            ? _buildVerticalLayout(theme, colorScheme)
-                            : _buildHorizontalLayout(theme, colorScheme);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : AnimatedScale(
-          scale: _isFocused ? 1.02 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _isFocused
-                    ? Colors.white.withValues(alpha: 0.35)
-                    : Colors.white.withValues(alpha: 0.06),
-                width: _isFocused ? 1.5 : 1,
-              ),
-              boxShadow: _isFocused
-                  ? [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        blurRadius: 16,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
-                  ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.95),
-                            Colors.black.withValues(alpha: 0.8),
-                            Colors.black.withValues(alpha: 0.5),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final useVerticalLayout = constraints.maxWidth < 500;
-                        return useVerticalLayout
-                            ? _buildVerticalLayout(theme, colorScheme)
-                            : _buildHorizontalLayout(theme, colorScheme);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -2463,25 +2692,33 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
+                  shadows: widget.isTelevision
+                      ? null
+                      : [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+              if (widget.item.genres != null &&
+                  widget.item.genres!.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   children: widget.item.genres!.take(3).map((genre) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                       ),
                       child: Text(
                         genre,
@@ -2495,7 +2732,8 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                   }).toList(),
                 ),
               ],
-              if (widget.item.description != null && widget.item.description!.isNotEmpty &&
+              if (widget.item.description != null &&
+                  widget.item.description!.isNotEmpty &&
                   _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -2573,25 +2811,33 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
-                      shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
+                      shadows: widget.isTelevision
+                          ? null
+                          : [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                  if (widget.item.genres != null &&
+                      widget.item.genres!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
                       children: widget.item.genres!.take(3).map((genre) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
                           ),
                           child: Text(
                             genre,
@@ -2610,7 +2856,8 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
             ),
           ],
         ),
-        if (widget.item.description != null && widget.item.description!.isNotEmpty &&
+        if (widget.item.description != null &&
+            widget.item.description!.isNotEmpty &&
             _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
@@ -2643,7 +2890,8 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
                   color: _accentRed,
-                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  isHighlighted:
+                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
@@ -2682,11 +2930,7 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
         ],
         if (widget.item.imdbRating != null) ...[
           const SizedBox(width: 8),
-          Icon(
-            Icons.star_rounded,
-            size: 14,
-            color: const Color(0xFFFBBF24),
-          ),
+          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
           const SizedBox(width: 2),
           Text(
             widget.item.imdbRating!.toStringAsFixed(1),
@@ -2718,14 +2962,10 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isHighlighted
-                ? color
-                : Colors.black.withValues(alpha: 0.85),
+            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isHighlighted
-                  ? color
-                  : color.withValues(alpha: 0.6),
+              color: isHighlighted ? color : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -2745,14 +2985,18 @@ class _CatalogItemCardState extends State<_CatalogItemCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                color: isHighlighted
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    color: isHighlighted
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -3026,19 +3270,29 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _buildBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                _buildBackdropImage(
+                  widget.episode.thumbnailUrl ?? widget.showPosterUrl,
+                ),
                 if (widget.watchProgress != null && widget.watchProgress! > 0)
                   Positioned(
-                    bottom: 0, left: 0, right: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                        widthFactor: (widget.watchProgress! / 100).clamp(
+                          0.0,
+                          1.0,
+                        ),
                         child: Container(
                           height: 3,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [_accentRed, _accentRed.withValues(alpha: 0.7)],
+                              colors: [
+                                _accentRed,
+                                _accentRed.withValues(alpha: 0.7),
+                              ],
                             ),
                           ),
                         ),
@@ -3066,7 +3320,8 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
               ),
               const SizedBox(height: 4),
               _buildMetadataRow(),
-              if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+              if (widget.episode.overview != null &&
+                  widget.episode.overview!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
                   widget.episode.overview!,
@@ -3120,19 +3375,30 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _buildBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
-                    if (widget.watchProgress != null && widget.watchProgress! > 0)
+                    _buildBackdropImage(
+                      widget.episode.thumbnailUrl ?? widget.showPosterUrl,
+                    ),
+                    if (widget.watchProgress != null &&
+                        widget.watchProgress! > 0)
                       Positioned(
-                        bottom: 0, left: 0, right: 0,
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: FractionallySizedBox(
-                            widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                            widthFactor: (widget.watchProgress! / 100).clamp(
+                              0.0,
+                              1.0,
+                            ),
                             child: Container(
                               height: 3,
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [_accentRed, _accentRed.withValues(alpha: 0.7)],
+                                  colors: [
+                                    _accentRed,
+                                    _accentRed.withValues(alpha: 0.7),
+                                  ],
                                 ),
                               ),
                             ),
@@ -3164,7 +3430,8 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
             ),
           ],
         ),
-        if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+        if (widget.episode.overview != null &&
+            widget.episode.overview!.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             widget.episode.overview!,
@@ -3196,7 +3463,8 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
                   color: _accentRed,
-                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  isHighlighted:
+                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
@@ -3253,7 +3521,11 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+              const Icon(
+                Icons.star_rounded,
+                size: 13,
+                color: Color(0xFFFBBF24),
+              ),
               const SizedBox(width: 2),
               Text(
                 ep.rating!.toStringAsFixed(1),
@@ -3294,14 +3566,10 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isHighlighted
-                ? color
-                : Colors.black.withValues(alpha: 0.85),
+            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isHighlighted
-                  ? color
-                  : color.withValues(alpha: 0.6),
+              color: isHighlighted ? color : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -3321,14 +3589,18 @@ class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                color: isHighlighted
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    color: isHighlighted
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -3365,11 +3637,15 @@ class _CatalogSelectSourceButton extends StatefulWidget {
   });
 
   @override
-  State<_CatalogSelectSourceButton> createState() => _CatalogSelectSourceButtonState();
+  State<_CatalogSelectSourceButton> createState() =>
+      _CatalogSelectSourceButtonState();
 }
 
-class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> {
-  final FocusNode _focusNode = FocusNode(debugLabel: 'catalog-select-source-btn');
+class _CatalogSelectSourceButtonState
+    extends State<_CatalogSelectSourceButton> {
+  final FocusNode _focusNode = FocusNode(
+    debugLabel: 'catalog-select-source-btn',
+  );
   bool _isFocused = false;
 
   @override
@@ -3392,9 +3668,12 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
           widget.onUpArrow?.call();
-          return widget.onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+          return widget.onUpArrow != null
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftFocus != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftFocus != null) {
           widget.onLeftFocus!.requestFocus();
           return KeyEventResult.handled;
         }
@@ -3403,7 +3682,9 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
           widget.onDownArrow?.call();
-          return widget.onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+          return widget.onDownArrow != null
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
         }
         return KeyEventResult.ignored;
       },
@@ -3421,8 +3702,8 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
               color: _isFocused
                   ? const Color(0xFF60A5FA)
                   : widget.hasBoundSource
-                      ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
-                      : Colors.white.withValues(alpha: 0.15),
+                  ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.15),
               width: _isFocused ? 2 : 1,
             ),
             boxShadow: _isFocused
@@ -3438,7 +3719,9 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.hasBoundSource ? Icons.link_rounded : Icons.link_off_rounded,
+                widget.hasBoundSource
+                    ? Icons.link_rounded
+                    : Icons.link_off_rounded,
                 size: 16,
                 color: widget.hasBoundSource
                     ? const Color(0xFF60A5FA)
@@ -3447,7 +3730,9 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
               const SizedBox(width: 4),
               Text(
                 widget.hasBoundSource
-                    ? (widget.sourceCount > 1 ? 'Sources (${widget.sourceCount})' : 'Source')
+                    ? (widget.sourceCount > 1
+                          ? 'Sources (${widget.sourceCount})'
+                          : 'Source')
                     : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource
@@ -3464,4 +3749,3 @@ class _CatalogSelectSourceButtonState extends State<_CatalogSelectSourceButton> 
     );
   }
 }
-

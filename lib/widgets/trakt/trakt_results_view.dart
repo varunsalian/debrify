@@ -16,6 +16,7 @@ import '../../screens/debrid_downloads_screen.dart';
 import '../../screens/torbox/torbox_downloads_screen.dart';
 import '../../screens/trakt_calendar_screen.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../add_source_picker_dialog.dart';
 
 // ─── Shared OTT Constants ────────────────────────────────────────────────────
@@ -36,7 +37,8 @@ Widget _buildOttBackdropImage(String? imageUrl) {
     memCacheWidth: 600,
     fit: BoxFit.cover,
     placeholder: (context, url) => Container(decoration: _placeholderGradient),
-    errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),
+    errorWidget: (context, url, error) =>
+        Container(decoration: _placeholderGradient),
   );
 }
 
@@ -117,10 +119,7 @@ extension TraktListTypeExtension on TraktListType {
 }
 
 /// Content type for Trakt lists
-enum TraktContentType {
-  movies,
-  shows,
-}
+enum TraktContentType { movies, shows }
 
 extension TraktContentTypeExtension on TraktContentType {
   String get label {
@@ -152,6 +151,7 @@ class TraktResultsView extends StatefulWidget {
   final void Function(AdvancedSearchSelection)? onQuickPlay;
   final bool showQuickPlay;
   final VoidCallback? onUpArrowFromFilters;
+
   /// Called when user wants to select a torrent source for a series.
   /// Parent should trigger series probing search in select-source mode.
   final void Function(StremioMeta show)? onSelectSource;
@@ -214,10 +214,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   // Focus nodes for DPAD
   final FocusNode _listTypeFocusNode = FocusNode(debugLabel: 'trakt-list-type');
-  final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'trakt-content-type');
-  final FocusNode _customListFocusNode = FocusNode(debugLabel: 'trakt-custom-list');
-  final FocusNode _likedListFocusNode = FocusNode(debugLabel: 'trakt-liked-list');
-  final FocusNode _calendarButtonFocusNode = FocusNode(debugLabel: 'trakt-calendar-btn');
+  final FocusNode _contentTypeFocusNode = FocusNode(
+    debugLabel: 'trakt-content-type',
+  );
+  final FocusNode _customListFocusNode = FocusNode(
+    debugLabel: 'trakt-custom-list',
+  );
+  final FocusNode _likedListFocusNode = FocusNode(
+    debugLabel: 'trakt-liked-list',
+  );
+  final FocusNode _calendarButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-calendar-btn',
+  );
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
@@ -234,8 +242,12 @@ class TraktResultsViewState extends State<TraktResultsView> {
   ({int season, int episode})? _nextEpisode;
   final ScrollController _episodeScrollController = ScrollController();
   final List<FocusNode> _episodeFocusNodes = [];
-  final FocusNode _seasonDropdownFocusNode = FocusNode(debugLabel: 'trakt-season-dropdown');
-  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'trakt-back-button');
+  final FocusNode _seasonDropdownFocusNode = FocusNode(
+    debugLabel: 'trakt-season-dropdown',
+  );
+  final FocusNode _backButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-back-button',
+  );
 
   @override
   void initState() {
@@ -288,14 +300,21 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Future<void> _checkAuthAndLoad() async {
     // Load saved Trakt defaults (list type + content type)
     final savedListType = await StorageService.getHomeDefaultTraktListType();
-    final savedContentType = await StorageService.getHomeDefaultTraktContentType();
+    final savedContentType =
+        await StorageService.getHomeDefaultTraktContentType();
     if (!mounted) return;
     if (savedListType != null) {
-      final listType = TraktListType.values.where((t) => t.apiValue == savedListType || t.name == savedListType).firstOrNull;
+      final listType = TraktListType.values
+          .where((t) => t.apiValue == savedListType || t.name == savedListType)
+          .firstOrNull;
       if (listType != null) _selectedListType = listType;
     }
     if (savedContentType != null) {
-      final contentType = TraktContentType.values.where((t) => t.apiValue == savedContentType || t.name == savedContentType).firstOrNull;
+      final contentType = TraktContentType.values
+          .where(
+            (t) => t.apiValue == savedContentType || t.name == savedContentType,
+          )
+          .firstOrNull;
       if (contentType != null) _selectedContentType = contentType;
     }
 
@@ -312,7 +331,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   Future<void> _fetchItems() async {
     // Search type: don't auto-fetch, wait for query
-    if (_selectedListType == TraktListType.search && widget.searchQuery.isEmpty) {
+    if (_selectedListType == TraktListType.search &&
+        widget.searchQuery.isEmpty) {
       setState(() {
         _isLoading = false;
         _items = [];
@@ -338,8 +358,13 @@ class TraktResultsViewState extends State<TraktResultsView> {
       List<dynamic> rawItems;
 
       if (_selectedListType == TraktListType.search) {
-        final searchType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
-        rawItems = await _traktService.searchItems(widget.searchQuery, searchType);
+        final searchType = _selectedContentType == TraktContentType.shows
+            ? 'show'
+            : 'movie';
+        rawItems = await _traktService.searchItems(
+          widget.searchQuery,
+          searchType,
+        );
       } else if (_selectedListType == TraktListType.customList) {
         // Load custom lists if not loaded
         if (!_customListsLoaded) {
@@ -361,7 +386,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
           return;
         }
 
-        final listSlug = _selectedCustomList!['ids']?['slug'] as String? ??
+        final listSlug =
+            _selectedCustomList!['ids']?['slug'] as String? ??
             _selectedCustomList!['ids']?['trakt']?.toString();
         if (listSlug == null || listSlug.isEmpty) {
           if (!mounted) return;
@@ -396,10 +422,16 @@ class TraktResultsViewState extends State<TraktResultsView> {
           return;
         }
 
-        final listSlug = _selectedLikedList!['ids']?['slug'] as String? ??
+        final listSlug =
+            _selectedLikedList!['ids']?['slug'] as String? ??
             _selectedLikedList!['ids']?['trakt']?.toString();
-        final owner = (_selectedLikedList!['user'] as Map<String, dynamic>?)?['username'] as String?;
-        if (listSlug == null || listSlug.isEmpty || owner == null || owner.isEmpty) {
+        final owner =
+            (_selectedLikedList!['user'] as Map<String, dynamic>?)?['username']
+                as String?;
+        if (listSlug == null ||
+            listSlug.isEmpty ||
+            owner == null ||
+            owner.isEmpty) {
           if (!mounted) return;
           setState(() {
             _isLoading = false;
@@ -434,9 +466,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
             if (imdbId != null) playbackImdbIds.add(imdbId);
           }
 
-          final recentWithNext = await _traktService.fetchRecentShowsWithNextEpisode(
-            excludeImdbIds: playbackImdbIds,
-          );
+          final recentWithNext = await _traktService
+              .fetchRecentShowsWithNextEpisode(excludeImdbIds: playbackImdbIds);
           if (!mounted) return;
 
           if (recentWithNext.isNotEmpty) {
@@ -458,7 +489,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final pbId = raw['id'] as int?;
-          final contentKey = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
+          final contentKey = _selectedContentType == TraktContentType.shows
+              ? 'show'
+              : 'movie';
           final content = raw[contentKey] as Map<String, dynamic>?;
           final ids = content?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
@@ -473,13 +506,19 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
       // Transform raw items into StremioMeta objects
       final List<StremioMeta> metas;
-      if ((_selectedListType == TraktListType.progress || _selectedListType == TraktListType.history) &&
+      if ((_selectedListType == TraktListType.progress ||
+              _selectedListType == TraktListType.history) &&
           _selectedContentType == TraktContentType.shows) {
         // Playback/history episodes → deduplicate into shows
         metas = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
       } else {
-        final inferredType = _selectedContentType == TraktContentType.shows ? 'show' : 'movie';
-        metas = TraktItemTransformer.transformList(rawItems, inferredType: inferredType);
+        final inferredType = _selectedContentType == TraktContentType.shows
+            ? 'show'
+            : 'movie';
+        metas = TraktItemTransformer.transformList(
+          rawItems,
+          inferredType: inferredType,
+        );
       }
 
       setState(() {
@@ -489,7 +528,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       _applySearchFilter(); // Also rebuilds _cardFocusNodes
 
       // Load bound sources for series and movie items (non-blocking)
-      if (_selectedContentType == TraktContentType.shows || _selectedContentType == TraktContentType.movies) {
+      if (_selectedContentType == TraktContentType.shows ||
+          _selectedContentType == TraktContentType.movies) {
         _loadBoundSources();
       }
 
@@ -645,7 +685,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
         // Fetch episode-specific playback progress from Trakt
         if (season != null && episode != null) {
-          final episodeProgress = await _traktService.fetchEpisodePlaybackProgress(showId);
+          final episodeProgress = await _traktService
+              .fetchEpisodePlaybackProgress(showId);
           if (!mounted) return;
           final key = '$season-$episode';
           final p = episodeProgress[key];
@@ -677,7 +718,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
-  Future<void> _onMenuAction(StremioMeta item, TraktItemMenuAction action) async {
+  Future<void> _onMenuAction(
+    StremioMeta item,
+    TraktItemMenuAction action,
+  ) async {
     final imdbId = item.effectiveImdbId ?? item.id;
     final type = item.type;
     bool success = false;
@@ -722,28 +766,37 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case TraktItemMenuAction.addToList:
         final list = await _showCustomListPickerDialog();
         if (list == null) return;
-        final listSlug = list['ids']?['slug'] as String? ??
+        final listSlug =
+            list['ids']?['slug'] as String? ??
             list['ids']?['trakt']?.toString();
         if (listSlug == null || listSlug.isEmpty) return;
         actionLabel = 'Added to "${list['name']}"';
         success = await _traktService.addToCustomList(listSlug, imdbId, type);
       case TraktItemMenuAction.removeFromList:
         if (_selectedCustomList == null) return;
-        final listSlug = _selectedCustomList!['ids']?['slug'] as String? ??
+        final listSlug =
+            _selectedCustomList!['ids']?['slug'] as String? ??
             _selectedCustomList!['ids']?['trakt']?.toString();
         if (listSlug == null || listSlug.isEmpty) return;
         actionLabel = 'Removed from List';
         success = await _traktService.removeFromCustomList(
-            listSlug, imdbId, type);
+          listSlug,
+          imdbId,
+          type,
+        );
         if (success && mounted) _fetchItems();
       case TraktItemMenuAction.removeFromPlayback:
         final pbIds = _playbackIds[imdbId];
         if (pbIds == null || pbIds.isEmpty) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('No in-progress playback to remove — try marking the next episode as watched instead'),
-              duration: Duration(seconds: 3),
-            ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No in-progress playback to remove — try marking the next episode as watched instead',
+                ),
+                duration: Duration(seconds: 3),
+              ),
+            );
           }
           return;
         }
@@ -753,6 +806,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
           if (ok) success = true;
         }
         if (success && mounted) _fetchItems();
+      case TraktItemMenuAction.addToStremioTv:
+        await _handleAddToStremioTv(item);
+        return;
       case TraktItemMenuAction.selectSource:
         _handleSelectSourceAction(item);
         return; // Handled via dialog, no snackbar needed
@@ -762,18 +818,35 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-      backgroundColor:
-          success ? const Color(0xFF34D399) : const Color(0xFFEF4444),
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<int?> _showRatingDialog() => showTraktRatingDialog(context);
 
   Future<Map<String, dynamic>?> _showCustomListPickerDialog() =>
       showTraktCustomListPickerDialog(context);
+
+  Future<void> _handleAddToStremioTv(StremioMeta item) async {
+    final result = await StremioTvCatalogPickerDialog.show(context, item: item);
+    if (!mounted || result == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.duplicate
+            ? Colors.orange.shade700
+            : const Color(0xFF34D399),
+      ),
+    );
+  }
 
   /// Public: refresh bound sources cache (call after Select Source completes).
   void refreshBoundSources() {
@@ -783,7 +856,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   /// Load bound sources for all currently displayed series and movie items.
   Future<void> _loadBoundSources() async {
-    final seriesItems = _filteredItems.where((i) => i.type == 'series' || i.type == 'movie');
+    final seriesItems = _filteredItems.where(
+      (i) => i.type == 'series' || i.type == 'movie',
+    );
     final sources = <String, List<SeriesSource>>{};
     for (final item in seriesItems) {
       final imdbId = item.effectiveImdbId ?? item.id;
@@ -813,7 +888,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
   Future<void> _showEditSourceDialog(StremioMeta show) async {
     final imdbId = show.effectiveImdbId ?? show.id;
     final isMovie = show.type == 'movie';
-    var sources = _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
+    var sources =
+        _boundSources[imdbId] ?? await SeriesSourceService.getSources(imdbId);
     if (sources.isEmpty || !mounted) return;
 
     await showDialog<void>(
@@ -823,9 +899,14 @@ class TraktResultsViewState extends State<TraktResultsView> {
           builder: (dialogContext, setDialogState) {
             return Dialog(
               backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                constraints: const BoxConstraints(
+                  maxWidth: 450,
+                  maxHeight: 500,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -833,10 +914,16 @@ class TraktResultsViewState extends State<TraktResultsView> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const Icon(
+                            Icons.link_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
+                            isMovie
+                                ? 'Movie Source'
+                                : 'Series Sources (${sources.length})',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -851,95 +938,119 @@ class TraktResultsViewState extends State<TraktResultsView> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'First match wins — reorder by priority',
-                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
                       const SizedBox(height: 12),
                       Flexible(
                         child: isMovie
-                          ? ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  showDragHandle: false,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                            ? ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    showDragHandle: false,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            )
-                          : ReorderableListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              onReorder: (oldIndex, newIndex) {
-                                if (newIndex > oldIndex) newIndex--;
-                                setDialogState(() {
-                                  final item = sources.removeAt(oldIndex);
-                                  sources.insert(newIndex, item);
-                                });
-                                // Persist reorder (defensive copy)
-                                SeriesSourceService.setSources(imdbId, List.of(sources));
-                                setState(() => _boundSources[imdbId] = List.of(sources));
-                              },
-                              proxyDecorator: (child, index, animation) {
-                                return Material(
-                                  color: Colors.transparent,
-                                  elevation: 4,
-                                  child: child,
-                                );
-                              },
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              )
+                            : ReorderableListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  if (newIndex > oldIndex) newIndex--;
+                                  setDialogState(() {
+                                    final item = sources.removeAt(oldIndex);
+                                    sources.insert(newIndex, item);
+                                  });
+                                  // Persist reorder (defensive copy)
+                                  SeriesSourceService.setSources(
+                                    imdbId,
+                                    List.of(sources),
+                                  );
+                                  setState(
+                                    () => _boundSources[imdbId] = List.of(
+                                      sources,
+                                    ),
+                                  );
+                                },
+                                proxyDecorator: (child, index, animation) {
+                                  return Material(
+                                    color: Colors.transparent,
+                                    elevation: 4,
+                                    child: child,
+                                  );
+                                },
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            ),
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -950,11 +1061,20 @@ class TraktResultsViewState extends State<TraktResultsView> {
                                 Navigator.of(dialogContext).pop();
                                 widget.onSelectSource?.call(show);
                               },
-                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
-                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                              icon: Icon(
+                                isMovie
+                                    ? Icons.swap_horiz_rounded
+                                    : Icons.add_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isMovie ? 'Change Source' : 'Add Source',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ),
@@ -963,17 +1083,34 @@ class TraktResultsViewState extends State<TraktResultsView> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  await SeriesSourceService.removeAllSources(
+                                    imdbId,
+                                  );
                                   if (mounted) {
-                                    setState(() => _boundSources.remove(imdbId));
+                                    setState(
+                                      () => _boundSources.remove(imdbId),
+                                    );
                                   }
-                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                  if (dialogContext.mounted)
+                                    Navigator.of(dialogContext).pop();
                                 },
-                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_sweep_outlined,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove All',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -983,13 +1120,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
                       // Add from Debrid button
                       FutureBuilder<List<bool>>(
                         future: Future.wait([
-                          StorageService.getApiKey().then((k) => k != null && k.isNotEmpty),
-                          StorageService.getTorboxApiKey().then((k) => k != null && k.isNotEmpty),
+                          StorageService.getApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
+                          StorageService.getTorboxApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
                         ]),
                         builder: (context, snapshot) {
                           final rdEnabled = snapshot.data?[0] ?? false;
                           final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled) return const SizedBox.shrink();
+                          if (!rdEnabled && !torboxEnabled)
+                            return const SizedBox.shrink();
 
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -1005,11 +1147,23 @@ class TraktResultsViewState extends State<TraktResultsView> {
                                     torboxEnabled: torboxEnabled,
                                   );
                                 },
-                                icon: const Icon(Icons.cloud_download_outlined, size: 18, color: Color(0xFF60A5FA)),
-                                label: const Text('Add from Debrid', style: TextStyle(color: Color(0xFF60A5FA))),
+                                icon: const Icon(
+                                  Icons.cloud_download_outlined,
+                                  size: 18,
+                                  color: Color(0xFF60A5FA),
+                                ),
+                                label: const Text(
+                                  'Add from Debrid',
+                                  style: TextStyle(color: Color(0xFF60A5FA)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF60A5FA), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFF60A5FA),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1019,7 +1173,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ),
                     ],
                   ),
@@ -1055,25 +1212,29 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
 
     void pushRd() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DebridDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DebridDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     void pushTorbox() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => TorboxDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TorboxDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     if (rdEnabled && !torboxEnabled) {
@@ -1099,12 +1260,19 @@ class TraktResultsViewState extends State<TraktResultsView> {
               padding: EdgeInsets.all(16),
               child: Text(
                 'Select Provider',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
-              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Real-Debrid',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushRd();
@@ -1112,7 +1280,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
-              title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'TorBox',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushTorbox();
@@ -1173,7 +1344,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
               ),
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: Color(0xFF60A5FA),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1185,20 +1360,31 @@ class TraktResultsViewState extends State<TraktResultsView> {
               children: [
                 Text(
                   source.torrentName,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: serviceColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
                     serviceLabel,
-                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: serviceColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -1206,7 +1392,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
           ),
           // Delete button
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Color(0xFFEF4444),
+            ),
             onPressed: onDelete,
             tooltip: 'Remove source',
             padding: EdgeInsets.zero,
@@ -1214,7 +1404,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
           ),
           // Drag handle
           if (showDragHandle)
-            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+            const Icon(
+              Icons.drag_handle_rounded,
+              size: 18,
+              color: Colors.white24,
+            ),
         ],
       ),
     );
@@ -1250,19 +1444,19 @@ class TraktResultsViewState extends State<TraktResultsView> {
       onTorrentSearch: () => widget.onSelectSource?.call(item),
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: true,
-                torboxEnabled: false,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: true,
+              torboxEnabled: false,
+            )
           : null,
       onTorbox: torboxEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: false,
-                torboxEnabled: true,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: false,
+              torboxEnabled: true,
+            )
           : null,
     );
   }
@@ -1365,7 +1559,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
           node.dispose();
         }
         _episodeFocusNodes.clear();
-        final targetSeasonObj = seasons.firstWhere((s) => s.number == targetSeason);
+        final targetSeasonObj = seasons.firstWhere(
+          (s) => s.number == targetSeason,
+        );
         for (int i = 0; i < targetSeasonObj.episodes.length; i++) {
           _episodeFocusNodes.add(FocusNode(debugLabel: 'trakt-ep-$i'));
         }
@@ -1388,13 +1584,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
             (s) => s.number == targetSeason,
             orElse: () => _seasons.first,
           );
-          final epIndex = season.episodes.indexWhere((e) => e.number == nextEpisode.episode);
+          final epIndex = season.episodes.indexWhere(
+            (e) => e.number == nextEpisode.episode,
+          );
           if (epIndex >= 0) {
             // Scroll to the episode if it's not at the top
             if (epIndex > 0 && _episodeScrollController.hasClients) {
-              final maxExtent = _episodeScrollController.position.maxScrollExtent;
+              final maxExtent =
+                  _episodeScrollController.position.maxScrollExtent;
               final ratio = epIndex / season.episodes.length;
-              _episodeScrollController.jumpTo((maxExtent * ratio).clamp(0.0, maxExtent));
+              _episodeScrollController.jumpTo(
+                (maxExtent * ratio).clamp(0.0, maxExtent),
+              );
             }
             // After the item is built, focus it and ensure visible
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1456,7 +1657,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
         final s = ep['season'] as int?;
         final e = ep['number'] as int?;
         final image = ep['image'] as Map<String, dynamic>?;
-        final url = image?['medium'] as String? ?? image?['original'] as String?;
+        final url =
+            image?['medium'] as String? ?? image?['original'] as String?;
         if (s != null && e != null && url != null) {
           imageMap['$s-$e'] = url;
         }
@@ -1499,7 +1701,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       }
       // Overlay playback progress (only for episodes not already fully watched)
       for (final entry in playback.entries) {
-        if (merged[entry.key] == 100.0) continue; // Don't downgrade fully watched
+        if (merged[entry.key] == 100.0)
+          continue; // Don't downgrade fully watched
         if (entry.value > 5.0) {
           merged[entry.key] = entry.value;
         }
@@ -1563,7 +1766,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
-      traktProgressPercent: _episodeWatchProgress['${episode.season}-${episode.number}'],
+      traktProgressPercent:
+          _episodeWatchProgress['${episode.season}-${episode.number}'],
       traktSource: true,
     );
     widget.onItemSelected(selection);
@@ -1581,7 +1785,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
-      traktProgressPercent: _episodeWatchProgress['${episode.season}-${episode.number}'],
+      traktProgressPercent:
+          _episodeWatchProgress['${episode.season}-${episode.number}'],
       traktSource: true,
     );
     if (widget.onQuickPlay != null) {
@@ -1592,7 +1797,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   Future<void> _onEpisodeMenuAction(
-      TraktEpisode episode, TraktEpisodeMenuAction action) async {
+    TraktEpisode episode,
+    TraktEpisodeMenuAction action,
+  ) async {
     final show = _selectedShow;
     if (show == null) return;
     final showImdbId = show.effectiveImdbId ?? show.id;
@@ -1604,14 +1811,20 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case TraktEpisodeMenuAction.markWatched:
         actionLabel = 'Marked as Watched';
         success = await _traktService.markEpisodeWatched(
-            showImdbId, episode.season, episode.number);
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
         if (success && mounted) {
           setState(() => _episodeWatchProgress[key] = 100.0);
         }
       case TraktEpisodeMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched';
         success = await _traktService.markEpisodeUnwatched(
-            showImdbId, episode.season, episode.number);
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
         if (success && mounted) {
           setState(() => _episodeWatchProgress.remove(key));
         }
@@ -1620,16 +1833,23 @@ class TraktResultsViewState extends State<TraktResultsView> {
         if (rating == null) return;
         actionLabel = 'Rated $rating/10';
         success = await _traktService.rateEpisode(
-            showImdbId, episode.season, episode.number, rating);
+          showImdbId,
+          episode.season,
+          episode.number,
+          rating,
+        );
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-      backgroundColor:
-          success ? const Color(0xFF34D399) : const Color(0xFFEF4444),
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _focusFirstEpisodeCard() {
@@ -1638,7 +1858,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
-  KeyEventResult _handleEpisodeCardKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
+  KeyEventResult _handleEpisodeCardKey(
+    int index,
+    KeyEvent event, {
+    bool? isQuickPlayFocused,
+  }) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -1654,7 +1878,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
         (s) => s.number == _selectedSeasonNumber,
         orElse: () => _seasons.first,
       );
-      if (index < currentSeason.episodes.length - 1 && index < _episodeFocusNodes.length - 1) {
+      if (index < currentSeason.episodes.length - 1 &&
+          index < _episodeFocusNodes.length - 1) {
         _episodeFocusNodes[index + 1].requestFocus();
       }
       return KeyEventResult.handled;
@@ -1723,148 +1948,184 @@ class TraktResultsViewState extends State<TraktResultsView> {
           border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
         ),
         child: Row(
-        children: [
-          // List type dropdown
-          Flexible(
-            flex: hasSubList ? 3 : 4,
-            child: _buildDropdown<TraktListType>(
-              focusNode: _listTypeFocusNode,
-              value: _selectedListType,
-              items: TraktListType.values.map((t) => DropdownMenuItem(
-                value: t,
-                child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 13)),
-              )).toList(),
-              onChanged: _onListTypeChanged,
-              hint: 'List Type',
-              onUpArrow: widget.onUpArrowFromFilters,
-              onDownArrow: _focusFirstCard,
-              onRightFocus: _contentTypeFocusNode,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Content type dropdown
-          Flexible(
-            flex: 2,
-            child: _buildDropdown<TraktContentType>(
-              focusNode: _contentTypeFocusNode,
-              value: _selectedContentType,
-              items: TraktContentType.values.map((t) => DropdownMenuItem(
-                value: t,
-                child: Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 13)),
-              )).toList(),
-              onChanged: _onContentTypeChanged,
-              hint: 'Type',
-              onUpArrow: widget.onUpArrowFromFilters,
-              onDownArrow: _focusFirstCard,
-              onLeftFocus: _listTypeFocusNode,
-              onRightFocus: hasCustomList
-                  ? _customListFocusNode
-                  : hasLikedList
-                      ? _likedListFocusNode
-                      : (showInlineCalendar ? _calendarButtonFocusNode : null),
-            ),
-          ),
-          // Custom list dropdown (only when Custom Lists is selected)
-          if (hasCustomList) ...[
-            const SizedBox(width: 8),
+          children: [
+            // List type dropdown
             Flexible(
-              flex: 3,
-              child: _buildDropdown<String>(
-                focusNode: _customListFocusNode,
-                value: _selectedCustomList != null
-                    ? (_selectedCustomList!['ids']?['slug'] as String? ?? '')
-                    : null,
-                items: _customLists.map((list) {
-                  final slug = list['ids']?['slug'] as String? ?? '';
-                  final name = list['name'] as String? ?? 'Unknown';
-                  return DropdownMenuItem(
-                    value: slug,
-                    child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                  );
-                }).toList(),
-                onChanged: (slug) {
-                  if (slug == null) return;
-                  final list = _customLists.firstWhere(
-                    (l) => (l['ids']?['slug'] as String? ?? '') == slug,
-                    orElse: () => _customLists.first,
-                  );
-                  _onCustomListChanged(list);
-                },
-                hint: 'Select List',
+              flex: hasSubList ? 3 : 4,
+              child: _buildDropdown<TraktListType>(
+                focusNode: _listTypeFocusNode,
+                value: _selectedListType,
+                items: TraktListType.values
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(
+                          t.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _onListTypeChanged,
+                hint: 'List Type',
                 onUpArrow: widget.onUpArrowFromFilters,
                 onDownArrow: _focusFirstCard,
-                onLeftFocus: _contentTypeFocusNode,
-                onRightFocus: showInlineCalendar ? _calendarButtonFocusNode : null,
+                onRightFocus: _contentTypeFocusNode,
               ),
             ),
-          ],
-          // Liked list dropdown (only when Liked Lists is selected)
-          if (hasLikedList) ...[
             const SizedBox(width: 8),
+            // Content type dropdown
             Flexible(
-              flex: 3,
-              child: _buildDropdown<String>(
-                focusNode: _likedListFocusNode,
-                value: _selectedLikedList != null
-                    ? '${(_selectedLikedList!['user'] as Map<String, dynamic>?)?['username'] ?? ''}/${_selectedLikedList!['ids']?['slug'] ?? ''}'
-                    : null,
-                items: _likedLists.map((list) {
-                  final slug = list['ids']?['slug'] as String? ?? '';
-                  final name = list['name'] as String? ?? 'Unknown';
-                  final owner = (list['user'] as Map<String, dynamic>?)?['username'] as String? ?? '';
-                  final key = '$owner/$slug';
-                  return DropdownMenuItem(
-                    value: key,
-                    child: Text(
-                      owner.isNotEmpty ? '$name ($owner)' : name,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-                onChanged: (key) {
-                  if (key == null) return;
-                  final list = _likedLists.firstWhere(
-                    (l) {
+              flex: 2,
+              child: _buildDropdown<TraktContentType>(
+                focusNode: _contentTypeFocusNode,
+                value: _selectedContentType,
+                items: TraktContentType.values
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(
+                          t.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _onContentTypeChanged,
+                hint: 'Type',
+                onUpArrow: widget.onUpArrowFromFilters,
+                onDownArrow: _focusFirstCard,
+                onLeftFocus: _listTypeFocusNode,
+                onRightFocus: hasCustomList
+                    ? _customListFocusNode
+                    : hasLikedList
+                    ? _likedListFocusNode
+                    : (showInlineCalendar ? _calendarButtonFocusNode : null),
+              ),
+            ),
+            // Custom list dropdown (only when Custom Lists is selected)
+            if (hasCustomList) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                flex: 3,
+                child: _buildDropdown<String>(
+                  focusNode: _customListFocusNode,
+                  value: _selectedCustomList != null
+                      ? (_selectedCustomList!['ids']?['slug'] as String? ?? '')
+                      : null,
+                  items: _customLists.map((list) {
+                    final slug = list['ids']?['slug'] as String? ?? '';
+                    final name = list['name'] as String? ?? 'Unknown';
+                    return DropdownMenuItem(
+                      value: slug,
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (slug) {
+                    if (slug == null) return;
+                    final list = _customLists.firstWhere(
+                      (l) => (l['ids']?['slug'] as String? ?? '') == slug,
+                      orElse: () => _customLists.first,
+                    );
+                    _onCustomListChanged(list);
+                  },
+                  hint: 'Select List',
+                  onUpArrow: widget.onUpArrowFromFilters,
+                  onDownArrow: _focusFirstCard,
+                  onLeftFocus: _contentTypeFocusNode,
+                  onRightFocus: showInlineCalendar
+                      ? _calendarButtonFocusNode
+                      : null,
+                ),
+              ),
+            ],
+            // Liked list dropdown (only when Liked Lists is selected)
+            if (hasLikedList) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                flex: 3,
+                child: _buildDropdown<String>(
+                  focusNode: _likedListFocusNode,
+                  value: _selectedLikedList != null
+                      ? '${(_selectedLikedList!['user'] as Map<String, dynamic>?)?['username'] ?? ''}/${_selectedLikedList!['ids']?['slug'] ?? ''}'
+                      : null,
+                  items: _likedLists.map((list) {
+                    final slug = list['ids']?['slug'] as String? ?? '';
+                    final name = list['name'] as String? ?? 'Unknown';
+                    final owner =
+                        (list['user'] as Map<String, dynamic>?)?['username']
+                            as String? ??
+                        '';
+                    final key = '$owner/$slug';
+                    return DropdownMenuItem(
+                      value: key,
+                      child: Text(
+                        owner.isNotEmpty ? '$name ($owner)' : name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (key) {
+                    if (key == null) return;
+                    final list = _likedLists.firstWhere((l) {
                       final s = l['ids']?['slug'] as String? ?? '';
-                      final o = (l['user'] as Map<String, dynamic>?)?['username'] as String? ?? '';
+                      final o =
+                          (l['user'] as Map<String, dynamic>?)?['username']
+                              as String? ??
+                          '';
                       return '$o/$s' == key;
-                    },
-                    orElse: () => _likedLists.first,
-                  );
-                  _onLikedListChanged(list);
-                },
-                hint: 'Select List',
-                onUpArrow: widget.onUpArrowFromFilters,
-                onDownArrow: _focusFirstCard,
-                onLeftFocus: _contentTypeFocusNode,
-                onRightFocus: showInlineCalendar ? _calendarButtonFocusNode : null,
+                    }, orElse: () => _likedLists.first);
+                    _onLikedListChanged(list);
+                  },
+                  hint: 'Select List',
+                  onUpArrow: widget.onUpArrowFromFilters,
+                  onDownArrow: _focusFirstCard,
+                  onLeftFocus: _contentTypeFocusNode,
+                  onRightFocus: showInlineCalendar
+                      ? _calendarButtonFocusNode
+                      : null,
+                ),
               ),
-            ),
-          ],
-          // Item count / loading indicator
-          const SizedBox(width: 8),
-          if (_isLoading)
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else if (_filteredItems.isNotEmpty)
-            Text(
-              '${_filteredItems.length}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          // Calendar shortcut button — opens the Trakt Calendar screen.
-          // Wide screens only; narrow screens get a FAB in torrent_search_screen.dart.
-          if (showInlineCalendar) ...[
+            ],
+            // Item count / loading indicator
             const SizedBox(width: 8),
-            _buildCalendarButton(context),
+            if (_isLoading)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else if (_filteredItems.isNotEmpty)
+              Text(
+                '${_filteredItems.length}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            // Calendar shortcut button — opens the Trakt Calendar screen.
+            // Wide screens only; narrow screens get a FAB in torrent_search_screen.dart.
+            if (showInlineCalendar) ...[
+              const SizedBox(width: 8),
+              _buildCalendarButton(context),
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -1873,8 +2134,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final previousFocus = hasCustomListActive
         ? _customListFocusNode
         : hasLikedListActive
-            ? _likedListFocusNode
-            : _contentTypeFocusNode;
+        ? _likedListFocusNode
+        : _contentTypeFocusNode;
     return Focus(
       focusNode: _calendarButtonFocusNode,
       onFocusChange: (_) => setState(() {}),
@@ -1953,9 +2214,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   bool get hasLikedListActive => _selectedListType == TraktListType.likedLists;
 
   void _openTraktCalendar() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TraktCalendarScreen()));
   }
 
   Widget _buildDropdown<T>({
@@ -1974,77 +2235,88 @@ class TraktResultsViewState extends State<TraktResultsView> {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         onUpArrow?.call();
-        return onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+        return onUpArrow != null
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
       }
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
         onDownArrow?.call();
-        return onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+        return onDownArrow != null
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft && onLeftFocus != null) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+          onLeftFocus != null) {
         onLeftFocus.requestFocus();
         return KeyEventResult.handled;
       }
-      if (event.logicalKey == LogicalKeyboardKey.arrowRight && onRightFocus != null) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+          onRightFocus != null) {
         onRightFocus.requestFocus();
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
     };
     return ListenableBuilder(
-        listenable: focusNode,
-        builder: (context, _) {
-          final hasFocus = focusNode.hasFocus;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            decoration: BoxDecoration(
+      listenable: focusNode,
+      builder: (context, _) {
+        final hasFocus = focusNode.hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: hasFocus
+                ? Theme.of(context).colorScheme.surfaceContainerHighest
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
               color: hasFocus
-                  ? Theme.of(context).colorScheme.surfaceContainerHighest
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
+                  ? const Color(0xFF60A5FA)
+                  : Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.3),
+              width: hasFocus ? 2.0 : 1.0,
+            ),
+            boxShadow: hasFocus
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              focusNode: focusNode,
+              focusColor: Colors.transparent,
+              value: value,
+              isExpanded: true,
+              isDense: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 20,
                 color: hasFocus
-                    ? const Color(0xFF60A5FA)
-                    : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-                width: hasFocus ? 2.0 : 1.0,
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.7),
               ),
-              boxShadow: hasFocus
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<T>(
-                focusNode: focusNode,
-                focusColor: Colors.transparent,
-                value: value,
-                isExpanded: true,
-                isDense: true,
-                dropdownColor: const Color(0xFF1E293B),
-                icon: Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20,
-                  color: hasFocus
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.7),
+              hint: Text(
+                hint,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 13,
                 ),
-                hint: Text(
-                  hint,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                items: items,
-                onChanged: onChanged,
+                overflow: TextOverflow.ellipsis,
               ),
+              items: items,
+              onChanged: onChanged,
             ),
-          );
-        },
-      );
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildContent(BuildContext context) {
@@ -2073,12 +2345,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
             const SizedBox(height: 12),
             Text(
               'No matching items',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'Try a different search term',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -2096,17 +2374,27 @@ class TraktResultsViewState extends State<TraktResultsView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: _TraktItemCard(
               item: item,
-              progress: _selectedContentType == TraktContentType.movies && _progressLoaded
+              progress:
+                  _selectedContentType == TraktContentType.movies &&
+                      _progressLoaded
                   ? _watchProgress[item.effectiveImdbId ?? item.id]
                   : null,
-              focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+              focusNode: index < _cardFocusNodes.length
+                  ? _cardFocusNodes[index]
+                  : null,
               onSources: () => _onItemTap(item),
               onQuickPlay: () => _onQuickPlay(item),
               showQuickPlay: widget.showQuickPlay,
-              onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+              onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(
+                index,
+                event,
+                isQuickPlayFocused: isQuickPlayFocused,
+              ),
               listType: _selectedListType,
               onMenuAction: (action) => _onMenuAction(item, action),
-              hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
+              hasBoundSource: _boundSources.containsKey(
+                item.effectiveImdbId ?? item.id,
+              ),
             ),
           );
         },
@@ -2114,7 +2402,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
     );
   }
 
-  KeyEventResult _handleCardKey(int index, KeyEvent event, {bool? isQuickPlayFocused}) {
+  KeyEventResult _handleCardKey(
+    int index,
+    KeyEvent event, {
+    bool? isQuickPlayFocused,
+  }) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -2126,7 +2418,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _filteredItems.length - 1 && index < _cardFocusNodes.length - 1) {
+      if (index < _filteredItems.length - 1 &&
+          index < _cardFocusNodes.length - 1) {
         _cardFocusNodes[index + 1].requestFocus();
       }
       return KeyEventResult.handled;
@@ -2151,95 +2444,107 @@ class TraktResultsViewState extends State<TraktResultsView> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
-        children: [
-          // Back button
-          Focus(
-            focusNode: _backButtonFocusNode,
-            onFocusChange: (focused) => setState(() {}),
-            onKeyEvent: (node, event) {
-              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                _seasonDropdownFocusNode.requestFocus();
-                return KeyEventResult.handled;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                _focusFirstEpisodeCard();
-                return KeyEventResult.handled;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                widget.onUpArrowFromFilters?.call();
-                return widget.onUpArrowFromFilters != null
-                    ? KeyEventResult.handled
-                    : KeyEventResult.ignored;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.escape ||
-                  event.logicalKey == LogicalKeyboardKey.goBack) {
-                _exitEpisodeMode();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: _backButtonFocusNode.hasFocus
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.transparent,
-                border: _backButtonFocusNode.hasFocus
-                    ? Border.all(color: const Color(0xFF60A5FA), width: 2)
-                    : null,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: _exitEpisodeMode,
-                tooltip: 'Back to shows',
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Season dropdown
-          if (_seasons.isNotEmpty)
-            Flexible(
-              flex: 1,
-              child: _buildDropdown<int>(
-                focusNode: _seasonDropdownFocusNode,
-                value: _selectedSeasonNumber,
-                items: _seasons.map((s) => DropdownMenuItem(
-                  value: s.number,
-                  child: Text(
-                    s.displayLabel,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                )).toList(),
-                onChanged: _onSeasonChanged,
-                hint: 'Season',
-                onUpArrow: widget.onUpArrowFromFilters,
-                onDownArrow: _focusFirstEpisodeCard,
-                onLeftFocus: _backButtonFocusNode,
+          children: [
+            // Back button
+            Focus(
+              focusNode: _backButtonFocusNode,
+              onFocusChange: (focused) => setState(() {}),
+              onKeyEvent: (node, event) {
+                if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                  _seasonDropdownFocusNode.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  _focusFirstEpisodeCard();
+                  return KeyEventResult.handled;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  widget.onUpArrowFromFilters?.call();
+                  return widget.onUpArrowFromFilters != null
+                      ? KeyEventResult.handled
+                      : KeyEventResult.ignored;
+                }
+                if (event.logicalKey == LogicalKeyboardKey.select ||
+                    event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.escape ||
+                    event.logicalKey == LogicalKeyboardKey.goBack) {
+                  _exitEpisodeMode();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: _backButtonFocusNode.hasFocus
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.transparent,
+                  border: _backButtonFocusNode.hasFocus
+                      ? Border.all(color: const Color(0xFF60A5FA), width: 2)
+                      : null,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: _exitEpisodeMode,
+                  tooltip: 'Back to shows',
+                ),
               ),
             ),
-
-          // Select Source / Edit Source button
-          if (_selectedShow != null && widget.onSelectSource != null) ...[
             const SizedBox(width: 8),
-            Builder(builder: (context) {
-              final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-              final sourceCount = _boundSources[imdbId]?.length ?? 0;
-              return _SelectSourceButton(
-                hasBoundSource: sourceCount > 0,
-                sourceCount: sourceCount,
-                onTap: () => _handleSelectSourceAction(_selectedShow!),
-                onLeftFocus: _seasons.isNotEmpty ? _seasonDropdownFocusNode : _backButtonFocusNode,
-                onUpArrow: widget.onUpArrowFromFilters,
-                onDownArrow: _focusFirstEpisodeCard,
-              );
-            }),
+
+            // Season dropdown
+            if (_seasons.isNotEmpty)
+              Flexible(
+                flex: 1,
+                child: _buildDropdown<int>(
+                  focusNode: _seasonDropdownFocusNode,
+                  value: _selectedSeasonNumber,
+                  items: _seasons
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s.number,
+                          child: Text(
+                            s.displayLabel,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _onSeasonChanged,
+                  hint: 'Season',
+                  onUpArrow: widget.onUpArrowFromFilters,
+                  onDownArrow: _focusFirstEpisodeCard,
+                  onLeftFocus: _backButtonFocusNode,
+                ),
+              ),
+
+            // Select Source / Edit Source button
+            if (_selectedShow != null && widget.onSelectSource != null) ...[
+              const SizedBox(width: 8),
+              Builder(
+                builder: (context) {
+                  final imdbId =
+                      _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
+                  final sourceCount = _boundSources[imdbId]?.length ?? 0;
+                  return _SelectSourceButton(
+                    hasBoundSource: sourceCount > 0,
+                    sourceCount: sourceCount,
+                    onTap: () => _handleSelectSourceAction(_selectedShow!),
+                    onLeftFocus: _seasons.isNotEmpty
+                        ? _seasonDropdownFocusNode
+                        : _backButtonFocusNode,
+                    onUpArrow: widget.onUpArrowFromFilters,
+                    onDownArrow: _focusFirstEpisodeCard,
+                  );
+                },
+              ),
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -2256,7 +2561,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 12),
               Text(_episodeErrorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 12),
@@ -2276,11 +2585,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.tv_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.5)),
+            Icon(
+              Icons.tv_off_rounded,
+              size: 48,
+              color: Colors.white.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 12),
             Text(
               'No seasons found',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 16),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 16,
+              ),
             ),
           ],
         ),
@@ -2304,14 +2620,24 @@ class TraktResultsViewState extends State<TraktResultsView> {
             child: _TraktEpisodeCard(
               episode: episode,
               showPosterUrl: _selectedShow!.poster,
-              focusNode: index < _episodeFocusNodes.length ? _episodeFocusNodes[index] : null,
+              focusNode: index < _episodeFocusNodes.length
+                  ? _episodeFocusNodes[index]
+                  : null,
               onBrowse: () => _onEpisodeTap(episode),
               onQuickPlay: () => _onEpisodeQuickPlay(episode),
               showQuickPlay: widget.showQuickPlay,
-              watchProgress: _episodeWatchProgress['${episode.season}-${episode.number}'],
-              isNextEpisode: _nextEpisode != null && _nextEpisode!.season == episode.season && _nextEpisode!.episode == episode.number,
+              watchProgress:
+                  _episodeWatchProgress['${episode.season}-${episode.number}'],
+              isNextEpisode:
+                  _nextEpisode != null &&
+                  _nextEpisode!.season == episode.season &&
+                  _nextEpisode!.episode == episode.number,
               onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
-                  _handleEpisodeCardKey(index, event, isQuickPlayFocused: isQuickPlayFocused),
+                  _handleEpisodeCardKey(
+                    index,
+                    event,
+                    isQuickPlayFocused: isQuickPlayFocused,
+                  ),
               onMenuAction: (action) => _onEpisodeMenuAction(episode, action),
             ),
           );
@@ -2374,16 +2700,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: colorScheme.error,
-            ),
+            Icon(Icons.error_outline, size: 64, color: colorScheme.error),
             const SizedBox(height: 16),
-            Text(
-              'Failed to load list',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Failed to load list', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
               _errorMessage!,
@@ -2413,24 +2732,23 @@ class TraktResultsViewState extends State<TraktResultsView> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _selectedListType == TraktListType.search ? Icons.search : Icons.movie_filter_outlined,
+            _selectedListType == TraktListType.search
+                ? Icons.search
+                : Icons.movie_filter_outlined,
             size: 64,
             color: colorScheme.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
-          Text(
-            'No items found',
-            style: theme.textTheme.titleMedium,
-          ),
+          Text('No items found', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Text(
             _selectedListType == TraktListType.search
                 ? (widget.searchQuery.isEmpty
-                    ? 'Type in the search bar above to search Trakt.'
-                    : 'No ${_selectedContentType.label.toLowerCase()} found for "${widget.searchQuery}".')
+                      ? 'Type in the search bar above to search Trakt.'
+                      : 'No ${_selectedContentType.label.toLowerCase()} found for "${widget.searchQuery}".')
                 : _selectedListType == TraktListType.progress
-                    ? 'You haven\'t watched any ${_selectedContentType.label.toLowerCase()} yet.'
-                    : 'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
+                ? 'You haven\'t watched any ${_selectedContentType.label.toLowerCase()} yet.'
+                : 'Your ${_selectedListType.label.toLowerCase()} is empty for ${_selectedContentType.label.toLowerCase()}.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -2452,7 +2770,8 @@ class _TraktItemCard extends StatefulWidget {
   final VoidCallback onSources;
   final VoidCallback onQuickPlay;
   final bool showQuickPlay;
-  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused})
+  onKeyEvent;
   final TraktListType? listType;
   final void Function(TraktItemMenuAction action)? onMenuAction;
   final bool hasBoundSource;
@@ -2490,8 +2809,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
   }
 
   int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-  int? get _moreIndex =>
-      widget.onMenuAction != null ? _buttonCount - 1 : null;
+  int? get _moreIndex => widget.onMenuAction != null ? _buttonCount - 1 : null;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -2526,8 +2844,10 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event,
-        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
+    return widget.onKeyEvent(
+      event,
+      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
+    );
   }
 
   String _stripHtml(String text) {
@@ -2587,7 +2907,9 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                 children: [
                   // Layer 1: Backdrop image
                   Positioned.fill(
-                    child: _buildOttBackdropImage(widget.item.background ?? widget.item.poster),
+                    child: _buildOttBackdropImage(
+                      widget.item.background ?? widget.item.poster,
+                    ),
                   ),
                   // Layer 2: Dark gradient scrim
                   Positioned.fill(
@@ -2632,7 +2954,10 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                             height: 3,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                                colors: [
+                                  _traktRed,
+                                  _traktRed.withValues(alpha: 0.7),
+                                ],
                               ),
                             ),
                           ),
@@ -2650,8 +2975,11 @@ class _TraktItemCardState extends State<_TraktItemCard> {
 
   Widget _buildOverflowMenu() {
     final listType = widget.listType;
-    final isWatched = (widget.progress ?? 0) >= 100 ||
-        (widget.progress == null && (listType == TraktListType.progress || listType == TraktListType.history));
+    final isWatched =
+        (widget.progress ?? 0) >= 100 ||
+        (widget.progress == null &&
+            (listType == TraktListType.progress ||
+                listType == TraktListType.history));
     final isHighlighted = _isFocused && _focusedButtonIndex == _moreIndex;
 
     return Container(
@@ -2683,126 +3011,173 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         tooltip: 'More options',
         color: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (action) => widget.onMenuAction?.call(action),
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: listType == TraktListType.watchlist
-              ? TraktItemMenuAction.removeFromWatchlist
-              : TraktItemMenuAction.addToWatchlist,
-          child: Row(children: [
-            Icon(
-              listType == TraktListType.watchlist
-                  ? Icons.bookmark_remove
-                  : Icons.bookmark_add_outlined,
-              size: 18,
-              color: const Color(0xFFFBBF24),
+        onSelected: (action) => widget.onMenuAction?.call(action),
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: listType == TraktListType.watchlist
+                ? TraktItemMenuAction.removeFromWatchlist
+                : TraktItemMenuAction.addToWatchlist,
+            child: Row(
+              children: [
+                Icon(
+                  listType == TraktListType.watchlist
+                      ? Icons.bookmark_remove
+                      : Icons.bookmark_add_outlined,
+                  size: 18,
+                  color: const Color(0xFFFBBF24),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  listType == TraktListType.watchlist
+                      ? 'Remove from Watchlist'
+                      : 'Add to Watchlist',
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(listType == TraktListType.watchlist
-                ? 'Remove from Watchlist'
-                : 'Add to Watchlist'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: listType == TraktListType.collection
-              ? TraktItemMenuAction.removeFromCollection
-              : TraktItemMenuAction.addToCollection,
-          child: Row(children: [
-            Icon(
-              listType == TraktListType.collection
-                  ? Icons.library_add_check
-                  : Icons.library_add_outlined,
-              size: 18,
-              color: const Color(0xFF60A5FA),
-            ),
-            const SizedBox(width: 12),
-            Text(listType == TraktListType.collection
-                ? 'Remove from Collection'
-                : 'Add to Collection'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: isWatched
-              ? TraktItemMenuAction.markUnwatched
-              : TraktItemMenuAction.markWatched,
-          child: Row(children: [
-            Icon(
-              isWatched ? Icons.visibility_off : Icons.visibility,
-              size: 18,
-              color: const Color(0xFF34D399),
-            ),
-            const SizedBox(width: 12),
-            Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: listType == TraktListType.ratings
-              ? TraktItemMenuAction.removeRating
-              : TraktItemMenuAction.rate,
-          child: Row(children: [
-            Icon(
-              listType == TraktListType.ratings
-                  ? Icons.star_border
-                  : Icons.star_rate_rounded,
-              size: 18,
-              color: const Color(0xFFFBBF24),
-            ),
-            const SizedBox(width: 12),
-            Text(listType == TraktListType.ratings ? 'Remove Rating' : 'Rate'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: listType == TraktListType.customList
-              ? TraktItemMenuAction.removeFromList
-              : TraktItemMenuAction.addToList,
-          child: Row(children: [
-            Icon(
-              listType == TraktListType.customList
-                  ? Icons.playlist_remove
-                  : Icons.playlist_add,
-              size: 18,
-              color: const Color(0xFFEC4899),
-            ),
-            const SizedBox(width: 12),
-            Text(listType == TraktListType.customList
-                ? 'Remove from List'
-                : 'Add to List...'),
-          ]),
-        ),
-        if (listType == TraktListType.progress)
-          const PopupMenuItem(
-            value: TraktItemMenuAction.removeFromPlayback,
-            child: Row(children: [
-              Icon(Icons.delete_outline_rounded,
-                  size: 18, color: Color(0xFFEF4444)),
-              SizedBox(width: 12),
-              Text('Remove from Continue Watching'),
-            ]),
           ),
-        PopupMenuItem(
-          value: TraktItemMenuAction.selectSource,
-          child: Row(children: [
-            Icon(
-              widget.hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
-              size: 18,
-              color: const Color(0xFF60A5FA),
+          PopupMenuItem(
+            value: listType == TraktListType.collection
+                ? TraktItemMenuAction.removeFromCollection
+                : TraktItemMenuAction.addToCollection,
+            child: Row(
+              children: [
+                Icon(
+                  listType == TraktListType.collection
+                      ? Icons.library_add_check
+                      : Icons.library_add_outlined,
+                  size: 18,
+                  color: const Color(0xFF60A5FA),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  listType == TraktListType.collection
+                      ? 'Remove from Collection'
+                      : 'Add to Collection',
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(widget.hasBoundSource
-                ? (widget.item.type == 'movie' ? 'Edit Source' : 'Edit Sources')
-                : 'Select Source'),
-          ]),
-        ),
-        if (widget.item.type == 'series')
-          const PopupMenuItem(
-            value: TraktItemMenuAction.searchPacks,
-            child: Row(children: [
-              Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFFFBBF24)),
-              SizedBox(width: 12),
-              Text('Search Season Packs'),
-            ]),
           ),
-      ],
+          PopupMenuItem(
+            value: isWatched
+                ? TraktItemMenuAction.markUnwatched
+                : TraktItemMenuAction.markWatched,
+            child: Row(
+              children: [
+                Icon(
+                  isWatched ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                  color: const Color(0xFF34D399),
+                ),
+                const SizedBox(width: 12),
+                Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: listType == TraktListType.ratings
+                ? TraktItemMenuAction.removeRating
+                : TraktItemMenuAction.rate,
+            child: Row(
+              children: [
+                Icon(
+                  listType == TraktListType.ratings
+                      ? Icons.star_border
+                      : Icons.star_rate_rounded,
+                  size: 18,
+                  color: const Color(0xFFFBBF24),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  listType == TraktListType.ratings ? 'Remove Rating' : 'Rate',
+                ),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: listType == TraktListType.customList
+                ? TraktItemMenuAction.removeFromList
+                : TraktItemMenuAction.addToList,
+            child: Row(
+              children: [
+                Icon(
+                  listType == TraktListType.customList
+                      ? Icons.playlist_remove
+                      : Icons.playlist_add,
+                  size: 18,
+                  color: const Color(0xFFEC4899),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  listType == TraktListType.customList
+                      ? 'Remove from List'
+                      : 'Add to List...',
+                ),
+              ],
+            ),
+          ),
+          if (listType == TraktListType.progress)
+            const PopupMenuItem(
+              value: TraktItemMenuAction.removeFromPlayback,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: Color(0xFFEF4444),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Remove from Continue Watching'),
+                ],
+              ),
+            ),
+          PopupMenuItem(
+            value: TraktItemMenuAction.selectSource,
+            child: Row(
+              children: [
+                Icon(
+                  widget.hasBoundSource
+                      ? Icons.edit_rounded
+                      : Icons.link_rounded,
+                  size: 18,
+                  color: const Color(0xFF60A5FA),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  widget.hasBoundSource
+                      ? (widget.item.type == 'movie'
+                            ? 'Edit Source'
+                            : 'Edit Sources')
+                      : 'Select Source',
+                ),
+              ],
+            ),
+          ),
+          if (widget.item.type == 'series')
+            const PopupMenuItem(
+              value: TraktItemMenuAction.searchPacks,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 18,
+                    color: Color(0xFFFBBF24),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Search Season Packs'),
+                ],
+              ),
+            ),
+          const PopupMenuItem(
+            value: TraktItemMenuAction.addToStremioTv,
+            child: Row(
+              children: [
+                Icon(Icons.live_tv_rounded, size: 18, color: Color(0xFF22C55E)),
+                SizedBox(width: 12),
+                Text('Add to Stremio TV'),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2831,18 +3206,24 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               ),
               const SizedBox(height: 4),
               _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+              if (widget.item.genres != null &&
+                  widget.item.genres!.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   children: widget.item.genres!.take(3).map((genre) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                       ),
                       child: Text(
                         genre,
@@ -2920,25 +3301,33 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
-                      shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
+                      shadows: [
+                        const Shadow(blurRadius: 8, color: Colors.black),
+                      ],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                  if (widget.item.genres != null &&
+                      widget.item.genres!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
                       children: widget.item.genres!.take(3).map((genre) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
                           ),
                           child: Text(
                             genre,
@@ -2991,7 +3380,8 @@ class _TraktItemCardState extends State<_TraktItemCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
                   color: _traktRed,
-                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  isHighlighted:
+                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
@@ -3022,13 +3412,17 @@ class _TraktItemCardState extends State<_TraktItemCard> {
       color: colorScheme.surfaceContainerHighest,
       child: Icon(
         widget.item.type == 'series' ? Icons.tv_rounded : Icons.movie_rounded,
-        color: colorScheme.onSurfaceVariant.withValues(alpha:0.5),
+        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
         size: 32,
       ),
     );
   }
 
-  Widget _buildPosterWithProgress(ColorScheme colorScheme, {required double width, required double height}) {
+  Widget _buildPosterWithProgress(
+    ColorScheme colorScheme, {
+    required double width,
+    required double height,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
@@ -3074,11 +3468,7 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         ],
         if (widget.item.imdbRating != null) ...[
           const SizedBox(width: 8),
-          Icon(
-            Icons.star_rounded,
-            size: 14,
-            color: const Color(0xFFFBBF24),
-          ),
+          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
           const SizedBox(width: 2),
           Text(
             widget.item.imdbRating!.toStringAsFixed(1),
@@ -3092,7 +3482,9 @@ class _TraktItemCardState extends State<_TraktItemCard> {
         if (widget.progress != null && widget.progress! > 0) ...[
           const SizedBox(width: 8),
           Text(
-            widget.progress! >= 100.0 ? 'Watched' : '${widget.progress!.round()}%',
+            widget.progress! >= 100.0
+                ? 'Watched'
+                : '${widget.progress!.round()}%',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.5),
               fontSize: 12,
@@ -3121,14 +3513,10 @@ class _TraktItemCardState extends State<_TraktItemCard> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isHighlighted
-                ? color
-                : Colors.black.withValues(alpha: 0.85),
+            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isHighlighted
-                  ? color
-                  : color.withValues(alpha: 0.6),
+              color: isHighlighted ? color : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -3148,14 +3536,18 @@ class _TraktItemCardState extends State<_TraktItemCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                color: isHighlighted
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    color: isHighlighted
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -3185,7 +3577,8 @@ class _TraktEpisodeCard extends StatefulWidget {
   final bool showQuickPlay;
   final double? watchProgress;
   final bool isNextEpisode;
-  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused})
+  onKeyEvent;
   final void Function(TraktEpisodeMenuAction action)? onMenuAction;
 
   const _TraktEpisodeCard({
@@ -3219,8 +3612,7 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
   }
 
   int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-  int? get _moreIndex =>
-      widget.onMenuAction != null ? _buttonCount - 1 : null;
+  int? get _moreIndex => widget.onMenuAction != null ? _buttonCount - 1 : null;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -3252,8 +3644,10 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(event,
-        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
+    return widget.onKeyEvent(
+      event,
+      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
+    );
   }
 
   @override
@@ -3290,9 +3684,15 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             border: widget.isNextEpisode && !_isFocused
                 ? Border(
                     left: const BorderSide(color: _traktRed, width: 3),
-                    top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                    right: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-                    bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    right: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    bottom: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
                   )
                 : Border.all(
                     color: _isFocused
@@ -3362,27 +3762,31 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             value: isWatched
                 ? TraktEpisodeMenuAction.markUnwatched
                 : TraktEpisodeMenuAction.markWatched,
-            child: Row(children: [
-              Icon(
-                isWatched ? Icons.visibility_off : Icons.visibility,
-                size: 18,
-                color: const Color(0xFF34D399),
-              ),
-              const SizedBox(width: 12),
-              Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  isWatched ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                  color: const Color(0xFF34D399),
+                ),
+                const SizedBox(width: 12),
+                Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
+              ],
+            ),
           ),
           PopupMenuItem(
             value: TraktEpisodeMenuAction.rate,
-            child: Row(children: [
-              Icon(
-                Icons.star_rate_rounded,
-                size: 18,
-                color: const Color(0xFFFBBF24),
-              ),
-              const SizedBox(width: 12),
-              const Text('Rate Episode'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.star_rate_rounded,
+                  size: 18,
+                  color: const Color(0xFFFBBF24),
+                ),
+                const SizedBox(width: 12),
+                const Text('Rate Episode'),
+              ],
+            ),
           ),
         ],
       ),
@@ -3402,14 +3806,19 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _buildOttBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                _buildOttBackdropImage(
+                  widget.episode.thumbnailUrl ?? widget.showPosterUrl,
+                ),
                 // "UP NEXT" badge top-left
                 if (widget.isNextEpisode)
                   Positioned(
                     top: 4,
                     left: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: _traktRed.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(4),
@@ -3434,12 +3843,18 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                        widthFactor: (widget.watchProgress! / 100).clamp(
+                          0.0,
+                          1.0,
+                        ),
                         child: Container(
                           height: 3,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                              colors: [
+                                _traktRed,
+                                _traktRed.withValues(alpha: 0.7),
+                              ],
                             ),
                           ),
                         ),
@@ -3467,7 +3882,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
               ),
               const SizedBox(height: 4),
               _buildMetadataRow(colorScheme),
-              if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+              if (widget.episode.overview != null &&
+                  widget.episode.overview!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
                   widget.episode.overview!,
@@ -3526,13 +3942,18 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _buildOttBackdropImage(widget.episode.thumbnailUrl ?? widget.showPosterUrl),
+                    _buildOttBackdropImage(
+                      widget.episode.thumbnailUrl ?? widget.showPosterUrl,
+                    ),
                     if (widget.isNextEpisode)
                       Positioned(
                         top: 4,
                         left: 4,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: _traktRed.withValues(alpha: 0.85),
                             borderRadius: BorderRadius.circular(4),
@@ -3548,7 +3969,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                           ),
                         ),
                       ),
-                    if (widget.watchProgress != null && widget.watchProgress! > 0)
+                    if (widget.watchProgress != null &&
+                        widget.watchProgress! > 0)
                       Positioned(
                         bottom: 0,
                         left: 0,
@@ -3556,12 +3978,18 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: FractionallySizedBox(
-                            widthFactor: (widget.watchProgress! / 100).clamp(0.0, 1.0),
+                            widthFactor: (widget.watchProgress! / 100).clamp(
+                              0.0,
+                              1.0,
+                            ),
                             child: Container(
                               height: 3,
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [_traktRed, _traktRed.withValues(alpha: 0.7)],
+                                  colors: [
+                                    _traktRed,
+                                    _traktRed.withValues(alpha: 0.7),
+                                  ],
                                 ),
                               ),
                             ),
@@ -3593,7 +4021,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
             ),
           ],
         ),
-        if (widget.episode.overview != null && widget.episode.overview!.isNotEmpty) ...[
+        if (widget.episode.overview != null &&
+            widget.episode.overview!.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             widget.episode.overview!,
@@ -3625,7 +4054,8 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
                   color: _traktRed,
-                  isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  isHighlighted:
+                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
@@ -3707,7 +4137,11 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+                  const Icon(
+                    Icons.star_rounded,
+                    size: 13,
+                    color: Color(0xFFFBBF24),
+                  ),
                   const SizedBox(width: 2),
                   Text(
                     ep.rating!.toStringAsFixed(1),
@@ -3750,14 +4184,10 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isHighlighted
-                ? color
-                : Colors.black.withValues(alpha: 0.85),
+            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isHighlighted
-                  ? color
-                  : color.withValues(alpha: 0.6),
+              color: isHighlighted ? color : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -3777,14 +4207,18 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                color: isHighlighted
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    color: isHighlighted
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -3847,7 +4281,8 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
           widget.onTap();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft && widget.onLeftFocus != null) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            widget.onLeftFocus != null) {
           widget.onLeftFocus!.requestFocus();
           return KeyEventResult.handled;
         }
@@ -3856,11 +4291,15 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
           widget.onUpArrow?.call();
-          return widget.onUpArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+          return widget.onUpArrow != null
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
           widget.onDownArrow?.call();
-          return widget.onDownArrow != null ? KeyEventResult.handled : KeyEventResult.ignored;
+          return widget.onDownArrow != null
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
         }
         return KeyEventResult.ignored;
       },
@@ -3878,8 +4317,8 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
               color: _isFocused
                   ? const Color(0xFF60A5FA)
                   : widget.hasBoundSource
-                      ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
-                      : Colors.white.withValues(alpha: 0.15),
+                  ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.15),
               width: _isFocused ? 2 : 1,
             ),
             boxShadow: _isFocused
@@ -3895,7 +4334,9 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                widget.hasBoundSource ? Icons.link_rounded : Icons.link_off_rounded,
+                widget.hasBoundSource
+                    ? Icons.link_rounded
+                    : Icons.link_off_rounded,
                 size: 16,
                 color: widget.hasBoundSource
                     ? const Color(0xFF60A5FA)
@@ -3904,7 +4345,9 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
               const SizedBox(width: 4),
               Text(
                 widget.hasBoundSource
-                    ? (widget.sourceCount > 1 ? 'Sources (${widget.sourceCount})' : 'Source')
+                    ? (widget.sourceCount > 1
+                          ? 'Sources (${widget.sourceCount})'
+                          : 'Source')
                     : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource

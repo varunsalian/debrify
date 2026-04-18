@@ -3,11 +3,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/trakt/trakt_service.dart';
 
 /// Actions available in the Trakt episode overflow menu.
-enum TraktEpisodeMenuAction {
-  markWatched,
-  markUnwatched,
-  rate,
-}
+enum TraktEpisodeMenuAction { markWatched, markUnwatched, rate }
 
 /// Actions available in the Trakt item overflow menu.
 enum TraktItemMenuAction {
@@ -22,6 +18,7 @@ enum TraktItemMenuAction {
   addToList,
   removeFromList,
   removeFromPlayback,
+  addToStremioTv,
   selectSource,
   searchPacks,
 }
@@ -42,8 +39,11 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
               const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.star_rate_rounded,
-                      color: Color(0xFFFBBF24), size: 24),
+                  Icon(
+                    Icons.star_rate_rounded,
+                    color: Color(0xFFFBBF24),
+                    size: 24,
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Rate this item',
@@ -74,8 +74,7 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
                         ),
                         padding: EdgeInsets.zero,
                       ),
-                      onPressed: () =>
-                          Navigator.of(dialogContext).pop(rating),
+                      onPressed: () => Navigator.of(dialogContext).pop(rating),
                       child: Text(
                         '$rating',
                         style: const TextStyle(
@@ -90,8 +89,10 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel',
-                    style: TextStyle(color: Colors.white54)),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white54),
+                ),
               ),
             ],
           ),
@@ -103,14 +104,17 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
 
 /// Shows a custom list picker dialog. Returns the selected list or null.
 Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
-    BuildContext context) async {
+  BuildContext context,
+) async {
   final lists = await TraktService.instance.fetchCustomLists();
   if (!context.mounted) return null;
   if (lists.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('No custom lists found. Create one on Trakt first.'),
-      backgroundColor: Color(0xFFEF4444),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No custom lists found. Create one on Trakt first.'),
+        backgroundColor: Color(0xFFEF4444),
+      ),
+    );
     return null;
   }
 
@@ -130,8 +134,11 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                 const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.playlist_add,
-                        color: Color(0xFFEC4899), size: 24),
+                    Icon(
+                      Icons.playlist_add,
+                      color: Color(0xFFEC4899),
+                      size: 24,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'Add to List',
@@ -153,14 +160,21 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                       final name = list['name'] as String? ?? 'Unknown';
                       final itemCount = list['item_count'] as int? ?? 0;
                       return ListTile(
-                        leading: const Icon(Icons.playlist_play,
-                            color: Color(0xFFEC4899)),
-                        title: Text(name,
-                            style: const TextStyle(color: Colors.white)),
-                        subtitle: Text('$itemCount items',
-                            style: const TextStyle(color: Colors.white54)),
+                        leading: const Icon(
+                          Icons.playlist_play,
+                          color: Color(0xFFEC4899),
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          '$itemCount items',
+                          style: const TextStyle(color: Colors.white54),
+                        ),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         onTap: () => Navigator.of(dialogContext).pop(list),
                       );
                     },
@@ -169,8 +183,10 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel',
-                      style: TextStyle(color: Colors.white54)),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
               ],
             ),
@@ -191,6 +207,7 @@ Future<void> handleTraktMenuAction(
   void Function(StremioMeta)? onSelectSource,
   void Function(StremioMeta)? onEditSource,
   void Function(StremioMeta)? onSearchPacks,
+  Future<void> Function(StremioMeta)? onAddToStremioTv,
 }) async {
   final traktService = TraktService.instance;
   final imdbId = item.effectiveImdbId ?? item.id;
@@ -218,8 +235,8 @@ Future<void> handleTraktMenuAction(
       if (!context.mounted) return;
       final list = await showTraktCustomListPickerDialog(context);
       if (list == null) return;
-      final listSlug = list['ids']?['slug'] as String? ??
-          list['ids']?['trakt']?.toString();
+      final listSlug =
+          list['ids']?['slug'] as String? ?? list['ids']?['trakt']?.toString();
       if (listSlug == null || listSlug.isEmpty) return;
       actionLabel = 'Added to Trakt list "${list['name']}"';
       success = await traktService.addToCustomList(listSlug, imdbId, type);
@@ -240,6 +257,9 @@ Future<void> handleTraktMenuAction(
       return; // No context for which list to remove from
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
+    case TraktItemMenuAction.addToStremioTv:
+      await onAddToStremioTv?.call(item);
+      return;
     case TraktItemMenuAction.selectSource:
       if (onEditSource != null) {
         // Caller handles edit-vs-select logic
@@ -254,12 +274,15 @@ Future<void> handleTraktMenuAction(
   }
 
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-    backgroundColor:
-        success ? const Color(0xFF34D399) : const Color(0xFFEF4444),
-    duration: const Duration(seconds: 2),
-  ));
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+      backgroundColor: success
+          ? const Color(0xFF34D399)
+          : const Color(0xFFEF4444),
+      duration: const Duration(seconds: 2),
+    ),
+  );
 }
 
 /// Builds the add-only Trakt overflow menu (no remove actions).
@@ -307,70 +330,111 @@ Widget buildTraktAddOnlyOverflowMenu({
         if (isTraktAuthenticated) ...[
           const PopupMenuItem(
             value: TraktItemMenuAction.addToWatchlist,
-            child: Row(children: [
-              Icon(Icons.bookmark_add_outlined,
-                  size: 18, color: Color(0xFFFBBF24)),
-              SizedBox(width: 12),
-              Text('Add to Trakt Watchlist'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.bookmark_add_outlined,
+                  size: 18,
+                  color: Color(0xFFFBBF24),
+                ),
+                SizedBox(width: 12),
+                Text('Add to Trakt Watchlist'),
+              ],
+            ),
           ),
           const PopupMenuItem(
             value: TraktItemMenuAction.addToCollection,
-            child: Row(children: [
-              Icon(Icons.library_add_outlined,
-                  size: 18, color: Color(0xFF60A5FA)),
-              SizedBox(width: 12),
-              Text('Add to Trakt Collection'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.library_add_outlined,
+                  size: 18,
+                  color: Color(0xFF60A5FA),
+                ),
+                SizedBox(width: 12),
+                Text('Add to Trakt Collection'),
+              ],
+            ),
           ),
           const PopupMenuItem(
             value: TraktItemMenuAction.markWatched,
-            child: Row(children: [
-              Icon(Icons.visibility, size: 18, color: Color(0xFF34D399)),
-              SizedBox(width: 12),
-              Text('Mark as Watched on Trakt'),
-            ]),
+            child: Row(
+              children: [
+                Icon(Icons.visibility, size: 18, color: Color(0xFF34D399)),
+                SizedBox(width: 12),
+                Text('Mark as Watched on Trakt'),
+              ],
+            ),
           ),
           const PopupMenuItem(
             value: TraktItemMenuAction.rate,
-            child: Row(children: [
-              Icon(Icons.star_rate_rounded, size: 18, color: Color(0xFFFBBF24)),
-              SizedBox(width: 12),
-              Text('Rate on Trakt'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.star_rate_rounded,
+                  size: 18,
+                  color: Color(0xFFFBBF24),
+                ),
+                SizedBox(width: 12),
+                Text('Rate on Trakt'),
+              ],
+            ),
           ),
           const PopupMenuItem(
             value: TraktItemMenuAction.addToList,
-            child: Row(children: [
-              Icon(Icons.playlist_add, size: 18, color: Color(0xFFEC4899)),
-              SizedBox(width: 12),
-              Text('Add to Trakt List...'),
-            ]),
+            child: Row(
+              children: [
+                Icon(Icons.playlist_add, size: 18, color: Color(0xFFEC4899)),
+                SizedBox(width: 12),
+                Text('Add to Trakt List...'),
+              ],
+            ),
           ),
         ],
         if (isSeries || isMovie)
           PopupMenuItem(
             value: TraktItemMenuAction.selectSource,
-            child: Row(children: [
-              Icon(
-                hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
-                size: 18,
-                color: const Color(0xFF60A5FA),
-              ),
-              const SizedBox(width: 12),
-              Text(hasBoundSource
-                  ? (isMovie ? 'Edit Source' : 'Edit Sources')
-                  : 'Select Source'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+                  size: 18,
+                  color: const Color(0xFF60A5FA),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  hasBoundSource
+                      ? (isMovie ? 'Edit Source' : 'Edit Sources')
+                      : 'Select Source',
+                ),
+              ],
+            ),
           ),
         if (isSeries)
           const PopupMenuItem(
             value: TraktItemMenuAction.searchPacks,
-            child: Row(children: [
-              Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFFFBBF24)),
-              SizedBox(width: 12),
-              Text('Search Season Packs'),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 18,
+                  color: Color(0xFFFBBF24),
+                ),
+                SizedBox(width: 12),
+                Text('Search Season Packs'),
+              ],
+            ),
+          ),
+        if (isSeries || isMovie)
+          const PopupMenuItem(
+            value: TraktItemMenuAction.addToStremioTv,
+            child: Row(
+              children: [
+                Icon(Icons.live_tv_rounded, size: 18, color: Color(0xFF22C55E)),
+                SizedBox(width: 12),
+                Text('Add to Stremio TV'),
+              ],
+            ),
           ),
       ],
     ),

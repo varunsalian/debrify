@@ -11,6 +11,7 @@ import '../services/trakt/trakt_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
+import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
 import 'trakt/trakt_menu_helpers.dart';
@@ -56,7 +57,8 @@ class AggregatedSearchResults extends StatefulWidget {
 
   /// Callback when user wants to browse a series with episode drill-down
   /// Passes the show and its source addon so the parent can switch to that addon's CatalogBrowser
-  final void Function(StremioMeta show, StremioAddon addon)? onBrowseSeriesEpisodes;
+  final void Function(StremioMeta show, StremioAddon addon)?
+  onBrowseSeriesEpisodes;
 
   const AggregatedSearchResults({
     super.key,
@@ -74,7 +76,8 @@ class AggregatedSearchResults extends StatefulWidget {
   });
 
   @override
-  State<AggregatedSearchResults> createState() => AggregatedSearchResultsState();
+  State<AggregatedSearchResults> createState() =>
+      AggregatedSearchResultsState();
 }
 
 class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
@@ -84,7 +87,8 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   List<StremioMeta> _results = [];
   bool _isLoading = false;
   String? _error;
-  String _lastSearchedQuery = ''; // Track last searched query to avoid duplicate searches
+  String _lastSearchedQuery =
+      ''; // Track last searched query to avoid duplicate searches
 
   // Race condition protection - ignore stale search responses
   int _activeSearchRequestId = 0;
@@ -228,7 +232,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
       // Race condition check: ignore stale responses from older requests
       if (!mounted || requestId != _activeSearchRequestId) {
-        debugPrint('AggregatedSearchResults: Ignoring stale response for "$searchQuery" (request $requestId, current $_activeSearchRequestId)');
+        debugPrint(
+          'AggregatedSearchResults: Ignoring stale response for "$searchQuery" (request $requestId, current $_activeSearchRequestId)',
+        );
         return;
       }
 
@@ -361,7 +367,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     if (item.type == 'series') {
       final imdbId = item.effectiveImdbId;
       if (imdbId != null) {
-        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+          imdbId,
+        );
         if (!mounted) return;
         if (lastPlayed != null) {
           season = lastPlayed['season'] as int?;
@@ -370,7 +378,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       }
       // Fallback to title-based lookup
       if (season == null || episode == null) {
-        final byTitle = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
+        final byTitle = await StorageService.getLastPlayedEpisode(
+          seriesTitle: item.name,
+        );
         if (!mounted) return;
         if (byTitle != null) {
           season = byTitle['season'] as int?;
@@ -415,7 +425,8 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     }
 
     // Down arrow: move to first result
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown && _results.isNotEmpty) {
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+        _results.isNotEmpty) {
       _resultFocusNodes[0].requestFocus();
       return KeyEventResult.handled;
     }
@@ -423,7 +434,12 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _handleResultKeyEvent(FocusNode node, KeyEvent event, int index, {bool? isQuickPlayFocused}) {
+  KeyEventResult _handleResultKeyEvent(
+    FocusNode node,
+    KeyEvent event,
+    int index, {
+    bool? isQuickPlayFocused,
+  }) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     // Select/Enter is now handled within the card widget for button selection
@@ -455,7 +471,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
   /// Load bound sources for displayed movie and series items.
   Future<void> _loadBoundSources() async {
-    final items = _results.where((i) => i.type == 'movie' || i.type == 'series');
+    final items = _results.where(
+      (i) => i.type == 'movie' || i.type == 'series',
+    );
     final sources = <String, List<SeriesSource>>{};
     for (final item in items) {
       final imdbId = item.effectiveImdbId ?? item.id;
@@ -496,19 +514,19 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       onTorrentSearch: () => widget.onSelectSource?.call(item),
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: true,
-                torboxEnabled: false,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: true,
+              torboxEnabled: false,
+            )
           : null,
       onTorbox: torboxEnabled
           ? () => _pushDebridSelectSource(
-                show: item,
-                imdbId: imdbId,
-                rdEnabled: false,
-                torboxEnabled: true,
-              )
+              show: item,
+              imdbId: imdbId,
+              rdEnabled: false,
+              torboxEnabled: true,
+            )
           : null,
     );
   }
@@ -529,9 +547,14 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           builder: (dialogContext, setDialogState) {
             return Dialog(
               backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                constraints: const BoxConstraints(
+                  maxWidth: 450,
+                  maxHeight: 500,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -539,10 +562,16 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const Icon(
+                            Icons.link_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
+                            isMovie
+                                ? 'Movie Source'
+                                : 'Series Sources (${sources.length})',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
@@ -557,94 +586,118 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'First match wins — reorder by priority',
-                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
                       const SizedBox(height: 12),
                       Flexible(
                         child: isMovie
-                          ? ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  showDragHandle: false,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                            ? ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    showDragHandle: false,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            )
-                          : ReorderableListView.builder(
-                              shrinkWrap: true,
-                              itemCount: sources.length,
-                              onReorder: (oldIndex, newIndex) {
-                                if (newIndex > oldIndex) newIndex--;
-                                setDialogState(() {
-                                  final item = sources.removeAt(oldIndex);
-                                  sources.insert(newIndex, item);
-                                });
-                                SeriesSourceService.setSources(imdbId, List.of(sources));
-                                setState(() => _boundSources[imdbId] = List.of(sources));
-                              },
-                              proxyDecorator: (child, index, animation) {
-                                return Material(
-                                  color: Colors.transparent,
-                                  elevation: 4,
-                                  child: child,
-                                );
-                              },
-                              itemBuilder: (context, index) {
-                                final source = sources[index];
-                                return _buildSourceListTile(
-                                  key: ValueKey(source.torrentHash),
-                                  source: source,
-                                  index: index,
-                                  onDelete: () async {
-                                    await SeriesSourceService.removeSourceByHash(imdbId, source.torrentHash);
-                                    final updated = await SeriesSourceService.getSources(imdbId);
-                                    setDialogState(() {
-                                      sources.clear();
-                                      sources.addAll(updated);
-                                    });
-                                    if (mounted) {
-                                      setState(() {
-                                        if (updated.isEmpty) {
-                                          _boundSources.remove(imdbId);
-                                        } else {
-                                          _boundSources[imdbId] = updated;
-                                        }
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              )
+                            : ReorderableListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  if (newIndex > oldIndex) newIndex--;
+                                  setDialogState(() {
+                                    final item = sources.removeAt(oldIndex);
+                                    sources.insert(newIndex, item);
+                                  });
+                                  SeriesSourceService.setSources(
+                                    imdbId,
+                                    List.of(sources),
+                                  );
+                                  setState(
+                                    () => _boundSources[imdbId] = List.of(
+                                      sources,
+                                    ),
+                                  );
+                                },
+                                proxyDecorator: (child, index, animation) {
+                                  return Material(
+                                    color: Colors.transparent,
+                                    elevation: 4,
+                                    child: child,
+                                  );
+                                },
+                                itemBuilder: (context, index) {
+                                  final source = sources[index];
+                                  return _buildSourceListTile(
+                                    key: ValueKey(source.torrentHash),
+                                    source: source,
+                                    index: index,
+                                    onDelete: () async {
+                                      await SeriesSourceService.removeSourceByHash(
+                                        imdbId,
+                                        source.torrentHash,
+                                      );
+                                      final updated =
+                                          await SeriesSourceService.getSources(
+                                            imdbId,
+                                          );
+                                      setDialogState(() {
+                                        sources.clear();
+                                        sources.addAll(updated);
                                       });
-                                    }
-                                    if (updated.isEmpty && dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  },
-                                );
-                              },
-                            ),
+                                      if (mounted) {
+                                        setState(() {
+                                          if (updated.isEmpty) {
+                                            _boundSources.remove(imdbId);
+                                          } else {
+                                            _boundSources[imdbId] = updated;
+                                          }
+                                        });
+                                      }
+                                      if (updated.isEmpty &&
+                                          dialogContext.mounted) {
+                                        Navigator.of(dialogContext).pop();
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -655,11 +708,20 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                                 Navigator.of(dialogContext).pop();
                                 widget.onSelectSource?.call(show);
                               },
-                              icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
-                              label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                              icon: Icon(
+                                isMovie
+                                    ? Icons.swap_horiz_rounded
+                                    : Icons.add_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isMovie ? 'Change Source' : 'Add Source',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ),
@@ -668,17 +730,34 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  await SeriesSourceService.removeAllSources(
+                                    imdbId,
+                                  );
                                   if (mounted) {
-                                    setState(() => _boundSources.remove(imdbId));
+                                    setState(
+                                      () => _boundSources.remove(imdbId),
+                                    );
                                   }
-                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                  if (dialogContext.mounted)
+                                    Navigator.of(dialogContext).pop();
                                 },
-                                icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove All', style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_sweep_outlined,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove All',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -688,17 +767,34 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(imdbId);
+                                  await SeriesSourceService.removeAllSources(
+                                    imdbId,
+                                  );
                                   if (mounted) {
-                                    setState(() => _boundSources.remove(imdbId));
+                                    setState(
+                                      () => _boundSources.remove(imdbId),
+                                    );
                                   }
-                                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                                  if (dialogContext.mounted)
+                                    Navigator.of(dialogContext).pop();
                                 },
-                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                                label: const Text('Remove', style: TextStyle(color: Color(0xFFEF4444))),
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                  color: Color(0xFFEF4444),
+                                ),
+                                label: const Text(
+                                  'Remove',
+                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFEF4444), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -708,13 +804,18 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                       // Add from Debrid button
                       FutureBuilder<List<bool>>(
                         future: Future.wait([
-                          StorageService.getApiKey().then((k) => k != null && k.isNotEmpty),
-                          StorageService.getTorboxApiKey().then((k) => k != null && k.isNotEmpty),
+                          StorageService.getApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
+                          StorageService.getTorboxApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
                         ]),
                         builder: (context, snapshot) {
                           final rdEnabled = snapshot.data?[0] ?? false;
                           final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled) return const SizedBox.shrink();
+                          if (!rdEnabled && !torboxEnabled)
+                            return const SizedBox.shrink();
 
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -730,11 +831,23 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                                     torboxEnabled: torboxEnabled,
                                   );
                                 },
-                                icon: const Icon(Icons.cloud_download_outlined, size: 18, color: Color(0xFF60A5FA)),
-                                label: const Text('Add from Debrid', style: TextStyle(color: Color(0xFF60A5FA))),
+                                icon: const Icon(
+                                  Icons.cloud_download_outlined,
+                                  size: 18,
+                                  color: Color(0xFF60A5FA),
+                                ),
+                                label: const Text(
+                                  'Add from Debrid',
+                                  style: TextStyle(color: Color(0xFF60A5FA)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF60A5FA), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFF60A5FA),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -744,7 +857,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('Close', style: TextStyle(color: Colors.white54)),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ),
                     ],
                   ),
@@ -754,6 +870,20 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           },
         );
       },
+    );
+  }
+
+  Future<void> _handleAddToStremioTv(StremioMeta item) async {
+    final result = await StremioTvCatalogPickerDialog.show(context, item: item);
+    if (!mounted || result == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.duplicate
+            ? Colors.orange.shade700
+            : const Color(0xFF34D399),
+      ),
     );
   }
 
@@ -780,25 +910,29 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     }
 
     void pushRd() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DebridDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DebridDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     void pushTorbox() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => TorboxDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: show.name,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TorboxDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: show.name,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     // If only one provider, push directly
@@ -826,12 +960,19 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               padding: EdgeInsets.all(16),
               child: Text(
                 'Select Provider',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
-              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Real-Debrid',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushRd();
@@ -839,7 +980,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
-              title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'TorBox',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushTorbox();
@@ -899,7 +1043,11 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               ),
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  color: Color(0xFF60A5FA),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -910,34 +1058,53 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               children: [
                 Text(
                   source.torrentName,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: serviceColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
                     serviceLabel,
-                    style: TextStyle(color: serviceColor, fontSize: 10, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: serviceColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Color(0xFFEF4444),
+            ),
             onPressed: onDelete,
             tooltip: 'Remove source',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           if (showDragHandle)
-            const Icon(Icons.drag_handle_rounded, size: 18, color: Colors.white24),
+            const Icon(
+              Icons.drag_handle_rounded,
+              size: 18,
+              color: Colors.white24,
+            ),
         ],
       ),
     );
@@ -991,7 +1158,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                   if (!_isLoading) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(10),
@@ -1053,48 +1223,61 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = _results[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: KeyedSubtree(
-                      key: _resultCardKeys[index],
-                      child: _CatalogResultCard(
-                        item: item,
-                        focusNode: _resultFocusNodes[index],
-                        isFocused: _focusedIndex == index,
-                        onQuickPlay: () => _onQuickPlay(item),
-                        onSources: () => _onItemSelected(item),
-                        onFocusChange: (focused) {
-                          setState(() {
-                            _focusedIndex = focused ? index : _focusedIndex;
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = _results[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: KeyedSubtree(
+                    key: _resultCardKeys[index],
+                    child: _CatalogResultCard(
+                      item: item,
+                      focusNode: _resultFocusNodes[index],
+                      isFocused: _focusedIndex == index,
+                      onQuickPlay: () => _onQuickPlay(item),
+                      onSources: () => _onItemSelected(item),
+                      onFocusChange: (focused) {
+                        setState(() {
+                          _focusedIndex = focused ? index : _focusedIndex;
+                        });
+                        // Scroll into view when focused
+                        if (focused) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _scrollResultIntoView(index);
                           });
-                          // Scroll into view when focused
-                          if (focused) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _scrollResultIntoView(index);
-                            });
-                          }
-                        },
-                        onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
-                            _handleResultKeyEvent(node, event, index, isQuickPlayFocused: isQuickPlayFocused),
-                        showQuickPlay: widget.showQuickPlay,
-                        onTraktMenuAction: (item.hasValidImdbId || (item.hasValidId && (item.type == 'movie' || item.type == 'series')))
-                            ? (action) => handleTraktMenuAction(context, item, action,
-                                onSelectSource: widget.onSelectSource,
-                                onEditSource: _handleSelectSourceAction,
-                                onSearchPacks: widget.onSearchPacks)
-                            : null,
-                        hasBoundSource: _boundSources.containsKey(item.effectiveImdbId ?? item.id),
-                        isTraktAuthenticated: _isTraktAuthenticated,
-                        isTelevision: widget.isTelevision,
+                        }
+                      },
+                      onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
+                          _handleResultKeyEvent(
+                            node,
+                            event,
+                            index,
+                            isQuickPlayFocused: isQuickPlayFocused,
+                          ),
+                      showQuickPlay: widget.showQuickPlay,
+                      onTraktMenuAction:
+                          (item.hasValidImdbId ||
+                              (item.hasValidId &&
+                                  (item.type == 'movie' ||
+                                      item.type == 'series')))
+                          ? (action) => handleTraktMenuAction(
+                              context,
+                              item,
+                              action,
+                              onSelectSource: widget.onSelectSource,
+                              onEditSource: _handleSelectSourceAction,
+                              onSearchPacks: widget.onSearchPacks,
+                              onAddToStremioTv: _handleAddToStremioTv,
+                            )
+                          : null,
+                      hasBoundSource: _boundSources.containsKey(
+                        item.effectiveImdbId ?? item.id,
                       ),
+                      isTraktAuthenticated: _isTraktAuthenticated,
+                      isTelevision: widget.isTelevision,
                     ),
-                  );
-                },
-                childCount: _results.length,
-              ),
+                  ),
+                );
+              }, childCount: _results.length),
             ),
           ),
 
@@ -1122,7 +1305,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                   Text(
                     'Try the keyword search above for torrent results',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      color: theme.colorScheme.onSurfaceVariant.withOpacity(
+                        0.7,
+                      ),
                     ),
                   ),
                 ],
@@ -1185,11 +1370,7 @@ class _KeywordSearchCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.search,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                const Icon(Icons.search, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Flexible(
                   child: Text.rich(
@@ -1197,9 +1378,7 @@ class _KeywordSearchCard extends StatelessWidget {
                       children: [
                         const TextSpan(
                           text: 'Tap to search ',
-                          style: TextStyle(
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(color: Colors.white70),
                         ),
                         TextSpan(
                           text: '"$query"',
@@ -1239,7 +1418,8 @@ class _CatalogResultCard extends StatefulWidget {
   final VoidCallback onQuickPlay;
   final VoidCallback onSources;
   final ValueChanged<bool> onFocusChange;
-  final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused}) onKeyEvent;
+  final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused})
+  onKeyEvent;
   final bool showQuickPlay;
   final void Function(TraktItemMenuAction action)? onTraktMenuAction;
   final bool hasBoundSource;
@@ -1311,8 +1491,11 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
       return KeyEventResult.handled;
     }
 
-    return widget.onKeyEvent(node, event,
-        isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex);
+    return widget.onKeyEvent(
+      node,
+      event,
+      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
+    );
   }
 
   void _handleFocusChange(bool focused) {
@@ -1346,7 +1529,9 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
     final cardStack = Stack(
       children: [
         Positioned.fill(
-          child: _buildBackdropImage(widget.item.background ?? widget.item.poster),
+          child: _buildBackdropImage(
+            widget.item.background ?? widget.item.poster,
+          ),
         ),
         Positioned.fill(
           child: DecoratedBox(
@@ -1451,25 +1636,33 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                 widget.item.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
+                  shadows: widget.isTelevision
+                      ? null
+                      : [const Shadow(blurRadius: 8, color: Colors.black)],
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+              if (widget.item.genres != null &&
+                  widget.item.genres!.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   children: widget.item.genres!.take(3).map((genre) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                       ),
                       child: Text(
                         genre,
@@ -1516,14 +1709,16 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
             icon: Icons.play_arrow_rounded,
             label: 'Play',
             color: const Color(0xFFED1C24),
-            isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
+            isHighlighted:
+                widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
             onTap: widget.onQuickPlay,
           ),
         ],
         if (widget.onTraktMenuAction != null) ...[
           const SizedBox(width: 4),
           buildTraktAddOnlyOverflowMenu(
-            isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
+            isHighlighted:
+                widget.isFocused && _focusedButtonIndex == _moreIndex,
             menuKey: _menuKey,
             onSelected: (action) => widget.onTraktMenuAction?.call(action),
             isMovie: widget.item.type == 'movie',
@@ -1563,25 +1758,33 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                     widget.item.name,
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
-                      shadows: widget.isTelevision ? null : [const Shadow(blurRadius: 8, color: Colors.black)],
+                      shadows: widget.isTelevision
+                          ? null
+                          : [const Shadow(blurRadius: 8, color: Colors.black)],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null && widget.item.genres!.isNotEmpty) ...[
+                  if (widget.item.genres != null &&
+                      widget.item.genres!.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
                       children: widget.item.genres!.take(3).map((genre) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
                           ),
                           child: Text(
                             genre,
@@ -1634,7 +1837,9 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
                   icon: Icons.play_arrow_rounded,
                   label: 'Play',
                   color: const Color(0xFFED1C24),
-                  isHighlighted: widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
+                  isHighlighted:
+                      widget.isFocused &&
+                      _focusedButtonIndex == _quickPlayIndex,
                   onTap: widget.onQuickPlay,
                 ),
               ),
@@ -1642,7 +1847,8 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
             if (widget.onTraktMenuAction != null) ...[
               const SizedBox(width: 4),
               buildTraktAddOnlyOverflowMenu(
-                isHighlighted: widget.isFocused && _focusedButtonIndex == _moreIndex,
+                isHighlighted:
+                    widget.isFocused && _focusedButtonIndex == _moreIndex,
                 menuKey: _menuKey,
                 onSelected: (action) => widget.onTraktMenuAction?.call(action),
                 isMovie: widget.item.type == 'movie',
@@ -1673,11 +1879,7 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
         ],
         if (widget.item.imdbRating != null) ...[
           const SizedBox(width: 8),
-          Icon(
-            Icons.star_rounded,
-            size: 14,
-            color: const Color(0xFFFBBF24),
-          ),
+          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
           const SizedBox(width: 2),
           Text(
             widget.item.imdbRating!.toStringAsFixed(1),
@@ -1709,14 +1911,10 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isHighlighted
-                ? color
-                : Colors.black.withValues(alpha: 0.85),
+            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isHighlighted
-                  ? color
-                  : color.withValues(alpha: 0.6),
+              color: isHighlighted ? color : color.withValues(alpha: 0.6),
               width: 1,
             ),
             boxShadow: isHighlighted
@@ -1736,14 +1934,18 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
               Icon(
                 icon,
                 size: 15,
-                color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                color: isHighlighted
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isHighlighted ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                    color: isHighlighted
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -1771,8 +1973,10 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
       imageUrl: imageUrl,
       memCacheWidth: 600,
       fit: BoxFit.cover,
-      placeholder: (context, url) => Container(decoration: _placeholderGradient),
-      errorWidget: (context, url, error) => Container(decoration: _placeholderGradient),
+      placeholder: (context, url) =>
+          Container(decoration: _placeholderGradient),
+      errorWidget: (context, url, error) =>
+          Container(decoration: _placeholderGradient),
     );
   }
 
@@ -1815,7 +2019,11 @@ class _CatalogResultCardState extends State<_CatalogResultCard> {
   }
 
   Widget _buildTypeBadge() {
-    final typeLabel = widget.item.type == 'movie' ? 'Movie' : widget.item.type == 'series' ? 'Series' : widget.item.type;
+    final typeLabel = widget.item.type == 'movie'
+        ? 'Movie'
+        : widget.item.type == 'series'
+        ? 'Series'
+        : widget.item.type;
     final color = widget.item.type == 'series'
         ? const Color(0xFF34D399)
         : const Color(0xFF60A5FA);
@@ -1849,9 +2057,7 @@ class _ShimmerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.2),
-        ),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
       ),
       child: Row(
         children: [
