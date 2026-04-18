@@ -7,11 +7,13 @@ import 'package:flutter/services.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 
+enum _ChannelRowMenuAction { favorite }
+
 /// A single channel row in the Stremio TV guide.
 ///
 /// Premium TV-style card with backdrop poster, channel badge, metadata overlay.
-/// Tap to play, favorite via explicit button or long press.
-/// DPAD: left/right moves across Play, Favorite, and Guide actions.
+/// Tap to play, favorite via overflow menu or long press.
+/// DPAD: left/right moves across Play, Guide, and More actions.
 class StremioTvChannelRow extends StatefulWidget {
   final StremioTvChannel channel;
   final StremioTvNowPlaying? nowPlaying;
@@ -50,12 +52,14 @@ class StremioTvChannelRow extends StatefulWidget {
 
 class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
   int _selectedActionIndex = 0;
+  final GlobalKey<PopupMenuButtonState<_ChannelRowMenuAction>> _menuKey =
+      GlobalKey<PopupMenuButtonState<_ChannelRowMenuAction>>();
 
   int get _guideActionIndex => 1;
 
-  int get _favoriteActionIndex => widget.onGuidePressed != null ? 2 : 1;
+  int get _menuActionIndex => widget.onGuidePressed != null ? 2 : 1;
 
-  int get _maxActionIndex => _favoriteActionIndex;
+  int get _maxActionIndex => _menuActionIndex;
 
   @override
   void didUpdateWidget(StremioTvChannelRow oldWidget) {
@@ -79,8 +83,8 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
 
         if (event.logicalKey == LogicalKeyboardKey.select ||
             event.logicalKey == LogicalKeyboardKey.enter) {
-          if (_selectedActionIndex == _favoriteActionIndex) {
-            widget.onFavoritePressed();
+          if (_selectedActionIndex == _menuActionIndex) {
+            _menuKey.currentState?.showButtonMenu();
           } else if (widget.onGuidePressed != null &&
               _selectedActionIndex == _guideActionIndex) {
             widget.onGuidePressed?.call();
@@ -345,19 +349,10 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                       ),
                     ],
                     const SizedBox(width: 8),
-                    _buildIconActionBtn(
-                      icon: widget.channel.isFavorite
-                          ? Icons.star_rounded
-                          : Icons.star_border_rounded,
-                      tooltip: widget.channel.isFavorite
-                          ? 'Unfavorite'
-                          : 'Favorite',
-                      baseColor: const Color(0xFFF59E0B),
+                    _buildOverflowActionBtn(
                       dpadSelected:
                           widget.isFocused &&
-                          _selectedActionIndex == _favoriteActionIndex,
-                      filled: widget.channel.isFavorite,
-                      onTap: widget.onFavoritePressed,
+                          _selectedActionIndex == _menuActionIndex,
                     ),
                   ],
                 ),
@@ -556,19 +551,10 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                         ),
                       ],
                       const SizedBox(width: 8),
-                      _buildIconActionBtn(
-                        icon: widget.channel.isFavorite
-                            ? Icons.star_rounded
-                            : Icons.star_border_rounded,
-                        tooltip: widget.channel.isFavorite
-                            ? 'Unfavorite'
-                            : 'Favorite',
-                        baseColor: const Color(0xFFF59E0B),
+                      _buildOverflowActionBtn(
                         dpadSelected:
                             widget.isFocused &&
-                            _selectedActionIndex == _favoriteActionIndex,
-                        filled: widget.channel.isFavorite,
-                        onTap: widget.onFavoritePressed,
+                            _selectedActionIndex == _menuActionIndex,
                       ),
                     ],
                   ),
@@ -760,43 +746,67 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
     );
   }
 
-  Widget _buildIconActionBtn({
-    required IconData icon,
-    required String tooltip,
-    required Color baseColor,
-    required bool dpadSelected,
-    required bool filled,
-    VoidCallback? onTap,
-  }) {
-    final backgroundColor = dpadSelected
-        ? baseColor
-        : filled
-        ? baseColor.withValues(alpha: 0.2)
-        : Colors.white.withValues(alpha: 0.08);
-    final iconColor = dpadSelected || filled ? Colors.white : baseColor;
-
+  Widget _buildOverflowActionBtn({required bool dpadSelected}) {
     return Tooltip(
-      message: tooltip,
+      message: 'More options',
       child: ExcludeFocus(
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(10),
+        child: PopupMenuButton<_ChannelRowMenuAction>(
+          key: _menuKey,
+          tooltip: 'More options',
+          color: const Color(0xFF111827),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          onSelected: (action) {
+            switch (action) {
+              case _ChannelRowMenuAction.favorite:
+                widget.onFavoritePressed();
+                break;
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem<_ChannelRowMenuAction>(
+              value: _ChannelRowMenuAction.favorite,
+              child: Row(
+                children: [
+                  Icon(
+                    widget.channel.isFavorite
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    size: 18,
+                    color: const Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(widget.channel.isFavorite ? 'Unfavorite' : 'Favorite'),
+                ],
+              ),
+            ),
+          ],
+          child: Material(
+            color: Colors.transparent,
             child: Container(
               width: 36,
               height: 36,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                color: backgroundColor,
+                color: dpadSelected
+                    ? const Color(0xFF6366F1)
+                    : Colors.white.withValues(alpha: 0.08),
                 border: Border.all(
                   color: dpadSelected
                       ? Colors.white
-                      : baseColor.withValues(alpha: filled ? 0.35 : 0.18),
+                      : Colors.white.withValues(alpha: 0.16),
                   width: dpadSelected ? 2 : 1,
                 ),
               ),
-              child: Icon(icon, size: 18, color: iconColor),
+              child: Icon(
+                Icons.more_vert_rounded,
+                size: 18,
+                color: dpadSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.78),
+              ),
             ),
           ),
         ),
