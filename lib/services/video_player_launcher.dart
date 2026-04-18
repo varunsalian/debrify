@@ -216,6 +216,8 @@ class VideoPlayerLaunchArgs {
   stremioTvChannelSwitchProvider;
   // Trakt scrobble: send playback progress to Trakt
   final bool traktScrobble;
+  // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
+  final bool suppressTraktAutoSync;
   // Trakt progress: resume fallback when no local resume exists (0-100)
   final double? traktProgressPercent;
   // Continue watching metadata (for home screen section)
@@ -266,6 +268,7 @@ class VideoPlayerLaunchArgs {
     this.stremioTvGuideDataProvider,
     this.stremioTvChannelSwitchProvider,
     this.traktScrobble = false,
+    this.suppressTraktAutoSync = false,
     this.traktProgressPercent,
     this.contentTitle,
     this.posterUrl,
@@ -359,6 +362,7 @@ class VideoPlayerLauncher {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
     if (!args.traktScrobble &&
+        !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
         args.stremioTvChannels == null) {
       final results = await Future.wait([
@@ -410,6 +414,7 @@ class VideoPlayerLauncher {
           stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
           stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
           traktScrobble: true,
+          suppressTraktAutoSync: args.suppressTraktAutoSync,
           traktProgressPercent: args.traktProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,

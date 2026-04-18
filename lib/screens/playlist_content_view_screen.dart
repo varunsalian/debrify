@@ -85,8 +85,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'playlist-search');
-  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'playlist-search-button');
-  final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'playlist-search-clear');
+  final FocusNode _searchButtonFocusNode = FocusNode(
+    debugLabel: 'playlist-search-button',
+  );
+  final FocusNode _searchClearFocusNode = FocusNode(
+    debugLabel: 'playlist-search-clear',
+  );
   List<_SearchResult> _searchResults = [];
 
   // Long-press state for episode cards (Android TV D-pad)
@@ -244,7 +248,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // 1. Try IMDB ID lookup first (most reliable — avoids title mismatches)
       final imdbId = widget.playlistItem['imdbId'] as String?;
       if (imdbId != null && imdbId.isNotEmpty) {
-        episodeProgress = await StorageService.getEpisodeProgressByImdbId(imdbId);
+        episodeProgress = await StorageService.getEpisodeProgressByImdbId(
+          imdbId,
+        );
       }
 
       // 2. Fallback: try seriesTitle field
@@ -951,10 +957,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Only search video files
         if (FileUtils.isVideoFile(node.name) &&
             node.name.toLowerCase().contains(lowerQuery)) {
-          results.add(_SearchResult(
-            node: node,
-            path: path.join(' / '),
-          ));
+          results.add(_SearchResult(node: node, path: path.join(' / ')));
         }
       } else {
         // Recurse into folder
@@ -988,11 +991,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 final textLength = _searchController.text.length;
                 final selection = _searchController.selection;
                 final isTextEmpty = textLength == 0;
-                final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
-                final isAtStart = !isSelectionValid ||
+                final isSelectionValid =
+                    selection.isValid && selection.baseOffset >= 0;
+                final isAtStart =
+                    !isSelectionValid ||
                     (selection.baseOffset == 0 && selection.extentOffset == 0);
-                final isAtEnd = !isSelectionValid ||
-                    (selection.baseOffset == textLength && selection.extentOffset == textLength);
+                final isAtEnd =
+                    !isSelectionValid ||
+                    (selection.baseOffset == textLength &&
+                        selection.extentOffset == textLength);
 
                 // Arrow Up at start/empty: exit TextField
                 if (key == LogicalKeyboardKey.arrowUp) {
@@ -1033,7 +1040,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 style: const TextStyle(color: Colors.white),
                 onChanged: _performSearch,
@@ -1117,10 +1127,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (_searchResults.isEmpty) {
       return const Center(
-        child: Text(
-          'No files found',
-          style: TextStyle(color: Colors.grey),
-        ),
+        child: Text('No files found', style: TextStyle(color: Colors.grey)),
       );
     }
 
@@ -1209,7 +1216,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   // Progress badge
                   if (progress > 0)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: isFinished ? Colors.green : Colors.blue,
                         borderRadius: BorderRadius.circular(4),
@@ -1282,11 +1292,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             ),
 
           // Search bar (only for Raw and Sort A-Z modes when active)
-          if (_isSearchActive && _currentViewMode != FolderViewMode.seriesArrange)
+          if (_isSearchActive &&
+              _currentViewMode != FolderViewMode.seriesArrange)
             _buildSearchBar(),
 
           // Content area
-          Expanded(child: _isSearchActive ? _buildSearchResults() : _buildContent()),
+          Expanded(
+            child: _isSearchActive ? _buildSearchResults() : _buildContent(),
+          ),
         ],
       ),
     );
@@ -2295,9 +2308,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           progress = positionMs / durationMs;
           // Check if finished based on progress OR if it's marked as finished explicitly
           // Dummy data has durationMs = 1 to indicate manually marked as watched
-          isFinished = progress >= 0.9 ||
-                       (durationMs - positionMs) < 120000 ||
-                       (positionMs == 0 && durationMs == 1);
+          isFinished =
+              progress >= 0.9 ||
+              (durationMs - positionMs) < 120000 ||
+              (positionMs == 0 && durationMs == 1);
           print(
             '📈 Progress: ${(progress * 100).round()}%, Finished: $isFinished',
           );
@@ -2333,11 +2347,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
             // Start timer for long press (800ms) - marks as watched
             _episodeLongPressTimer?.cancel();
-            _episodeLongPressTimer = Timer(const Duration(milliseconds: 800), () {
-              _episodeLongPressTriggered = true;
-              _lastEpisodeLongPressTime = DateTime.now();
-              _toggleWatchedState(episode);
-            });
+            _episodeLongPressTimer = Timer(
+              const Duration(milliseconds: 800),
+              () {
+                _episodeLongPressTriggered = true;
+                _lastEpisodeLongPressTime = DateTime.now();
+                _toggleWatchedState(episode);
+              },
+            );
 
             return KeyEventResult.handled;
           } else if (event is KeyRepeatEvent) {
@@ -2353,7 +2370,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
             // Check if we recently triggered a long press
             final timeSinceLongPress = _lastEpisodeLongPressTime != null
-                ? DateTime.now().difference(_lastEpisodeLongPressTime!).inMilliseconds
+                ? DateTime.now()
+                      .difference(_lastEpisodeLongPressTime!)
+                      .inMilliseconds
                 : 999999;
 
             // Short press - play episode
@@ -2390,8 +2409,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 ),
                 child: InkWell(
                   onTap: _isAndroidTv ? null : () => _playEpisode(episode),
-                  onLongPress:
-                      _isAndroidTv ? null : () => _toggleWatchedState(episode),
+                  onLongPress: _isAndroidTv
+                      ? null
+                      : () => _toggleWatchedState(episode),
                   child: isMobile
                       ? _buildMobileEpisodeCard(
                           episode,
@@ -2415,7 +2435,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(6),
@@ -2430,7 +2453,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          isFinished ? 'Hold to unmark' : 'Hold to mark watched',
+                          isFinished
+                              ? 'Hold to unmark'
+                              : 'Hold to mark watched',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 11,
@@ -2457,7 +2482,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     EpisodeInfo? episodeInfo,
   ) {
     final epNum = episode.seriesInfo.episode;
-    final titlePrefix = epNum != null ? 'E${epNum.toString().padLeft(2, '0')} - ' : '';
+    final titlePrefix = epNum != null
+        ? 'E${epNum.toString().padLeft(2, '0')} - '
+        : '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -2485,9 +2512,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     _buildThumbnailPlaceholder(episode),
 
                   if (isFinished)
-                    Container(
-                      color: Colors.black.withValues(alpha: 0.6),
-                    ),
+                    Container(color: Colors.black.withValues(alpha: 0.6)),
 
                   // Thin progress bar at bottom
                   if (progress > 0.0)
@@ -2508,8 +2533,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                                       ? const Color(0xFF059669)
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? const Color(0xFF059669).withValues(alpha: 0.7)
-                                      : const Color(0xFF6366F1).withValues(alpha: 0.7),
+                                      ? const Color(
+                                          0xFF059669,
+                                        ).withValues(alpha: 0.7)
+                                      : const Color(
+                                          0xFF6366F1,
+                                        ).withValues(alpha: 0.7),
                                 ],
                               ),
                             ),
@@ -2541,7 +2570,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                _buildEpisodeMetadataRow(episode, episodeInfo, progress, isFinished),
+                _buildEpisodeMetadataRow(
+                  episode,
+                  episodeInfo,
+                  progress,
+                  isFinished,
+                ),
                 if (hasMetadata && episodeInfo!.plot != null) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -2600,7 +2634,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     EpisodeInfo? episodeInfo,
   ) {
     final epNum = episode.seriesInfo.episode;
-    final titlePrefix = epNum != null ? 'E${epNum.toString().padLeft(2, '0')} - ' : '';
+    final titlePrefix = epNum != null
+        ? 'E${epNum.toString().padLeft(2, '0')} - '
+        : '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2629,9 +2665,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
                   // Dim overlay for watched episodes
                   if (isFinished)
-                    Container(
-                      color: Colors.black.withValues(alpha: 0.6),
-                    ),
+                    Container(color: Colors.black.withValues(alpha: 0.6)),
 
                   // Thin progress bar at bottom of thumbnail
                   if (progress > 0.0)
@@ -2652,8 +2686,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                                       ? const Color(0xFF059669)
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? const Color(0xFF059669).withValues(alpha: 0.7)
-                                      : const Color(0xFF6366F1).withValues(alpha: 0.7),
+                                      ? const Color(
+                                          0xFF059669,
+                                        ).withValues(alpha: 0.7)
+                                      : const Color(
+                                          0xFF6366F1,
+                                        ).withValues(alpha: 0.7),
                                 ],
                               ),
                             ),
@@ -2689,7 +2727,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 const SizedBox(height: 4),
 
                 // Metadata row — S01E01 badge, air date, runtime, rating, watch status
-                _buildEpisodeMetadataRow(episode, episodeInfo, progress, isFinished),
+                _buildEpisodeMetadataRow(
+                  episode,
+                  episodeInfo,
+                  progress,
+                  isFinished,
+                ),
 
                 // Description
                 if (hasMetadata && episodeInfo!.plot != null) ...[
@@ -2745,8 +2788,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   String _formatAirDate(String airDate) {
     try {
       final date = DateTime.parse(airDate);
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       return '${months[date.month - 1]} ${date.day}, ${date.year}';
     } catch (_) {
       return airDate;
@@ -2804,7 +2859,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.star_rounded, size: 13, color: Color(0xFFFBBF24)),
+              const Icon(
+                Icons.star_rounded,
+                size: 13,
+                color: Color(0xFFFBBF24),
+              ),
               const SizedBox(width: 2),
               Text(
                 episodeInfo!.rating!.toStringAsFixed(1),
@@ -2853,8 +2912,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (_seriesPlaylist == null) return;
 
     // Get the series title for storage
-    final String? seriesTitle = _seriesPlaylist!.seriesTitle ??
-                                widget.playlistItem['title'] as String?;
+    final String? seriesTitle =
+        _seriesPlaylist!.seriesTitle ?? widget.playlistItem['title'] as String?;
 
     if (seriesTitle == null || seriesTitle.isEmpty) {
       print('❌ Cannot toggle watched state: No series title available');
@@ -2901,13 +2960,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           SnackBar(
             content: Text(
               isCurrentlyFinished
-                ? 'Episode marked as unwatched'
-                : 'Episode marked as watched',
+                  ? 'Episode marked as unwatched'
+                  : 'Episode marked as watched',
             ),
             duration: const Duration(seconds: 2),
             backgroundColor: isCurrentlyFinished
-              ? const Color(0xFF6366F1)
-              : const Color(0xFF4CAF50),
+                ? const Color(0xFF6366F1)
+                : const Color(0xFF4CAF50),
           ),
         );
       }
@@ -3137,6 +3196,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
+        suppressTraktAutoSync: true,
       ),
     );
   }
@@ -3240,6 +3300,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
+        suppressTraktAutoSync: true,
       ),
     );
   }
@@ -3344,6 +3405,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
+        suppressTraktAutoSync: true,
       ),
     );
   }
@@ -3378,8 +3440,5 @@ class _SearchResult {
   final RDFileNode node;
   final String path;
 
-  const _SearchResult({
-    required this.node,
-    required this.path,
-  });
+  const _SearchResult({required this.node, required this.path});
 }

@@ -23,7 +23,10 @@ class PlaylistPlayerService {
   PlaylistPlayerService._();
 
   /// Play a playlist item. Routes to the correct provider handler.
-  static Future<void> play(BuildContext context, Map<String, dynamic> item) async {
+  static Future<void> play(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
     await StorageService.updatePlaylistItemLastPlayed(item);
 
     // Re-read from storage to pick up any fields saved by other screens
@@ -36,8 +39,8 @@ class PlaylistPlayerService {
     );
 
     final String title = (freshItem['title'] as String?) ?? 'Video';
-    final String provider =
-        ((freshItem['provider'] as String?) ?? 'realdebrid').toLowerCase();
+    final String provider = ((freshItem['provider'] as String?) ?? 'realdebrid')
+        .toLowerCase();
     if (provider == 'torbox') {
       await _playTorboxItem(context, freshItem, fallbackTitle: title);
       return;
@@ -64,17 +67,26 @@ class PlaylistPlayerService {
     if (kind == 'single') {
       final String? restrictedLink = item['restrictedLink'] as String?;
       final String? apiKey = await StorageService.getApiKey();
-      if (restrictedLink != null && restrictedLink.isNotEmpty && apiKey != null && apiKey.isNotEmpty) {
+      if (restrictedLink != null &&
+          restrictedLink.isNotEmpty &&
+          apiKey != null &&
+          apiKey.isNotEmpty) {
         try {
-          final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
+          final unrestrictResult = await DebridService.unrestrictLink(
+            apiKey,
+            restrictedLink,
+          );
           final downloadLink = unrestrictResult['download']?.toString() ?? '';
           final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
           if (downloadLink.isNotEmpty) {
             if (FileUtils.isVideoMimeType(mimeType)) {
               if (!context.mounted) return;
               MainPageBridge.notifyPlayerLaunching();
-              final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
-              final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+              final savedViewModeString =
+                  await StorageService.getPlaylistItemViewMode(item);
+              final viewMode = PlaylistViewModeStorage.fromStorageString(
+                savedViewModeString,
+              );
               await VideoPlayerLauncher.push(
                 context,
                 VideoPlayerLaunchArgs(
@@ -84,6 +96,7 @@ class PlaylistPlayerService {
                   viewMode: viewMode,
                   contentImdbId: item['imdbId'] as String?,
                   contentType: item['contentType'] as String?,
+                  suppressTraktAutoSync: true,
                 ),
               );
             } else {
@@ -103,9 +116,9 @@ class PlaylistPlayerService {
           if (torrentHash != null && torrentHash.isNotEmpty) {
             await _attemptRecovery(context, item);
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error: ${e.toString()}')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
           }
         }
         return;
@@ -128,7 +141,10 @@ class PlaylistPlayerService {
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
-                Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+                Text(
+                  'Preparing playlist…',
+                  style: TextStyle(color: Colors.white),
+                ),
               ],
             ),
           ),
@@ -137,39 +153,53 @@ class PlaylistPlayerService {
         final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
         final allFiles = (info['files'] as List<dynamic>? ?? const []);
         if (allFiles.isEmpty) {
-          if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (context.mounted && Navigator.of(context).canPop())
+            Navigator.of(context).pop();
           return;
         }
 
         final links = (info['links'] as List<dynamic>? ?? const []);
 
         // Archive check
-        final selectedFiles = allFiles.where((f) => f['selected'] == 1).toList();
+        final selectedFiles = allFiles
+            .where((f) => f['selected'] == 1)
+            .toList();
         final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : allFiles;
         if (filesToUse.length > 1 && links.length == 1) {
-          if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (context.mounted && Navigator.of(context).canPop())
+            Navigator.of(context).pop();
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('This is an archived torrent. Please extract it first.')),
+              const SnackBar(
+                content: Text(
+                  'This is an archived torrent. Please extract it first.',
+                ),
+              ),
             );
           }
           return;
         }
 
-        final rootNode = RDFolderTreeBuilder.buildTree(allFiles.cast<Map<String, dynamic>>());
+        final rootNode = RDFolderTreeBuilder.buildTree(
+          allFiles.cast<Map<String, dynamic>>(),
+        );
         final videoFiles = RDFolderTreeBuilder.collectVideoFiles(rootNode);
 
         if (videoFiles.isEmpty) {
-          if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+          if (context.mounted && Navigator.of(context).canPop())
+            Navigator.of(context).pop();
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No playable video files found in this torrent.')),
+              const SnackBar(
+                content: Text('No playable video files found in this torrent.'),
+              ),
             );
           }
           return;
         }
 
-        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+        final savedViewModeString =
+            await StorageService.getPlaylistItemViewMode(item);
 
         // Apply Sort A-Z sorting if in sorted mode
         if (savedViewModeString == 'sortedAZ') {
@@ -186,7 +216,9 @@ class PlaylistPlayerService {
           for (int i = 0; i < seriesInfos.length; i++) {
             final info = seriesInfos[i];
             if (info.isSeries && info.season != null && info.episode != null) {
-              if (info.season! < lowestSeason || (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+              if (info.season! < lowestSeason ||
+                  (info.season! == lowestSeason &&
+                      info.episode! < lowestEpisode)) {
                 lowestSeason = info.season!;
                 lowestEpisode = info.episode!;
                 firstIndex = i;
@@ -204,49 +236,75 @@ class PlaylistPlayerService {
 
           if (i == firstIndex) {
             try {
-              final unrestrictResult = await DebridService.unrestrictLink(apiKey, restrictedLink);
+              final unrestrictResult = await DebridService.unrestrictLink(
+                apiKey,
+                restrictedLink,
+              );
               final url = unrestrictResult['download']?.toString() ?? '';
               if (url.isNotEmpty) {
-                entries.add(PlaylistEntry(
-                  url: url, title: file.name,
-                  relativePath: file.relativePath ?? file.path,
-                  rdTorrentId: rdTorrentId, rdLinkIndex: linkIndex,
-                  torrentHash: torrentHash, sizeBytes: file.bytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: url,
+                    title: file.name,
+                    relativePath: file.relativePath ?? file.path,
+                    rdTorrentId: rdTorrentId,
+                    rdLinkIndex: linkIndex,
+                    torrentHash: torrentHash,
+                    sizeBytes: file.bytes,
+                  ),
+                );
               } else {
-                entries.add(PlaylistEntry(
-                  url: '', title: file.name,
-                  relativePath: file.relativePath ?? file.path,
-                  restrictedLink: restrictedLink,
-                  rdTorrentId: rdTorrentId, rdLinkIndex: linkIndex,
-                  torrentHash: torrentHash, sizeBytes: file.bytes,
-                ));
+                entries.add(
+                  PlaylistEntry(
+                    url: '',
+                    title: file.name,
+                    relativePath: file.relativePath ?? file.path,
+                    restrictedLink: restrictedLink,
+                    rdTorrentId: rdTorrentId,
+                    rdLinkIndex: linkIndex,
+                    torrentHash: torrentHash,
+                    sizeBytes: file.bytes,
+                  ),
+                );
               }
             } catch (_) {
-              entries.add(PlaylistEntry(
-                url: '', title: file.name,
-                relativePath: file.relativePath ?? file.path,
-                restrictedLink: restrictedLink,
-                rdTorrentId: rdTorrentId, rdLinkIndex: linkIndex,
-                torrentHash: torrentHash, sizeBytes: file.bytes,
-              ));
+              entries.add(
+                PlaylistEntry(
+                  url: '',
+                  title: file.name,
+                  relativePath: file.relativePath ?? file.path,
+                  restrictedLink: restrictedLink,
+                  rdTorrentId: rdTorrentId,
+                  rdLinkIndex: linkIndex,
+                  torrentHash: torrentHash,
+                  sizeBytes: file.bytes,
+                ),
+              );
             }
           } else {
-            entries.add(PlaylistEntry(
-              url: '', title: file.name,
-              relativePath: file.relativePath ?? file.path,
-              restrictedLink: restrictedLink,
-              rdTorrentId: rdTorrentId, rdLinkIndex: linkIndex,
-              torrentHash: torrentHash, sizeBytes: file.bytes,
-            ));
+            entries.add(
+              PlaylistEntry(
+                url: '',
+                title: file.name,
+                relativePath: file.relativePath ?? file.path,
+                restrictedLink: restrictedLink,
+                rdTorrentId: rdTorrentId,
+                rdLinkIndex: linkIndex,
+                torrentHash: torrentHash,
+                sizeBytes: file.bytes,
+              ),
+            );
           }
         }
 
-        if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (context.mounted && Navigator.of(context).canPop())
+          Navigator.of(context).pop();
         if (entries.isEmpty) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No playable video files found in this torrent.')),
+              const SnackBar(
+                content: Text('No playable video files found in this torrent.'),
+              ),
             );
           }
           return;
@@ -257,7 +315,9 @@ class PlaylistPlayerService {
 
         if (!context.mounted) return;
         MainPageBridge.notifyPlayerLaunching();
-        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(
+          savedViewModeString,
+        );
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -270,10 +330,12 @@ class PlaylistPlayerService {
             viewMode: viewMode,
             contentImdbId: item['imdbId'] as String?,
             contentType: item['contentType'] as String?,
+            suppressTraktAutoSync: true,
           ),
         );
       } catch (e) {
-        if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (context.mounted && Navigator.of(context).canPop())
+          Navigator.of(context).pop();
         if (torrentHash != null && torrentHash.isNotEmpty) {
           await _attemptRecovery(context, item);
         }
@@ -285,8 +347,12 @@ class PlaylistPlayerService {
     final String url = (item['url'] as String?) ?? '';
     if (!context.mounted) return;
     MainPageBridge.notifyPlayerLaunching();
-    final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
-    final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+    final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+      item,
+    );
+    final viewMode = PlaylistViewModeStorage.fromStorageString(
+      savedViewModeString,
+    );
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -296,6 +362,7 @@ class PlaylistPlayerService {
         viewMode: viewMode,
         contentImdbId: item['imdbId'] as String?,
         contentType: item['contentType'] as String?,
+        suppressTraktAutoSync: true,
       ),
     );
   }
@@ -311,7 +378,11 @@ class PlaylistPlayerService {
     if (apiKey == null || apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add your Torbox API key in Settings to play playlist items.')),
+        const SnackBar(
+          content: Text(
+            'Add your Torbox API key in Settings to play playlist items.',
+          ),
+        ),
       );
       return;
     }
@@ -339,19 +410,27 @@ class PlaylistPlayerService {
 
       try {
         final streamUrl = await TorboxService.requestFileDownloadLink(
-          apiKey: apiKey, torrentId: torrentId, fileId: fileId,
+          apiKey: apiKey,
+          torrentId: torrentId,
+          fileId: fileId,
         );
 
         final int? sizeBytes = _asInt(item['sizeBytes']);
-        final String? subtitle =
-            sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+        final String? subtitle = sizeBytes != null && sizeBytes > 0
+            ? Formatters.formatFileSize(sizeBytes)
+            : null;
         final String resolvedTitle =
-            (item['title'] as String?)?.isNotEmpty == true ? item['title'] as String : fallbackTitle;
+            (item['title'] as String?)?.isNotEmpty == true
+            ? item['title'] as String
+            : fallbackTitle;
 
         if (!context.mounted) return;
         MainPageBridge.notifyPlayerLaunching();
-        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
-        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+        final savedViewModeString =
+            await StorageService.getPlaylistItemViewMode(item);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(
+          savedViewModeString,
+        );
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
@@ -362,12 +441,17 @@ class PlaylistPlayerService {
             viewMode: viewMode,
             contentImdbId: item['imdbId'] as String?,
             contentType: item['contentType'] as String?,
+            suppressTraktAutoSync: true,
           ),
         );
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to prepare Torbox stream: ${_formatTorboxError(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to prepare Torbox stream: ${_formatTorboxError(e)}',
+            ),
+          ),
         );
       }
       return;
@@ -387,7 +471,10 @@ class PlaylistPlayerService {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+              Text(
+                'Preparing playlist…',
+                style: TextStyle(color: Colors.white),
+              ),
             ],
           ),
         );
@@ -397,16 +484,23 @@ class PlaylistPlayerService {
     final previousKey = StorageService.computePlaylistDedupeKey(item);
 
     try {
-      TorboxTorrent? torrent = await TorboxService.getTorrentById(apiKey, torrentId);
+      TorboxTorrent? torrent = await TorboxService.getTorrentById(
+        apiKey,
+        torrentId,
+      );
 
       if (torrent == null) {
         torrent = await _recoverTorboxPlaylistTorrent(
-          apiKey: apiKey, item: item, context: context,
+          apiKey: apiKey,
+          item: item,
+          context: context,
         );
         if (torrent == null) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Torbox torrent is no longer available.')),
+              const SnackBar(
+                content: Text('Torbox torrent is no longer available.'),
+              ),
             );
           }
           return;
@@ -429,7 +523,9 @@ class PlaylistPlayerService {
             .whereType<int>()
             .toSet();
         if (selectedIds.isNotEmpty) {
-          final filtered = files.where((file) => selectedIds.contains(file.id)).toList();
+          final filtered = files
+              .where((file) => selectedIds.contains(file.id))
+              .toList();
           if (filtered.isNotEmpty) files = filtered;
         }
       }
@@ -443,19 +539,25 @@ class PlaylistPlayerService {
       if (files.isEmpty) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No playable Torbox video files found.')),
+          const SnackBar(
+            content: Text('No playable Torbox video files found.'),
+          ),
         );
         return;
       }
 
-      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+        item,
+      );
 
       if (savedViewModeString == 'sortedAZ') {
         _sortTorboxFilesAZ(files);
       }
 
       final entries = _buildTorboxPlaylistEntries(
-        torrent: torrent, files: files, viewMode: savedViewModeString,
+        torrent: torrent,
+        files: files,
+        viewMode: savedViewModeString,
       );
       final playlistEntries = entries.playlistEntries;
       final startIndex = entries.startIndex;
@@ -507,7 +609,9 @@ class PlaylistPlayerService {
 
       if (!context.mounted) return;
       MainPageBridge.notifyPlayerLaunching();
-      final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+      final viewMode = PlaylistViewModeStorage.fromStorageString(
+        savedViewModeString,
+      );
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -520,12 +624,17 @@ class PlaylistPlayerService {
           viewMode: viewMode,
           contentImdbId: item['imdbId'] as String?,
           contentType: item['contentType'] as String?,
+          suppressTraktAutoSync: true,
         ),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to prepare Torbox playlist: ${_formatTorboxError(e)}')),
+        SnackBar(
+          content: Text(
+            'Failed to prepare Torbox playlist: ${_formatTorboxError(e)}',
+          ),
+        ),
       );
     } finally {
       if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
@@ -546,7 +655,11 @@ class PlaylistPlayerService {
     if (!await pikpak.isAuthenticated()) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please login to PikPak in Settings to play playlist items.')),
+        const SnackBar(
+          content: Text(
+            'Please login to PikPak in Settings to play playlist items.',
+          ),
+        ),
       );
       return;
     }
@@ -565,8 +678,10 @@ class PlaylistPlayerService {
       }
 
       try {
-        final Map<String, dynamic>? storedFile = item['pikpakFile'] as Map<String, dynamic>?;
-        final bool hasStoredMetadata = storedFile != null && storedFile.isNotEmpty;
+        final Map<String, dynamic>? storedFile =
+            item['pikpakFile'] as Map<String, dynamic>?;
+        final bool hasStoredMetadata =
+            storedFile != null && storedFile.isNotEmpty;
 
         final fileData = await pikpak.getFileDetails(pikpakFileId);
         final url = pikpak.getStreamingUrl(fileData);
@@ -574,29 +689,39 @@ class PlaylistPlayerService {
         if (url == null || url.isEmpty) {
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to get PikPak streaming URL.')),
+            const SnackBar(
+              content: Text('Failed to get PikPak streaming URL.'),
+            ),
           );
           return;
         }
 
         final String resolvedTitle = hasStoredMetadata
             ? ((storedFile['name'] as String?)?.isNotEmpty == true
-                ? storedFile['name'] as String : fallbackTitle)
+                  ? storedFile['name'] as String
+                  : fallbackTitle)
             : ((fileData['name'] as String?)?.isNotEmpty == true
-                ? fileData['name'] as String : fallbackTitle);
+                  ? fileData['name'] as String
+                  : fallbackTitle);
 
         final int? sizeBytes = hasStoredMetadata
-            ? _asInt(storedFile['size']) : _asInt(fileData['size']);
-        final String? subtitle =
-            sizeBytes != null && sizeBytes > 0 ? Formatters.formatFileSize(sizeBytes) : null;
+            ? _asInt(storedFile['size'])
+            : _asInt(fileData['size']);
+        final String? subtitle = sizeBytes != null && sizeBytes > 0
+            ? Formatters.formatFileSize(sizeBytes)
+            : null;
 
         if (!context.mounted) return;
         MainPageBridge.notifyPlayerLaunching();
-        final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
-        final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+        final savedViewModeString =
+            await StorageService.getPlaylistItemViewMode(item);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(
+          savedViewModeString,
+        );
 
         final singleFileRelativePath = hasStoredMetadata
-            ? ((storedFile['_fullPath'] as String?) ?? (storedFile['name'] as String?))
+            ? ((storedFile['_fullPath'] as String?) ??
+                  (storedFile['name'] as String?))
             : (fileData['name'] as String?);
 
         await VideoPlayerLauncher.push(
@@ -607,9 +732,11 @@ class PlaylistPlayerService {
             subtitle: subtitle,
             playlist: [
               PlaylistEntry(
-                url: url, title: resolvedTitle,
+                url: url,
+                title: resolvedTitle,
                 relativePath: singleFileRelativePath,
-                provider: 'pikpak', pikpakFileId: pikpakFileId,
+                provider: 'pikpak',
+                pikpakFileId: pikpakFileId,
                 sizeBytes: sizeBytes,
               ),
             ],
@@ -618,12 +745,17 @@ class PlaylistPlayerService {
             viewMode: viewMode,
             contentImdbId: item['imdbId'] as String?,
             contentType: item['contentType'] as String?,
+            suppressTraktAutoSync: true,
           ),
         );
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to play PikPak file: ${_formatPikPakError(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to play PikPak file: ${_formatPikPakError(e)}',
+            ),
+          ),
         );
       }
       return;
@@ -631,7 +763,8 @@ class PlaylistPlayerService {
 
     // Collection items
     final List<dynamic>? pikpakFiles = item['pikpakFiles'] as List<dynamic>?;
-    final List<dynamic>? pikpakFileIds = item['pikpakFileIds'] as List<dynamic>?;
+    final List<dynamic>? pikpakFileIds =
+        item['pikpakFileIds'] as List<dynamic>?;
 
     if ((pikpakFiles == null || pikpakFiles.isEmpty) &&
         (pikpakFileIds == null || pikpakFileIds.isEmpty)) {
@@ -642,7 +775,8 @@ class PlaylistPlayerService {
       return;
     }
 
-    final bool hasStoredMetadata = pikpakFiles != null && pikpakFiles.isNotEmpty;
+    final bool hasStoredMetadata =
+        pikpakFiles != null && pikpakFiles.isNotEmpty;
     if (!context.mounted) return;
     bool dialogOpen = false;
 
@@ -658,7 +792,10 @@ class PlaylistPlayerService {
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
-                Text('Preparing playlist...', style: TextStyle(color: Colors.white)),
+                Text(
+                  'Preparing playlist...',
+                  style: TextStyle(color: Colors.white),
+                ),
               ],
             ),
           );
@@ -674,7 +811,8 @@ class PlaylistPlayerService {
           if (file is Map<String, dynamic>) {
             final mimeType = (file['mime_type'] as String?) ?? '';
             final fileName = (file['name'] as String?) ?? '';
-            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+            if (mimeType.startsWith('video/') ||
+                FileUtils.isVideoFile(fileName)) {
               videoFiles.add(file);
             }
           }
@@ -685,11 +823,14 @@ class PlaylistPlayerService {
             final fileData = await pikpak.getFileMetadata(fileId.toString());
             final mimeType = (fileData['mime_type'] as String?) ?? '';
             final fileName = (fileData['name'] as String?) ?? '';
-            if (mimeType.startsWith('video/') || FileUtils.isVideoFile(fileName)) {
+            if (mimeType.startsWith('video/') ||
+                FileUtils.isVideoFile(fileName)) {
               videoFiles.add(fileData);
             }
           } catch (e) {
-            debugPrint('PlaylistPlayerService: Failed to get PikPak file metadata for $fileId: $e');
+            debugPrint(
+              'PlaylistPlayerService: Failed to get PikPak file metadata for $fileId: $e',
+            );
           }
         }
       }
@@ -701,7 +842,9 @@ class PlaylistPlayerService {
         }
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No playable PikPak video files found.')),
+          const SnackBar(
+            content: Text('No playable PikPak video files found.'),
+          ),
         );
         return;
       }
@@ -710,14 +853,22 @@ class PlaylistPlayerService {
       for (final file in videoFiles) {
         final displayName = (file['name'] as String?) ?? 'Unknown';
         final info = SeriesParser.parseFilename(displayName);
-        candidates.add(_PikPakPlaylistCandidate(file: file, info: info, displayName: displayName));
+        candidates.add(
+          _PikPakPlaylistCandidate(
+            file: file,
+            info: info,
+            displayName: displayName,
+          ),
+        );
       }
 
       final filenames = candidates.map((c) => c.displayName).toList();
       final bool isSeriesCollection =
           candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
 
-      final savedViewModeString = await StorageService.getPlaylistItemViewMode(item);
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+        item,
+      );
 
       // Sort
       if (savedViewModeString == 'sortedAZ') {
@@ -726,21 +877,31 @@ class PlaylistPlayerService {
         candidates.sort((a, b) {
           final aInfo = a.info;
           final bInfo = b.info;
-          final aIsSeries = aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
-          final bIsSeries = bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+          final aIsSeries =
+              aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+          final bIsSeries =
+              bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
           if (aIsSeries && bIsSeries) {
-            final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+            final seasonCompare = (aInfo.season ?? 0).compareTo(
+              bInfo.season ?? 0,
+            );
             if (seasonCompare != 0) return seasonCompare;
-            final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+            final episodeCompare = (aInfo.episode ?? 0).compareTo(
+              bInfo.episode ?? 0,
+            );
             if (episodeCompare != 0) return episodeCompare;
           } else if (aIsSeries != bIsSeries) {
             return aIsSeries ? -1 : 1;
           }
-          return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+          return a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
         });
       } else {
         candidates.sort(
-          (a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
         );
       }
 
@@ -761,7 +922,9 @@ class PlaylistPlayerService {
           initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
         }
       } catch (e) {
-        debugPrint('PlaylistPlayerService: PikPak initial URL resolution failed: $e');
+        debugPrint(
+          'PlaylistPlayerService: PikPak initial URL resolution failed: $e',
+        );
       }
 
       if (initialUrl.isEmpty) {
@@ -782,28 +945,38 @@ class PlaylistPlayerService {
         final candidate = candidates[i];
         final seriesInfo = candidate.info;
         final episodeLabel = _formatPikPakPlaylistTitle(
-          info: seriesInfo, fallback: candidate.displayName,
+          info: seriesInfo,
+          fallback: candidate.displayName,
           isSeriesCollection: isSeriesCollection,
         );
         final combinedTitle = _composePikPakEntryTitle(
-          seriesTitle: seriesInfo.title, episodeLabel: episodeLabel,
-          isSeriesCollection: isSeriesCollection, fallback: candidate.displayName,
+          seriesTitle: seriesInfo.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: candidate.displayName,
         );
 
         final fileId = candidate.file['id'] as String?;
         final sizeBytes = _asInt(candidate.file['size']);
-        final relativePath = (candidate.file['_fullPath'] as String?) ??
-                            (candidate.file['name'] as String?);
+        final relativePath =
+            (candidate.file['_fullPath'] as String?) ??
+            (candidate.file['name'] as String?);
 
-        playlistEntries.add(PlaylistEntry(
-          url: i == startIndex ? initialUrl : '',
-          title: combinedTitle, relativePath: relativePath,
-          provider: 'pikpak', pikpakFileId: fileId, sizeBytes: sizeBytes,
-        ));
+        playlistEntries.add(
+          PlaylistEntry(
+            url: i == startIndex ? initialUrl : '',
+            title: combinedTitle,
+            relativePath: relativePath,
+            provider: 'pikpak',
+            pikpakFileId: fileId,
+            sizeBytes: sizeBytes,
+          ),
+        );
       }
 
       final totalBytes = candidates.fold<int>(
-        0, (sum, c) => sum + (_asInt(c.file['size']) ?? 0),
+        0,
+        (sum, c) => sum + (_asInt(c.file['size']) ?? 0),
       );
       final subtitle =
           '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
@@ -816,10 +989,13 @@ class PlaylistPlayerService {
       if (!context.mounted) return;
 
       final firstFileId = candidates.isNotEmpty
-          ? (candidates[0].file['id'] as String?) : null;
+          ? (candidates[0].file['id'] as String?)
+          : null;
 
       MainPageBridge.notifyPlayerLaunching();
-      final viewMode = PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+      final viewMode = PlaylistViewModeStorage.fromStorageString(
+        savedViewModeString,
+      );
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -832,12 +1008,17 @@ class PlaylistPlayerService {
           viewMode: viewMode,
           contentImdbId: item['imdbId'] as String?,
           contentType: item['contentType'] as String?,
+          suppressTraktAutoSync: true,
         ),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to prepare PikPak playlist: ${_formatPikPakError(e)}')),
+        SnackBar(
+          content: Text(
+            'Failed to prepare PikPak playlist: ${_formatPikPakError(e)}',
+          ),
+        ),
       );
     } finally {
       if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
@@ -848,11 +1029,17 @@ class PlaylistPlayerService {
 
   // ── Recovery ─────────────────────────────────────────────────────────────
 
-  static Future<void> _attemptRecovery(BuildContext context, Map<String, dynamic> item) async {
+  static Future<void> _attemptRecovery(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
     final String? torrentHash = item['torrent_hash'] as String?;
     final String? apiKey = await StorageService.getApiKey();
 
-    if (torrentHash == null || torrentHash.isEmpty || apiKey == null || apiKey.isEmpty) {
+    if (torrentHash == null ||
+        torrentHash.isEmpty ||
+        apiKey == null ||
+        apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Content no longer available')),
@@ -870,7 +1057,10 @@ class PlaylistPlayerService {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 16),
-            Text('Reconstructing playlist...', style: TextStyle(color: Colors.white)),
+            Text(
+              'Reconstructing playlist...',
+              style: TextStyle(color: Colors.white),
+            ),
           ],
         ),
       ),
@@ -878,23 +1068,31 @@ class PlaylistPlayerService {
 
     try {
       final magnetLink = 'magnet:?xt=urn:btih:$torrentHash';
-      final result = await DebridService.addTorrentToDebridPreferVideos(apiKey, magnetLink);
+      final result = await DebridService.addTorrentToDebridPreferVideos(
+        apiKey,
+        magnetLink,
+      );
       final newTorrentId = result['torrentId'] as String?;
       final newLinks = result['links'] as List<dynamic>? ?? [];
 
-      if (newTorrentId != null && newTorrentId.isNotEmpty && newLinks.isNotEmpty) {
+      if (newTorrentId != null &&
+          newTorrentId.isNotEmpty &&
+          newLinks.isNotEmpty) {
         await _updatePlaylistItemWithNewTorrent(item, newTorrentId, newLinks);
-        if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (context.mounted && Navigator.of(context).canPop())
+          Navigator.of(context).pop();
         await play(context, item);
       } else {
-        if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (context.mounted && Navigator.of(context).canPop())
+          Navigator.of(context).pop();
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Content no longer available')),
         );
       }
     } catch (e) {
-      if (context.mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (context.mounted && Navigator.of(context).canPop())
+        Navigator.of(context).pop();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Content no longer available')),
@@ -903,7 +1101,9 @@ class PlaylistPlayerService {
   }
 
   static Future<void> _updatePlaylistItemWithNewTorrent(
-    Map<String, dynamic> item, String newTorrentId, List<dynamic> newLinks,
+    Map<String, dynamic> item,
+    String newTorrentId,
+    List<dynamic> newLinks,
   ) async {
     item['rdTorrentId'] = newTorrentId;
     if (item['kind'] == 'single' && newLinks.isNotEmpty) {
@@ -913,7 +1113,8 @@ class PlaylistPlayerService {
     final items = await StorageService.getPlaylistItemsRaw();
     final itemKey = StorageService.computePlaylistDedupeKey(item);
     final itemIndex = items.indexWhere(
-      (playlistItem) => StorageService.computePlaylistDedupeKey(playlistItem) == itemKey,
+      (playlistItem) =>
+          StorageService.computePlaylistDedupeKey(playlistItem) == itemKey,
     );
 
     if (itemIndex != -1) {
@@ -931,7 +1132,9 @@ class PlaylistPlayerService {
     if (hash == null || hash.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cannot recover Torbox torrent – missing hash.')),
+          const SnackBar(
+            content: Text('Cannot recover Torbox torrent – missing hash.'),
+          ),
         );
       }
       return null;
@@ -941,14 +1144,20 @@ class PlaylistPlayerService {
       final response = await TorboxService.createTorrent(
         apiKey: apiKey,
         magnet: 'magnet:?xt=urn:btih:$hash',
-        seed: true, allowZip: true, addOnlyIfCached: true,
+        seed: true,
+        allowZip: true,
+        addOnlyIfCached: true,
       );
 
       final success = response['success'] as bool? ?? false;
       if (!success) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Torbox recovery failed: ${response['error']?.toString() ?? 'unknown error'}')),
+            SnackBar(
+              content: Text(
+                'Torbox recovery failed: ${response['error']?.toString() ?? 'unknown error'}',
+              ),
+            ),
           );
         }
         return null;
@@ -959,7 +1168,9 @@ class PlaylistPlayerService {
       if (newId == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Torbox recovery failed: missing torrent id.')),
+            const SnackBar(
+              content: Text('Torbox recovery failed: missing torrent id.'),
+            ),
           );
         }
         return null;
@@ -975,7 +1186,9 @@ class PlaylistPlayerService {
       if (recovered == null) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Torbox recovery pending – try again in a moment.')),
+            const SnackBar(
+              content: Text('Torbox recovery pending – try again in a moment.'),
+            ),
           );
         }
         return null;
@@ -1001,7 +1214,9 @@ class PlaylistPlayerService {
     for (final node in videoFiles) {
       final fullPath = (node.relativePath ?? node.path) ?? '';
       final lastSlashIndex = fullPath.lastIndexOf('/');
-      final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+      final folderPath = lastSlashIndex >= 0
+          ? fullPath.substring(0, lastSlashIndex)
+          : '';
       folderGroups.putIfAbsent(folderPath, () => []);
       folderGroups[folderPath]!.add(node);
     }
@@ -1040,7 +1255,9 @@ class PlaylistPlayerService {
     for (final file in files) {
       final fullPath = file.name;
       final lastSlashIndex = fullPath.lastIndexOf('/');
-      final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+      final folderPath = lastSlashIndex >= 0
+          ? fullPath.substring(0, lastSlashIndex)
+          : '';
       folderGroups.putIfAbsent(folderPath, () => []);
       folderGroups[folderPath]!.add(file);
     }
@@ -1062,11 +1279,15 @@ class PlaylistPlayerService {
     folderPathsList.sort((a, b) {
       String aFolderName;
       String bFolderName;
-      if (a.isEmpty) { aFolderName = 'Root'; } else {
+      if (a.isEmpty) {
+        aFolderName = 'Root';
+      } else {
         final aParts = a.split('/');
         aFolderName = aParts.length > 1 ? aParts[1] : aParts[0];
       }
-      if (b.isEmpty) { bFolderName = 'Root'; } else {
+      if (b.isEmpty) {
+        bFolderName = 'Root';
+      } else {
         final bParts = b.split('/');
         bFolderName = bParts.length > 1 ? bParts[1] : bParts[0];
       }
@@ -1084,12 +1305,17 @@ class PlaylistPlayerService {
     }
   }
 
-  static void _sortPikPakCandidatesAZ(List<_PikPakPlaylistCandidate> candidates) {
+  static void _sortPikPakCandidatesAZ(
+    List<_PikPakPlaylistCandidate> candidates,
+  ) {
     final folderGroups = <String, List<_PikPakPlaylistCandidate>>{};
     for (final candidate in candidates) {
-      final fullPath = (candidate.file['name'] as String?) ?? candidate.displayName;
+      final fullPath =
+          (candidate.file['name'] as String?) ?? candidate.displayName;
       final lastSlashIndex = fullPath.lastIndexOf('/');
-      final folderPath = lastSlashIndex >= 0 ? fullPath.substring(0, lastSlashIndex) : '';
+      final folderPath = lastSlashIndex >= 0
+          ? fullPath.substring(0, lastSlashIndex)
+          : '';
       folderGroups.putIfAbsent(folderPath, () => []);
       folderGroups[folderPath]!.add(candidate);
     }
@@ -1101,7 +1327,9 @@ class PlaylistPlayerService {
         if (aNum != null && bNum != null) return aNum.compareTo(bNum);
         if (aNum != null) return -1;
         if (bNum != null) return 1;
-        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
       });
     }
 
@@ -1167,8 +1395,9 @@ class PlaylistPlayerService {
       if (!info.isSeries || season == null || episode == null) continue;
       final bool isBetterSeason = bestSeason == null || season < bestSeason;
       final bool isBetterEpisode =
-          bestSeason != null && season == bestSeason &&
-              (bestEpisode == null || episode < bestEpisode);
+          bestSeason != null &&
+          season == bestSeason &&
+          (bestEpisode == null || episode < bestEpisode);
       if (isBetterSeason || isBetterEpisode) {
         bestSeason = season;
         bestEpisode = episode;
@@ -1179,7 +1408,8 @@ class PlaylistPlayerService {
   }
 
   static Future<void> _persistPlaylistItemChanges(
-    Map<String, dynamic> item, String previousKey,
+    Map<String, dynamic> item,
+    String previousKey,
   ) async {
     final items = await StorageService.getPlaylistItemsRaw();
     final index = items.indexWhere(
@@ -1197,9 +1427,11 @@ class PlaylistPlayerService {
     String? viewMode,
   }) {
     final filenames = files
-        .map((file) => file.shortName.isNotEmpty
-            ? file.shortName
-            : FileUtils.getFileName(file.name))
+        .map(
+          (file) => file.shortName.isNotEmpty
+              ? file.shortName
+              : FileUtils.getFileName(file.name),
+        )
         .toList();
     final seriesInfos = SeriesParser.parsePlaylist(filenames);
     final bool isSeriesCollection = SeriesParser.isSeriesPlaylist(filenames);
@@ -1211,40 +1443,58 @@ class PlaylistPlayerService {
       final displayName = _composeTorboxEntryTitle(
         seriesTitle: info.title,
         episodeLabel: _formatTorboxPlaylistTitle(
-          info: info, fallback: filenames[i],
+          info: info,
+          fallback: filenames[i],
           isSeriesCollection: isSeriesCollection,
         ),
         isSeriesCollection: isSeriesCollection,
         fallback: filenames[i],
       );
-      candidates.add(_TorboxPlaylistCandidate(file: file, info: info, displayName: displayName));
+      candidates.add(
+        _TorboxPlaylistCandidate(
+          file: file,
+          info: info,
+          displayName: displayName,
+        ),
+      );
     }
 
     if (viewMode != 'raw' && viewMode != 'sortedAZ') {
       candidates.sort((a, b) {
         final aInfo = a.info;
         final bInfo = b.info;
-        final aIsSeries = aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
-        final bIsSeries = bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+        final aIsSeries =
+            aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+        final bIsSeries =
+            bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
         if (aIsSeries && bIsSeries) {
-          final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+          final seasonCompare = (aInfo.season ?? 0).compareTo(
+            bInfo.season ?? 0,
+          );
           if (seasonCompare != 0) return seasonCompare;
-          final episodeCompare = (aInfo.episode ?? 0).compareTo(bInfo.episode ?? 0);
+          final episodeCompare = (aInfo.episode ?? 0).compareTo(
+            bInfo.episode ?? 0,
+          );
           if (episodeCompare != 0) return episodeCompare;
         } else if (aIsSeries != bIsSeries) {
           return aIsSeries ? -1 : 1;
         }
-        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
       });
     }
 
     int startIndex = 0;
     if (isSeriesCollection) {
       startIndex = candidates.indexWhere(
-        (c) => c.info.isSeries && c.info.season != null && c.info.episode != null,
+        (c) =>
+            c.info.isSeries && c.info.season != null && c.info.episode != null,
       );
       if (startIndex == -1) {
-        startIndex = _findFirstEpisodeIndex(candidates.map((c) => c.info).toList());
+        startIndex = _findFirstEpisodeIndex(
+          candidates.map((c) => c.info).toList(),
+        );
       }
     }
     if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
@@ -1254,27 +1504,36 @@ class PlaylistPlayerService {
       String relativePath = candidate.file.name;
       final firstSlash = relativePath.indexOf('/');
       if (firstSlash > 0) relativePath = relativePath.substring(firstSlash + 1);
-      playlistEntries.add(PlaylistEntry(
-        url: '', title: candidate.displayName,
-        relativePath: relativePath, provider: 'torbox',
-        torboxTorrentId: torrent.id, torboxFileId: candidate.file.id,
-        torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
-        sizeBytes: candidate.file.size,
-      ));
+      playlistEntries.add(
+        PlaylistEntry(
+          url: '',
+          title: candidate.displayName,
+          relativePath: relativePath,
+          provider: 'torbox',
+          torboxTorrentId: torrent.id,
+          torboxFileId: candidate.file.id,
+          torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
+          sizeBytes: candidate.file.size,
+        ),
+      );
     }
 
     final totalBytes = candidates.fold<int>(0, (sum, c) => sum + c.file.size);
-    final subtitle = '${playlistEntries.length} '
+    final subtitle =
+        '${playlistEntries.length} '
         '${isSeriesCollection ? 'episodes' : 'files'} • '
         '${Formatters.formatFileSize(totalBytes)}';
 
     return _TorboxPlaylistEntriesResult(
-      playlistEntries: playlistEntries, startIndex: startIndex, subtitle: subtitle,
+      playlistEntries: playlistEntries,
+      startIndex: startIndex,
+      subtitle: subtitle,
     );
   }
 
   static String _formatTorboxPlaylistTitle({
-    required SeriesInfo info, required String fallback,
+    required SeriesInfo info,
+    required String fallback,
     required bool isSeriesCollection,
   }) {
     if (!isSeriesCollection) return fallback;
@@ -1286,24 +1545,29 @@ class PlaylistPlayerService {
       final description = info.episodeTitle?.trim().isNotEmpty == true
           ? info.episodeTitle!.trim()
           : info.title?.trim().isNotEmpty == true
-              ? info.title!.trim() : fallback;
+          ? info.title!.trim()
+          : fallback;
       return 'S${seasonLabel}E$episodeLabel · $description';
     }
     return fallback;
   }
 
   static String _composeTorboxEntryTitle({
-    required String? seriesTitle, required String episodeLabel,
-    required bool isSeriesCollection, required String fallback,
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
   }) {
     if (!isSeriesCollection) return fallback;
     final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
-    if (cleanSeries != null && cleanSeries.isNotEmpty) return '$cleanSeries $episodeLabel';
+    if (cleanSeries != null && cleanSeries.isNotEmpty)
+      return '$cleanSeries $episodeLabel';
     return fallback;
   }
 
   static String _formatPikPakPlaylistTitle({
-    required SeriesInfo info, required String fallback,
+    required SeriesInfo info,
+    required String fallback,
     required bool isSeriesCollection,
   }) {
     if (!isSeriesCollection) return fallback;
@@ -1315,19 +1579,23 @@ class PlaylistPlayerService {
       final description = info.episodeTitle?.trim().isNotEmpty == true
           ? info.episodeTitle!.trim()
           : info.title?.trim().isNotEmpty == true
-              ? info.title!.trim() : fallback;
+          ? info.title!.trim()
+          : fallback;
       return 'S${seasonLabel}E$episodeLabel · $description';
     }
     return fallback;
   }
 
   static String _composePikPakEntryTitle({
-    required String? seriesTitle, required String episodeLabel,
-    required bool isSeriesCollection, required String fallback,
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
   }) {
     if (!isSeriesCollection) return fallback;
     final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
-    if (cleanSeries != null && cleanSeries.isNotEmpty) return '$cleanSeries $episodeLabel';
+    if (cleanSeries != null && cleanSeries.isNotEmpty)
+      return '$cleanSeries $episodeLabel';
     return fallback;
   }
 
@@ -1343,7 +1611,8 @@ class PlaylistPlayerService {
     final lowerName = folderName.toLowerCase();
     for (final pattern in patterns) {
       final match = pattern.firstMatch(lowerName);
-      if (match != null && match.groupCount >= 1) return int.tryParse(match.group(1)!);
+      if (match != null && match.groupCount >= 1)
+        return int.tryParse(match.group(1)!);
     }
     return null;
   }
@@ -1351,7 +1620,8 @@ class PlaylistPlayerService {
   static int? _extractLeadingNumber(String filename) {
     final pattern = RegExp(r'^(\d+)[\s._-]');
     final match = pattern.firstMatch(filename);
-    if (match != null && match.groupCount >= 1) return int.tryParse(match.group(1)!);
+    if (match != null && match.groupCount >= 1)
+      return int.tryParse(match.group(1)!);
     return null;
   }
 }
@@ -1362,14 +1632,22 @@ class _TorboxPlaylistCandidate {
   final TorboxFile file;
   final SeriesInfo info;
   final String displayName;
-  _TorboxPlaylistCandidate({required this.file, required this.info, required this.displayName});
+  _TorboxPlaylistCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
 }
 
 class _PikPakPlaylistCandidate {
   final Map<String, dynamic> file;
   final SeriesInfo info;
   final String displayName;
-  _PikPakPlaylistCandidate({required this.file, required this.info, required this.displayName});
+  _PikPakPlaylistCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
 }
 
 class _TorboxPlaylistEntriesResult {
@@ -1377,6 +1655,8 @@ class _TorboxPlaylistEntriesResult {
   final int startIndex;
   final String subtitle;
   const _TorboxPlaylistEntriesResult({
-    required this.playlistEntries, required this.startIndex, required this.subtitle,
+    required this.playlistEntries,
+    required this.startIndex,
+    required this.subtitle,
   });
 }
