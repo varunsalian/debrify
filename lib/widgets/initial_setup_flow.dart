@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,14 +8,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/account_service.dart';
 import '../services/aptabase_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/torbox_account_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/storage_service.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
+import '../services/pikpak_api_service.dart';
 import '../utils/platform_util.dart';
+import '../services/storage_service.dart';
+import '../services/torbox_account_service.dart';
+import '../services/trakt/trakt_service.dart';
 import 'pikpak_folder_picker_dialog.dart';
 
 class InitialSetupFlow extends StatefulWidget {
@@ -130,7 +133,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final TextEditingController _pikpakPasswordController =
       TextEditingController();
   int _stepIndex =
-      0; // 0 => welcome, >0 => selected integrations, -1 => engine selection
+      0; // 0 => welcome, 1..n => integrations, n+1 => engines, n+2 => trakt
   List<_IntegrationType> _flow = const <_IntegrationType>[];
   bool _isProcessing = false;
   String? _errorMessage;
@@ -142,9 +145,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   Set<String> _selectedEngineIds = {};
   bool _isLoadingEngines = false;
   String? _engineError;
+  int _engineLoadRequestId = 0;
 
   bool _isAndroidTv = false; // Store TV detection result
-  bool _isTvDetectionComplete = false; // Track if TV detection is done
 
   // Scroll controller for auto-scrolling on DPAD navigation
   final ScrollController _scrollController = ScrollController();
@@ -198,6 +201,36 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     debugLabel: 'engine-retry-button',
   );
   final Map<String, FocusNode> _engineItemFocusNodes = {};
+  final FocusNode _traktYesButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-yes-button',
+  );
+  final FocusNode _traktSkipButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-skip-button',
+  );
+  final FocusNode _traktOpenUrlButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-open-url',
+  );
+  final FocusNode _traktCancelButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-cancel-button',
+  );
+  final FocusNode _traktFinishButtonFocusNode = FocusNode(
+    debugLabel: 'trakt-finish-button',
+  );
+
+  bool _traktConnected = false;
+  bool _isTraktStarting = false;
+  bool _isResolvingTraktAuth = false;
+  String? _traktUsername;
+  String? _traktErrorMessage;
+  String? _traktUserCode;
+  String? _traktVerificationUrl;
+  String? _traktDeviceCode;
+  int _traktPollInterval = 5;
+  DateTime? _traktCodeExpiresAt;
+  Timer? _traktPollTimer;
+  Timer? _traktCountdownTimer;
+  int _traktLoginAttemptId = 0;
+  bool _isTraktPolling = false;
 
   // DPAD shortcuts for arrow key navigation
   static const Map<ShortcutActivator, Intent> _dpadShortcuts = {
@@ -241,30 +274,34 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
         setState(() {
           _isAndroidTv = isTV;
-          _isTvDetectionComplete = true;
         });
 
-        // Only request focus on TV devices for D-pad navigation
-        if (_isAndroidTv) {
-          // Wait for next frame to ensure UI is ready
-          await Future.delayed(const Duration(milliseconds: 100));
-          if (!mounted) return;
+        // Wait for next frame to ensure UI is ready before assigning initial
+        // keyboard/DPAD focus on all platforms.
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
 
-          // Verify dialog is still visible and topmost
-          final navigator = Navigator.maybeOf(context);
-          if (navigator == null || !navigator.canPop()) return;
+        // Verify dialog is still visible and topmost
+        final navigator = Navigator.maybeOf(context);
+        if (navigator == null || !navigator.canPop()) return;
 
-          // Request focus on the first chip
-          FocusManager.instance.primaryFocus?.unfocus();
-          _realDebridChipFocusNode.requestFocus();
-        }
+        FocusManager.instance.primaryFocus?.unfocus();
+        _realDebridChipFocusNode.requestFocus();
       } catch (e) {
         // Failed to detect TV, default to non-TV mode
         if (!mounted) return;
         setState(() {
           _isAndroidTv = false;
-          _isTvDetectionComplete = true;
         });
+
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+
+        final navigator = Navigator.maybeOf(context);
+        if (navigator == null || !navigator.canPop()) return;
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        _realDebridChipFocusNode.requestFocus();
       }
     });
   }
@@ -286,6 +323,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _connectButtonFocusNode,
       _engineSkipButtonFocusNode,
       _engineImportButtonFocusNode,
+      _traktYesButtonFocusNode,
+      _traktSkipButtonFocusNode,
+      _traktOpenUrlButtonFocusNode,
+      _traktCancelButtonFocusNode,
+      _traktFinishButtonFocusNode,
     ];
 
     for (final node in focusNodes) {
@@ -354,6 +396,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   @override
   void dispose() {
+    _traktPollTimer?.cancel();
+    _traktCountdownTimer?.cancel();
+
     // Remove focus listeners FIRST to prevent memory leaks
     _removeFocusListeners();
 
@@ -381,6 +426,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _engineSkipButtonFocusNode.dispose();
     _engineImportButtonFocusNode.dispose();
     _engineRetryButtonFocusNode.dispose();
+    _traktYesButtonFocusNode.dispose();
+    _traktSkipButtonFocusNode.dispose();
+    _traktOpenUrlButtonFocusNode.dispose();
+    _traktCancelButtonFocusNode.dispose();
+    _traktFinishButtonFocusNode.dispose();
     for (final node in _engineItemFocusNodes.values) {
       node.dispose();
     }
@@ -505,9 +555,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                                                               .maxWidth,
                                                           screenHeight,
                                                         )
-                                                      : _stepIndex >
-                                                            _flow.length
+                                                      : _isEngineSelectionStep
                                                       ? _buildEngineSelectionStep(
+                                                          theme,
+                                                          innerConstraints
+                                                              .maxWidth,
+                                                          screenHeight,
+                                                        )
+                                                      : _isTraktStep
+                                                      ? _buildTraktStep(
                                                           theme,
                                                           innerConstraints
                                                               .maxWidth,
@@ -973,11 +1029,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     child: OutlinedButton.icon(
                       focusNode: _engineRetryButtonFocusNode,
                       onPressed: () {
+                        _engineLoadRequestId++;
                         setState(() {
                           _isLoadingEngines = true;
                           _engineError = null;
                         });
-                        _loadAvailableEngines();
+                        _loadAvailableEngines(_engineLoadRequestId);
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white),
                       label: const Text(
@@ -1068,9 +1125,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               order: NumericFocusOrder(_availableEngines.length.toDouble() + 1),
               child: TextButton(
                 focusNode: _engineSkipButtonFocusNode,
-                onPressed: _isProcessing
-                    ? null
-                    : () => Navigator.of(context).pop(_hasConfigured),
+                onPressed: _isProcessing ? null : _goToTraktStep,
                 child: const Text('Skip for now'),
               ),
             ),
@@ -1090,13 +1145,425 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                       )
                     : Text(
                         _selectedEngineIds.isEmpty
-                            ? 'Finish'
+                            ? 'Continue'
                             : 'Import ${_selectedEngineIds.length} Engine${_selectedEngineIds.length == 1 ? '' : 's'}',
                       ),
               ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildTraktStep(
+    ThemeData theme,
+    double availableWidth,
+    double screenHeight,
+  ) {
+    final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
+    final spacing2 = screenHeight < 800 ? 12.0 : 16.0;
+    final spacing3 = screenHeight < 800 ? 16.0 : 24.0;
+    final bool isCompact = availableWidth < 420;
+    final bool hasPendingCode =
+        _traktUserCode != null && !_traktConnected && !_isResolvingTraktAuth;
+    final bool isTraktPollLocked = hasPendingCode && _isTraktPolling;
+    final String activationUrl =
+        _traktVerificationUrl ?? 'https://trakt.tv/activate';
+
+    return Column(
+      key: ValueKey<String>(
+        'trakt-step-${_traktConnected
+            ? 'connected'
+            : hasPendingCode
+            ? 'code'
+            : 'prompt'}',
+      ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'Final step',
+          style: theme.textTheme.labelLarge?.copyWith(color: Colors.white60),
+        ),
+        SizedBox(height: spacing1),
+        Text(
+          'Connect Trakt',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        SizedBox(height: spacing1),
+        Text(
+          'Do you have Trakt? If yes, connect it now to sync your watch activity and continue watching.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+        ),
+        SizedBox(height: spacing3),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: _isResolvingTraktAuth
+              ? Row(
+                  children: <Widget>[
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Checking your Trakt status...',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : _traktConnected
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: Colors.greenAccent,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _traktUsername == null
+                                ? 'Trakt connected'
+                                : 'Connected as $_traktUsername',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'You can manage scrobbling and sync behavior later in Settings.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                )
+              : hasPendingCode
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Enter this code at Trakt:',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: spacing2),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 12 : 16,
+                        vertical: isCompact ? 16 : 20,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
+                        ),
+                      ),
+                      child: Column(
+                        children: <Widget>[
+                          if (_isAndroidTv)
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _traktUserCode!,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 30 : 40,
+                                  height: 1,
+                                  letterSpacing: isCompact ? 4 : 6,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          else
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _traktUserCode!,
+                                      style: TextStyle(
+                                        fontSize: isCompact ? 30 : 40,
+                                        height: 1,
+                                        letterSpacing: isCompact ? 4 : 6,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: _copyTraktCode,
+                                  tooltip: 'Copy code',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          SizedBox(height: spacing1),
+                          Text(
+                            'Code expires in ${_formatTraktCountdown()}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white60,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: spacing2),
+                    Text(
+                      activationUrl,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'Open the link on your phone or computer, approve Debrify, and then finish setup here.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                    if (isTraktPollLocked) ...<Widget>[
+                      SizedBox(height: spacing1),
+                      Text(
+                        'Checking Trakt now. Cancel and skip are temporarily disabled.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white60,
+                        ),
+                      ),
+                    ],
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        const Icon(Icons.live_tv_rounded, color: Colors.white),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Trakt is optional',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: spacing1),
+                    Text(
+                      'If you have a Trakt account, Debrify can track what you watch and keep your progress in sync.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+        if (_traktErrorMessage != null) ...<Widget>[
+          SizedBox(height: spacing2),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              _traktErrorMessage!,
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+            ),
+          ),
+        ],
+        SizedBox(height: spacing3),
+        if (_isResolvingTraktAuth)
+          const SizedBox.shrink()
+        else if (_traktConnected)
+          Align(
+            alignment: Alignment.centerRight,
+            child: FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: FilledButton.icon(
+                focusNode: _traktFinishButtonFocusNode,
+                onPressed: _finishOnboarding,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Finish setup'),
+              ),
+            ),
+          )
+        else if (hasPendingCode) ...<Widget>[
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(1),
+            child: OutlinedButton.icon(
+              focusNode: _traktOpenUrlButtonFocusNode,
+              onPressed: () => _launch(activationUrl),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Open activation page'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+            ),
+          ),
+          SizedBox(height: spacing2),
+          isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _traktCancelButtonFocusNode,
+                        onPressed: isTraktPollLocked ? null : _cancelTraktLogin,
+                        child: const Text('Cancel login'),
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(3),
+                      child: FilledButton(
+                        focusNode: _traktFinishButtonFocusNode,
+                        onPressed: isTraktPollLocked ? null : _finishOnboarding,
+                        child: const Text('Finish without Trakt'),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _traktCancelButtonFocusNode,
+                        onPressed: isTraktPollLocked ? null : _cancelTraktLogin,
+                        child: const Text('Cancel login'),
+                      ),
+                    ),
+                    const Spacer(),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(3),
+                      child: FilledButton(
+                        focusNode: _traktFinishButtonFocusNode,
+                        onPressed: isTraktPollLocked ? null : _finishOnboarding,
+                        child: const Text('Finish without Trakt'),
+                      ),
+                    ),
+                  ],
+                ),
+        ] else
+          isCompact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: FilledButton.icon(
+                        focusNode: _traktYesButtonFocusNode,
+                        onPressed: _isTraktStarting ? null : _startTraktLogin,
+                        icon: _isTraktStarting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.login_rounded),
+                        label: Text(
+                          _isTraktStarting
+                              ? 'Getting code...'
+                              : 'Yes, connect Trakt',
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: spacing1),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _traktSkipButtonFocusNode,
+                        onPressed: _finishOnboarding,
+                        child: const Text('No, finish setup'),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: <Widget>[
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: FilledButton.icon(
+                        focusNode: _traktYesButtonFocusNode,
+                        onPressed: _isTraktStarting ? null : _startTraktLogin,
+                        icon: _isTraktStarting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.login_rounded),
+                        label: Text(
+                          _isTraktStarting
+                              ? 'Getting code...'
+                              : 'Yes, connect Trakt',
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(2),
+                      child: TextButton(
+                        focusNode: _traktSkipButtonFocusNode,
+                        onPressed: _finishOnboarding,
+                        child: const Text('No, finish setup'),
+                      ),
+                    ),
+                  ],
+                ),
       ],
     );
   }
@@ -1458,12 +1925,272 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   void _goToEngineSelection() {
+    _engineLoadRequestId++;
     setState(() {
-      _stepIndex = _flow.length + 1;
+      _stepIndex = _engineStepIndex;
       _isLoadingEngines = true;
       _engineError = null;
     });
-    _loadAvailableEngines();
+    _loadAvailableEngines(_engineLoadRequestId);
+  }
+
+  int get _engineStepIndex => _flow.length + 1;
+
+  int get _traktStepIndex => _flow.length + 2;
+
+  bool get _isEngineSelectionStep => _stepIndex == _engineStepIndex;
+
+  bool get _isTraktStep => _stepIndex == _traktStepIndex;
+
+  Future<void> _goToTraktStep() async {
+    _stopTraktDeviceCodeFlow(updateState: false);
+    _engineLoadRequestId++;
+
+    setState(() {
+      _stepIndex = _traktStepIndex;
+      _isTraktStarting = false;
+      _isResolvingTraktAuth = true;
+      _traktErrorMessage = null;
+    });
+
+    final isAuth = await TraktService.instance.isAuthenticated();
+    final username = await TraktService.instance.getUsername();
+
+    if (!mounted) return;
+
+    if (isAuth) {
+      _traktConnected = true;
+      _traktUsername = username;
+      _hasConfigured = true;
+      _queueTraktConnectedSnackBar(username);
+      await _finishOnboarding();
+      return;
+    }
+
+    setState(() {
+      _isResolvingTraktAuth = false;
+      _traktConnected = isAuth;
+      _traktUsername = username;
+    });
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  Future<void> _startTraktLogin() async {
+    final attemptId = ++_traktLoginAttemptId;
+
+    setState(() {
+      _isTraktStarting = true;
+      _traktErrorMessage = null;
+    });
+
+    final result = await TraktService.instance.requestDeviceCode();
+
+    if (!mounted || attemptId != _traktLoginAttemptId) return;
+
+    if (result == null) {
+      setState(() {
+        _isTraktStarting = false;
+        _traktErrorMessage =
+            'Failed to get a Trakt device code. Please try again.';
+      });
+      return;
+    }
+
+    final expiresIn = result['expires_in'] as int? ?? 600;
+
+    _traktPollInterval = result['interval'] as int? ?? 5;
+    setState(() {
+      _traktUserCode = result['user_code'] as String?;
+      _traktVerificationUrl = result['verification_url'] as String?;
+      _traktDeviceCode = result['device_code'] as String?;
+      _traktCodeExpiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+      _isTraktStarting = false;
+      _isResolvingTraktAuth = false;
+      _isTraktPolling = false;
+    });
+
+    _startTraktCountdownTimer();
+    _startTraktPolling();
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  void _startTraktPolling() {
+    _traktPollTimer?.cancel();
+    _traktPollTimer = Timer.periodic(
+      Duration(seconds: _traktPollInterval),
+      (_) => _pollTraktOnce(),
+    );
+  }
+
+  Future<void> _pollTraktOnce() async {
+    final deviceCode = _traktDeviceCode;
+    final attemptId = _traktLoginAttemptId;
+    if (deviceCode == null || _isTraktPolling) return;
+
+    _isTraktPolling = true;
+
+    String? error;
+    try {
+      error = await TraktService.instance.pollDeviceToken(deviceCode);
+    } finally {
+      if (attemptId == _traktLoginAttemptId) {
+        _isTraktPolling = false;
+      }
+    }
+
+    if (!mounted ||
+        attemptId != _traktLoginAttemptId ||
+        _traktDeviceCode != deviceCode) {
+      return;
+    }
+
+    if (error == null) {
+      _traktPollTimer?.cancel();
+      _traktCountdownTimer?.cancel();
+
+      final username = await TraktService.instance.getUsername();
+      if (!mounted ||
+          attemptId != _traktLoginAttemptId ||
+          _traktDeviceCode != deviceCode) {
+        return;
+      }
+
+      _traktConnected = true;
+      _traktUsername = username;
+      _hasConfigured = true;
+      _traktErrorMessage = null;
+      _resetTraktDeviceCodeState();
+
+      await StorageService.setTraktSyncCatalogItems(true);
+      AptabaseService.trackInBackground('trakt_connected', {
+        'surface': 'onboarding',
+        'method': 'device_code',
+      });
+      MainPageBridge.notifyIntegrationChanged();
+      _queueTraktConnectedSnackBar(username);
+      await _finishOnboarding();
+      return;
+    }
+
+    switch (error) {
+      case 'authorization_pending':
+      case 'network_error':
+        break;
+      case 'slow_down':
+        _traktPollInterval += 5;
+        _traktPollTimer?.cancel();
+        _startTraktPolling();
+        break;
+      case 'expired_token':
+        _stopTraktDeviceCodeFlow(message: 'Code expired. Please try again.');
+        break;
+      case 'access_denied':
+        _stopTraktDeviceCodeFlow(message: 'Authorization denied.');
+        break;
+      default:
+        _stopTraktDeviceCodeFlow(
+          message: 'Authorization failed. Please try again.',
+        );
+    }
+  }
+
+  void _startTraktCountdownTimer() {
+    _traktCountdownTimer?.cancel();
+    _traktCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+
+      if (_traktCodeExpiresAt != null &&
+          DateTime.now().isAfter(_traktCodeExpiresAt!)) {
+        _stopTraktDeviceCodeFlow(message: 'Code expired. Please try again.');
+        return;
+      }
+
+      setState(() {});
+    });
+  }
+
+  void _cancelTraktLogin() {
+    _stopTraktDeviceCodeFlow();
+  }
+
+  void _stopTraktDeviceCodeFlow({String? message, bool updateState = true}) {
+    _traktLoginAttemptId++;
+    _isTraktPolling = false;
+    _traktPollTimer?.cancel();
+    _traktCountdownTimer?.cancel();
+
+    if (!updateState || !mounted) {
+      _resetTraktDeviceCodeState();
+      return;
+    }
+
+    setState(() {
+      _isTraktStarting = false;
+      _isResolvingTraktAuth = false;
+      _traktErrorMessage = message;
+      _resetTraktDeviceCodeState();
+    });
+
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestFocusForCurrentStep();
+      });
+    }
+  }
+
+  void _resetTraktDeviceCodeState() {
+    _traktUserCode = null;
+    _traktVerificationUrl = null;
+    _traktDeviceCode = null;
+    _traktCodeExpiresAt = null;
+  }
+
+  String _formatTraktCountdown() {
+    if (_traktCodeExpiresAt == null) return '';
+
+    final remaining = _traktCodeExpiresAt!.difference(DateTime.now());
+    if (remaining.isNegative) return 'Expired';
+
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  Future<void> _finishOnboarding() async {
+    _stopTraktDeviceCodeFlow(updateState: false);
+
+    if (!mounted) return;
+    Navigator.of(context).pop(_hasConfigured || _traktConnected);
+  }
+
+  void _queueTraktConnectedSnackBar(String? username) {
+    final message = username == null || username.isEmpty
+        ? 'Trakt connected'
+        : 'Connected to Trakt as $username';
+    MainPageBridge.queuePostSetupSnackBar(message);
+  }
+
+  void _copyTraktCode() {
+    final code = _traktUserCode;
+    if (code == null || code.isEmpty) return;
+
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Trakt code copied')));
   }
 
   /// Request focus on the appropriate widget for the current step (Android TV)
@@ -1484,20 +2211,31 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         // TorBox uses the shared text field focus node
         _textFieldFocusNode.requestFocus();
       }
-    } else if (_stepIndex > _flow.length) {
+    } else if (_isEngineSelectionStep) {
       // Engine selection step
       if (_engineError != null) {
         _engineRetryButtonFocusNode.requestFocus();
       } else if (!_isLoadingEngines && _availableEngines.isNotEmpty) {
         _engineImportButtonFocusNode.requestFocus();
+      } else {
+        _engineSkipButtonFocusNode.requestFocus();
+      }
+    } else if (_isTraktStep) {
+      if (_traktConnected) {
+        _traktFinishButtonFocusNode.requestFocus();
+      } else if (_traktUserCode != null) {
+        _traktOpenUrlButtonFocusNode.requestFocus();
+      } else {
+        _traktYesButtonFocusNode.requestFocus();
       }
     }
   }
 
-  Future<void> _loadAvailableEngines() async {
+  Future<void> _loadAvailableEngines(int requestId) async {
     try {
       final engines = await _remoteEngineManager.fetchAvailableEngines();
       if (!mounted) return; // Early exit if widget disposed during fetch
+      if (requestId != _engineLoadRequestId || !_isEngineSelectionStep) return;
 
       // Clean up old focus nodes AND their listeners before creating new ones
       for (final node in _engineItemFocusNodes.values) {
@@ -1540,6 +2278,18 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         _engineItemFocusNodes.clear();
         return;
       }
+      if (requestId != _engineLoadRequestId || !_isEngineSelectionStep) {
+        for (final node in _engineItemFocusNodes.values) {
+          final listener = _focusListeners[node];
+          if (listener != null) {
+            node.removeListener(listener);
+            _focusListeners.remove(node);
+          }
+          node.dispose();
+        }
+        _engineItemFocusNodes.clear();
+        return;
+      }
 
       setState(() {
         _availableEngines = engines;
@@ -1550,12 +2300,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
       // Auto-focus the import button after a short delay
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (mounted &&
+            requestId == _engineLoadRequestId &&
+            _isEngineSelectionStep) {
           _engineImportButtonFocusNode.requestFocus();
         }
       });
     } catch (e) {
       if (!mounted) return; // Early exit if disposed during error
+      if (requestId != _engineLoadRequestId || !_isEngineSelectionStep) return;
 
       setState(() {
         _isLoadingEngines = false;
@@ -1564,7 +2317,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
       // Focus retry button on error
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (mounted &&
+            requestId == _engineLoadRequestId &&
+            _isEngineSelectionStep) {
           _engineRetryButtonFocusNode.requestFocus();
         }
       });
@@ -1574,8 +2329,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   Future<void> _importSelectedEngines() async {
     if (_selectedEngineIds.isEmpty) {
       // Skip if no engines selected
-      if (!mounted) return;
-      Navigator.of(context).pop(_hasConfigured);
+      await _goToTraktStep();
       return;
     }
 
@@ -1625,8 +2379,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _isProcessing = false;
     });
 
-    if (!mounted) return;
-    Navigator.of(context).pop(_hasConfigured || successCount > 0);
+    if (successCount > 0) {
+      _hasConfigured = true;
+    }
+
+    await _goToTraktStep();
   }
 
   Future<void> _launch(String url) async {
@@ -1867,7 +2624,6 @@ class _FocusableEngineItemState extends State<_FocusableEngineItem> {
 /// A TV-friendly TextField that allows escaping with DPAD
 class _TvFriendlyTextField extends StatefulWidget {
   const _TvFriendlyTextField({
-    super.key,
     required this.controller,
     required this.focusNode,
     required this.enabled,

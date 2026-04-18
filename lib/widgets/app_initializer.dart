@@ -63,29 +63,44 @@ class _AppInitializerState extends State<AppInitializer>
     );
 
     _iconReveal = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.0, 0.6, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _contentController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
     );
 
     _iconScale = Tween<double>(begin: 0.7, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack)),
+      CurvedAnimation(
+        parent: _contentController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
+      ),
     );
 
     _textReveal = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.3, 0.8, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _contentController,
+        curve: const Interval(0.3, 0.8, curve: Curves.easeOut),
+      ),
     );
 
     _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: const Interval(0.4, 1.0, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _contentController,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+      ),
     );
 
-    _exitAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
-    );
+    _exitAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
 
     // Start the sequence: sweep first, content reveals as sweep passes center
     _sweepController.forward();
     _sweepController.addListener(() {
-      if (_sweepController.value > 0.35 && !_contentController.isAnimating && !_contentController.isCompleted) {
+      if (_sweepController.value > 0.35 &&
+          !_contentController.isAnimating &&
+          !_contentController.isCompleted) {
         _contentController.forward();
       }
     });
@@ -178,6 +193,19 @@ class _AppInitializerState extends State<AppInitializer>
     setState(() {
       _onboardingComplete = true;
     });
+    _showPendingPostSetupSnackBarIfNeeded();
+  }
+
+  void _showPendingPostSetupSnackBarIfNeeded() {
+    final message = MainPageBridge.takePostSetupSnackBar();
+    if (message == null || message.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    });
   }
 
   /// Start TV listener early so phone can discover TV during onboarding
@@ -202,7 +230,9 @@ class _AppInitializerState extends State<AppInitializer>
         RemoteCommandRouter().dispatchCommand(action, command, data);
       };
 
-      debugPrint('AppInitializer: TV listener started - discoverable during onboarding');
+      debugPrint(
+        'AppInitializer: TV listener started - discoverable during onboarding',
+      );
     } catch (e) {
       debugPrint('AppInitializer: Failed to start TV listener early: $e');
     }
@@ -260,7 +290,8 @@ class _AppInitializerState extends State<AppInitializer>
                               boxShadow: [
                                 BoxShadow(
                                   color: const Color(0xFF6366F1).withValues(
-                                      alpha: 0.25 * _glowAnimation.value),
+                                    alpha: 0.25 * _glowAnimation.value,
+                                  ),
                                   blurRadius: 40 * _glowAnimation.value,
                                   spreadRadius: 8 * _glowAnimation.value,
                                 ),
@@ -323,36 +354,47 @@ class _SweepPainter extends CustomPainter {
 
     // Main horizontal sweep line
     final sweepPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          Colors.transparent,
-          const Color(0xFF6366F1).withValues(alpha: 0.08),
-          const Color(0xFF818CF8).withValues(alpha: 0.15),
-          const Color(0xFF6366F1).withValues(alpha: 0.08),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
-      ).createShader(Rect.fromCenter(
-        center: Offset(centerX, centerY),
-        width: size.width * 0.5,
-        height: size.height,
-      ));
+      ..shader =
+          LinearGradient(
+            colors: [
+              Colors.transparent,
+              const Color(0xFF6366F1).withValues(alpha: 0.08),
+              const Color(0xFF818CF8).withValues(alpha: 0.15),
+              const Color(0xFF6366F1).withValues(alpha: 0.08),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+          ).createShader(
+            Rect.fromCenter(
+              center: Offset(centerX, centerY),
+              width: size.width * 0.5,
+              height: size.height,
+            ),
+          );
 
     canvas.drawRect(
-      Rect.fromLTWH(centerX - size.width * 0.25, 0, size.width * 0.5, size.height),
+      Rect.fromLTWH(
+        centerX - size.width * 0.25,
+        0,
+        size.width * 0.5,
+        size.height,
+      ),
       sweepPaint,
     );
 
     // Bright center point
     final glowPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.12),
-          Colors.white.withValues(alpha: 0.04),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.3, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset(centerX, centerY), radius: 80));
+      ..shader =
+          RadialGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.04),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.3, 1.0],
+          ).createShader(
+            Rect.fromCircle(center: Offset(centerX, centerY), radius: 80),
+          );
 
     canvas.drawCircle(Offset(centerX, centerY), 80, glowPaint);
   }

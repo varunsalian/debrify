@@ -12,9 +12,15 @@ class MainPageBridge {
   /// Flag to track if user came from torrent search "Open in xxx" flow.
   /// When true, back navigation should return to torrent search instead of folder navigation.
   static bool returnToTorrentSearchOnBack = false;
-  static Future<void> Function(Map<String, dynamic> result, String torrentName, String apiKey)? handleRealDebridResult;
+  static Future<void> Function(
+    Map<String, dynamic> result,
+    String torrentName,
+    String apiKey,
+  )?
+  handleRealDebridResult;
   static Future<void> Function(TorboxTorrent torrent)? handleTorboxResult;
-  static Future<void> Function(String fileId, String fileName)? handlePikPakResult;
+  static Future<void> Function(String fileId, String fileName)?
+  handlePikPakResult;
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
   static Future<void> Function(String channelId)? watchStremioTvChannel;
@@ -115,6 +121,18 @@ class MainPageBridge {
     }
   }
 
+  static String? _pendingPostSetupSnackBarMessage;
+
+  static void queuePostSetupSnackBar(String message) {
+    _pendingPostSetupSnackBarMessage = message;
+  }
+
+  static String? takePostSetupSnackBar() {
+    final message = _pendingPostSetupSnackBarMessage;
+    _pendingPostSetupSnackBarMessage = null;
+    return message;
+  }
+
   static void notifyPlayerLaunching() {
     hideAutoLaunchOverlay?.call();
   }
@@ -171,13 +189,19 @@ class MainPageBridge {
 
   /// Register a screen's content focus handler for TV navigation.
   /// Call in initState. The handler should focus the screen's primary element.
-  static void registerTvContentFocusHandler(int tabIndex, VoidCallback handler) {
+  static void registerTvContentFocusHandler(
+    int tabIndex,
+    VoidCallback handler,
+  ) {
     _tvContentFocusHandlers[tabIndex] = handler;
   }
 
   /// Unregister a screen's content focus handler. Call in dispose.
   /// Only removes if the handler matches (prevents race condition when widget rebuilds).
-  static void unregisterTvContentFocusHandler(int tabIndex, VoidCallback handler) {
+  static void unregisterTvContentFocusHandler(
+    int tabIndex,
+    VoidCallback handler,
+  ) {
     if (_tvContentFocusHandlers[tabIndex] == handler) {
       _tvContentFocusHandlers.remove(tabIndex);
     }
