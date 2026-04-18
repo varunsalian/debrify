@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/debrify_tv_channel_record.dart';
+import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/storage_service.dart';
+import '../stremio_tv/stremio_tv_service.dart';
 
 class StartupSettingsPage extends StatefulWidget {
   const StartupSettingsPage({super.key});
@@ -13,10 +15,12 @@ class StartupSettingsPage extends StatefulWidget {
 class _StartupSettingsPageState extends State<StartupSettingsPage> {
   bool _loading = true;
   bool _autoLaunchEnabled = false;
-  String _startupMode = 'channel'; // 'channel' or 'playlist'
+  String _startupMode = 'channel'; // 'channel', 'stremio_tv', or 'playlist'
   String? _selectedChannelId; // "random" or actual channelId
+  String? _selectedStremioTvChannelId; // "random" or actual channelId
   String? _selectedPlaylistItemId; // playlist item dedupe key
   List<DebrifyTvChannelRecord> _channels = [];
+  List<StremioTvChannel> _stremioTvChannels = [];
   List<Map<String, dynamic>> _playlistItems = [];
 
   @override
@@ -33,21 +37,58 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     try {
       // Fetch channels and playlist items
       final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+      final stremioTvChannels = await StremioTvService.instance
+          .discoverChannels();
       final playlistItems = await StorageService.getPlaylistItemsRaw();
 
       // Load settings
-      final autoLaunchEnabled = await StorageService.getStartupAutoLaunchEnabled();
+      final autoLaunchEnabled =
+          await StorageService.getStartupAutoLaunchEnabled();
       final startupMode = await StorageService.getStartupMode();
       final selectedChannelId = await StorageService.getStartupChannelId();
-      final selectedPlaylistItemId = await StorageService.getStartupPlaylistItemId();
+      final selectedStremioTvChannelId =
+          await StorageService.getStartupStremioTvChannelId();
+      final selectedPlaylistItemId =
+          await StorageService.getStartupPlaylistItemId();
+      final availableModes = _availableModes(
+        hasDebrifyChannels: channels.isNotEmpty,
+        hasStremioTvChannels: stremioTvChannels.isNotEmpty,
+        hasPlaylistItems: playlistItems.isNotEmpty,
+      );
+      final resolvedMode = _resolveStartupMode(startupMode, availableModes);
+      final resolvedChannelId = _resolveDebrifyChannelId(
+        selectedChannelId,
+        channels,
+      );
+      final resolvedStremioTvChannelId = _resolveStremioTvChannelId(
+        selectedStremioTvChannelId,
+        stremioTvChannels,
+      );
+      final resolvedPlaylistItemId = _resolvePlaylistItemId(
+        selectedPlaylistItemId,
+        playlistItems,
+      );
+      await _persistResolvedStartupSettings(
+        savedMode: startupMode,
+        resolvedMode: resolvedMode,
+        hasDebrifyChannels: channels.isNotEmpty,
+        hasStremioTvChannels: stremioTvChannels.isNotEmpty,
+        hasPlaylistItems: playlistItems.isNotEmpty,
+        savedChannelId: selectedChannelId,
+        resolvedChannelId: resolvedChannelId,
+        savedPlaylistItemId: selectedPlaylistItemId,
+        resolvedPlaylistItemId: resolvedPlaylistItemId,
+      );
 
       setState(() {
         _channels = channels;
+        _stremioTvChannels = stremioTvChannels;
         _playlistItems = playlistItems;
         _autoLaunchEnabled = autoLaunchEnabled;
-        _startupMode = startupMode;
-        _selectedChannelId = selectedChannelId ?? 'random';
-        _selectedPlaylistItemId = selectedPlaylistItemId;
+        _startupMode = resolvedMode;
+        _selectedChannelId = resolvedChannelId;
+        _selectedStremioTvChannelId = resolvedStremioTvChannelId;
+        _selectedPlaylistItemId = resolvedPlaylistItemId;
         _loading = false;
       });
     } catch (e) {
@@ -55,9 +96,9 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         _loading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load settings: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load settings: $e')));
       }
     }
   }
@@ -70,9 +111,9 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save setting: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
     }
   }
@@ -87,6 +128,21 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save channel selection: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectStremioTvChannel(String? channelId) async {
+    try {
+      await StorageService.setStartupStremioTvChannelId(channelId);
+      setState(() {
+        _selectedStremioTvChannelId = channelId ?? 'random';
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save Stremio TV selection: $e')),
         );
       }
     }
@@ -122,28 +178,158 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     }
   }
 
+  List<String> _availableModes({
+    required bool hasDebrifyChannels,
+    required bool hasStremioTvChannels,
+    required bool hasPlaylistItems,
+  }) {
+    final modes = <String>[];
+    if (hasDebrifyChannels) modes.add('channel');
+    if (hasStremioTvChannels) modes.add('stremio_tv');
+    if (hasPlaylistItems) modes.add('playlist');
+    return modes;
+  }
+
+  String _resolveStartupMode(String savedMode, List<String> availableModes) {
+    if (availableModes.isEmpty) return 'channel';
+    if (availableModes.contains(savedMode)) return savedMode;
+    return availableModes.first;
+  }
+
+  String _resolveDebrifyChannelId(
+    String? channelId,
+    List<DebrifyTvChannelRecord> channels,
+  ) {
+    if (channelId == null || channelId.isEmpty || channelId == 'random') {
+      return 'random';
+    }
+    final exists = channels.any((channel) => channel.channelId == channelId);
+    return exists ? channelId : 'random';
+  }
+
+  String _resolveStremioTvChannelId(
+    String? channelId,
+    List<StremioTvChannel> channels,
+  ) {
+    if (channelId == null || channelId.isEmpty || channelId == 'random') {
+      return 'random';
+    }
+    final exists = channels.any((channel) => channel.id == channelId);
+    return exists ? channelId : 'random';
+  }
+
+  String? _resolvePlaylistItemId(
+    String? itemId,
+    List<Map<String, dynamic>> playlistItems,
+  ) {
+    if (itemId == null || itemId.isEmpty) return null;
+    final exists = playlistItems.any(
+      (item) => StorageService.computePlaylistDedupeKey(item) == itemId,
+    );
+    return exists ? itemId : null;
+  }
+
+  Future<void> _persistResolvedStartupSettings({
+    required String savedMode,
+    required String resolvedMode,
+    required bool hasDebrifyChannels,
+    required bool hasStremioTvChannels,
+    required bool hasPlaylistItems,
+    required String? savedChannelId,
+    required String resolvedChannelId,
+    required String? savedPlaylistItemId,
+    required String? resolvedPlaylistItemId,
+  }) async {
+    final writes = <Future<void>>[];
+
+    if (_shouldPersistResolvedMode(
+      savedMode: savedMode,
+      resolvedMode: resolvedMode,
+      hasDebrifyChannels: hasDebrifyChannels,
+      hasStremioTvChannels: hasStremioTvChannels,
+      hasPlaylistItems: hasPlaylistItems,
+    )) {
+      writes.add(StorageService.setStartupMode(resolvedMode));
+    }
+
+    if (savedChannelId != null &&
+        savedChannelId != 'random' &&
+        resolvedChannelId == 'random') {
+      writes.add(StorageService.setStartupChannelId(null));
+    }
+
+    if (savedPlaylistItemId != null && resolvedPlaylistItemId == null) {
+      writes.add(StorageService.setStartupPlaylistItemId(null));
+    }
+
+    if (writes.isNotEmpty) {
+      await Future.wait(writes);
+    }
+  }
+
+  bool _shouldPersistResolvedMode({
+    required String savedMode,
+    required String resolvedMode,
+    required bool hasDebrifyChannels,
+    required bool hasStremioTvChannels,
+    required bool hasPlaylistItems,
+  }) {
+    if (savedMode == resolvedMode) return false;
+
+    switch (savedMode) {
+      case 'channel':
+        return !hasDebrifyChannels;
+      case 'playlist':
+        return !hasPlaylistItems;
+      case 'stremio_tv':
+        return !hasStremioTvChannels &&
+            _modeHasAvailableContent(
+              resolvedMode,
+              hasDebrifyChannels: hasDebrifyChannels,
+              hasStremioTvChannels: hasStremioTvChannels,
+              hasPlaylistItems: hasPlaylistItems,
+            );
+      default:
+        return true;
+    }
+  }
+
+  bool _modeHasAvailableContent(
+    String mode, {
+    required bool hasDebrifyChannels,
+    required bool hasStremioTvChannels,
+    required bool hasPlaylistItems,
+  }) {
+    switch (mode) {
+      case 'channel':
+        return hasDebrifyChannels;
+      case 'stremio_tv':
+        return hasStremioTvChannels;
+      case 'playlist':
+        return hasPlaylistItems;
+      default:
+        return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Startup Settings'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Startup Settings')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     final theme = Theme.of(context);
     final hasChannels = _channels.isNotEmpty;
+    final hasStremioTvChannels = _stremioTvChannels.isNotEmpty;
     final hasPlaylistItems = _playlistItems.isNotEmpty;
-    final hasAnyContent = hasChannels || hasPlaylistItems;
+    final hasAnyContent =
+        hasChannels || hasStremioTvChannels || hasPlaylistItems;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Startup Settings'),
-      ),
+      appBar: AppBar(title: const Text('Startup Settings')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -230,6 +416,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                           prefixIcon: Icon(
                             _startupMode == 'channel'
                                 ? Icons.tv_rounded
+                                : _startupMode == 'stremio_tv'
+                                ? Icons.live_tv_rounded
                                 : Icons.playlist_play_rounded,
                             color: theme.colorScheme.primary,
                           ),
@@ -237,13 +425,19 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                          fillColor: theme.colorScheme.surfaceVariant
+                              .withOpacity(0.3),
                         ),
                         items: [
                           if (hasChannels)
                             const DropdownMenuItem<String>(
                               value: 'channel',
                               child: Text('Debrify TV Channel'),
+                            ),
+                          if (hasStremioTvChannels)
+                            const DropdownMenuItem<String>(
+                              value: 'stremio_tv',
+                              child: Text('Stremio TV Channel'),
                             ),
                           if (hasPlaylistItems)
                             const DropdownMenuItem<String>(
@@ -276,7 +470,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
                           ),
                           items: [
                             // Random option first
@@ -299,6 +494,46 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                         ),
                       ),
 
+                    if (_startupMode == 'stremio_tv' && hasStremioTvChannels)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedStremioTvChannelId,
+                          decoration: InputDecoration(
+                            labelText: 'Select Stremio TV channel',
+                            prefixIcon: Icon(
+                              _selectedStremioTvChannelId == 'random'
+                                  ? Icons.shuffle_rounded
+                                  : Icons.live_tv_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: 'random',
+                              child: Text('Random Stremio TV Channel'),
+                            ),
+                            ..._stremioTvChannels.map((channel) {
+                              return DropdownMenuItem<String>(
+                                value: channel.id,
+                                child: Text(
+                                  channel.displayName,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                          onChanged: (value) => _selectStremioTvChannel(value),
+                        ),
+                      ),
+
                     // Playlist item selection (shown when mode is 'playlist')
                     if (_startupMode == 'playlist' && hasPlaylistItems)
                       Padding(
@@ -316,11 +551,14 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             filled: true,
-                            fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
                           ),
                           items: _playlistItems.map((item) {
-                            final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-                            final title = (item['title'] as String?) ?? 'Unknown';
+                            final dedupeKey =
+                                StorageService.computePlaylistDedupeKey(item);
+                            final title =
+                                (item['title'] as String?) ?? 'Unknown';
                             return DropdownMenuItem<String>(
                               value: dedupeKey,
                               child: Text(
@@ -356,6 +594,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                       child: Text(
                         _startupMode == 'channel'
                             ? 'When enabled, the app will automatically navigate to Debrify TV and start playing your selected channel on startup. This skips the normal home screen.'
+                            : _startupMode == 'stremio_tv'
+                            ? 'When enabled, the app will automatically navigate to Stremio TV and start playing your selected channel on startup. This skips the normal home screen.'
                             : 'When enabled, the app will automatically start playing your selected playlist item on startup. This skips the normal home screen.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,

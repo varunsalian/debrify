@@ -73,8 +73,10 @@ class StorageService {
   static const String _startupAutoLaunchEnabledKey =
       'startup_auto_launch_enabled';
   static const String _startupChannelIdKey = 'startup_channel_id';
+  static const String _startupStremioTvChannelIdKey =
+      'startup_stremio_tv_channel_id';
   static const String _startupModeKey =
-      'startup_mode'; // 'channel' or 'playlist'
+      'startup_mode'; // 'channel', 'stremio_tv', or 'playlist'
   static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
 
   // Reddit settings
@@ -1952,6 +1954,7 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_startupAutoLaunchEnabledKey);
     await prefs.remove(_startupChannelIdKey);
+    await prefs.remove(_startupStremioTvChannelIdKey);
     await prefs.remove(_startupModeKey);
     await prefs.remove(_startupPlaylistItemIdKey);
   }
@@ -2894,6 +2897,20 @@ class StorageService {
       await prefs.remove(_startupChannelIdKey);
     } else {
       await prefs.setString(_startupChannelIdKey, channelId);
+    }
+  }
+
+  static Future<String?> getStartupStremioTvChannelId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupStremioTvChannelIdKey);
+  }
+
+  static Future<void> setStartupStremioTvChannelId(String? channelId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (channelId == null) {
+      await prefs.remove(_startupStremioTvChannelIdKey);
+    } else {
+      await prefs.setString(_startupStremioTvChannelIdKey, channelId);
     }
   }
 

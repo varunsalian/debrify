@@ -24,6 +24,7 @@ import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/debrify_tv_repository.dart';
+import 'screens/stremio_tv/stremio_tv_service.dart';
 import 'models/debrify_tv_channel_record.dart';
 import 'widgets/app_initializer.dart';
 import 'package:collection/collection.dart';
@@ -1361,10 +1362,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       // Get startup mode
       final startupMode = await StorageService.getStartupMode();
 
-      if (startupMode == 'playlist') {
-        await _launchPlaylistItem();
-      } else {
-        await _launchChannel();
+      switch (startupMode) {
+        case 'playlist':
+          await _launchPlaylistItem();
+          break;
+        case 'stremio_tv':
+          await _launchStremioTvChannel();
+          break;
+        case 'channel':
+        default:
+          await _launchChannel();
+          break;
       }
     } catch (e) {
       debugPrint('MainPage: Failed to auto-launch: $e');
@@ -1445,6 +1453,46 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
 
     _onItemTapped(3); // Debrify TV tab
+  }
+
+  /// Launch a Stremio TV channel on startup
+  Future<void> _launchStremioTvChannel() async {
+    final channels = await StremioTvService.instance.discoverChannels();
+    if (channels.isEmpty) {
+      return;
+    }
+
+    final selectedChannelId =
+        await StorageService.getStartupStremioTvChannelId() ?? 'random';
+
+    final channelToLaunch = selectedChannelId == 'random'
+        ? channels[Random().nextInt(channels.length)]
+        : channels.firstWhereOrNull(
+                (channel) => channel.id == selectedChannelId,
+              ) ??
+              channels[Random().nextInt(channels.length)];
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchChannelName = channelToLaunch.displayName;
+      _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
+          ? channelToLaunch.channelNumber
+          : null;
+    });
+
+    _isAutoLaunchShowingOverlay = true;
+
+    MainPageBridge.notifyStremioTvChannelToAutoPlay(channelToLaunch.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    _onItemTapped(9); // Stremio TV tab
   }
 
   /// Launch a playlist item on startup

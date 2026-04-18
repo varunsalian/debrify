@@ -85,6 +85,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   // Track mounted state for auto-play
   String? _pendingChannelId;
+  bool _startupAutoPlayActive = false;
 
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
@@ -193,9 +194,22 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (_pendingChannelId != null && mounted) {
       final id = _pendingChannelId!;
       _pendingChannelId = null;
+      _startupAutoPlayActive = true;
       await _ensureChannelLoaded(id);
       if (mounted) _playChannelById(id);
     }
+  }
+
+  void _notifyStartupAutoLaunchFailed(String reason) {
+    if (!_startupAutoPlayActive) return;
+    _startupAutoPlayActive = false;
+    MainPageBridge.notifyAutoLaunchFailed(reason);
+  }
+
+  void _notifyStartupPlayerLaunching() {
+    if (!_startupAutoPlayActive) return;
+    _startupAutoPlayActive = false;
+    MainPageBridge.notifyPlayerLaunching();
   }
 
   Future<void> _refresh() async {
@@ -529,6 +543,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       salt: _mixSalt,
     );
     if (nowPlaying == null) {
+      _notifyStartupAutoLaunchFailed('No items available for channel');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No items available for this channel')),
@@ -544,6 +559,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
 
     if (!item.hasValidId) {
+      _notifyStartupAutoLaunchFailed('Channel item has no valid ID');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -579,6 +595,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       Navigator.of(context).pop(); // Dismiss episode resolution dialog
 
       if (resolved == null) {
+        _notifyStartupAutoLaunchFailed('Could not resolve episode');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -608,6 +625,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       onCancel: () {
         _playGeneration++;
         _dialogGeneration = -1;
+        _notifyStartupAutoLaunchFailed('Playback canceled');
         if (mounted) Navigator.of(context).pop();
       },
     );
@@ -667,6 +685,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           'Found $directCount direct + $torrentCount torrent streams, resolving...';
 
       if (torrents.isEmpty) {
+        _notifyStartupAutoLaunchFailed('No streams found');
         if (mounted) {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
@@ -725,6 +744,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (playableSources.isEmpty) {
+        _notifyStartupAutoLaunchFailed('No playable streams found');
         if (mounted) {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
@@ -804,12 +824,14 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
+        _notifyStartupAutoLaunchFailed('No auto-play stream resolved');
         if (mounted) {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
           // Show source picker so user can manually select
           final result = await _showManualSourcePicker(playableSources, item);
           if (result != null && mounted) {
+            _notifyStartupPlayerLaunching();
             await VideoPlayerLauncher.push(
               context,
               VideoPlayerLaunchArgs(
@@ -841,6 +863,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       // Dismiss loading dialog right before player launch
       Navigator.of(context).pop();
       _dialogGeneration = -1;
+      _notifyStartupPlayerLaunching();
 
       // Launch player with all sources for in-player switching
       await VideoPlayerLauncher.push(
@@ -865,6 +888,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         ),
       );
     } catch (e) {
+      _notifyStartupAutoLaunchFailed('Error searching streams: $e');
       if (!mounted) return;
       if (_dialogGeneration == myGeneration) {
         _dialogGeneration = -1;
@@ -1759,7 +1783,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   void _playChannelById(String channelId) {
-    if (_channels.isEmpty) return;
+    if (_channels.isEmpty) {
+      _notifyStartupAutoLaunchFailed('Channels not loaded');
+      return;
+    }
+    if (_startupAutoPlayActive &&
+        !_channels.any((channel) => channel.id == channelId)) {
+      _notifyStartupAutoLaunchFailed('Startup channel not found');
+      return;
+    }
     final channel = _channels.firstWhere(
       (ch) => ch.id == channelId,
       orElse: () => _channels.first,
