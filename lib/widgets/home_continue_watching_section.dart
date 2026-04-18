@@ -23,9 +23,22 @@ class HomeContinueWatchingSection extends StatefulWidget {
   final bool isTelevision;
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
+  final Future<void> Function(
+    AdvancedSearchSelection selection,
+    String? addonId, {
+    int? currentSeason,
+    int? currentEpisode,
+  })?
+  onPlayRandomEpisode;
   final void Function(AdvancedSearchSelection selection)? onSelectSource;
   final void Function(AdvancedSearchSelection selection)? onSearchPacks;
-  final void Function(AdvancedSearchSelection selection, String? addonId, {int? season, int? episode})? onBrowseEpisodes;
+  final void Function(
+    AdvancedSearchSelection selection,
+    String? addonId, {
+    int? season,
+    int? episode,
+  })?
+  onBrowseEpisodes;
 
   const HomeContinueWatchingSection({
     super.key,
@@ -35,6 +48,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
     this.isTelevision = false,
     this.onItemSelected,
     this.onQuickPlay,
+    this.onPlayRandomEpisode,
     this.onSelectSource,
     this.onSearchPacks,
     this.onBrowseEpisodes,
@@ -92,8 +106,9 @@ class _HomeContinueWatchingSectionState
 
   void _ensureFocusNodes() {
     while (_cardFocusNodes.length < _items.length) {
-      _cardFocusNodes.add(FocusNode(
-          debugLabel: 'cw_card_${_cardFocusNodes.length}'));
+      _cardFocusNodes.add(
+        FocusNode(debugLabel: 'cw_card_${_cardFocusNodes.length}'),
+      );
     }
     while (_cardFocusNodes.length > _items.length) {
       _cardFocusNodes.removeLast().dispose();
@@ -121,13 +136,17 @@ class _HomeContinueWatchingSectionState
         if (imdbId == null) continue;
 
         if (contentType == 'series') {
-          final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+          final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(
+            imdbId,
+          );
           if (lastEp != null) {
             final finished = lastEp['finished'] == true;
             final posMs = lastEp['positionMs'] as int? ?? 0;
             final durMs = lastEp['durationMs'] as int? ?? 1;
             if (durMs > 0) {
-              progressMap[imdbId] = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
+              progressMap[imdbId] = finished
+                  ? 100.0
+                  : (posMs / durMs * 100).clamp(0.0, 100.0);
             }
             final s = lastEp['season'] as int?;
             final e = lastEp['episode'] as int?;
@@ -136,7 +155,9 @@ class _HomeContinueWatchingSectionState
             }
           }
         } else {
-          final state = await StorageService.getVideoPlaybackStateByImdbId(imdbId);
+          final state = await StorageService.getVideoPlaybackStateByImdbId(
+            imdbId,
+          );
           if (state != null) {
             final posMs = state['positionMs'] as int? ?? 0;
             final durMs = state['durationMs'] as int? ?? 1;
@@ -213,71 +234,97 @@ class _HomeContinueWatchingSectionState
             ),
             child: FocusTraversalGroup(
               child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                _MenuItem(
-                  icon: Icons.play_circle_filled_rounded,
-                  label: 'Play',
-                  subtitle: 'Quick play with default source',
-                  color: const Color(0xFF10B981),
-                  onTap: () => Navigator.pop(context, 'quick_play'),
-                  autofocus: true,
-                  isTelevision: widget.isTelevision,
-                ),
-                _MenuItem(
-                  icon: isSeries ? Icons.view_list_rounded : Icons.search_rounded,
-                  label: isSeries ? 'Browse Episodes' : 'Browse Sources',
-                  subtitle: isSeries ? 'View seasons and episodes' : 'Find available sources',
-                  color: const Color(0xFF818CF8),
-                  onTap: () => Navigator.pop(context, 'browse'),
-                  isTelevision: widget.isTelevision,
-                ),
-                if (widget.onSelectSource != null)
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
                   _MenuItem(
-                    icon: hasBoundSource ? Icons.edit_rounded : Icons.add_link_rounded,
-                    label: hasBoundSource ? 'Edit Source' : 'Add Source',
-                    subtitle: hasBoundSource ? 'Change the bound torrent source' : 'Bind a torrent source for quick play',
-                    color: const Color(0xFF60A5FA),
-                    onTap: () => Navigator.pop(context, 'select_source'),
+                    icon: Icons.play_circle_filled_rounded,
+                    label: 'Play',
+                    subtitle: 'Quick play with default source',
+                    color: const Color(0xFF10B981),
+                    onTap: () => Navigator.pop(context, 'quick_play'),
+                    autofocus: true,
                     isTelevision: widget.isTelevision,
                   ),
-                if (isSeries && widget.onSearchPacks != null)
+                  if (isSeries && widget.onPlayRandomEpisode != null)
+                    _MenuItem(
+                      icon: Icons.shuffle_rounded,
+                      label: 'Play Random Episode',
+                      subtitle: 'Pick a random aired episode',
+                      color: const Color(0xFFF59E0B),
+                      onTap: () => Navigator.pop(context, 'random_episode'),
+                      isTelevision: widget.isTelevision,
+                    ),
                   _MenuItem(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Search Season Packs',
-                    subtitle: 'Find full season packs to download or add',
-                    color: const Color(0xFFFBBF24),
-                    onTap: () => Navigator.pop(context, 'search_packs'),
+                    icon: isSeries
+                        ? Icons.view_list_rounded
+                        : Icons.search_rounded,
+                    label: isSeries ? 'Browse Episodes' : 'Browse Sources',
+                    subtitle: isSeries
+                        ? 'View seasons and episodes'
+                        : 'Find available sources',
+                    color: const Color(0xFF818CF8),
+                    onTap: () => Navigator.pop(context, 'browse'),
                     isTelevision: widget.isTelevision,
                   ),
-                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                _MenuItem(
-                  icon: Icons.remove_circle_outline_rounded,
-                  label: 'Remove from Continue Watching',
-                  subtitle: 'Remove from this list',
-                  color: const Color(0xFFEF4444),
-                  onTap: () => Navigator.pop(context, 'remove'),
-                  isTelevision: widget.isTelevision,
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
+                  if (widget.onSelectSource != null)
+                    _MenuItem(
+                      icon: hasBoundSource
+                          ? Icons.edit_rounded
+                          : Icons.add_link_rounded,
+                      label: hasBoundSource ? 'Edit Source' : 'Add Source',
+                      subtitle: hasBoundSource
+                          ? 'Change the bound torrent source'
+                          : 'Bind a torrent source for quick play',
+                      color: const Color(0xFF60A5FA),
+                      onTap: () => Navigator.pop(context, 'select_source'),
+                      isTelevision: widget.isTelevision,
+                    ),
+                  if (isSeries && widget.onSearchPacks != null)
+                    _MenuItem(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Search Season Packs',
+                      subtitle: 'Find full season packs to download or add',
+                      color: const Color(0xFFFBBF24),
+                      onTap: () => Navigator.pop(context, 'search_packs'),
+                      isTelevision: widget.isTelevision,
+                    ),
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                  _MenuItem(
+                    icon: Icons.remove_circle_outline_rounded,
+                    label: 'Remove from Continue Watching',
+                    subtitle: 'Remove from this list',
+                    color: const Color(0xFFEF4444),
+                    onTap: () => Navigator.pop(context, 'remove'),
+                    isTelevision: widget.isTelevision,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         ),
@@ -297,9 +344,16 @@ class _HomeContinueWatchingSectionState
           int episode = cachedEp.episode;
           // If episode is near-complete (>=90%) or finished, find the real next episode from the catalog
           final progress = _progressMap[selection.imdbId] ?? 0.0; // 0-100
-          debugPrint('HomeContinueWatching: Quick Play S${season}E$episode progress=$progress');
+          debugPrint(
+            'HomeContinueWatching: Quick Play S${season}E$episode progress=$progress',
+          );
           if (progress >= 90) {
-            final nextEp = await _findNextEpisode(selection.imdbId, season, episode, item['addonId'] as String?);
+            final nextEp = await _findNextEpisode(
+              selection.imdbId,
+              season,
+              episode,
+              item['addonId'] as String?,
+            );
             if (!mounted) return;
             if (nextEp != null) {
               season = nextEp.season;
@@ -359,11 +413,22 @@ class _HomeContinueWatchingSectionState
           widget.onItemSelected?.call(selection);
         }
       }
+    } else if (choice == 'random_episode') {
+      final addonId = item['addonId'] as String?;
+      final cachedEp = _episodeInfoMap[selection.imdbId];
+      await widget.onPlayRandomEpisode?.call(
+        selection,
+        addonId,
+        currentSeason: cachedEp?.season,
+        currentEpisode: cachedEp?.episode,
+      );
     } else if (choice == 'browse') {
       if (selection.isSeries && widget.onBrowseEpisodes != null) {
         final addonId = item['addonId'] as String?;
         final cachedEp = _episodeInfoMap[selection.imdbId];
-        widget.onBrowseEpisodes!(selection, addonId,
+        widget.onBrowseEpisodes!(
+          selection,
+          addonId,
           season: cachedEp?.season,
           episode: cachedEp?.episode,
         );
@@ -403,9 +468,16 @@ class _HomeContinueWatchingSectionState
 
   /// Find the next episode after the given season/episode using the Stremio catalog addon.
   Future<({int season, int episode})?> _findNextEpisode(
-    String imdbId, int currentSeason, int currentEpisode, String? addonId,
+    String imdbId,
+    int currentSeason,
+    int currentEpisode,
+    String? addonId,
   ) async {
-    return NextEpisodeService.findNextEpisode(imdbId, currentSeason, currentEpisode);
+    return NextEpisodeService.findNextEpisode(
+      imdbId,
+      currentSeason,
+      currentEpisode,
+    );
   }
 
   Future<void> _showEditSourceDialog(AdvancedSearchSelection selection) async {
@@ -420,9 +492,14 @@ class _HomeContinueWatchingSectionState
           builder: (dialogContext, setDialogState) {
             return Dialog(
               backgroundColor: const Color(0xFF141824),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                constraints: const BoxConstraints(
+                  maxWidth: 450,
+                  maxHeight: 500,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -430,11 +507,20 @@ class _HomeContinueWatchingSectionState
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.link_rounded, color: Color(0xFF60A5FA), size: 24),
+                          const Icon(
+                            Icons.link_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 24,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            isMovie ? 'Movie Source' : 'Series Sources (${sources.length})',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                            isMovie
+                                ? 'Movie Source'
+                                : 'Series Sources (${sources.length})',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -444,7 +530,10 @@ class _HomeContinueWatchingSectionState
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'First match wins — reorder by priority',
-                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -460,13 +549,22 @@ class _HomeContinueWatchingSectionState
                               dense: true,
                               contentPadding: EdgeInsets.zero,
                               leading: Container(
-                                width: 32, height: 32,
+                                width: 32,
+                                height: 32,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                                  color: const Color(
+                                    0xFF60A5FA,
+                                  ).withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Center(
-                                  child: Text('${index + 1}', style: const TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(
+                                      color: Color(0xFF60A5FA),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ),
                               title: Text(
@@ -476,14 +574,25 @@ class _HomeContinueWatchingSectionState
                                 overflow: TextOverflow.ellipsis,
                               ),
                               trailing: IconButton(
-                                icon: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red.withValues(alpha: 0.7)),
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                  color: Colors.red.withValues(alpha: 0.7),
+                                ),
                                 onPressed: () async {
-                                  await SeriesSourceService.removeSourceByHash(selection.imdbId, source.torrentHash);
-                                  final updated = await SeriesSourceService.getSources(selection.imdbId);
+                                  await SeriesSourceService.removeSourceByHash(
+                                    selection.imdbId,
+                                    source.torrentHash,
+                                  );
+                                  final updated =
+                                      await SeriesSourceService.getSources(
+                                        selection.imdbId,
+                                      );
                                   setDialogState(() {
                                     sources = updated;
                                   });
-                                  if (updated.isEmpty && dialogContext.mounted) {
+                                  if (updated.isEmpty &&
+                                      dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
                                   }
                                 },
@@ -496,13 +605,19 @@ class _HomeContinueWatchingSectionState
                       // Add from Debrid button
                       FutureBuilder<List<bool>>(
                         future: Future.wait([
-                          StorageService.getApiKey().then((k) => k != null && k.isNotEmpty),
-                          StorageService.getTorboxApiKey().then((k) => k != null && k.isNotEmpty),
+                          StorageService.getApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
+                          StorageService.getTorboxApiKey().then(
+                            (k) => k != null && k.isNotEmpty,
+                          ),
                         ]),
                         builder: (context, snapshot) {
                           final rdEnabled = snapshot.data?[0] ?? false;
                           final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled) return const SizedBox.shrink();
+                          if (!rdEnabled && !torboxEnabled) {
+                            return const SizedBox.shrink();
+                          }
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
@@ -517,11 +632,23 @@ class _HomeContinueWatchingSectionState
                                     torboxEnabled: torboxEnabled,
                                   );
                                 },
-                                icon: const Icon(Icons.cloud_download_outlined, size: 18, color: Color(0xFF60A5FA)),
-                                label: const Text('Add from Debrid', style: TextStyle(color: Color(0xFF60A5FA))),
+                                icon: const Icon(
+                                  Icons.cloud_download_outlined,
+                                  size: 18,
+                                  color: Color(0xFF60A5FA),
+                                ),
+                                label: const Text(
+                                  'Add from Debrid',
+                                  style: TextStyle(color: Color(0xFF60A5FA)),
+                                ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF60A5FA), width: 1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: const BorderSide(
+                                    color: Color(0xFF60A5FA),
+                                    width: 1,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),
@@ -537,8 +664,15 @@ class _HomeContinueWatchingSectionState
                           ),
                           const SizedBox(width: 8),
                           FilledButton.icon(
-                            icon: Icon(isMovie ? Icons.swap_horiz_rounded : Icons.add_rounded, size: 18),
-                            label: Text(isMovie ? 'Change Source' : 'Add Source'),
+                            icon: Icon(
+                              isMovie
+                                  ? Icons.swap_horiz_rounded
+                                  : Icons.add_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              isMovie ? 'Change Source' : 'Add Source',
+                            ),
                             onPressed: () {
                               Navigator.of(dialogContext).pop();
                               widget.onSelectSource?.call(selection);
@@ -577,17 +711,17 @@ class _HomeContinueWatchingSectionState
       onTorrentSearch: () => widget.onSelectSource?.call(selection),
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
-                selection: selection,
-                rdEnabled: true,
-                torboxEnabled: false,
-              )
+              selection: selection,
+              rdEnabled: true,
+              torboxEnabled: false,
+            )
           : null,
       onTorbox: torboxEnabled
           ? () => _pushDebridSelectSource(
-                selection: selection,
-                rdEnabled: false,
-                torboxEnabled: true,
-              )
+              selection: selection,
+              rdEnabled: false,
+              torboxEnabled: true,
+            )
           : null,
     );
   }
@@ -609,25 +743,29 @@ class _HomeContinueWatchingSectionState
     }
 
     void pushRd() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DebridDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: selection.title,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DebridDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: selection.title,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     void pushTorbox() {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => TorboxDownloadsScreen(
-          isPushedRoute: true,
-          initialSearchQuery: selection.title,
-          selectSourceMode: true,
-          onSourceSelected: saveSource,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TorboxDownloadsScreen(
+            isPushedRoute: true,
+            initialSearchQuery: selection.title,
+            selectSourceMode: true,
+            onSourceSelected: saveSource,
+          ),
         ),
-      ));
+      );
     }
 
     if (rdEnabled && !torboxEnabled) {
@@ -653,12 +791,19 @@ class _HomeContinueWatchingSectionState
               padding: EdgeInsets.all(16),
               child: Text(
                 'Select Provider',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
-              title: const Text('Real-Debrid', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'Real-Debrid',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushRd();
@@ -666,7 +811,10 @@ class _HomeContinueWatchingSectionState
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
-              title: const Text('TorBox', style: TextStyle(color: Colors.white)),
+              title: const Text(
+                'TorBox',
+                style: TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushTorbox();
@@ -743,7 +891,8 @@ class _HomeContinueWatchingSectionState
 
               return Padding(
                 padding: EdgeInsets.only(
-                    right: index < _items.length - 1 ? 16 : 0),
+                  right: index < _items.length - 1 ? 16 : 0,
+                ),
                 child: _buildCard(
                   item: item,
                   progressPercent: progress != null ? progress / 100.0 : null,
@@ -786,8 +935,10 @@ class _HomeContinueWatchingSectionState
       isTelevision: widget.isTelevision,
       onFocusChanged: (focused, idx) {
         if (focused) {
-          widget.focusController
-              ?.saveLastFocusedIndex(HomeSection.continueWatching, idx);
+          widget.focusController?.saveLastFocusedIndex(
+            HomeSection.continueWatching,
+            idx,
+          );
         }
       },
       child: (isFocused, isHovered) {
@@ -808,31 +959,31 @@ class _HomeContinueWatchingSectionState
         final year = item['year'] as String? ?? '';
 
         final cardStack = Stack(
-            fit: StackFit.expand,
-            children: [
-              // Backdrop image
-              _buildBackdropImage(posterUrl, title),
+          fit: StackFit.expand,
+          children: [
+            // Backdrop image
+            _buildBackdropImage(posterUrl, title),
 
-              // Cinematic gradient overlay
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.1),
-                        Colors.black.withValues(alpha: 0.75),
-                        Colors.black.withValues(alpha: 0.95),
-                      ],
-                      stops: const [0.0, 0.3, 0.65, 1.0],
-                    ),
+            // Cinematic gradient overlay
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.1),
+                      Colors.black.withValues(alpha: 0.75),
+                      Colors.black.withValues(alpha: 0.95),
+                    ],
+                    stops: const [0.0, 0.3, 0.65, 1.0],
                   ),
                 ),
               ),
-              // Left vignette (skip on TV for GPU perf)
-              if (!widget.isTelevision)
+            ),
+            // Left vignette (skip on TV for GPU perf)
+            if (!widget.isTelevision)
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -850,155 +1001,151 @@ class _HomeContinueWatchingSectionState
                 ),
               ),
 
-              // Type badge (top left)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: contentType == 'series'
-                        ? _accentColor
-                        : const Color(0xFFEF4444),
-                    borderRadius: BorderRadius.circular(6),
+            // Type badge (top left)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: contentType == 'series'
+                      ? _accentColor
+                      : const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  contentType == 'series' ? 'SERIES' : 'MOVIE',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
-                  child: Text(
-                    contentType == 'series' ? 'SERIES' : 'MOVIE',
-                    style: const TextStyle(
+                ),
+              ),
+            ),
+
+            // Bottom info area
+            Positioned(
+              bottom: progressPercent != null ? 5 : 12,
+              left: 12,
+              right: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+                      height: 1.2,
+                      letterSpacing: -0.2,
+                      shadows: widget.isTelevision
+                          ? null
+                          : const [Shadow(color: Colors.black, blurRadius: 8)],
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ),
-
-              // Bottom info area
-              Positioned(
-                bottom: progressPercent != null ? 5 : 12,
-                left: 12,
-                right: 12,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        height: 1.2,
-                        letterSpacing: -0.2,
-                        shadows: widget.isTelevision ? null : const [
-                          Shadow(color: Colors.black, blurRadius: 8),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (year.isNotEmpty)
-                          Text(
-                            year,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (year.isNotEmpty)
+                        Text(
+                          year,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.6),
                           ),
-                        if (year.isNotEmpty && episodeInfo != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Container(
-                              width: 3,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        if (episodeInfo != null)
-                          Text(
-                            'S${episodeInfo.season.toString().padLeft(2, '0')}E${episodeInfo.episode.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Progress bar
-              if (progressPercent != null)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: SizedBox(
-                    height: 3.5,
-                    child: Stack(
-                      children: [
-                        Container(
-                          color: Colors.white.withValues(alpha: 0.1),
                         ),
-                        FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progressPercent.clamp(0.0, 1.0),
+                      if (year.isNotEmpty && episodeInfo != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           child: Container(
+                            width: 3,
+                            height: 3,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFFED1C24),
-                                  Color(0xFFFF4D4D),
-                                ],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFED1C24).withValues(alpha: 0.6),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, -1),
-                                ),
-                              ],
+                              color: Colors.white.withValues(alpha: 0.3),
+                              shape: BoxShape.circle,
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      if (episodeInfo != null)
+                        Text(
+                          'S${episodeInfo.season.toString().padLeft(2, '0')}E${episodeInfo.episode.toString().padLeft(2, '0')}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
+                ],
+              ),
+            ),
 
-              // Play overlay on hover/focus
-              Positioned.fill(
-                child: AnimatedOpacity(
-                        opacity: isActive ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutCubic,
+            // Progress bar
+            if (progressPercent != null)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: SizedBox(
+                  height: 3.5,
+                  child: Stack(
+                    children: [
+                      Container(color: Colors.white.withValues(alpha: 0.1)),
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: progressPercent.clamp(0.0, 1.0),
                         child: Container(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          child: Center(
-                            child: TweenAnimationBuilder<double>(
-                              tween: Tween(
-                                  begin: 0.85, end: isActive ? 1.0 : 0.85),
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOutBack,
-                              builder: (context, scale, child) =>
-                                  Transform.scale(scale: scale, child: child),
-                              child: _buildPlayButton(),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFED1C24), Color(0xFFFF4D4D)],
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFFED1C24,
+                                ).withValues(alpha: 0.6),
+                                blurRadius: 6,
+                                offset: const Offset(0, -1),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
               ),
-            ],
+
+            // Play overlay on hover/focus
+            Positioned.fill(
+              child: AnimatedOpacity(
+                opacity: isActive ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  child: Center(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.85, end: isActive ? 1.0 : 0.85),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutBack,
+                      builder: (context, scale, child) =>
+                          Transform.scale(scale: scale, child: child),
+                      child: _buildPlayButton(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
 
         final cardDecoration = BoxDecoration(
@@ -1052,10 +1199,7 @@ class _HomeContinueWatchingSectionState
           width: 1.5,
         ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 16,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16),
         ],
       ),
       child: ClipOval(
@@ -1306,7 +1450,9 @@ class _MenuItemState extends State<_MenuItem> {
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                color: _focused
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: _buildContent(),
@@ -1315,7 +1461,9 @@ class _MenuItemState extends State<_MenuItem> {
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+                color: _focused
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: _buildContent(),
@@ -1340,9 +1488,21 @@ class _MenuItemState extends State<_MenuItem> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              Text(
+                widget.label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+              Text(
+                widget.subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.4),
+                ),
+              ),
             ],
           ),
         ),

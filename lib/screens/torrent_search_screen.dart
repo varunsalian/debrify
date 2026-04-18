@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -67,6 +68,7 @@ import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
 import '../services/series_source_service.dart';
+import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/home_focus_controller.dart';
 import '../models/iptv_playlist.dart';
@@ -3370,6 +3372,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _showQuickPlayLoading(String title, {VoidCallback? onDismissed}) {
+    _showLoadingDialog(
+      title,
+      subtitle: 'Loading from saved source...',
+      accentColor: const Color(0xFF6366F1),
+      onDismissed: onDismissed,
+    );
+  }
+
+  void _showLoadingDialog(
+    String title, {
+    required String subtitle,
+    required Color accentColor,
+    VoidCallback? onDismissed,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -3388,14 +3404,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 36,
                   height: 36,
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF6366F1),
-                    ),
+                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -3412,9 +3426,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Loading from saved source...',
-                  style: TextStyle(
+                Text(
+                  subtitle,
+                  style: const TextStyle(
                     color: Colors.white54,
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
@@ -3427,6 +3441,264 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       ),
     ).whenComplete(() => onDismissed?.call());
+  }
+
+  Future<void> _handleLocalContinueWatchingRandomEpisode(
+    AdvancedSearchSelection selection,
+    String? addonId, {
+    int? currentSeason,
+    int? currentEpisode,
+  }) async {
+    if (!selection.isSeries) {
+      await _handleQuickPlay(selection);
+      return;
+    }
+
+    bool dialogOpen = true;
+    _showLoadingDialog(
+      selection.title,
+      subtitle: 'Picking a random episode...',
+      accentColor: const Color(0xFFF59E0B),
+      onDismissed: () => dialogOpen = false,
+    );
+
+    try {
+      final chosen = await _resolveRandomEpisodeForLocalSeries(
+        selection.imdbId,
+        addonId,
+        currentSeason: currentSeason,
+        currentEpisode: currentEpisode,
+      );
+
+      if (dialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted) return;
+
+      if (chosen == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable episodes found for this series'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+        return;
+      }
+
+      await _handleQuickPlay(
+        AdvancedSearchSelection(
+          imdbId: selection.imdbId,
+          isSeries: true,
+          title: selection.title,
+          year: selection.year,
+          season: chosen.season,
+          episode: chosen.episode,
+          contentType: selection.contentType,
+          posterUrl: selection.posterUrl,
+        ),
+      );
+    } catch (e) {
+      if (dialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted) return;
+      debugPrint(
+        'TorrentSearchScreen: random local episode pick failed for '
+        '${selection.imdbId}: $e',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to pick a random episode'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
+  Future<({int season, int episode})?> _resolveRandomEpisodeForLocalSeries(
+    String imdbId,
+    String? addonId, {
+    int? currentSeason,
+    int? currentEpisode,
+  }) async {
+    final addon = await _preferredMetaAddonFor(imdbId, addonId);
+    if (addon != null) {
+      final videos = await StremioService.instance.fetchSeriesMeta(
+        addon,
+        imdbId,
+      );
+      final pickedFromAddon = _pickRandomEpisodeFromAddonVideos(
+        videos,
+        currentSeason: currentSeason,
+        currentEpisode: currentEpisode,
+      );
+      if (pickedFromAddon != null) {
+        return pickedFromAddon;
+      }
+    }
+
+    final rawSeasons = await TraktService.instance.fetchShowSeasons(imdbId);
+    return _pickRandomEpisodeFromTraktSeasons(
+      rawSeasons,
+      currentSeason: currentSeason,
+      currentEpisode: currentEpisode,
+    );
+  }
+
+  Future<StremioAddon?> _preferredMetaAddonFor(
+    String imdbId,
+    String? addonId,
+  ) async {
+    final addons = await StremioService.instance.getEnabledAddons();
+
+    bool supportsEpisodeMeta(StremioAddon addon) =>
+        addon.supportsMeta &&
+        addon.supportsSeries &&
+        addon.supportsContentId(imdbId);
+
+    if (addonId != null) {
+      final exact = addons.cast<StremioAddon?>().firstWhere(
+        (addon) =>
+            addon != null && addon.id == addonId && supportsEpisodeMeta(addon),
+        orElse: () => null,
+      );
+      if (exact != null) {
+        return exact;
+      }
+    }
+
+    return addons.cast<StremioAddon?>().firstWhere(
+      (addon) => addon != null && supportsEpisodeMeta(addon),
+      orElse: () => null,
+    );
+  }
+
+  ({int season, int episode})? _pickRandomEpisodeFromAddonVideos(
+    List<Map<String, dynamic>>? videos, {
+    int? currentSeason,
+    int? currentEpisode,
+  }) {
+    if (videos == null || videos.isEmpty) return null;
+
+    final episodes = <({int season, int episode, DateTime? firstAired})>[];
+    final seen = <String>{};
+
+    for (final video in videos) {
+      final seasonRaw = video['season'];
+      final season = seasonRaw is int
+          ? seasonRaw
+          : (seasonRaw is num ? seasonRaw.toInt() : null);
+      final episodeRaw = video['number'] ?? video['episode'];
+      final episode = episodeRaw is int
+          ? episodeRaw
+          : (episodeRaw is num ? episodeRaw.toInt() : null);
+      if (season == null || episode == null || episode <= 0) continue;
+
+      final key = '$season-$episode';
+      if (!seen.add(key)) continue;
+
+      episodes.add((
+        season: season,
+        episode: episode,
+        firstAired: _tryParseEpisodeDate(video['released'] as String?),
+      ));
+    }
+
+    return _pickRandomEpisodeFromCandidates(
+      episodes,
+      currentSeason: currentSeason,
+      currentEpisode: currentEpisode,
+    );
+  }
+
+  ({int season, int episode})? _pickRandomEpisodeFromTraktSeasons(
+    List<Map<String, dynamic>> rawSeasons, {
+    int? currentSeason,
+    int? currentEpisode,
+  }) {
+    if (rawSeasons.isEmpty) return null;
+
+    final episodes = <({int season, int episode, DateTime? firstAired})>[];
+    final seasons = rawSeasons
+        .map(TraktSeason.fromJson)
+        .where((season) => season.episodes.isNotEmpty);
+
+    for (final season in seasons) {
+      for (final episode in season.episodes) {
+        if (episode.number <= 0) continue;
+        episodes.add((
+          season: episode.season,
+          episode: episode.number,
+          firstAired: _tryParseEpisodeDate(episode.firstAired),
+        ));
+      }
+    }
+
+    return _pickRandomEpisodeFromCandidates(
+      episodes,
+      currentSeason: currentSeason,
+      currentEpisode: currentEpisode,
+    );
+  }
+
+  ({int season, int episode})? _pickRandomEpisodeFromCandidates(
+    List<({int season, int episode, DateTime? firstAired})> episodes, {
+    int? currentSeason,
+    int? currentEpisode,
+  }) {
+    if (episodes.isEmpty) return null;
+
+    final nowUtc = DateTime.now().toUtc();
+    final random = Random();
+
+    bool isAired(({int season, int episode, DateTime? firstAired}) episode) {
+      final firstAired = episode.firstAired;
+      if (firstAired == null) return true;
+      return !firstAired.toUtc().isAfter(nowUtc);
+    }
+
+    List<({int season, int episode, DateTime? firstAired})>
+    excludeCurrentIfPossible(
+      List<({int season, int episode, DateTime? firstAired})> candidates,
+    ) {
+      if (candidates.length <= 1 ||
+          currentSeason == null ||
+          currentEpisode == null) {
+        return candidates;
+      }
+
+      final filtered = candidates
+          .where(
+            (episode) =>
+                episode.season != currentSeason ||
+                episode.episode != currentEpisode,
+          )
+          .toList();
+      return filtered.isNotEmpty ? filtered : candidates;
+    }
+
+    var candidates = episodes
+        .where((episode) => episode.season > 0 && isAired(episode))
+        .toList();
+    candidates = excludeCurrentIfPossible(candidates);
+    if (candidates.isNotEmpty) {
+      final picked = candidates[random.nextInt(candidates.length)];
+      return (season: picked.season, episode: picked.episode);
+    }
+
+    candidates = episodes.where(isAired).toList();
+    candidates = excludeCurrentIfPossible(candidates);
+    if (candidates.isNotEmpty) {
+      final picked = candidates[random.nextInt(candidates.length)];
+      return (season: picked.season, episode: picked.episode);
+    }
+
+    return null;
+  }
+
+  DateTime? _tryParseEpisodeDate(String? value) {
+    if (value == null || value.isEmpty) return null;
+    return DateTime.tryParse(value);
   }
 
   /// Try to play from bound sources (series: finds the right episode; movies: picks the largest file).
@@ -17006,6 +17278,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               onQuickPlay: (selection) {
                 _handleQuickPlay(selection);
               },
+              onPlayRandomEpisode:
+                  (
+                    selection,
+                    addonId, {
+                    int? currentSeason,
+                    int? currentEpisode,
+                  }) async {
+                    await _handleLocalContinueWatchingRandomEpisode(
+                      selection,
+                      addonId,
+                      currentSeason: currentSeason,
+                      currentEpisode: currentEpisode,
+                    );
+                  },
               onBrowseEpisodes: (selection, addonId, {int? season, int? episode}) {
                 final meta = StremioMeta.fromJson({
                   'id': selection.imdbId,
