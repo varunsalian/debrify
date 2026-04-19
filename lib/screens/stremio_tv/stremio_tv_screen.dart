@@ -18,6 +18,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
+import '../../utils/stremio_episode_selector.dart';
 import '../../services/torrent_service.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
@@ -805,6 +806,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             torrentStreams[i],
             item,
             _debridProvider,
+            season: season,
+            episode: episode,
           );
           if (url != null && url.isNotEmpty) {
             firstPlayableUrl = url;
@@ -829,21 +832,32 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           Navigator.of(context).pop();
           _dialogGeneration = -1;
           // Show source picker so user can manually select
-          final result = await _showManualSourcePicker(playableSources, item);
+          final result = await _showManualSourcePicker(
+            playableSources,
+            item,
+            season: season,
+            episode: episode,
+          );
           if (result != null && mounted) {
             _notifyStartupPlayerLaunching();
             await VideoPlayerLauncher.push(
               context,
               VideoPlayerLaunchArgs(
-                videoUrl: result.$1,
+                videoUrl: result.url,
                 title: _currentPlayTitle ?? item.name,
                 startAtPercent: _currentSlotProgress,
                 contentImdbId: item.effectiveImdbId,
                 contentTitle: item.name,
                 contentType: item.type,
+                contentSeason: season,
+                contentEpisode: episode,
                 stremioSources: playableSources,
-                stremioCurrentSourceIndex: result.$2,
-                resolveStremioSource: _createSourceResolver(item),
+                stremioCurrentSourceIndex: result.sourceIndex,
+                resolveStremioSource: _createSourceResolver(
+                  item,
+                  season: season,
+                  episode: episode,
+                ),
                 stremioTvChannels: _buildGuideChannelMetadata(),
                 stremioTvCurrentChannelId: channel.id,
                 stremioTvRotationMinutes: _rotationMinutes,
@@ -875,9 +889,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           contentImdbId: item.effectiveImdbId,
           contentTitle: item.name,
           contentType: item.type,
+          contentSeason: season,
+          contentEpisode: episode,
           stremioSources: playableSources,
           stremioCurrentSourceIndex: firstPlayableIndex,
-          resolveStremioSource: _createSourceResolver(item),
+          resolveStremioSource: _createSourceResolver(
+            item,
+            season: season,
+            episode: episode,
+          ),
           stremioTvChannels: _buildGuideChannelMetadata(),
           stremioTvCurrentChannelId: channel.id,
           stremioTvRotationMinutes: _rotationMinutes,
@@ -1055,6 +1075,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           torrentStreams[i],
           item,
           _debridProvider,
+          season: season,
+          episode: episode,
         );
         if (url != null && url.isNotEmpty) {
           firstPlayableUrl = url;
@@ -1083,7 +1105,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       startAtPercent: slotProgress,
       playableSources: playableSources,
       sourceIndex: firstPlayableIndex,
-      sourceResolver: _createSourceResolver(item),
+      sourceResolver: _createSourceResolver(
+        item,
+        season: season,
+        episode: episode,
+      ),
     );
   }
 
@@ -1427,12 +1453,18 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Show a bottom sheet with all available sources so the user can pick one manually.
   /// Returns (resolvedUrl, sourceIndex) or null if dismissed.
-  Future<(String, int)?> _showManualSourcePicker(
+  Future<_ResolvedSourceChoice?> _showManualSourcePicker(
     List<Torrent> sources,
-    StremioMeta item,
-  ) async {
-    final resolver = _createSourceResolver(item);
-    return showModalBottomSheet<(String, int)?>(
+    StremioMeta item, {
+    int? season,
+    int? episode,
+  }) async {
+    final resolver = _createSourceResolver(
+      item,
+      season: season,
+      episode: episode,
+    );
+    return showModalBottomSheet<_ResolvedSourceChoice?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -1460,14 +1492,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   // ─── Source Resolution (no dialogs, returns URL) ────────────────────
 
   /// Creates a resolver closure that snapshots current state at creation time.
-  Future<String?> Function(Torrent) _createSourceResolver(StremioMeta item) {
+  Future<String?> Function(Torrent) _createSourceResolver(
+    StremioMeta item, {
+    int? season,
+    int? episode,
+  }) {
     final debridProvider = _debridProvider;
     return (Torrent torrent) async {
       if (torrent.isDirectStream) {
         return torrent.directUrl;
       }
       if (torrent.streamType == StreamType.torrent) {
-        return _resolveTorrentUrl(torrent, item, debridProvider);
+        return _resolveTorrentUrl(
+          torrent,
+          item,
+          debridProvider,
+          season: season,
+          episode: episode,
+        );
       }
       return null;
     };
@@ -1596,38 +1638,69 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   Future<String?> _resolveTorrentUrl(
     Torrent torrent,
     StremioMeta item,
-    String debridProvider,
-  ) async {
+    String debridProvider, {
+    int? season,
+    int? episode,
+  }) async {
     // Try the selected provider first
     if (debridProvider == 'realdebrid') {
       final rdKey = await StorageService.getApiKey();
       if (rdKey != null && rdKey.isNotEmpty) {
-        return _resolveViaRealDebrid(torrent, item, rdKey);
+        return _resolveViaRealDebrid(
+          torrent,
+          item,
+          rdKey,
+          season: season,
+          episode: episode,
+        );
       }
     } else if (debridProvider == 'torbox') {
       final tbKey = await StorageService.getTorboxApiKey();
       if (tbKey != null && tbKey.isNotEmpty) {
-        return _resolveViaTorbox(torrent, tbKey);
+        return _resolveViaTorbox(
+          torrent,
+          item,
+          tbKey,
+          season: season,
+          episode: episode,
+        );
       }
     } else if (debridProvider == 'pikpak') {
       final pikpakEnabled = await StorageService.getPikPakEnabled();
       if (pikpakEnabled) {
-        return _resolveViaPikPak(torrent, item);
+        return _resolveViaPikPak(
+          torrent,
+          item,
+          season: season,
+          episode: episode,
+        );
       }
     }
 
     // Auto fallback
     final rdKey = await StorageService.getApiKey();
     if (rdKey != null && rdKey.isNotEmpty) {
-      return _resolveViaRealDebrid(torrent, item, rdKey);
+      return _resolveViaRealDebrid(
+        torrent,
+        item,
+        rdKey,
+        season: season,
+        episode: episode,
+      );
     }
     final tbKey = await StorageService.getTorboxApiKey();
     if (tbKey != null && tbKey.isNotEmpty) {
-      return _resolveViaTorbox(torrent, tbKey);
+      return _resolveViaTorbox(
+        torrent,
+        item,
+        tbKey,
+        season: season,
+        episode: episode,
+      );
     }
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     if (pikpakEnabled) {
-      return _resolveViaPikPak(torrent, item);
+      return _resolveViaPikPak(torrent, item, season: season, episode: episode);
     }
 
     return null;
@@ -1636,8 +1709,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   Future<String?> _resolveViaRealDebrid(
     Torrent torrent,
     StremioMeta item,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    int? season,
+    int? episode,
+  }) async {
     try {
       final magnet =
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
@@ -1653,21 +1728,48 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (links.isEmpty) return null;
 
       String linkToUnrestrict = links.first.toString();
-      if (item.type.toLowerCase() == 'movie' && links.length > 1) {
-        final selectedFiles = files
-            .where((f) => f is Map && f['selected'] == 1)
-            .toList();
-        if (selectedFiles.length == links.length) {
-          int largestIndex = 0;
-          int largestSize = 0;
-          for (int i = 0; i < selectedFiles.length; i++) {
-            final size = (selectedFiles[i]['bytes'] as int?) ?? 0;
-            if (size > largestSize) {
-              largestSize = size;
-              largestIndex = i;
-            }
-          }
-          linkToUnrestrict = links[largestIndex].toString();
+      final selectedVideoFiles = <Map<String, dynamic>>[];
+      final selectedVideoLinks = <String>[];
+      int linkIndex = 0;
+      for (final file in files) {
+        if (file is! Map<String, dynamic>) continue;
+        final selected = file['selected'] == 1 || file['selected'] == true;
+        if (!selected) continue;
+        final rawName =
+            (file['path'] as String?) ?? (file['name'] as String?) ?? '';
+        if (FileUtils.isVideoFile(FileUtils.getFileName(rawName)) &&
+            linkIndex < links.length) {
+          selectedVideoFiles.add(file);
+          selectedVideoLinks.add(links[linkIndex].toString());
+        }
+        linkIndex++;
+      }
+
+      final isSeries = item.type.toLowerCase() == 'series';
+      if (isSeries && season != null && episode != null) {
+        final candidateNames = selectedVideoFiles.map((file) {
+          return (file['path'] as String?) ?? (file['name'] as String?) ?? '';
+        }).toList();
+        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+          candidateNames,
+          season: season,
+          episode: episode,
+        );
+        if (targetIndex == null || targetIndex >= selectedVideoLinks.length) {
+          debugPrint(
+            'StremioTV: RD could not match S${season}E$episode in ${torrent.name}, '
+            'falling back to default file selection',
+          );
+        } else {
+          linkToUnrestrict = selectedVideoLinks[targetIndex];
+        }
+      } else if (item.type.toLowerCase() == 'movie' &&
+          selectedVideoLinks.length > 1) {
+        final targetIndex = StremioEpisodeSelector.findLargestFileIndex(
+          selectedVideoFiles.map((file) => file['bytes'] as int?).toList(),
+        );
+        if (targetIndex < selectedVideoLinks.length) {
+          linkToUnrestrict = selectedVideoLinks[targetIndex];
         }
       }
 
@@ -1682,7 +1784,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<String?> _resolveViaTorbox(Torrent torrent, String apiKey) async {
+  Future<String?> _resolveViaTorbox(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey, {
+    int? season,
+    int? episode,
+  }) async {
     try {
       final magnet =
           'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
@@ -1714,7 +1822,37 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (files.isEmpty) return null;
 
       var targetFile = files.first;
-      if (files.length > 1) {
+      if (item.type.toLowerCase() == 'series' &&
+          season != null &&
+          episode != null) {
+        if (files.length > 1) {
+          final fallbackIndex = StremioEpisodeSelector.findLargestFileIndex(
+            files.map((f) => f.size).toList(),
+          );
+          targetFile = files[fallbackIndex];
+        }
+        final candidateNames = files
+            .map((f) => f.absolutePath ?? f.name)
+            .toList();
+        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+          candidateNames,
+          season: season,
+          episode: episode,
+        );
+        if (targetIndex == null || targetIndex >= files.length) {
+          debugPrint(
+            'StremioTV: Torbox could not match S${season}E$episode in ${torrent.name}, '
+            'falling back to legacy file selection',
+          );
+        } else {
+          targetFile = files[targetIndex];
+        }
+      } else if (item.type.toLowerCase() == 'movie' && files.length > 1) {
+        final targetIndex = StremioEpisodeSelector.findLargestFileIndex(
+          files.map((f) => f.size).toList(),
+        );
+        targetFile = files[targetIndex];
+      } else if (files.length > 1) {
         for (final f in files) {
           if (f.size > targetFile.size) {
             targetFile = f;
@@ -1735,7 +1873,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     }
   }
 
-  Future<String?> _resolveViaPikPak(Torrent torrent, StremioMeta item) async {
+  Future<String?> _resolveViaPikPak(
+    Torrent torrent,
+    StremioMeta item, {
+    int? season,
+    int? episode,
+  }) async {
     try {
       final prepared = await PikPakTvService.instance.prepareTorrent(
         infohash: torrent.infohash.trim().toLowerCase(),
@@ -1747,26 +1890,50 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       String? streamUrl = prepared['url'] as String?;
 
       final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
-      if (allVideoFiles != null &&
-          allVideoFiles.isNotEmpty &&
-          item.type.toLowerCase() == 'movie') {
-        Map<String, dynamic>? largestFile;
-        int largestSize = 0;
-        for (final file in allVideoFiles) {
-          if (file is Map<String, dynamic>) {
-            final size = (file['size'] as int?) ?? 0;
-            if (size > largestSize) {
-              largestSize = size;
-              largestFile = file;
+      if (allVideoFiles != null && allVideoFiles.isNotEmpty) {
+        Map<String, dynamic>? targetFile;
+        final isSeries = item.type.toLowerCase() == 'series';
+        if (isSeries && season != null && episode != null) {
+          final candidateNames = allVideoFiles.map((file) {
+            if (file is! Map<String, dynamic>) return '';
+            return (file['_fullPath'] as String?) ??
+                (file['name'] as String?) ??
+                '';
+          }).toList();
+          final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+            candidateNames,
+            season: season,
+            episode: episode,
+          );
+          if (targetIndex == null || targetIndex >= allVideoFiles.length) {
+            debugPrint(
+              'StremioTV: PikPak could not match S${season}E$episode in ${torrent.name}, '
+              'falling back to prepared default file',
+            );
+          } else {
+            final file = allVideoFiles[targetIndex];
+            if (file is Map<String, dynamic>) {
+              targetFile = file;
             }
+          }
+        } else if (item.type.toLowerCase() == 'movie') {
+          final targetIndex = StremioEpisodeSelector.findLargestFileIndex(
+            allVideoFiles.map((file) {
+              if (file is! Map<String, dynamic>) return null;
+              return file['size'] as int?;
+            }).toList(),
+          );
+          final file = allVideoFiles[targetIndex];
+          if (file is Map<String, dynamic>) {
+            targetFile = file;
           }
         }
 
-        if (largestFile != null) {
-          final largestFileId = largestFile['id'] as String?;
-          if (largestFileId != null && largestFileId.isNotEmpty) {
+        if (targetFile != null) {
+          final targetFileId = targetFile['id'] as String?;
+          if (targetFileId != null && targetFileId.isNotEmpty) {
             final api = PikPakApiService.instance;
-            final fileData = await api.getFileDetails(largestFileId);
+            final fileData = await api.getFileDetails(targetFileId);
             final url = api.getStreamingUrl(fileData);
             if (url != null && url.isNotEmpty) {
               streamUrl = url;
@@ -2590,7 +2757,9 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             return;
           }
         }
-        Navigator.of(context).pop((url, originalIndex));
+        Navigator.of(
+          context,
+        ).pop(_ResolvedSourceChoice(url: url, sourceIndex: originalIndex));
       } else {
         setState(() {
           _resolvingIndex = null;
@@ -3021,4 +3190,11 @@ class _ChannelPlaybackResult {
     required this.sourceIndex,
     required this.sourceResolver,
   });
+}
+
+class _ResolvedSourceChoice {
+  final String url;
+  final int sourceIndex;
+
+  const _ResolvedSourceChoice({required this.url, required this.sourceIndex});
 }

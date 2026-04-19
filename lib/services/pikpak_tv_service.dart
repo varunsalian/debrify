@@ -149,7 +149,9 @@ class PikPakTvService {
           final taskPhase = taskData['phase'] as String?;
           final taskProgress = _parseProgress(taskData);
 
-          log('Initial task check - phase: $taskPhase, progress: $taskProgress%');
+          log(
+            'Initial task check - phase: $taskPhase, progress: $taskProgress%',
+          );
 
           // Quick success - already complete
           if (taskPhase == 'PHASE_TYPE_COMPLETE') {
@@ -166,10 +168,14 @@ class PikPakTvService {
 
           // Determine if worth waiting based on initial progress
           if (taskProgress >= _progressThreshold) {
-            log('Good initial progress ($taskProgress%), likely cached - waiting for completion');
+            log(
+              'Good initial progress ($taskProgress%), likely cached - waiting for completion',
+            );
             return await _pollTaskUntilReady(taskId, fileId, torrentName, log);
           } else if (taskProgress >= 20) {
-            log('Some progress ($taskProgress%), might be cached - checking progress delta');
+            log(
+              'Some progress ($taskProgress%), might be cached - checking progress delta',
+            );
 
             // Wait 2 seconds and check delta
             await Future.delayed(const Duration(seconds: 2));
@@ -179,9 +185,17 @@ class PikPakTvService {
 
             log('Progress after 2s: $newProgress% (delta: $delta)');
 
-            if (delta >= _progressDeltaThreshold || newProgress >= _progressThreshold) {
-              log('Good progress delta or threshold reached - waiting for completion');
-              return await _pollTaskUntilReady(taskId, fileId, torrentName, log);
+            if (delta >= _progressDeltaThreshold ||
+                newProgress >= _progressThreshold) {
+              log(
+                'Good progress delta or threshold reached - waiting for completion',
+              );
+              return await _pollTaskUntilReady(
+                taskId,
+                fileId,
+                torrentName,
+                log,
+              );
             }
           }
 
@@ -195,10 +209,17 @@ class PikPakTvService {
             await _cleanupFile(fileId, log);
             return null;
           } else {
-            log('Some progress detected ($finalProgress%), continuing with limited wait');
-            return await _pollTaskUntilReady(taskId, fileId, torrentName, log, maxSeconds: 10);
+            log(
+              'Some progress detected ($finalProgress%), continuing with limited wait',
+            );
+            return await _pollTaskUntilReady(
+              taskId,
+              fileId,
+              torrentName,
+              log,
+              maxSeconds: 10,
+            );
           }
-
         } catch (e) {
           log('Task polling failed, falling back to file-based polling: $e');
           // Fall through to file-based polling
@@ -273,16 +294,13 @@ class PikPakTvService {
       log('Timed out waiting for file completion');
       await _cleanupFile(fileId, log);
       return null;
-
     } catch (e) {
       log('Error preparing torrent: $e');
 
       // Check if the error is because the restricted folder was deleted
       final folderExists = await _api.verifyRestrictedFolderExists();
       if (!folderExists) {
-        log(
-          'Restricted folder was deleted externally - logging out user',
-        );
+        log('Restricted folder was deleted externally - logging out user');
         await _api.logout();
         // Note: The UI will be updated when the user navigates or refreshes
       }
@@ -299,9 +317,9 @@ class PikPakTvService {
     String taskId,
     String fileId,
     String torrentName,
-    void Function(String) log,
-    {int maxSeconds = 15}
-  ) async {
+    void Function(String) log, {
+    int maxSeconds = 15,
+  }) async {
     final stopTime = DateTime.now().add(Duration(seconds: maxSeconds));
     int lastProgress = 0;
 
@@ -433,10 +451,17 @@ class PikPakTvService {
       final videoFiles = <Map<String, dynamic>>[];
       const int maxDepth = 5; // Prevent infinite recursion
 
-      Future<void> collectVideosRecursively(List<dynamic> fileList, String parentId, {int depth = 0}) async {
+      Future<void> collectVideosRecursively(
+        List<dynamic> fileList,
+        String parentId, {
+        int depth = 0,
+        String parentPath = '',
+      }) async {
         // Check depth limit to prevent infinite recursion
         if (depth >= maxDepth) {
-          log('Reached maximum recursion depth ($maxDepth) at folder $parentId');
+          log(
+            'Reached maximum recursion depth ($maxDepth) at folder $parentId',
+          );
           return;
         }
 
@@ -453,20 +478,27 @@ class PikPakTvService {
               log('Folder missing ID, skipping');
               continue;
             }
+            final nextPath = parentPath.isEmpty ? name : '$parentPath/$name';
             try {
               final subResult = await _api.listFiles(parentId: folderId);
-              await collectVideosRecursively(subResult.files, folderId, depth: depth + 1);
+              await collectVideosRecursively(
+                subResult.files,
+                folderId,
+                depth: depth + 1,
+                parentPath: nextPath,
+              );
             } catch (e) {
               log('Error scanning subfolder ${file['name']}: $e');
             }
             continue;
           }
 
-          final isVideo = mimeType.startsWith('video/') ||
-              FileUtils.isVideoFile(name);
+          final isVideo =
+              mimeType.startsWith('video/') || FileUtils.isVideoFile(name);
 
           if (isVideo && size >= _minVideoSizeBytes) {
-            videoFiles.add(file);
+            final fullPath = parentPath.isEmpty ? name : '$parentPath/$name';
+            videoFiles.add({...file, '_fullPath': fullPath});
             log('Found video: $name (${_formatSize(size)})');
           }
         }
@@ -508,11 +540,16 @@ class PikPakTvService {
         'provider': 'pikpak',
         'pikpakFileId': firstFileId,
         'pikpakFolderId': folderId,
-        'allVideoFiles': videoFiles.map((f) => {
-          'id': f['id'],
-          'name': f['name'],
-          'size': _parseSize(f['size']),
-        }).toList(),
+        'allVideoFiles': videoFiles
+            .map(
+              (f) => {
+                'id': f['id'],
+                'name': f['name'],
+                'size': _parseSize(f['size']),
+                '_fullPath': f['_fullPath'],
+              },
+            )
+            .toList(),
       };
     } catch (e) {
       log('Error scanning folder: $e');
