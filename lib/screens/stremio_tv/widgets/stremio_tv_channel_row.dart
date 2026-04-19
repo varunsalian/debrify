@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 
-enum _ChannelRowMenuAction { favorite, export }
+enum _ChannelRowMenuAction { favorite, edit, export }
 
 /// A single channel row in the Stremio TV guide.
 ///
@@ -23,6 +23,7 @@ class StremioTvChannelRow extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onFavoritePressed;
+  final VoidCallback? onEditPressed;
   final VoidCallback? onExportPressed;
   final VoidCallback? onGuidePressed;
   final VoidCallback? onLeftPress;
@@ -40,6 +41,7 @@ class StremioTvChannelRow extends StatefulWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onFavoritePressed,
+    this.onEditPressed,
     this.onExportPressed,
     this.onGuidePressed,
     this.onLeftPress,
@@ -765,6 +767,9 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
               case _ChannelRowMenuAction.favorite:
                 widget.onFavoritePressed();
                 break;
+              case _ChannelRowMenuAction.edit:
+                widget.onEditPressed?.call();
+                break;
               case _ChannelRowMenuAction.export:
                 widget.onExportPressed?.call();
                 break;
@@ -787,8 +792,25 @@ class _StremioTvChannelRowState extends State<StremioTvChannelRow> {
                 ],
               ),
             ),
-            if (widget.channel.isLocal && widget.onExportPressed != null)
+            if (widget.channel.isLocal &&
+                (widget.onEditPressed != null ||
+                    widget.onExportPressed != null))
               const PopupMenuDivider(),
+            if (widget.channel.isLocal && widget.onEditPressed != null)
+              const PopupMenuItem<_ChannelRowMenuAction>(
+                value: _ChannelRowMenuAction.edit,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.edit_rounded,
+                      size: 18,
+                      color: Color(0xFFA78BFA),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Edit channel'),
+                  ],
+                ),
+              ),
             if (widget.channel.isLocal && widget.onExportPressed != null)
               const PopupMenuItem<_ChannelRowMenuAction>(
                 value: _ChannelRowMenuAction.export,

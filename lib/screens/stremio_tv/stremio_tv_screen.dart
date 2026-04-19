@@ -2057,6 +2057,66 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
   }
 
+  Future<void> _editLocalCatalog(StremioTvChannel channel) async {
+    final previousFocusedIndex = _focusedIndex;
+    final previousFocusedChannelId = _currentFocusedChannelId();
+    final previousFilteredIndex = previousFocusedChannelId == null
+        ? -1
+        : _filteredChannels.indexWhere(
+            (ch) => ch.id == previousFocusedChannelId,
+          );
+    final changed = await StremioTvLocalCatalogEditorDialog.show(
+      context,
+      catalogId: channel.catalog.id,
+      catalogType: channel.type,
+    );
+    if (changed != true || !mounted) return;
+
+    await _refresh();
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      void focusChannelById(String channelId) {
+        final channelIndex = _channels.indexWhere((ch) => ch.id == channelId);
+        if (channelIndex >= 0 && channelIndex < _rowFocusNodes.length) {
+          _rowFocusNodes[channelIndex].requestFocus();
+          setState(() => _focusedIndex = channelIndex);
+        }
+      }
+
+      final visibleChannels = _filteredChannels;
+      final visibleEditedChannel = visibleChannels.firstWhereOrNull(
+        (ch) => ch.id == channel.id,
+      );
+      if (visibleEditedChannel != null) {
+        focusChannelById(visibleEditedChannel.id);
+        return;
+      }
+
+      final visiblePreviousChannel = previousFocusedChannelId == null
+          ? null
+          : visibleChannels.firstWhereOrNull(
+              (ch) => ch.id == previousFocusedChannelId,
+            );
+      if (visiblePreviousChannel != null) {
+        focusChannelById(visiblePreviousChannel.id);
+        return;
+      }
+
+      if (visibleChannels.isNotEmpty) {
+        final fallbackVisibleIndex = previousFilteredIndex >= 0
+            ? previousFilteredIndex.clamp(0, visibleChannels.length - 1)
+            : previousFocusedIndex.clamp(0, visibleChannels.length - 1);
+        focusChannelById(visibleChannels[fallbackVisibleIndex].id);
+        return;
+      }
+
+      _searchBtnFocusNode.requestFocus();
+    });
+  }
+
   // ============================================================================
   // Search
   // ============================================================================
@@ -2620,6 +2680,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 onLongPress: () => _toggleFavorite(channel),
                                 onFavoritePressed: () =>
                                     _toggleFavorite(channel),
+                                onEditPressed: channel.isLocal
+                                    ? () => _editLocalCatalog(channel)
+                                    : null,
                                 onExportPressed: channel.isLocal
                                     ? () => _copyLocalCatalogJson(channel)
                                     : null,
