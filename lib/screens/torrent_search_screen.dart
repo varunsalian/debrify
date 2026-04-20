@@ -427,37 +427,40 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               isNarrow ? 360.0 : 400.0,
             );
             return Dialog(
-              backgroundColor: const Color(0xFF0B1020),
+              backgroundColor: Colors.transparent,
               insetPadding: EdgeInsets.symmetric(
                 horizontal: isNarrow ? 16 : 24,
                 vertical: 24,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxWidth: isNarrow ? 420 : 460,
+                  maxWidth: isNarrow ? 396 : 420,
                   maxHeight: maxDialogHeight,
                 ),
                 child: FocusTraversalGroup(
                   policy: OrderedTraversalPolicy(),
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF151B30),
-                          const Color(0xFF0B1020),
-                        ],
+                      color: const Color(0xFF171B2D),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.28),
+                          blurRadius: 28,
+                          offset: const Offset(0, 14),
+                        ),
+                      ],
                     ),
                     child: Scrollbar(
                       thumbVisibility: !isNarrow,
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,99 +474,114 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 icon: const Icon(Icons.close_rounded),
                                 color: Colors.white54,
                                 tooltip: 'Close',
-                                splashRadius: 18,
+                                splashRadius: 16,
+                                visualDensity: VisualDensity.compact,
                               ),
                             ),
                             if (providers.isNotEmpty)
                               Container(
-                                margin: const EdgeInsets.only(bottom: 12),
+                                margin: const EdgeInsets.only(bottom: 10),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 6,
+                                  horizontal: 12,
+                                  vertical: 10,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.04),
-                                  borderRadius: BorderRadius.circular(16),
+                                  color: Colors.white.withValues(alpha: 0.03),
+                                  borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.08),
+                                    color: Colors.white.withValues(alpha: 0.07),
                                   ),
                                 ),
-                                child: DropdownButtonFormField<String>(
-                                  value: activeProvider?.id,
-                                  focusNode: providerFocusNode,
-                                  dropdownColor: const Color(0xFF1A2236),
-                                  iconEnabledColor: Colors.white54,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                  ),
-                                  items: providers.map((provider) {
-                                    final title = provider.id == 'debrid'
-                                        ? 'Real-Debrid'
-                                        : provider.id == 'torbox'
-                                        ? 'TorBox'
-                                        : 'PikPak';
-                                    return DropdownMenuItem<String>(
-                                      value: provider.id,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            provider.icon,
-                                            size: 18,
-                                            color: provider.color,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(title),
-                                        ],
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            (activeProvider?.color ??
+                                                    Colors.white54)
+                                                .withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(9),
                                       ),
-                                    );
-                                  }).toList(),
-                                  selectedItemBuilder: (context) {
-                                    return providers.map((provider) {
-                                      final title = provider.id == 'debrid'
-                                          ? 'Real-Debrid'
-                                          : provider.id == 'torbox'
-                                          ? 'TorBox'
-                                          : 'PikPak';
-                                      return Row(
-                                        children: [
-                                          Icon(
-                                            provider.icon,
-                                            size: 18,
-                                            color: provider.color,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              title,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
+                                      child: Icon(
+                                        activeProvider?.icon ??
+                                            Icons.cloud_outlined,
+                                        size: 16,
+                                        color:
+                                            activeProvider?.color ??
+                                            Colors.white54,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: activeProvider?.id,
+                                        focusNode: providerFocusNode,
+                                        dropdownColor: const Color(0xFF1B2136),
+                                        iconEnabledColor: Colors.white54,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 8,
                                               ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }).toList();
-                                  },
-                                  onChanged: (providerId) async {
-                                    if (providerId == null ||
-                                        providerId == activeProvider?.id) {
-                                      return;
-                                    }
-                                    await _setDefaultProvider(providerId);
-                                    if (!mounted || !dialogContext.mounted) {
-                                      return;
-                                    }
-                                    setDialogState(() {});
-                                  },
+                                        ),
+                                        items: providers.map((provider) {
+                                          final title = provider.id == 'debrid'
+                                              ? 'Real-Debrid'
+                                              : provider.id == 'torbox'
+                                              ? 'TorBox'
+                                              : 'PikPak';
+                                          return DropdownMenuItem<String>(
+                                            value: provider.id,
+                                            child: Text(title),
+                                          );
+                                        }).toList(),
+                                        selectedItemBuilder: (context) {
+                                          return providers.map((provider) {
+                                            final title =
+                                                provider.id == 'debrid'
+                                                ? 'Real-Debrid'
+                                                : provider.id == 'torbox'
+                                                ? 'TorBox'
+                                                : 'PikPak';
+                                            return Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                title,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList();
+                                        },
+                                        onChanged: (providerId) async {
+                                          if (providerId == null ||
+                                              providerId ==
+                                                  activeProvider?.id) {
+                                            return;
+                                          }
+                                          await _setDefaultProvider(providerId);
+                                          if (!mounted ||
+                                              !dialogContext.mounted) {
+                                            return;
+                                          }
+                                          setDialogState(() {});
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             _QuickControlTile(
@@ -20185,34 +20203,34 @@ class _QuickControlTileState extends State<_QuickControlTile> {
         opacity: isEnabled ? 1 : 0.68,
         child: InkWell(
           onTap: widget.onPressed,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               color: _isFocused
-                  ? Colors.white.withValues(alpha: 0.09)
-                  : Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(16),
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.white.withValues(alpha: 0.025),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _isFocused
-                    ? Colors.white.withValues(alpha: 0.58)
-                    : Colors.white.withValues(alpha: 0.08),
-                width: _isFocused ? 2 : 1,
+                    ? const Color(0xFF8B5CF6).withValues(alpha: 0.65)
+                    : Colors.white.withValues(alpha: 0.07),
+                width: _isFocused ? 1.5 : 1,
               ),
             ),
             child: Row(
               children: [
                 Container(
-                  width: 34,
-                  height: 34,
+                  width: 30,
+                  height: 30,
                   decoration: BoxDecoration(
-                    color: widget.iconColor.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(10),
+                    color: widget.iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(9),
                   ),
-                  child: Icon(widget.icon, size: 18, color: widget.iconColor),
+                  child: Icon(widget.icon, size: 16, color: widget.iconColor),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -20221,7 +20239,7 @@ class _QuickControlTileState extends State<_QuickControlTile> {
                         widget.title,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -20229,14 +20247,14 @@ class _QuickControlTileState extends State<_QuickControlTile> {
                       Text(
                         widget.subtitle,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.58),
-                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.52),
+                          fontSize: 11.5,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 widget.trailing,
               ],
             ),
