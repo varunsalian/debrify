@@ -373,11 +373,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   bool _shouldShowQuickControlsLauncher({required bool isWide}) {
-    final hasProviderControl = _multipleServicesEnabled;
-    final hasTraktControl = _traktAuthenticated;
-    if (!hasProviderControl && !hasTraktControl) {
-      return false;
-    }
+    // Quick controls now always include the home continue-watching toggle.
     return isWide || (!_isTelevision && !_isSelectionMode);
   }
 
@@ -396,24 +392,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<void> _showQuickControlsDialog() async {
     final providers = _availableProviders;
-    final focusNodes = <FocusNode>[
-      ...List.generate(
-        providers.length,
-        (i) => FocusNode(debugLabel: 'quick-provider-$i'),
-      ),
-      if (_traktAuthenticated) FocusNode(debugLabel: 'quick-trakt-toggle'),
-      FocusNode(debugLabel: 'quick-controls-close'),
-    ];
+    final providerFocusNode = FocusNode(debugLabel: 'quick-provider-dropdown');
+    final continueWatchingFocusNode = FocusNode(
+      debugLabel: 'quick-home-continue-watching',
+    );
+    final traktFocusNode = FocusNode(debugLabel: 'quick-trakt-toggle');
+    final closeFocusNode = FocusNode(debugLabel: 'quick-controls-close');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (focusNodes.isEmpty) return;
-      final activeProvider = _activeProviderOption;
-      final activeIdx = activeProvider != null
-          ? providers.indexWhere((provider) => provider.id == activeProvider.id)
-          : -1;
-      final targetIndex = activeIdx >= 0 ? activeIdx : 0;
-      if (targetIndex < focusNodes.length) {
-        focusNodes[targetIndex].requestFocus();
+      if (!providerFocusNode.hasFocus &&
+          !continueWatchingFocusNode.hasFocus &&
+          !traktFocusNode.hasFocus &&
+          !closeFocusNode.hasFocus) {
+        if (providers.isNotEmpty) {
+          providerFocusNode.requestFocus();
+        } else {
+          continueWatchingFocusNode.requestFocus();
+        }
       }
     });
 
@@ -424,13 +419,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            final theme = Theme.of(dialogContext);
             final mediaQuery = MediaQuery.of(dialogContext);
             final isNarrow = mediaQuery.size.width < 500;
             final activeProvider = _activeProviderOption;
             final maxDialogHeight = min(
-              mediaQuery.size.height * 0.82,
-              isNarrow ? 560.0 : 620.0,
+              mediaQuery.size.height * 0.72,
+              isNarrow ? 360.0 : 400.0,
             );
             return Dialog(
               backgroundColor: const Color(0xFF0B1020),
@@ -463,213 +457,185 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     child: Scrollbar(
                       thumbVisibility: !isNarrow,
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF8B5CF6,
-                                    ).withValues(alpha: 0.16),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.tune_rounded,
-                                    color: Color(0xFFC4B5FD),
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Quick Controls',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        activeProvider != null
-                                            ? 'Provider ${activeProvider.name} • Trakt ${_traktSyncCatalog ? 'On' : 'Off'}'
-                                            : 'Trakt ${_traktSyncCatalog ? 'On' : 'Off'}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white.withValues(
-                                            alpha: 0.58,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(),
-                                  icon: const Icon(Icons.close_rounded),
-                                  color: Colors.white70,
-                                  tooltip: 'Close',
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.04),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.16),
-                                    blurRadius: 18,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Current State',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.48,
-                                      ),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.24,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      if (activeProvider != null)
-                                        _QuickControlStatusChip(
-                                          label:
-                                              'Provider ${activeProvider.name}',
-                                          color: activeProvider.color,
-                                          icon: activeProvider.icon,
-                                        ),
-                                      if (_traktAuthenticated)
-                                        _QuickControlStatusChip(
-                                          label: _traktSyncCatalog
-                                              ? 'Trakt Sync On'
-                                              : 'Trakt Sync Off',
-                                          color: _traktSyncCatalog
-                                              ? const Color(0xFF4ADE80)
-                                              : const Color(0xFFFF6B6B),
-                                          icon: Icons.sync_rounded,
-                                        ),
-                                    ],
-                                  ),
-                                ],
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: IconButton(
+                                focusNode: closeFocusNode,
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                icon: const Icon(Icons.close_rounded),
+                                color: Colors.white54,
+                                tooltip: 'Close',
+                                splashRadius: 18,
                               ),
                             ),
-                            if (providers.isNotEmpty) ...[
-                              const SizedBox(height: 18),
-                              Text(
-                                'Playback Provider',
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.2,
+                            if (providers.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 6,
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              ...providers.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final provider = entry.value;
-                                final isActive =
-                                    activeProvider != null &&
-                                    provider.id == activeProvider.id;
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom: index == providers.length - 1
-                                        ? 0
-                                        : 10,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.04),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
                                   ),
-                                  child: _QuickControlTile(
-                                    focusNode: focusNodes[index],
-                                    icon: provider.icon,
-                                    iconColor: provider.color,
-                                    title: provider.id == 'debrid'
+                                ),
+                                child: DropdownButtonFormField<String>(
+                                  value: activeProvider?.id,
+                                  focusNode: providerFocusNode,
+                                  dropdownColor: const Color(0xFF1A2236),
+                                  iconEnabledColor: Colors.white54,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                  ),
+                                  items: providers.map((provider) {
+                                    final title = provider.id == 'debrid'
                                         ? 'Real-Debrid'
                                         : provider.id == 'torbox'
                                         ? 'TorBox'
-                                        : 'PikPak',
-                                    subtitle: isActive
-                                        ? 'Currently selected'
-                                        : 'Switch playback provider',
-                                    trailing: isActive
-                                        ? Icon(
-                                            Icons.check_circle_rounded,
-                                            color: provider.color,
+                                        : 'PikPak';
+                                    return DropdownMenuItem<String>(
+                                      value: provider.id,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            provider.icon,
                                             size: 18,
-                                          )
-                                        : Text(
-                                            provider.name,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.42,
+                                            color: provider.color,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(title),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                  selectedItemBuilder: (context) {
+                                    return providers.map((provider) {
+                                      final title = provider.id == 'debrid'
+                                          ? 'Real-Debrid'
+                                          : provider.id == 'torbox'
+                                          ? 'TorBox'
+                                          : 'PikPak';
+                                      return Row(
+                                        children: [
+                                          Icon(
+                                            provider.icon,
+                                            size: 18,
+                                            color: provider.color,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              title,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
                                               ),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
-                                    onPressed: isActive
-                                        ? null
-                                        : () async {
-                                            await _setDefaultProvider(
-                                              provider.id,
-                                            );
-                                            if (!mounted ||
-                                                !dialogContext.mounted) {
-                                              return;
-                                            }
-                                            setDialogState(() {});
-                                          },
-                                  ),
-                                );
-                              }),
-                            ],
-                            if (_traktAuthenticated) ...[
-                              const SizedBox(height: 18),
-                              Text(
-                                'Trakt',
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.2,
+                                        ],
+                                      );
+                                    }).toList();
+                                  },
+                                  onChanged: (providerId) async {
+                                    if (providerId == null ||
+                                        providerId == activeProvider?.id) {
+                                      return;
+                                    }
+                                    await _setDefaultProvider(providerId);
+                                    if (!mounted || !dialogContext.mounted) {
+                                      return;
+                                    }
+                                    setDialogState(() {});
+                                  },
                                 ),
                               ),
+                            _QuickControlTile(
+                              focusNode: continueWatchingFocusNode,
+                              icon: Icons.history_rounded,
+                              iconColor: _continueWatchingEnabled
+                                  ? const Color(0xFF60A5FA)
+                                  : Colors.white54,
+                              title: 'Local Continue Watching',
+                              subtitle: _continueWatchingEnabled
+                                  ? 'Shown on the home screen'
+                                  : 'Hidden on the home screen',
+                              trailing: AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                width: 44,
+                                height: 24,
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: _continueWatchingEnabled
+                                      ? const Color(
+                                          0xFF60A5FA,
+                                        ).withValues(alpha: 0.22)
+                                      : Colors.white.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: _continueWatchingEnabled
+                                        ? const Color(
+                                            0xFF60A5FA,
+                                          ).withValues(alpha: 0.55)
+                                        : Colors.white.withValues(alpha: 0.18),
+                                  ),
+                                ),
+                                child: Align(
+                                  alignment: _continueWatchingEnabled
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: _continueWatchingEnabled
+                                          ? const Color(0xFF60A5FA)
+                                          : Colors.white54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              onPressed: () async {
+                                final newValue = !_continueWatchingEnabled;
+                                await StorageService.setHomeContinueWatchingEnabled(
+                                  newValue,
+                                );
+                                if (!mounted || !dialogContext.mounted) {
+                                  return;
+                                }
+                                setState(() {
+                                  _continueWatchingEnabled = newValue;
+                                });
+                                setDialogState(() {});
+                                MainPageBridge.notifyHomeSettingsChanged();
+                              },
+                            ),
+                            if (_traktAuthenticated) ...[
                               const SizedBox(height: 10),
                               _QuickControlTile(
-                                focusNode: focusNodes[providers.length],
+                                focusNode: traktFocusNode,
                                 icon: Icons.sync_rounded,
                                 iconColor: _traktSyncCatalog
                                     ? const Color(0xFF4ADE80)
                                     : const Color(0xFFFF6B6B),
-                                title: 'Catalog Sync',
+                                title: 'Trakt Catalog Sync',
                                 subtitle: _traktSyncCatalog
                                     ? 'Enabled for catalog browsing'
                                     : 'Disabled for catalog browsing',
@@ -720,28 +686,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 },
                               ),
                             ],
-                            const SizedBox(height: 18),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                focusNode: focusNodes.last,
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white70,
-                                  side: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.14),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: const Text('Close'),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -755,9 +699,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       },
     );
 
-    for (final focusNode in focusNodes) {
-      focusNode.dispose();
-    }
+    providerFocusNode.dispose();
+    continueWatchingFocusNode.dispose();
+    traktFocusNode.dispose();
+    closeFocusNode.dispose();
   }
 
   /// Focus the first interactive element below the search/source bar.
@@ -20297,46 +20242,6 @@ class _QuickControlTileState extends State<_QuickControlTile> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _QuickControlStatusChip extends StatelessWidget {
-  final String label;
-  final Color color;
-  final IconData icon;
-
-  const _QuickControlStatusChip({
-    required this.label,
-    required this.color,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.18,
-            ),
-          ),
-        ],
       ),
     );
   }
