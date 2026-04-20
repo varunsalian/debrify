@@ -62,7 +62,6 @@ import '../widgets/home_empty_state.dart';
 import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/home_trakt_now_playing_card.dart';
 import '../widgets/home_today_calendar_card.dart';
-import 'trakt_calendar_screen.dart';
 import 'settings/trakt_settings_page.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
@@ -373,6 +372,394 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  bool _shouldShowQuickControlsLauncher({required bool isWide}) {
+    final hasProviderControl = _multipleServicesEnabled;
+    final hasTraktControl = _traktAuthenticated;
+    if (!hasProviderControl && !hasTraktControl) {
+      return false;
+    }
+    return isWide || (!_isTelevision && !_isSelectionMode);
+  }
+
+  bool _isQuickControlsLauncherVisibleForWidth(double width) {
+    final isWide = width >= 500;
+    return _shouldShowQuickControlsLauncher(isWide: isWide);
+  }
+
+  Future<void> _setDefaultProvider(String providerId) async {
+    await StorageService.setDefaultTorrentProvider(providerId);
+    if (!mounted) return;
+    setState(() {
+      _defaultTorrentProvider = providerId;
+    });
+  }
+
+  Future<void> _showQuickControlsDialog() async {
+    final providers = _availableProviders;
+    final focusNodes = <FocusNode>[
+      ...List.generate(
+        providers.length,
+        (i) => FocusNode(debugLabel: 'quick-provider-$i'),
+      ),
+      if (_traktAuthenticated) FocusNode(debugLabel: 'quick-trakt-toggle'),
+      FocusNode(debugLabel: 'quick-controls-close'),
+    ];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (focusNodes.isEmpty) return;
+      final activeProvider = _activeProviderOption;
+      final activeIdx = activeProvider != null
+          ? providers.indexWhere((provider) => provider.id == activeProvider.id)
+          : -1;
+      final targetIndex = activeIdx >= 0 ? activeIdx : 0;
+      if (targetIndex < focusNodes.length) {
+        focusNodes[targetIndex].requestFocus();
+      }
+    });
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final theme = Theme.of(dialogContext);
+            final mediaQuery = MediaQuery.of(dialogContext);
+            final isNarrow = mediaQuery.size.width < 500;
+            final activeProvider = _activeProviderOption;
+            final maxDialogHeight = min(
+              mediaQuery.size.height * 0.82,
+              isNarrow ? 560.0 : 620.0,
+            );
+            return Dialog(
+              backgroundColor: const Color(0xFF0B1020),
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 16 : 24,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isNarrow ? 420 : 460,
+                  maxHeight: maxDialogHeight,
+                ),
+                child: FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFF151B30),
+                          const Color(0xFF0B1020),
+                        ],
+                      ),
+                    ),
+                    child: Scrollbar(
+                      thumbVisibility: !isNarrow,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF8B5CF6,
+                                    ).withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.tune_rounded,
+                                    color: Color(0xFFC4B5FD),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Quick Controls',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        activeProvider != null
+                                            ? 'Provider ${activeProvider.name} • Trakt ${_traktSyncCatalog ? 'On' : 'Off'}'
+                                            : 'Trakt ${_traktSyncCatalog ? 'On' : 'Off'}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.58,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(),
+                                  icon: const Icon(Icons.close_rounded),
+                                  color: Colors.white70,
+                                  tooltip: 'Close',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.16),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Current State',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.48,
+                                      ),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.24,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      if (activeProvider != null)
+                                        _QuickControlStatusChip(
+                                          label:
+                                              'Provider ${activeProvider.name}',
+                                          color: activeProvider.color,
+                                          icon: activeProvider.icon,
+                                        ),
+                                      if (_traktAuthenticated)
+                                        _QuickControlStatusChip(
+                                          label: _traktSyncCatalog
+                                              ? 'Trakt Sync On'
+                                              : 'Trakt Sync Off',
+                                          color: _traktSyncCatalog
+                                              ? const Color(0xFF4ADE80)
+                                              : const Color(0xFFFF6B6B),
+                                          icon: Icons.sync_rounded,
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (providers.isNotEmpty) ...[
+                              const SizedBox(height: 18),
+                              Text(
+                                'Playback Provider',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              ...providers.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final provider = entry.value;
+                                final isActive =
+                                    activeProvider != null &&
+                                    provider.id == activeProvider.id;
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: index == providers.length - 1
+                                        ? 0
+                                        : 10,
+                                  ),
+                                  child: _QuickControlTile(
+                                    focusNode: focusNodes[index],
+                                    icon: provider.icon,
+                                    iconColor: provider.color,
+                                    title: provider.id == 'debrid'
+                                        ? 'Real-Debrid'
+                                        : provider.id == 'torbox'
+                                        ? 'TorBox'
+                                        : 'PikPak',
+                                    subtitle: isActive
+                                        ? 'Currently selected'
+                                        : 'Switch playback provider',
+                                    trailing: isActive
+                                        ? Icon(
+                                            Icons.check_circle_rounded,
+                                            color: provider.color,
+                                            size: 18,
+                                          )
+                                        : Text(
+                                            provider.name,
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.42,
+                                              ),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                    onPressed: isActive
+                                        ? null
+                                        : () async {
+                                            await _setDefaultProvider(
+                                              provider.id,
+                                            );
+                                            if (!mounted ||
+                                                !dialogContext.mounted) {
+                                              return;
+                                            }
+                                            setDialogState(() {});
+                                          },
+                                  ),
+                                );
+                              }),
+                            ],
+                            if (_traktAuthenticated) ...[
+                              const SizedBox(height: 18),
+                              Text(
+                                'Trakt',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _QuickControlTile(
+                                focusNode: focusNodes[providers.length],
+                                icon: Icons.sync_rounded,
+                                iconColor: _traktSyncCatalog
+                                    ? const Color(0xFF4ADE80)
+                                    : const Color(0xFFFF6B6B),
+                                title: 'Catalog Sync',
+                                subtitle: _traktSyncCatalog
+                                    ? 'Enabled for catalog browsing'
+                                    : 'Disabled for catalog browsing',
+                                trailing: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  width: 44,
+                                  height: 24,
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: BoxDecoration(
+                                    color: _traktSyncCatalog
+                                        ? const Color(
+                                            0xFF4ADE80,
+                                          ).withValues(alpha: 0.22)
+                                        : Colors.white.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: _traktSyncCatalog
+                                          ? const Color(
+                                              0xFF4ADE80,
+                                            ).withValues(alpha: 0.55)
+                                          : Colors.white.withValues(
+                                              alpha: 0.18,
+                                            ),
+                                    ),
+                                  ),
+                                  child: Align(
+                                    alignment: _traktSyncCatalog
+                                        ? Alignment.centerRight
+                                        : Alignment.centerLeft,
+                                    child: Container(
+                                      width: 16,
+                                      height: 16,
+                                      decoration: BoxDecoration(
+                                        color: _traktSyncCatalog
+                                            ? const Color(0xFF4ADE80)
+                                            : Colors.white54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  _toggleTraktSync();
+                                  if (!mounted || !dialogContext.mounted) {
+                                    return;
+                                  }
+                                  setDialogState(() {});
+                                },
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                focusNode: focusNodes.last,
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white70,
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text('Close'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    for (final focusNode in focusNodes) {
+      focusNode.dispose();
+    }
+  }
+
   /// Focus the first interactive element below the search/source bar.
   /// Used by both the search bar and source dropdown DPAD down handlers.
   void _focusBelowSourceBar() {
@@ -598,11 +985,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   KeyEventResult _handleSortDropdownKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    // Left arrow: go to provider chip (large screens), or torrent/direct dropdown, or back button
+    // Left arrow: go to quick controls launcher (when rendered), or torrent/direct dropdown, or back button
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_multipleServicesEnabled &&
-          MediaQuery.of(context).size.width >= 500) {
-        _providerChipFocusNode.requestFocus();
+      final screenWidth = MediaQuery.of(context).size.width;
+      if (_isQuickControlsLauncherVisibleForWidth(screenWidth) &&
+          screenWidth >= 500) {
+        _traktSyncFocusNode.requestFocus();
       } else if (_torrentProviderCounts.isNotEmpty) {
         _torrentDropdownFocusNode.requestFocus();
       } else if (_directProviderCounts.isNotEmpty) {
@@ -2557,13 +2945,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onLeftArrowPressed: () {
         _searchToggleFocusNode.requestFocus();
       },
-      // Right arrow: go to Trakt button if visible, otherwise Sources / control row
+      // Right arrow: go to quick controls launcher if visible, otherwise Sources / control row
       onRightArrowPressed: () {
-        if (_traktAuthenticated &&
-            (_selectedSource.type == SearchSourceType.all ||
-                (_selectedSource.type == SearchSourceType.addon &&
-                    _selectedSource.addon != null &&
-                    _selectedSource.addon!.supportsCatalogs))) {
+        if (_isQuickControlsLauncherVisibleForWidth(
+          MediaQuery.of(context).size.width,
+        )) {
           _traktSyncFocusNode.requestFocus();
         } else {
           _focusControlRow();
@@ -5136,6 +5522,166 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  Widget _buildQuickControlsLauncher({required bool isFab}) {
+    final activeProvider = _activeProviderOption;
+    final isFocused = _traktSyncFocusNode.hasFocus;
+    final quickControlsAccent = const Color(0xFF8B5CF6);
+    final syncBadgeBackground = _traktAuthenticated
+        ? quickControlsAccent.withValues(alpha: _traktSyncCatalog ? 0.9 : 0.24)
+        : Colors.white.withValues(alpha: 0.12);
+    final syncBadgeForeground = _traktAuthenticated
+        ? Colors.white.withValues(alpha: _traktSyncCatalog ? 0.95 : 0.58)
+        : Colors.white38;
+    final baseColor = isFab ? const Color(0xFF121827) : const Color(0xFF141420);
+    final providerLabel = activeProvider?.name ?? 'Auto';
+
+    return Focus(
+      focusNode: _traktSyncFocusNode,
+      onFocusChange: (focused) => setState(() {}),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          _showQuickControlsDialog();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          final isSearchActive =
+              _showSearchField ||
+              _hasSearched ||
+              _searchController.text.isNotEmpty;
+          if (isSearchActive) {
+            _providerAccordionFocusNode.requestFocus();
+          } else {
+            _sourceDropdownFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _focusBelowSourceBar();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _focusSearchBar();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: _showQuickControlsDialog,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: isFab ? 38 : 38,
+          width: isFab ? 38 : null,
+          padding: EdgeInsets.symmetric(horizontal: isFab ? 0 : 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                isFocused ? Colors.white.withValues(alpha: 0.18) : baseColor,
+                isFocused
+                    ? const Color(0xFF1F2937)
+                    : baseColor.withValues(alpha: 0.96),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(isFab ? 23 : 19),
+            border: Border.all(
+              color: isFocused
+                  ? Colors.white.withValues(alpha: 0.72)
+                  : Colors.white.withValues(alpha: 0.12),
+              width: isFocused ? 2 : 1,
+            ),
+            boxShadow: isFab || isFocused
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : null,
+          ),
+          child: isFab
+              ? Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        Icons.tune_rounded,
+                        size: 18,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: syncBadgeBackground,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: baseColor, width: 1.2),
+                          ),
+                          child: Icon(
+                            Icons.sync_rounded,
+                            size: 7,
+                            color: syncBadgeForeground,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Icon(
+                        Icons.grid_view_rounded,
+                        size: 12,
+                        color: Colors.white.withValues(alpha: 0.84),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      providerLabel,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white.withValues(alpha: 0.92),
+                        letterSpacing: 0.12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: syncBadgeBackground,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Icon(
+                        Icons.sync_rounded,
+                        size: 10,
+                        color: syncBadgeForeground,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
   void _toggleTraktSync() {
     setState(() {
       _traktSyncCatalog = !_traktSyncCatalog;
@@ -5149,138 +5695,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Widget _buildTraktSyncButton() {
-    final isFocused = _traktSyncFocusNode.hasFocus;
-    return GestureDetector(
-      onTap: _toggleTraktSync,
-      child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: _traktSyncCatalog
-              ? const Color(0xFF4ADE80).withValues(alpha: 0.15)
-              : const Color(0xFFFF6B6B).withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isFocused
-                ? Colors.white.withValues(alpha: 0.8)
-                : _traktSyncCatalog
-                ? const Color(0xFF4ADE80).withValues(alpha: 0.5)
-                : const Color(0xFFFF6B6B).withValues(alpha: 0.5),
-            width: isFocused ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.sync_rounded,
-              size: 15,
-              color: _traktSyncCatalog
-                  ? const Color(0xFF4ADE80)
-                  : const Color(0xFFFF6B6B),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              'Trakt',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _traktSyncCatalog
-                    ? const Color(0xFF4ADE80)
-                    : const Color(0xFFFF6B6B),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTraktCalendarFab() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const TraktCalendarScreen()));
-      },
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE50914).withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: const Color(0xFFE50914).withValues(alpha: 0.6),
-          ),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_month_rounded,
-              size: 16,
-              color: Color(0xFFE50914),
-            ),
-            SizedBox(width: 6),
-            Text(
-              'Calendar',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFFE50914),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTraktSyncFab() {
-    return GestureDetector(
-      onTap: _toggleTraktSync,
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: _traktSyncCatalog
-              ? const Color(0xFF4ADE80).withValues(alpha: 0.15)
-              : const Color(0xFFFF6B6B).withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: _traktSyncCatalog
-                ? const Color(0xFF4ADE80).withValues(alpha: 0.6)
-                : const Color(0xFFFF6B6B).withValues(alpha: 0.6),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.sync_rounded,
-              size: 16,
-              color: _traktSyncCatalog
-                  ? const Color(0xFF4ADE80)
-                  : const Color(0xFFFF6B6B),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Trakt',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _traktSyncCatalog
-                    ? const Color(0xFF4ADE80)
-                    : const Color(0xFFFF6B6B),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -15181,9 +15595,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 : null,
             onRightArrowPressed: hasTorrentProviders
                 ? () => _torrentDropdownFocusNode.requestFocus()
-                : (_multipleServicesEnabled &&
+                : (_isQuickControlsLauncherVisibleForWidth(
+                            MediaQuery.of(context).size.width,
+                          ) &&
                           MediaQuery.of(context).size.width >= 500
-                      ? () => _providerChipFocusNode.requestFocus()
+                      ? () => _traktSyncFocusNode.requestFocus()
                       : () => _sortDropdownFocusNode.requestFocus()),
             onUpArrowPressed: () {
               if (_isSeries) {
@@ -15219,9 +15635,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ? () => _backButtonFocusNode.requestFocus()
                       : null),
             onRightArrowPressed: () {
-              if (_multipleServicesEnabled &&
-                  MediaQuery.of(context).size.width >= 500) {
-                _providerChipFocusNode.requestFocus();
+              final screenWidth = MediaQuery.of(context).size.width;
+              if (_isQuickControlsLauncherVisibleForWidth(screenWidth) &&
+                  screenWidth >= 500) {
+                _traktSyncFocusNode.requestFocus();
               } else {
                 _sortDropdownFocusNode.requestFocus();
               }
@@ -15770,44 +16187,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 ],
                               ],
                             ),
-                            // Trakt sync toggle — end-aligned, wide screens only
-                            if (_traktAuthenticated &&
-                                MediaQuery.of(context).size.width >= 500 &&
-                                (_selectedSource.type == SearchSourceType.all ||
-                                    (_selectedSource.type ==
-                                            SearchSourceType.addon &&
-                                        _selectedSource.addon != null &&
-                                        _selectedSource
-                                            .addon!
-                                            .supportsCatalogs)))
+                            // Unified quick controls — end-aligned, wide screens only
+                            if (_shouldShowQuickControlsLauncher(
+                                  isWide:
+                                      MediaQuery.of(context).size.width >= 500,
+                                ) &&
+                                MediaQuery.of(context).size.width >= 500)
                               Positioned(
                                 right: 16,
-                                child: Focus(
-                                  focusNode: _traktSyncFocusNode,
-                                  onFocusChange: (focused) => setState(() {}),
-                                  onKeyEvent: (node, event) {
-                                    if (event is! KeyDownEvent)
-                                      return KeyEventResult.ignored;
-                                    if (event.logicalKey ==
-                                            LogicalKeyboardKey.enter ||
-                                        event.logicalKey ==
-                                            LogicalKeyboardKey.select) {
-                                      _toggleTraktSync();
-                                      return KeyEventResult.handled;
-                                    }
-                                    if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowLeft) {
-                                      _sourceDropdownFocusNode.requestFocus();
-                                      return KeyEventResult.handled;
-                                    }
-                                    if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowDown) {
-                                      _focusBelowSourceBar();
-                                      return KeyEventResult.handled;
-                                    }
-                                    return KeyEventResult.ignored;
-                                  },
-                                  child: _buildTraktSyncButton(),
+                                child: _buildQuickControlsLauncher(
+                                  isFab: false,
                                 ),
                               ),
                           ],
@@ -16514,19 +16903,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                                       ),
                                                     ),
                                                   ),
-                                                // Provider chip (large screens only)
-                                                if (_multipleServicesEnabled &&
-                                                    MediaQuery.of(
-                                                          context,
-                                                        ).size.width >=
-                                                        500)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          left: 6,
-                                                        ),
-                                                    child: _buildProviderChip(),
-                                                  ),
                                                 const Spacer(),
                                                 // Sort dropdown with arrow key navigation
                                                 // Using Shortcuts widget to handle arrow keys without blocking DropdownButton's Enter key handling
@@ -17074,73 +17450,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               ),
             ),
           ),
-          // Provider FAB — small screens only, above the bulk-select FAB
-          if (_torrents.isNotEmpty &&
-              !_isTelevision &&
-              _multipleServicesEnabled &&
-              !_isSelectionMode &&
+          // Unified quick controls FAB — small screens only
+          if (_shouldShowQuickControlsLauncher(
+                isWide: MediaQuery.of(context).size.width >= 500,
+              ) &&
               MediaQuery.of(context).size.width < 500)
             Positioned(
-              left: 16,
-              bottom: 62 + MediaQuery.of(context).padding.bottom,
-              child: GestureDetector(
-                onTap: _showProviderSwitchMenu,
-                child: Builder(
-                  builder: (context) {
-                    final active = _activeProviderOption;
-                    return Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF334155),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          width: 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          active?.name ?? 'RD',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          // Trakt sync FAB — small screens only, hide when torrent results are showing
-          if (_traktAuthenticated &&
-              !_isTelevision &&
-              !_isSelectionMode &&
-              _torrents.isEmpty &&
-              MediaQuery.of(context).size.width < 500 &&
-              (_selectedSource.type == SearchSourceType.all ||
-                  (_selectedSource.type == SearchSourceType.addon &&
-                      _selectedSource.addon != null &&
-                      _selectedSource.addon!.supportsCatalogs)))
-            Positioned(
               left: 12,
-              bottom: 12 + MediaQuery.of(context).padding.bottom,
-              child: _buildTraktSyncFab(),
-            ),
-          // Trakt Calendar FAB — small screens only, shown when Trakt source is selected
-          if (_traktAuthenticated &&
-              !_isTelevision &&
-              !_isSelectionMode &&
-              _torrents.isEmpty &&
-              MediaQuery.of(context).size.width < 500 &&
-              _selectedSource.type == SearchSourceType.trakt)
-            Positioned(
-              left: 12,
-              bottom: 12 + MediaQuery.of(context).padding.bottom,
-              child: _buildTraktCalendarFab(),
+              bottom:
+                  (_torrents.isNotEmpty ? 62 : 12) +
+                  MediaQuery.of(context).padding.bottom,
+              child: _buildQuickControlsLauncher(isFab: true),
             ),
           // Bulk Add Button or Selection Mode Bar
           if (_torrents.isNotEmpty && !_isBulkAdding && !_isTelevision)
@@ -19869,6 +20189,157 @@ class _ProviderOption {
     required this.icon,
     required this.color,
   });
+}
+
+class _QuickControlTile extends StatefulWidget {
+  final FocusNode focusNode;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final Widget trailing;
+  final VoidCallback? onPressed;
+
+  const _QuickControlTile({
+    required this.focusNode,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    this.onPressed,
+  });
+
+  @override
+  State<_QuickControlTile> createState() => _QuickControlTileState();
+}
+
+class _QuickControlTileState extends State<_QuickControlTile> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = widget.onPressed != null;
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) {
+        setState(() {
+          _isFocused = focused;
+        });
+      },
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          widget.onPressed?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.68,
+        child: InkWell(
+          onTap: widget.onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _isFocused
+                    ? Colors.white.withValues(alpha: 0.58)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: _isFocused ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: widget.iconColor.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(widget.icon, size: 18, color: widget.iconColor),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.58),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                widget.trailing,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickControlStatusChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData icon;
+
+  const _QuickControlStatusChip({
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.18,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Result from the provider selection dialog
