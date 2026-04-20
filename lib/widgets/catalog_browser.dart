@@ -57,6 +57,10 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Callback when user selects "Play Random Episode" for a series
+  final Future<void> Function(StremioMeta show, StremioAddon? addon)?
+  onPlayRandomEpisode;
+
   /// Callback when user selects "Search Season Packs" for a series
   final void Function(StremioMeta show)? onSearchPacks;
 
@@ -76,6 +80,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onRequestFocusAbove,
     this.defaultCatalogId,
     this.onSelectSource,
+    this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onEpisodeModeExited,
     this.isTelevision = false,
@@ -2431,6 +2436,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                     action,
                     onSelectSource: widget.onSelectSource,
                     onEditSource: _handleSelectSourceAction,
+                    onPlayRandomEpisode: (show) async {
+                      await widget.onPlayRandomEpisode?.call(
+                        show,
+                        _selectedAddon,
+                      );
+                    },
                     onSearchPacks: widget.onSearchPacks,
                     onAddToStremioTv: _handleAddToStremioTv,
                   )

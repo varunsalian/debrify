@@ -20,6 +20,7 @@ enum TraktItemMenuAction {
   removeFromPlayback,
   addToStremioTv,
   selectSource,
+  playRandomEpisode,
   searchPacks,
 }
 
@@ -206,6 +207,7 @@ Future<void> handleTraktMenuAction(
   TraktItemMenuAction action, {
   void Function(StremioMeta)? onSelectSource,
   void Function(StremioMeta)? onEditSource,
+  Future<void> Function(StremioMeta)? onPlayRandomEpisode,
   void Function(StremioMeta)? onSearchPacks,
   Future<void> Function(StremioMeta)? onAddToStremioTv,
 }) async {
@@ -267,6 +269,9 @@ Future<void> handleTraktMenuAction(
       } else {
         onSelectSource?.call(item);
       }
+      return;
+    case TraktItemMenuAction.playRandomEpisode:
+      await onPlayRandomEpisode?.call(item);
       return;
     case TraktItemMenuAction.searchPacks:
       onSearchPacks?.call(item);
@@ -407,6 +412,17 @@ Widget buildTraktAddOnlyOverflowMenu({
                       ? (isMovie ? 'Edit Source' : 'Edit Sources')
                       : 'Select Source',
                 ),
+              ],
+            ),
+          ),
+        if (isSeries)
+          const PopupMenuItem(
+            value: TraktItemMenuAction.playRandomEpisode,
+            child: Row(
+              children: [
+                Icon(Icons.shuffle_rounded, size: 18, color: Color(0xFFF59E0B)),
+                SizedBox(width: 12),
+                Text('Play Random Episode'),
               ],
             ),
           ),

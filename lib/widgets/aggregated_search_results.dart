@@ -53,6 +53,10 @@ class AggregatedSearchResults extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta)? onSelectSource;
 
+  /// Callback when user selects "Play Random Episode" for a series
+  final Future<void> Function(StremioMeta show, StremioAddon? addon)?
+  onPlayRandomEpisode;
+
   /// Callback when user selects "Search Season Packs" for a series
   final void Function(StremioMeta)? onSearchPacks;
 
@@ -72,6 +76,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
     this.onSelectSource,
+    this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onBrowseSeriesEpisodes,
   });
@@ -1276,6 +1281,12 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                               action,
                               onSelectSource: widget.onSelectSource,
                               onEditSource: _handleSelectSourceAction,
+                              onPlayRandomEpisode: (show) async {
+                                await widget.onPlayRandomEpisode?.call(
+                                  show,
+                                  show.sourceAddon,
+                                );
+                              },
                               onSearchPacks: widget.onSearchPacks,
                               onAddToStremioTv: _handleAddToStremioTv,
                             )

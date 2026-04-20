@@ -812,6 +812,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case TraktItemMenuAction.selectSource:
         _handleSelectSourceAction(item);
         return; // Handled via dialog, no snackbar needed
+      case TraktItemMenuAction.playRandomEpisode:
+        return; // Not exposed in Trakt results menus
       case TraktItemMenuAction.searchPacks:
         widget.onSearchPacks?.call(item);
         return;

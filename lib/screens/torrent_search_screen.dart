@@ -3520,6 +3520,118 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  Future<({int season, int episode})?> _lastPlayedEpisodeForMeta(
+    StremioMeta item,
+  ) async {
+    final imdbId = item.effectiveImdbId;
+    if (imdbId != null) {
+      final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+        imdbId,
+      );
+      if (lastPlayed != null) {
+        final season = lastPlayed['season'] as int?;
+        final episode = lastPlayed['episode'] as int?;
+        if (season != null && episode != null) {
+          return (season: season, episode: episode);
+        }
+      }
+    }
+
+    final byTitle = await StorageService.getLastPlayedEpisode(
+      seriesTitle: item.name,
+    );
+    if (byTitle != null) {
+      final season = byTitle['season'] as int?;
+      final episode = byTitle['episode'] as int?;
+      if (season != null && episode != null) {
+        return (season: season, episode: episode);
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _handleCatalogPlayRandomEpisode(
+    StremioMeta item,
+    StremioAddon? addon,
+  ) async {
+    if (item.type != 'series') {
+      final selection = AdvancedSearchSelection(
+        imdbId: item.effectiveImdbId ?? item.id,
+        isSeries: false,
+        title: item.name,
+        year: item.year,
+        contentType: item.type,
+        posterUrl: item.poster,
+      );
+      await _handleQuickPlay(selection);
+      return;
+    }
+
+    bool dialogOpen = true;
+    _showLoadingDialog(
+      item.name,
+      subtitle: 'Picking a random episode...',
+      accentColor: const Color(0xFFF59E0B),
+      onDismissed: () => dialogOpen = false,
+    );
+
+    try {
+      final current = await _lastPlayedEpisodeForMeta(item);
+      if (!mounted) return;
+
+      final chosen = await _resolveRandomEpisodeForLocalSeries(
+        item.effectiveImdbId ?? item.id,
+        addon?.id,
+        currentSeason: current?.season,
+        currentEpisode: current?.episode,
+      );
+
+      if (dialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted) return;
+
+      if (chosen == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable episodes found for this series'),
+            backgroundColor: Color(0xFFEF4444),
+          ),
+        );
+        return;
+      }
+
+      await _handleQuickPlay(
+        AdvancedSearchSelection(
+          imdbId: item.effectiveImdbId ?? item.id,
+          isSeries: true,
+          title: item.name,
+          year: item.year,
+          season: chosen.season,
+          episode: chosen.episode,
+          contentType: item.type,
+          posterUrl: item.poster,
+        ),
+      );
+    } catch (e) {
+      if (dialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted) return;
+      debugPrint(
+        'TorrentSearchScreen: random catalog episode pick failed for '
+        '${item.effectiveImdbId ?? item.id}: $e',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to pick a random episode'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+    }
+  }
+
   Future<({int season, int episode})?> _resolveRandomEpisodeForLocalSeries(
     String imdbId,
     String? addonId, {
@@ -15744,6 +15856,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _focusControlRow();
                               },
                               onSelectSource: _handleSelectSource,
+                              onPlayRandomEpisode:
+                                  _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
                               onBrowseSeriesEpisodes:
                                   _handleBrowseSeriesEpisodes,
@@ -15780,6 +15894,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _focusControlRow();
                               },
                               onSelectSource: _handleSelectSource,
+                              onPlayRandomEpisode:
+                                  _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
                               onEpisodeModeExited: _handleEpisodeModeExited,
                             ),
