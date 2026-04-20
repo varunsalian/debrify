@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/series_source_service.dart';
@@ -121,11 +122,20 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onKeywordFocusNodeReady?.call(_keywordSearchFocusNode);
     });
-    TraktService.instance.isAuthenticated().then((auth) {
-      if (mounted) setState(() => _isTraktAuthenticated = auth);
-    });
+    _refreshTraktAuthState();
+    MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     // Initial search without debounce
     _performSearch();
+  }
+
+  Future<void> _refreshTraktAuthState() async {
+    final auth = await TraktService.instance.isAuthenticated();
+    if (!mounted) return;
+    setState(() => _isTraktAuthenticated = auth);
+  }
+
+  void _handleIntegrationChanged() {
+    _refreshTraktAuthState();
   }
 
   /// Request focus on the first result card (for DPAD navigation from Sources)
@@ -206,6 +216,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     for (final node in _resultFocusNodes) {
       node.dispose();
     }
+    MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     super.dispose();
   }
 

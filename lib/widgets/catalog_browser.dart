@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
@@ -219,9 +220,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     super.initState();
     _loadAddons();
     _scrollController.addListener(_onScroll);
-    TraktService.instance.isAuthenticated().then((auth) {
-      if (mounted) setState(() => _isTraktAuthenticated = auth);
-    });
+    _refreshTraktAuthState();
+    MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     // Set up focus listeners for visual indicators
     _providerDropdownFocusNode.addListener(() {
       _providerDropdownFocused.value = _providerDropdownFocusNode.hasFocus;
@@ -238,6 +238,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _genreDropdownFocusNode.onKeyEvent = _handleGenreDropdownKeyEvent;
     _episodeSeasonDropdownFocusNode.onKeyEvent =
         _handleEpisodeSeasonDropdownKeyEvent;
+  }
+
+  Future<void> _refreshTraktAuthState() async {
+    final auth = await TraktService.instance.isAuthenticated();
+    if (!mounted) return;
+    setState(() => _isTraktAuthenticated = auth);
+  }
+
+  void _handleIntegrationChanged() {
+    _refreshTraktAuthState();
   }
 
   /// Navigate down from top dropdowns: if in episode mode, go to season dropdown; otherwise content items.
@@ -391,6 +401,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     for (final node in _episodeFocusNodes) {
       node.dispose();
     }
+    MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     super.dispose();
   }
 
