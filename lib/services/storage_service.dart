@@ -3012,7 +3012,7 @@ class StorageService {
 
   static Future<bool> getHomeHideProviderCards() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_homeHideProviderCardsKey) ?? false;
+    return prefs.getBool(_homeHideProviderCardsKey) ?? true;
   }
 
   static Future<void> setHomeHideProviderCards(bool value) async {

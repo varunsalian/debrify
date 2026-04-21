@@ -95,7 +95,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
           if (ctx != null) {
             final scrollable = Scrollable.maybeOf(ctx);
             if (scrollable != null && scrollable.position.maxScrollExtent > 0) {
-              Scrollable.ensureVisible(ctx, duration: Duration.zero, alignment: 0.3);
+              Scrollable.ensureVisible(
+                ctx,
+                duration: Duration.zero,
+                alignment: 0.3,
+              );
             }
           }
         }
@@ -229,7 +233,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
     return AnimatedBuilder(
       animation: _expandAnimation,
       builder: (context, child) {
-        final width = _collapsedWidth +
+        final width =
+            _collapsedWidth +
             (_expandedWidth - _collapsedWidth) * _expandAnimation.value;
 
         return Container(
@@ -271,12 +276,16 @@ class TvSidebarNavState extends State<TvSidebarNav>
               // Navigation items
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   itemCount: widget.items.length,
                   itemBuilder: (context, index) {
                     final item = widget.items[index];
                     final isSelected = index == widget.currentIndex;
-                    final isFocused = index == _focusedIndex && _hasSidebarFocus;
+                    final isFocused =
+                        index == _focusedIndex && _hasSidebarFocus;
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 4),
@@ -306,56 +315,101 @@ class TvSidebarNavState extends State<TvSidebarNav>
       animation: _expandAnimation,
       builder: (context, child) {
         final expanded = _expandAnimation.value;
-        return Container(
-          padding: EdgeInsets.fromLTRB(
-            expanded > 0.5 ? 16 : 0,
-            12,
-            12,
-            12,
-          ),
-          child: Row(
-            mainAxisAlignment: expanded > 0.5 ? MainAxisAlignment.start : MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
+        final bool showLabel = expanded > 0.08;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+          child: SizedBox(
+            height: 48,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                width: 32 + (expanded * 168),
+                padding: EdgeInsets.symmetric(horizontal: expanded * 12),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    'assets/app_icon.png',
-                    width: 32,
-                    height: 32,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-              ClipRect(
-                child: SizedBox(
-                  width: 130 * expanded,
-                  child: expanded < 0.1 ? const SizedBox.shrink() : Opacity(
-                    opacity: expanded,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 10),
-                      child: Text(
-                        'Debrify',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: expanded <= 0.02
+                      ? null
+                      : LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(
+                              alpha: 0.04 + (expanded * 0.03),
+                            ),
+                            const Color(
+                              0xFF111827,
+                            ).withValues(alpha: 0.68 + (expanded * 0.16)),
+                          ],
                         ),
-                        overflow: TextOverflow.clip,
-                        softWrap: false,
+                  border: expanded <= 0.02
+                      ? null
+                      : Border.all(
+                          color: Colors.white.withValues(
+                            alpha: 0.06 + (expanded * 0.06),
+                          ),
+                        ),
+                  boxShadow: expanded <= 0.02
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: 0.16 + (expanded * 0.08),
+                            ),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                            spreadRadius: -8,
+                          ),
+                        ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Center(
+                        child: Image.asset(
+                          'assets/app_icon.png',
+                          width: 26,
+                          height: 26,
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
-                  ),
+                    ClipRect(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutCubic,
+                        width: expanded * 96,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 180),
+                            opacity: showLabel ? expanded.clamp(0.0, 1.0) : 0.0,
+                            child: const Padding(
+                              padding: EdgeInsets.only(left: 10),
+                              child: Text(
+                                'Debrify',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
+                                ),
+                                overflow: TextOverflow.clip,
+                                softWrap: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -401,12 +455,14 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.03).animate(
-      CurvedAnimation(parent: _focusController, curve: Curves.easeOut),
-    );
-    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _focusController, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.03,
+    ).animate(CurvedAnimation(parent: _focusController, curve: Curves.easeOut));
+    _glowAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _focusController, curve: Curves.easeOut));
 
     if (widget.isFocused) {
       _focusController.forward();
@@ -439,7 +495,10 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedBuilder(
-          animation: Listenable.merge([_focusController, widget.expandAnimation]),
+          animation: Listenable.merge([
+            _focusController,
+            widget.expandAnimation,
+          ]),
           builder: (context, child) {
             return Transform.scale(
               scale: _scaleAnimation.value,
@@ -451,8 +510,8 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
                   color: widget.isFocused
                       ? Colors.white.withValues(alpha: 0.12)
                       : widget.isSelected
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.transparent,
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.transparent,
                 ),
                 child: child,
               ),
@@ -461,7 +520,9 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
-              mainAxisAlignment: widget.isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              mainAxisAlignment: widget.isExpanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
               children: [
                 // Selected indicator bar
                 if (widget.isExpanded)
@@ -481,8 +542,8 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
                   color: widget.isFocused
                       ? Colors.white
                       : widget.isSelected
-                          ? const Color(0xFF818CF8)
-                          : Colors.white.withValues(alpha: 0.4),
+                      ? const Color(0xFF818CF8)
+                      : Colors.white.withValues(alpha: 0.4),
                   size: 20,
                 ),
                 // Label (visible when expanded)
@@ -492,58 +553,78 @@ class _TvNavItemWidgetState extends State<_TvNavItemWidget>
                     return ClipRect(
                       child: SizedBox(
                         width: 150 * widget.expandAnimation.value,
-                        child: widget.expandAnimation.value < 0.1 ? const SizedBox.shrink() : Opacity(
-                          opacity: widget.expandAnimation.value,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    widget.item.label,
-                                    style: TextStyle(
-                                      color: widget.isFocused
-                                          ? Colors.white
-                                          : widget.isSelected
-                                              ? Colors.white.withValues(alpha: 0.95)
-                                              : Colors.white.withValues(alpha: 0.45),
-                                      fontSize: 14,
-                                      fontWeight: widget.isSelected || widget.isFocused
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                      letterSpacing: 0.1,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.clip,
-                                    softWrap: false,
+                        child: widget.expandAnimation.value < 0.1
+                            ? const SizedBox.shrink()
+                            : Opacity(
+                                opacity: widget.expandAnimation.value,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          widget.item.label,
+                                          style: TextStyle(
+                                            color: widget.isFocused
+                                                ? Colors.white
+                                                : widget.isSelected
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.95,
+                                                  )
+                                                : Colors.white.withValues(
+                                                    alpha: 0.45,
+                                                  ),
+                                            fontSize: 14,
+                                            fontWeight:
+                                                widget.isSelected ||
+                                                    widget.isFocused
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                            letterSpacing: 0.1,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.clip,
+                                          softWrap: false,
+                                        ),
+                                      ),
+                                      if (widget.item.tag != null) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.withValues(
+                                              alpha: 0.15,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.amber.withValues(
+                                                alpha: 0.4,
+                                              ),
+                                              width: 0.5,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            widget.item.tag!,
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.amber,
+                                              letterSpacing: 0.5,
+                                              height: 1.2,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                if (widget.item.tag != null) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
-                                    ),
-                                    child: Text(
-                                      widget.item.tag!,
-                                      style: const TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.amber,
-                                        letterSpacing: 0.5,
-                                        height: 1.2,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
+                              ),
                       ),
                     );
                   },

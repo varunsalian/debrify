@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/main_page_bridge.dart';
 import 'home_focus_controller.dart';
 
 class HomeEmptyAction {
@@ -175,12 +176,21 @@ class _HomeEmptyStateState extends State<HomeEmptyState> {
       return KeyEventResult.handled;
     }
 
-    if (columns > 1 && key == LogicalKeyboardKey.arrowLeft) {
-      final isLeftColumn = index % columns == 0;
-      if (!isLeftColumn) {
-        _focusNodes[index - 1].requestFocus();
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (columns > 1) {
+        final isLeftColumn = index % columns == 0;
+        if (!isLeftColumn) {
+          _focusNodes[index - 1].requestFocus();
+        } else if (widget.isTelevision) {
+          MainPageBridge.focusTvSidebar?.call();
+        }
+        return KeyEventResult.handled;
       }
-      return KeyEventResult.handled;
+      if (widget.isTelevision) {
+        MainPageBridge.focusTvSidebar?.call();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
     }
 
     if (columns > 1 && key == LogicalKeyboardKey.arrowRight) {
