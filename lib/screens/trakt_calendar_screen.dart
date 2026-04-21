@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/stremio_addon.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
@@ -202,8 +201,8 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  void _handleEpisodeSelected(StremioMeta meta) {
-    Navigator.of(context).pop(meta);
+  void _handleEpisodeSelected(TraktCalendarEntry entry) {
+    Navigator.of(context).pop(entry);
   }
 
   @override

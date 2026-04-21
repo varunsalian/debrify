@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/stremio_addon.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
 import '../screens/trakt_calendar_screen.dart';
 import '../services/trakt/trakt_calendar_service.dart';
@@ -31,7 +30,7 @@ class HomeTodayCalendarCard extends StatefulWidget {
   final bool isTelevision;
   final VoidCallback onRequestFocusAbove;
   final VoidCallback onRequestFocusBelow;
-  final void Function(StremioMeta meta) onItemSelected;
+  final void Function(TraktCalendarEntry entry) onItemSelected;
 
   @override
   State<HomeTodayCalendarCard> createState() => _HomeTodayCalendarCardState();
@@ -594,7 +593,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
   // ─── Helpers ────────────────────────────────────────────────────────────
 
   Future<void> _openFullCalendar() async {
-    final result = await Navigator.of(context).push<StremioMeta?>(
+    final result = await Navigator.of(context).push<TraktCalendarEntry?>(
       MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
     );
     if (!mounted) return;

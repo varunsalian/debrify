@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../models/stremio_addon.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
 
 /// Bottom sheet showing all episodes airing on a specific day.
 ///
 /// Tapping an episode dismisses the sheet and calls [onEpisodeSelected]
-/// with a [StremioMeta] built from the entry's show fields.
+/// with the full calendar entry so season/episode context is preserved.
 class TraktCalendarDaySheet extends StatelessWidget {
   const TraktCalendarDaySheet({
     super.key,
@@ -17,7 +16,7 @@ class TraktCalendarDaySheet extends StatelessWidget {
 
   final DateTime date;
   final List<TraktCalendarEntry> entries;
-  final void Function(StremioMeta meta) onEpisodeSelected;
+  final void Function(TraktCalendarEntry entry) onEpisodeSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -52,10 +51,9 @@ class TraktCalendarDaySheet extends StatelessWidget {
                 itemBuilder: (ctx, i) => _EpisodeRow(
                   entry: sorted[i],
                   onTap: () {
-                    final meta = _buildMetaFromEntry(sorted[i]);
-                    if (meta == null) return;
+                    if (sorted[i].showImdbId == null) return;
                     Navigator.of(ctx).pop();
-                    onEpisodeSelected(meta);
+                    onEpisodeSelected(sorted[i]);
                   },
                 ),
               ),
@@ -66,24 +64,29 @@ class TraktCalendarDaySheet extends StatelessWidget {
     );
   }
 
-  static StremioMeta? _buildMetaFromEntry(TraktCalendarEntry e) {
-    if (e.showImdbId == null) return null;
-    return StremioMeta.fromJson({
-      'id': e.showImdbId,
-      'name': e.showTitle,
-      'type': 'series',
-      'year': e.showYear?.toString(),
-      'poster': e.posterUrl,
-    });
-  }
-
   static String _formatFullDate(DateTime d) {
     const weekdays = [
-      'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     const months = [
-      'January','February','March','April','May','June',
-      'July','August','September','October','November','December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return '${weekdays[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
   }
@@ -101,8 +104,8 @@ class _EpisodeRow extends StatelessWidget {
     final badge = entry.isNewShow
         ? 'NEW SHOW'
         : entry.isSeasonPremiere
-            ? 'SEASON PREMIERE'
-            : null;
+        ? 'SEASON PREMIERE'
+        : null;
 
     return InkWell(
       onTap: onTap,
@@ -120,7 +123,10 @@ class _EpisodeRow extends StatelessWidget {
                   height: 60,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => const SizedBox(
-                      width: 40, height: 60, child: Icon(Icons.tv)),
+                    width: 40,
+                    height: 60,
+                    child: Icon(Icons.tv),
+                  ),
                 ),
               )
             else
@@ -150,7 +156,10 @@ class _EpisodeRow extends StatelessWidget {
                   if (badge != null) ...[
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF59E0B),
                         borderRadius: BorderRadius.circular(3),

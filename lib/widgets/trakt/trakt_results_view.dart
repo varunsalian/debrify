@@ -151,6 +151,7 @@ class TraktResultsView extends StatefulWidget {
   final void Function(AdvancedSearchSelection)? onQuickPlay;
   final bool showQuickPlay;
   final VoidCallback? onUpArrowFromFilters;
+  final VoidCallback? onEpisodeModeExited;
 
   /// Called when user wants to select a torrent source for a series.
   /// Parent should trigger series probing search in select-source mode.
@@ -167,6 +168,7 @@ class TraktResultsView extends StatefulWidget {
     this.onQuickPlay,
     this.showQuickPlay = true,
     this.onUpArrowFromFilters,
+    this.onEpisodeModeExited,
     this.onSelectSource,
     this.onSearchPacks,
   });
@@ -1480,12 +1482,17 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   /// Public entry point to open episode browser for a show.
-  /// Used by HomeTraktContinueWatchingSection to navigate here.
-  void enterEpisodeMode(StremioMeta show) => _enterEpisodeMode(show);
+  /// Used by home sections to navigate here.
+  void enterEpisodeMode(StremioMeta show, {int? season, int? episode}) =>
+      _enterEpisodeMode(show, initialSeason: season, initialEpisode: episode);
 
   // ── Episode drill-down ──────────────────────────────────────────────────────
 
-  Future<void> _enterEpisodeMode(StremioMeta show) async {
+  Future<void> _enterEpisodeMode(
+    StremioMeta show, {
+    int? initialSeason,
+    int? initialEpisode,
+  }) async {
     final generation = ++_episodeModeGeneration;
 
     setState(() {
@@ -1548,11 +1555,25 @@ class TraktResultsViewState extends State<TraktResultsView> {
       // Store next episode for UI highlighting
       _nextEpisode = nextEpisode;
 
-      // Default to first regular season, but override with next episode's season if available
+      // Prefer an explicit target episode when supplied (calendar/deep-link
+      // flows), otherwise fall back to Trakt's next-episode context.
       var targetSeason = defaultSeason.number;
-      if (nextEpisode != null) {
+      int? targetEpisodeNumber;
+      if (initialSeason != null &&
+          initialEpisode != null &&
+          seasons.any((s) => s.number == initialSeason) &&
+          seasons
+              .firstWhere((s) => s.number == initialSeason)
+              .episodes
+              .any((e) => e.number == initialEpisode)) {
+        targetSeason = initialSeason;
+        targetEpisodeNumber = initialEpisode;
+      } else if (nextEpisode != null) {
         final hasSeason = seasons.any((s) => s.number == nextEpisode.season);
-        if (hasSeason) targetSeason = nextEpisode.season;
+        if (hasSeason) {
+          targetSeason = nextEpisode.season;
+          targetEpisodeNumber = nextEpisode.episode;
+        }
       }
 
       // Rebuild focus nodes for the target season
@@ -1578,8 +1599,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
       // Load bound source for this show (non-blocking)
       _loadBoundSourceForShow();
 
-      // Scroll to the next episode after the frame renders
-      if (nextEpisode != null && targetSeason == nextEpisode.season) {
+      // Scroll to the requested episode after the frame renders.
+      if (targetEpisodeNumber != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || generation != _episodeModeGeneration) return;
           final season = _seasons.firstWhere(
@@ -1587,7 +1608,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
             orElse: () => _seasons.first,
           );
           final epIndex = season.episodes.indexWhere(
-            (e) => e.number == nextEpisode.episode,
+            (e) => e.number == targetEpisodeNumber,
           );
           if (epIndex >= 0) {
             // Scroll to the episode if it's not at the top
@@ -1732,6 +1753,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       _episodeWatchProgress = {};
       _nextEpisode = null;
     });
+    widget.onEpisodeModeExited?.call();
   }
 
   void _onSeasonChanged(int? seasonNumber) {

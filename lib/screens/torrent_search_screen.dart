@@ -62,7 +62,9 @@ import '../widgets/home_empty_state.dart';
 import '../widgets/home_trakt_continue_watching_section.dart';
 import '../widgets/home_trakt_now_playing_card.dart';
 import '../widgets/home_today_calendar_card.dart';
+import '../models/trakt/trakt_calendar_entry.dart';
 import 'settings/trakt_settings_page.dart';
+import 'trakt_calendar_screen.dart';
 import '../widgets/reddit/reddit_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
@@ -258,6 +260,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _showSearchField = false;
   bool _traktAuthenticated = false;
   bool _traktSyncCatalog = false;
+  Future<void> Function()? _pendingTraktEpisodeModeExitAction;
+  SearchSourceOption? _pendingCalendarReturnSource;
   int _activeSearchRequestId = 0;
   String? _apiKey;
   String? _torboxApiKey;
@@ -1998,6 +2002,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Clear episode drill-down return state when source changes
     // (prevents auto-returning to "All" if user manually switches source)
     _sourceBeforeEpisodeDrillDown = null;
+    if (source.type != SearchSourceType.trakt) {
+      _pendingTraktEpisodeModeExitAction = null;
+      _pendingCalendarReturnSource = null;
+    }
 
     setState(() {
       _selectedSource = source;
@@ -16369,20 +16377,34 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   : _searchController.text,
                               isTelevision: _isTelevision,
                               onItemSelected: (selection) {
+                                _pendingTraktEpisodeModeExitAction = null;
+                                _pendingCalendarReturnSource = null;
                                 _handleCatalogItemSelected(
                                   selection,
                                   updateSearchText: true,
                                 );
                               },
                               onQuickPlay: (selection) {
+                                _pendingTraktEpisodeModeExitAction = null;
+                                _pendingCalendarReturnSource = null;
                                 _handleQuickPlay(selection);
                               },
                               showQuickPlay:
                                   _defaultTorrentProvider != 'pikpak',
                               onUpArrowFromFilters: () =>
                                   _sourceDropdownFocusNode.requestFocus(),
-                              onSelectSource: _handleSelectSource,
-                              onSearchPacks: _handleSearchPacks,
+                              onSelectSource: (show) {
+                                _pendingTraktEpisodeModeExitAction = null;
+                                _pendingCalendarReturnSource = null;
+                                _handleSelectSource(show);
+                              },
+                              onSearchPacks: (show) {
+                                _pendingTraktEpisodeModeExitAction = null;
+                                _pendingCalendarReturnSource = null;
+                                _handleSearchPacks(show);
+                              },
+                              onEpisodeModeExited:
+                                  _handleTraktEpisodeModeExited,
                             ),
                           ),
 
@@ -17600,7 +17622,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // ============================================================================
 
   /// Switch to Trakt source and open episode browser for a show.
-  void _browseTraktShow(StremioMeta show) {
+  void _browseTraktShow(
+    StremioMeta show, {
+    int? season,
+    int? episode,
+    bool returnToCalendarOnEpisodeExit = false,
+  }) {
     // Find the existing Trakt option from available sources
     final traktOption = _availableSourceOptions
         .cast<SearchSourceOption?>()
@@ -17608,15 +17635,85 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           (o) => o?.type == SearchSourceType.trakt,
           orElse: () => null,
         );
-    if (traktOption == null) return; // Trakt not available
+    if (traktOption == null) {
+      final selection = AdvancedSearchSelection(
+        imdbId: show.effectiveImdbId ?? show.id,
+        isSeries: show.type == 'series',
+        title: show.name,
+        contentType: show.type,
+        posterUrl: show.poster,
+        year: show.year,
+        season: season,
+        episode: episode,
+      );
+      _handleCatalogItemSelected(selection, updateSearchText: true);
+      return;
+    }
+
+    _pendingTraktEpisodeModeExitAction = returnToCalendarOnEpisodeExit
+        ? _reopenTraktCalendar
+        : null;
+    _pendingCalendarReturnSource = returnToCalendarOnEpisodeExit
+        ? (_pendingCalendarReturnSource ?? _selectedSource)
+        : null;
 
     // Switch source to Trakt
     _onSearchSourceChanged(traktOption);
 
     // Enter episode mode after the TraktResultsView has mounted
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _traktResultsKey.currentState?.enterEpisodeMode(show);
+      _traktResultsKey.currentState?.enterEpisodeMode(
+        show,
+        season: season,
+        episode: episode,
+      );
     });
+  }
+
+  void _handleHomeCalendarEntrySelected(TraktCalendarEntry entry) {
+    if (entry.showImdbId == null) return;
+
+    final show = StremioMeta.fromJson({
+      'id': entry.showImdbId,
+      'name': entry.showTitle,
+      'type': 'series',
+      'year': entry.showYear?.toString(),
+      'poster': entry.posterUrl,
+    });
+
+    _browseTraktShow(
+      show,
+      season: entry.seasonNumber,
+      episode: entry.episodeNumber,
+      returnToCalendarOnEpisodeExit: true,
+    );
+  }
+
+  Future<void> _reopenTraktCalendar() async {
+    if (!mounted) return;
+    final returnSource = _pendingCalendarReturnSource;
+    final result = await Navigator.of(context).push<TraktCalendarEntry?>(
+      MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
+    );
+    if (!mounted) return;
+    if (result == null) {
+      if (returnSource != null) {
+        _onSearchSourceChanged(returnSource);
+      }
+      return;
+    }
+    _handleHomeCalendarEntrySelected(result);
+  }
+
+  void _handleTraktEpisodeModeExited() {
+    final pendingAction = _pendingTraktEpisodeModeExitAction;
+    _pendingTraktEpisodeModeExitAction = null;
+    if (pendingAction == null) {
+      _pendingCalendarReturnSource = null;
+    }
+    if (pendingAction != null) {
+      unawaited(pendingAction());
+    }
   }
 
   SearchSourceOption? _firstCatalogSourceOption() {
@@ -17677,17 +17774,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 _homeFocusController.focusSection(next);
               }
             },
-            onItemSelected: (meta) {
-              final isSeries = meta.type == 'series';
-              final selection = AdvancedSearchSelection(
-                imdbId: meta.imdbId ?? meta.id,
-                isSeries: isSeries,
-                title: meta.name,
-                contentType: isSeries ? 'series' : 'movie',
-                posterUrl: meta.poster,
-                year: meta.year,
-              );
-              _handleCatalogItemSelected(selection, updateSearchText: true);
+            onItemSelected: (entry) {
+              _handleHomeCalendarEntrySelected(entry);
             },
           ),
         ),
