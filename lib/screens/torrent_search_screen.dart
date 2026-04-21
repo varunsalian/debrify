@@ -405,7 +405,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
     final traktFocusNode = FocusNode(debugLabel: 'quick-trakt-toggle');
     final closeFocusNode = FocusNode(debugLabel: 'quick-controls-close');
-    String? selectedProviderId = _activeProviderOption?.id;
+    final availableProviderIds = providers
+        .map((provider) => provider.id)
+        .toSet();
+    String selectedProviderId =
+        _defaultTorrentProvider == 'none' ||
+            availableProviderIds.contains(_defaultTorrentProvider)
+        ? _defaultTorrentProvider
+        : 'none';
     String selectedPostAction = 'choose';
     String? loadedPostActionProviderId;
     bool initialFocusRequested = false;
@@ -426,11 +433,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           builder: (dialogContext, setDialogState) {
             final mediaQuery = MediaQuery.of(dialogContext);
             final isNarrow = mediaQuery.size.width < 500;
-            final activeProvider =
-                providers
-                    .where((provider) => provider.id == selectedProviderId)
-                    .firstOrNull ??
-                _activeProviderOption;
+            final activeProvider = selectedProviderId == 'none'
+                ? null
+                : providers
+                          .where(
+                            (provider) => provider.id == selectedProviderId,
+                          )
+                          .firstOrNull ??
+                      _activeProviderOption;
             if (!initialFocusRequested) {
               initialFocusRequested = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -576,7 +586,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       ),
                                       child: Icon(
                                         activeProvider?.icon ??
-                                            Icons.cloud_outlined,
+                                            Icons.tune_rounded,
                                         size: 16,
                                         color:
                                             activeProvider?.color ??
@@ -586,7 +596,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
-                                        value: activeProvider?.id,
+                                        value: selectedProviderId,
                                         focusNode: providerFocusNode,
                                         dropdownColor: const Color(0xFF1B2136),
                                         iconEnabledColor: Colors.white54,
@@ -607,29 +617,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           focusedBorder: InputBorder.none,
                                           disabledBorder: InputBorder.none,
                                         ),
-                                        items: providers.map((provider) {
-                                          final title = provider.id == 'debrid'
-                                              ? 'Real-Debrid'
-                                              : provider.id == 'torbox'
-                                              ? 'TorBox'
-                                              : 'PikPak';
-                                          return DropdownMenuItem<String>(
-                                            value: provider.id,
-                                            child: Text(title),
-                                          );
-                                        }).toList(),
+                                        items: [
+                                          const DropdownMenuItem<String>(
+                                            value: 'none',
+                                            child: Text('Let me choose'),
+                                          ),
+                                          ...providers.map((provider) {
+                                            return DropdownMenuItem<String>(
+                                              value: provider.id,
+                                              child: Text(
+                                                _providerDisplayName(
+                                                  provider.id,
+                                                ),
+                                              ),
+                                            );
+                                          }),
+                                        ],
                                         selectedItemBuilder: (context) {
-                                          return providers.map((provider) {
-                                            final title =
-                                                provider.id == 'debrid'
-                                                ? 'Real-Debrid'
-                                                : provider.id == 'torbox'
-                                                ? 'TorBox'
-                                                : 'PikPak';
+                                          return [
+                                            'none',
+                                            ...providers.map(
+                                              (provider) => provider.id,
+                                            ),
+                                          ].map((providerId) {
                                             return Align(
                                               alignment: Alignment.centerLeft,
                                               child: Text(
-                                                title,
+                                                providerId == 'none'
+                                                    ? 'Let me choose'
+                                                    : _providerDisplayName(
+                                                        providerId,
+                                                      ),
                                                 style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,
@@ -643,7 +661,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                         onChanged: (providerId) async {
                                           if (providerId == null ||
                                               providerId ==
-                                                  activeProvider?.id) {
+                                                  selectedProviderId) {
                                             return;
                                           }
                                           await _setDefaultProvider(providerId);
@@ -5747,7 +5765,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ? Colors.white.withValues(alpha: _traktSyncCatalog ? 0.95 : 0.58)
         : Colors.white38;
     final baseColor = isFab ? const Color(0xFF121827) : const Color(0xFF141420);
-    final providerLabel = activeProvider?.name ?? 'Auto';
+    final providerLabel = _defaultTorrentProvider == 'none'
+        ? 'Let me choose'
+        : activeProvider?.name ?? 'Auto';
 
     return Focus(
       focusNode: _traktSyncFocusNode,
