@@ -426,6 +426,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             final mediaQuery = MediaQuery.of(dialogContext);
             final isNarrow = mediaQuery.size.width < 500;
             final activeProvider = _activeProviderOption;
+            final isDirectKeywordSearchResults =
+                _hasSearched && !_cameFromCatalogBrowse;
+            const directKeywordSearchSubtitle =
+                'Not available for direct keyword searches';
             final maxDialogHeight = min(
               mediaQuery.size.height * 0.72,
               isNarrow ? 360.0 : 400.0,
@@ -613,11 +617,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             _QuickControlTile(
                               focusNode: continueWatchingFocusNode,
                               icon: Icons.history_rounded,
-                              iconColor: _continueWatchingEnabled
+                              iconColor: isDirectKeywordSearchResults
+                                  ? Colors.white38
+                                  : _continueWatchingEnabled
                                   ? const Color(0xFF60A5FA)
                                   : Colors.white54,
                               title: 'Local Continue Watching',
-                              subtitle: _continueWatchingEnabled
+                              subtitle: isDirectKeywordSearchResults
+                                  ? directKeywordSearchSubtitle
+                                  : _continueWatchingEnabled
                                   ? 'Shown on the home screen'
                                   : 'Hidden on the home screen',
                               trailing: AnimatedContainer(
@@ -626,14 +634,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 height: 24,
                                 padding: const EdgeInsets.all(3),
                                 decoration: BoxDecoration(
-                                  color: _continueWatchingEnabled
+                                  color: isDirectKeywordSearchResults
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : _continueWatchingEnabled
                                       ? const Color(
                                           0xFF60A5FA,
                                         ).withValues(alpha: 0.22)
                                       : Colors.white.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(999),
                                   border: Border.all(
-                                    color: _continueWatchingEnabled
+                                    color: isDirectKeywordSearchResults
+                                        ? Colors.white.withValues(alpha: 0.12)
+                                        : _continueWatchingEnabled
                                         ? const Color(
                                             0xFF60A5FA,
                                           ).withValues(alpha: 0.55)
@@ -648,7 +660,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     width: 16,
                                     height: 16,
                                     decoration: BoxDecoration(
-                                      color: _continueWatchingEnabled
+                                      color: isDirectKeywordSearchResults
+                                          ? Colors.white30
+                                          : _continueWatchingEnabled
                                           ? const Color(0xFF60A5FA)
                                           : Colors.white54,
                                       shape: BoxShape.circle,
@@ -656,31 +670,39 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   ),
                                 ),
                               ),
-                              onPressed: () async {
-                                final newValue = !_continueWatchingEnabled;
-                                await StorageService.setHomeContinueWatchingEnabled(
-                                  newValue,
-                                );
-                                if (!mounted || !dialogContext.mounted) {
-                                  return;
-                                }
-                                setState(() {
-                                  _continueWatchingEnabled = newValue;
-                                });
-                                setDialogState(() {});
-                                MainPageBridge.notifyHomeSettingsChanged();
-                              },
+                              onPressed: isDirectKeywordSearchResults
+                                  ? null
+                                  : () async {
+                                      final newValue =
+                                          !_continueWatchingEnabled;
+                                      await StorageService.setHomeContinueWatchingEnabled(
+                                        newValue,
+                                      );
+                                      if (!mounted || !dialogContext.mounted) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        _continueWatchingEnabled = newValue;
+                                      });
+                                      setDialogState(() {});
+                                      MainPageBridge.notifyHomeSettingsChanged();
+                                    },
                             ),
-                            if (_traktAuthenticated) ...[
+                            if (_traktAuthenticated ||
+                                isDirectKeywordSearchResults) ...[
                               const SizedBox(height: 10),
                               _QuickControlTile(
                                 focusNode: traktFocusNode,
                                 icon: Icons.sync_rounded,
-                                iconColor: _traktSyncCatalog
+                                iconColor: isDirectKeywordSearchResults
+                                    ? Colors.white38
+                                    : _traktSyncCatalog
                                     ? const Color(0xFF4ADE80)
                                     : const Color(0xFFFF6B6B),
                                 title: 'Trakt Catalog Sync',
-                                subtitle: _traktSyncCatalog
+                                subtitle: isDirectKeywordSearchResults
+                                    ? directKeywordSearchSubtitle
+                                    : _traktSyncCatalog
                                     ? 'Enabled for catalog browsing'
                                     : 'Disabled for catalog browsing',
                                 trailing: AnimatedContainer(
@@ -689,14 +711,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   height: 24,
                                   padding: const EdgeInsets.all(3),
                                   decoration: BoxDecoration(
-                                    color: _traktSyncCatalog
+                                    color: isDirectKeywordSearchResults
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : _traktSyncCatalog
                                         ? const Color(
                                             0xFF4ADE80,
                                           ).withValues(alpha: 0.22)
                                         : Colors.white.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(999),
                                     border: Border.all(
-                                      color: _traktSyncCatalog
+                                      color: isDirectKeywordSearchResults
+                                          ? Colors.white.withValues(alpha: 0.12)
+                                          : _traktSyncCatalog
                                           ? const Color(
                                               0xFF4ADE80,
                                             ).withValues(alpha: 0.55)
@@ -713,7 +739,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       width: 16,
                                       height: 16,
                                       decoration: BoxDecoration(
-                                        color: _traktSyncCatalog
+                                        color: isDirectKeywordSearchResults
+                                            ? Colors.white30
+                                            : _traktSyncCatalog
                                             ? const Color(0xFF4ADE80)
                                             : Colors.white54,
                                         shape: BoxShape.circle,
@@ -721,13 +749,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                     ),
                                   ),
                                 ),
-                                onPressed: () {
-                                  _toggleTraktSync();
-                                  if (!mounted || !dialogContext.mounted) {
-                                    return;
-                                  }
-                                  setDialogState(() {});
-                                },
+                                onPressed: isDirectKeywordSearchResults
+                                    ? null
+                                    : () {
+                                        _toggleTraktSync();
+                                        if (!mounted ||
+                                            !dialogContext.mounted) {
+                                          return;
+                                        }
+                                        setDialogState(() {});
+                                      },
                               ),
                             ],
                           ],
