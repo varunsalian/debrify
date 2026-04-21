@@ -398,26 +398,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final providers = _availableProviders;
     final providerFocusNode = FocusNode(debugLabel: 'quick-provider-dropdown');
     final providerFocused = ValueNotifier(false);
+    final postActionFocusNode = FocusNode(debugLabel: 'quick-post-action');
+    final postActionFocused = ValueNotifier(false);
     final continueWatchingFocusNode = FocusNode(
       debugLabel: 'quick-home-continue-watching',
     );
     final traktFocusNode = FocusNode(debugLabel: 'quick-trakt-toggle');
     final closeFocusNode = FocusNode(debugLabel: 'quick-controls-close');
+    String? selectedProviderId = _activeProviderOption?.id;
+    String selectedPostAction = 'choose';
+    String? loadedPostActionProviderId;
+    bool initialFocusRequested = false;
+    int postActionLoadRequestId = 0;
     providerFocusNode.addListener(() {
       providerFocused.value = providerFocusNode.hasFocus;
     });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!providerFocusNode.hasFocus &&
-          !continueWatchingFocusNode.hasFocus &&
-          !traktFocusNode.hasFocus &&
-          !closeFocusNode.hasFocus) {
-        if (providers.isNotEmpty) {
-          providerFocusNode.requestFocus();
-        } else {
-          continueWatchingFocusNode.requestFocus();
-        }
-      }
+    postActionFocusNode.addListener(() {
+      postActionFocused.value = postActionFocusNode.hasFocus;
     });
 
     if (!mounted) return;
@@ -429,7 +426,50 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           builder: (dialogContext, setDialogState) {
             final mediaQuery = MediaQuery.of(dialogContext);
             final isNarrow = mediaQuery.size.width < 500;
-            final activeProvider = _activeProviderOption;
+            final activeProvider =
+                providers
+                    .where((provider) => provider.id == selectedProviderId)
+                    .firstOrNull ??
+                _activeProviderOption;
+            if (!initialFocusRequested) {
+              initialFocusRequested = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!dialogContext.mounted) return;
+                if (!providerFocusNode.hasFocus &&
+                    !postActionFocusNode.hasFocus &&
+                    !continueWatchingFocusNode.hasFocus &&
+                    !traktFocusNode.hasFocus &&
+                    !closeFocusNode.hasFocus) {
+                  if (providers.isNotEmpty) {
+                    providerFocusNode.requestFocus();
+                  } else {
+                    continueWatchingFocusNode.requestFocus();
+                  }
+                }
+              });
+            }
+            final shouldLoadPostAction =
+                activeProvider != null &&
+                loadedPostActionProviderId != activeProvider.id;
+            if (shouldLoadPostAction) {
+              final providerId = activeProvider.id;
+              final requestId = ++postActionLoadRequestId;
+              loadedPostActionProviderId = providerId;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final postAction = await _getPostTorrentActionForProvider(
+                  providerId,
+                );
+                if (!mounted ||
+                    !dialogContext.mounted ||
+                    requestId != postActionLoadRequestId ||
+                    selectedProviderId != providerId) {
+                  return;
+                }
+                setDialogState(() {
+                  selectedPostAction = postAction;
+                });
+              });
+            }
             final isDirectKeywordSearchResults =
                 _hasSearched && !_cameFromCatalogBrowse;
             const directKeywordSearchSubtitle =
@@ -611,7 +651,150 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                               !dialogContext.mounted) {
                                             return;
                                           }
-                                          setDialogState(() {});
+                                          setDialogState(() {
+                                            selectedProviderId = providerId;
+                                            selectedPostAction = 'choose';
+                                            loadedPostActionProviderId = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (activeProvider != null)
+                              ValueListenableBuilder<bool>(
+                                valueListenable: postActionFocused,
+                                builder: (context, isPostActionFocused, child) {
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 140),
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isPostActionFocused
+                                          ? Colors.white.withValues(alpha: 0.05)
+                                          : Colors.white.withValues(
+                                              alpha: 0.03,
+                                            ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: isPostActionFocused
+                                            ? activeProvider.color.withValues(
+                                                alpha: 0.62,
+                                              )
+                                            : Colors.white.withValues(
+                                                alpha: 0.07,
+                                              ),
+                                        width: isPostActionFocused ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: child,
+                                  );
+                                },
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: activeProvider.color.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Icon(
+                                        Icons.play_circle_outline_rounded,
+                                        size: 16,
+                                        color: activeProvider.color,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: selectedPostAction,
+                                        focusNode: postActionFocusNode,
+                                        dropdownColor: const Color(0xFF1B2136),
+                                        iconEnabledColor: Colors.white54,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText: 'Post-Torrent Action',
+                                          labelStyle: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 8,
+                                              ),
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          disabledBorder: InputBorder.none,
+                                        ),
+                                        items:
+                                            _postTorrentActionOptionsForProvider(
+                                              activeProvider.id,
+                                            ).map((action) {
+                                              return DropdownMenuItem<String>(
+                                                value: action,
+                                                child: Text(
+                                                  _postTorrentActionLabel(
+                                                    action,
+                                                    providerId:
+                                                        activeProvider.id,
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                        selectedItemBuilder: (context) {
+                                          return _postTorrentActionOptionsForProvider(
+                                            activeProvider.id,
+                                          ).map((action) {
+                                            return Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                _postTorrentActionLabel(
+                                                  action,
+                                                  providerId: activeProvider.id,
+                                                ),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList();
+                                        },
+                                        onChanged: (action) async {
+                                          if (action == null ||
+                                              action == selectedPostAction) {
+                                            return;
+                                          }
+                                          await _savePostTorrentActionForProvider(
+                                            activeProvider.id,
+                                            action,
+                                          );
+                                          if (!mounted ||
+                                              !dialogContext.mounted) {
+                                            return;
+                                          }
+                                          setDialogState(() {
+                                            selectedPostAction = action;
+                                          });
                                         },
                                       ),
                                     ),
@@ -780,6 +963,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     providerFocusNode.dispose();
     providerFocused.dispose();
+    postActionFocusNode.dispose();
+    postActionFocused.dispose();
     continueWatchingFocusNode.dispose();
     traktFocusNode.dispose();
     closeFocusNode.dispose();
@@ -5829,6 +6014,78 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
     return list;
+  }
+
+  Future<String> _getPostTorrentActionForProvider(String providerId) {
+    switch (providerId) {
+      case 'torbox':
+        return StorageService.getTorboxPostTorrentAction();
+      case 'pikpak':
+        return StorageService.getPikPakPostTorrentAction();
+      case 'debrid':
+      default:
+        return StorageService.getPostTorrentAction();
+    }
+  }
+
+  Future<void> _savePostTorrentActionForProvider(
+    String providerId,
+    String action,
+  ) {
+    switch (providerId) {
+      case 'torbox':
+        return StorageService.saveTorboxPostTorrentAction(action);
+      case 'pikpak':
+        return StorageService.savePikPakPostTorrentAction(action);
+      case 'debrid':
+      default:
+        return StorageService.savePostTorrentAction(action);
+    }
+  }
+
+  List<String> _postTorrentActionOptionsForProvider(String providerId) {
+    return const [
+      'none',
+      'choose',
+      'open',
+      'play',
+      'download',
+      'playlist',
+      'channel',
+    ];
+  }
+
+  String _postTorrentActionLabel(String action, {required String providerId}) {
+    switch (action) {
+      case 'none':
+        return 'None';
+      case 'choose':
+        return 'Let me choose';
+      case 'open':
+        return 'Open in ${_providerDisplayName(providerId)}';
+      case 'play':
+        return 'Play video';
+      case 'download':
+        return 'Download to device';
+      case 'playlist':
+        return 'Add to playlist';
+      case 'channel':
+        return 'Add to channel';
+      default:
+        return action;
+    }
+  }
+
+  String _providerDisplayName(String providerId) {
+    switch (providerId) {
+      case 'torbox':
+        return 'Torbox';
+      case 'pikpak':
+        return 'PikPak';
+      case 'debrid':
+      default:
+        return 'Real-Debrid';
+    }
   }
 
   void _showProviderSwitchMenu() async {
