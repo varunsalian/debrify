@@ -267,13 +267,17 @@ class _HomeContinueWatchingSectionState
                     autofocus: true,
                     isTelevision: widget.isTelevision,
                   ),
-                  if (isSeries && widget.onPlayRandomEpisode != null)
+                  if (!isSeries && widget.onSelectSource != null)
                     _MenuItem(
-                      icon: Icons.shuffle_rounded,
-                      label: 'Play Random Episode',
-                      subtitle: 'Pick a random aired episode',
-                      color: const Color(0xFFF59E0B),
-                      onTap: () => Navigator.pop(context, 'random_episode'),
+                      icon: hasBoundSource
+                          ? Icons.edit_rounded
+                          : Icons.add_link_rounded,
+                      label: hasBoundSource ? 'Edit Source' : 'Add Source',
+                      subtitle: hasBoundSource
+                          ? 'Change the bound torrent source'
+                          : 'Bind a torrent source for quick play',
+                      color: const Color(0xFF60A5FA),
+                      onTap: () => Navigator.pop(context, 'select_source'),
                       isTelevision: widget.isTelevision,
                     ),
                   _MenuItem(
@@ -283,12 +287,21 @@ class _HomeContinueWatchingSectionState
                     label: isSeries ? 'Browse Episodes' : 'Browse Sources',
                     subtitle: isSeries
                         ? 'View seasons and episodes'
-                        : 'Find available sources',
+                        : 'Find sources to play, download, or save',
                     color: const Color(0xFF818CF8),
                     onTap: () => Navigator.pop(context, 'browse'),
                     isTelevision: widget.isTelevision,
                   ),
-                  if (widget.onSelectSource != null)
+                  if (isSeries && widget.onPlayRandomEpisode != null)
+                    _MenuItem(
+                      icon: Icons.shuffle_rounded,
+                      label: 'Play Random Episode',
+                      subtitle: 'Pick a random aired episode',
+                      color: const Color(0xFFF59E0B),
+                      onTap: () => Navigator.pop(context, 'random_episode'),
+                      isTelevision: widget.isTelevision,
+                    ),
+                  if (widget.onSelectSource != null && isSeries)
                     _MenuItem(
                       icon: hasBoundSource
                           ? Icons.edit_rounded

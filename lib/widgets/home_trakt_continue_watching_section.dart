@@ -682,28 +682,7 @@ class _HomeTraktContinueWatchingSectionState
                   onTap: () => Navigator.pop(context, 'quick_play'),
                   autofocus: true,
                 ),
-                if (item.type == 'series')
-                  _buildMenuItem(
-                    icon: Icons.shuffle_rounded,
-                    label: 'Play Random Episode',
-                    subtitle: 'Pick a random aired episode',
-                    color: const Color(0xFFF59E0B),
-                    onTap: () => Navigator.pop(context, 'random_episode'),
-                  ),
-                _buildMenuItem(
-                  icon: item.type == 'series'
-                      ? Icons.view_list_rounded
-                      : Icons.search_rounded,
-                  label: item.type == 'series'
-                      ? 'Browse Episodes'
-                      : 'Browse Sources',
-                  subtitle: item.type == 'series'
-                      ? 'View seasons and episodes'
-                      : 'Find available sources',
-                  color: const Color(0xFF818CF8),
-                  onTap: () => Navigator.pop(context, 'browse'),
-                ),
-                if (widget.onSelectSource != null)
+                if (item.type != 'series' && widget.onSelectSource != null)
                   _buildMenuItem(
                     icon: hasBoundSource
                         ? Icons.edit_rounded
@@ -715,6 +694,40 @@ class _HomeTraktContinueWatchingSectionState
                     color: const Color(0xFF60A5FA),
                     onTap: () => Navigator.pop(context, 'select_source'),
                   ),
+                _buildMenuItem(
+                  icon: item.type == 'series'
+                      ? Icons.view_list_rounded
+                      : Icons.search_rounded,
+                  label: item.type == 'series'
+                      ? 'Browse Episodes'
+                      : 'Browse Sources',
+                  subtitle: item.type == 'series'
+                      ? 'View seasons and episodes'
+                      : 'Find sources to play, download, or save',
+                  color: const Color(0xFF818CF8),
+                  onTap: () => Navigator.pop(context, 'browse'),
+                ),
+                if (item.type == 'series')
+                  _buildMenuItem(
+                    icon: Icons.shuffle_rounded,
+                    label: 'Play Random Episode',
+                    subtitle: 'Pick a random aired episode',
+                    color: const Color(0xFFF59E0B),
+                    onTap: () => Navigator.pop(context, 'random_episode'),
+                  ),
+                if (widget.onSelectSource != null)
+                  if (item.type == 'series')
+                    _buildMenuItem(
+                      icon: hasBoundSource
+                          ? Icons.edit_rounded
+                          : Icons.add_link_rounded,
+                      label: hasBoundSource ? 'Edit Source' : 'Add Source',
+                      subtitle: hasBoundSource
+                          ? 'Change the bound torrent source'
+                          : 'Bind a torrent source for quick play',
+                      color: const Color(0xFF60A5FA),
+                      onTap: () => Navigator.pop(context, 'select_source'),
+                    ),
                 if (item.type == 'series' && widget.onSearchPacks != null)
                   _buildMenuItem(
                     icon: Icons.inventory_2_outlined,
