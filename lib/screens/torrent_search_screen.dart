@@ -393,11 +393,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _showQuickControlsDialog() async {
     final providers = _availableProviders;
     final providerFocusNode = FocusNode(debugLabel: 'quick-provider-dropdown');
+    final providerFocused = ValueNotifier(false);
     final continueWatchingFocusNode = FocusNode(
       debugLabel: 'quick-home-continue-watching',
     );
     final traktFocusNode = FocusNode(debugLabel: 'quick-trakt-toggle');
     final closeFocusNode = FocusNode(debugLabel: 'quick-controls-close');
+    providerFocusNode.addListener(() {
+      providerFocused.value = providerFocusNode.hasFocus;
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!providerFocusNode.hasFocus &&
@@ -479,19 +483,37 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               ),
                             ),
                             if (providers.isNotEmpty)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.03),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.07),
-                                  ),
-                                ),
+                              ValueListenableBuilder<bool>(
+                                valueListenable: providerFocused,
+                                builder: (context, isProviderFocused, child) {
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 140),
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isProviderFocused
+                                          ? Colors.white.withValues(alpha: 0.05)
+                                          : Colors.white.withValues(
+                                              alpha: 0.03,
+                                            ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: isProviderFocused
+                                            ? const Color(
+                                                0xFF8B5CF6,
+                                              ).withValues(alpha: 0.62)
+                                            : Colors.white.withValues(
+                                                alpha: 0.07,
+                                              ),
+                                        width: isProviderFocused ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: child,
+                                  );
+                                },
                                 child: Row(
                                   children: [
                                     Container(
@@ -526,12 +548,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           fontWeight: FontWeight.w600,
                                         ),
                                         decoration: InputDecoration(
-                                          border: InputBorder.none,
                                           isDense: true,
                                           contentPadding:
                                               const EdgeInsets.symmetric(
+                                                horizontal: 8,
                                                 vertical: 8,
                                               ),
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          disabledBorder: InputBorder.none,
                                         ),
                                         items: providers.map((provider) {
                                           final title = provider.id == 'debrid'
@@ -718,6 +744,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
 
     providerFocusNode.dispose();
+    providerFocused.dispose();
     continueWatchingFocusNode.dispose();
     traktFocusNode.dispose();
     closeFocusNode.dispose();
