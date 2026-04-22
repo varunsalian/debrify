@@ -1,0 +1,16 @@
+{
+  "support": {
+    "providers": [],
+    "settings_label": "Support Debrify",
+    "settings_subtitle": "Help fund development with a donation"
+  },
+  "campaign": {
+    "enabled": false,
+    "id": "",
+    "title": "",
+    "message": "",
+    "button_label": "Donate on Ko-fi",
+    "start_utc": "",
+    "end_utc": ""
+  }
+}

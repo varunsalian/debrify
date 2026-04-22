@@ -15,6 +15,7 @@ import '../services/main_page_bridge.dart';
 import '../services/account_service.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
+import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
@@ -22,6 +23,7 @@ import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/update_service.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -79,11 +81,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
+  SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
+  String _supportSettingsLabel = 'Support Debrify';
+  String _supportSettingsSubtitle = 'Help fund development with a donation';
 
   @override
   void initState() {
     super.initState();
     _loadSummaries();
+    _loadSupportConfig();
 
     // Register TV sidebar focus handler (tab index 8 = Settings)
     _tvContentFocusHandler = () {
@@ -210,6 +216,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _loadSupportConfig() async {
+    final service = SupportRemoteConfigService.instance;
+    final cached = await service.loadCachedOrFallback();
+    if (mounted) {
+      setState(() {
+        _applySupportConfig(cached);
+      });
+    }
+
+    final fresh = await service.loadConfig();
+    if (!mounted) return;
+    setState(() {
+      _applySupportConfig(fresh);
+    });
+  }
+
+  void _applySupportConfig(SupportRemoteConfig config) {
+    _supportDonation = config.donation;
+    _supportSettingsLabel = config.donation.settingsLabel;
+    _supportSettingsSubtitle = config.donation.settingsSubtitle;
+  }
+
+  Future<void> _openSupportDonation() async {
+    await showSupportDonationChooserDialog(
+      context,
+      donation: _supportDonation,
+      title: _supportSettingsLabel,
+    );
+  }
+
   void _applyRdUserInfo(dynamic user) {
     final expiry = _tryParseDate(user.expiration);
     final bool isPremium = user.isPremium;
@@ -321,6 +357,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       checkingUpdates: _checkingUpdates,
       autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      showSupportDonation: _supportDonation.hasProviders,
+      supportDonationLabel: _supportSettingsLabel,
+      supportDonationSubtitle: _supportSettingsSubtitle,
+      onOpenSupportDonation: _openSupportDonation,
     );
   }
 
@@ -969,6 +1009,10 @@ class _SettingsLayout extends StatelessWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool showSupportDonation;
+  final String supportDonationLabel;
+  final String supportDonationSubtitle;
+  final Future<void> Function() onOpenSupportDonation;
 
   const _SettingsLayout({
     required this.connections,
@@ -993,6 +1037,10 @@ class _SettingsLayout extends StatelessWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.showSupportDonation,
+    required this.supportDonationLabel,
+    required this.supportDonationSubtitle,
+    required this.onOpenSupportDonation,
   });
 
   @override
@@ -1166,6 +1214,14 @@ class _SettingsLayout extends StatelessWidget {
                       )
                     : null,
               ),
+              if (showSupportDonation)
+                _SettingsTile(
+                  icon: Icons.favorite_rounded,
+                  title: supportDonationLabel,
+                  subtitle: supportDonationSubtitle,
+                  onTap: onOpenSupportDonation,
+                  iconColor: const Color(0xFFEC4899),
+                ),
               _SettingsTile(
                 icon: Icons.forum_rounded,
                 title: 'Reddit Community',

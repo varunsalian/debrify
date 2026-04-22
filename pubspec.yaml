@@ -125,6 +125,7 @@ flutter:
 
   assets:
     - assets/app_icon.png
+    - assets/config/app_remote_config.json
     - assets/config/engines/
 
   # Bundled subtitle fonts

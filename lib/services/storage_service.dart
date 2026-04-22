@@ -68,6 +68,10 @@ class StorageService {
       'home_continue_watching_enabled';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
+  static const String _supportRemoteConfigCacheKey =
+      'support_remote_config_cache_v1';
+  static const String _dismissedDonationCampaignIdsKey =
+      'dismissed_donation_campaign_ids_v1';
 
   // Startup settings
   static const String _startupAutoLaunchEnabledKey =
@@ -3786,6 +3790,30 @@ class StorageService {
   static Future<void> clearDefaultTorrentProvider() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_defaultTorrentProviderKey);
+  }
+
+  static Future<String?> getSupportRemoteConfigCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_supportRemoteConfigCacheKey);
+  }
+
+  static Future<void> setSupportRemoteConfigCache(String json) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_supportRemoteConfigCacheKey, json);
+  }
+
+  static Future<List<String>> getDismissedDonationCampaignIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
+  }
+
+  static Future<void> dismissDonationCampaign(String campaignId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids =
+        prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
+    if (ids.contains(campaignId)) return;
+    ids.add(campaignId);
+    await prefs.setStringList(_dismissedDonationCampaignIdsKey, ids);
   }
 
   // Quick Play VR Settings methods

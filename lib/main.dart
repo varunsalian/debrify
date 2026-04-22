@@ -48,8 +48,10 @@ import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
 import 'services/aptabase_service.dart';
+import 'services/support_remote_config_service.dart';
 import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_control_screen.dart';
+import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'services/update_service.dart';
 
@@ -428,6 +430,93 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
+class _SupportCampaignDialog extends StatefulWidget {
+  final SupportCampaignConfig campaign;
+  final Future<void> Function() onDismissForever;
+
+  const _SupportCampaignDialog({
+    required this.campaign,
+    required this.onDismissForever,
+  });
+
+  @override
+  State<_SupportCampaignDialog> createState() => _SupportCampaignDialogState();
+}
+
+class _SupportCampaignDialogState extends State<_SupportCampaignDialog> {
+  final FocusNode _maybeLaterFocusNode = FocusNode(
+    debugLabel: 'supportMaybeLater',
+  );
+  final FocusNode _dismissFocusNode = FocusNode(
+    debugLabel: 'supportDismissForever',
+  );
+  final FocusNode _donateFocusNode = FocusNode(debugLabel: 'supportDonate');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _donateFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _maybeLaterFocusNode.dispose();
+    _dismissFocusNode.dispose();
+    _donateFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FocusTraversalGroup(
+      child: FocusScope(
+        autofocus: true,
+        child: AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          title: Text(widget.campaign.title),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Text(
+              widget.campaign.message,
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+          ),
+          actions: [
+            TextButton(
+              focusNode: _maybeLaterFocusNode,
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: const Text('Maybe later'),
+            ),
+            TextButton(
+              focusNode: _dismissFocusNode,
+              onPressed: () async {
+                await widget.onDismissForever();
+                if (mounted) {
+                  Navigator.of(context).pop(false);
+                }
+              },
+              child: const Text("Don't show again"),
+            ),
+            FilledButton(
+              focusNode: _donateFocusNode,
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+              child: Text(widget.campaign.buttonLabel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   static String? _startupChannelIdToLaunch;
   static bool _startupChannelIdConsumed = false;
@@ -471,6 +560,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   StreamSubscription<Map<String, dynamic>>? _autoUpdateDownloadSub;
   String? _autoUpdateDownloadTaskId;
   bool _hasTrackedInitialTab = false;
+  bool _didCheckSupportCampaign = false;
+  bool _startupModalActive = false;
+  bool _supportCampaignResolved = false;
+  bool _autoUpdateCheckResolved = false;
 
   final List<Widget> _pages = [
     const TorrentSearchScreen(), // 0: Home
@@ -654,6 +747,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeAutoCheckForUpdates();
     });
+
+    _scheduleSupportCampaignPrompt();
 
     // Check if startup auto-launch is enabled
     _checkStartupAutoLaunch();
@@ -895,14 +990,111 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     _didAutoUpdateCheck = true;
     Future<void>.delayed(const Duration(seconds: 6), () async {
       if (!mounted) return;
-      await _performAutoUpdateCheck();
+      await _runDeferredAutoUpdateCheck();
     });
   }
 
-  Future<void> _performAutoUpdateCheck() async {
+  void _scheduleSupportCampaignPrompt() {
+    if (_didCheckSupportCampaign) return;
+    _didCheckSupportCampaign = true;
+
+    Future<void>.delayed(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+      await _runDeferredSupportCampaignPrompt();
+    });
+  }
+
+  Future<void> _runDeferredSupportCampaignPrompt() async {
+    if (!mounted || _supportCampaignResolved) return;
+    if (MainPage.isAutoLaunchShowingOverlay || _startupModalActive) {
+      Future<void>.delayed(const Duration(seconds: 3), () async {
+        if (!mounted) return;
+        await _runDeferredSupportCampaignPrompt();
+      });
+      return;
+    }
+
+    final completed = await _maybeShowSupportCampaignDialog();
+    if (completed) {
+      _supportCampaignResolved = true;
+      return;
+    }
+
+    if (!mounted || _supportCampaignResolved) return;
+    Future<void>.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      await _runDeferredSupportCampaignPrompt();
+    });
+  }
+
+  Future<void> _runDeferredAutoUpdateCheck() async {
+    if (!mounted || _autoUpdateCheckResolved) return;
+    if (_startupModalActive) {
+      Future<void>.delayed(const Duration(seconds: 3), () async {
+        if (!mounted) return;
+        await _runDeferredAutoUpdateCheck();
+      });
+      return;
+    }
+
+    final completed = await _performAutoUpdateCheck();
+    if (completed) {
+      _autoUpdateCheckResolved = true;
+      return;
+    }
+
+    if (!mounted || _autoUpdateCheckResolved) return;
+    Future<void>.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      await _runDeferredAutoUpdateCheck();
+    });
+  }
+
+  Future<bool> _maybeShowSupportCampaignDialog() async {
+    final config = await SupportRemoteConfigService.instance.loadConfig();
+    final campaign = config.campaign;
+    final donation = config.donation;
+    if (_startupModalActive) return false;
+    if (!campaign.isActiveAt(
+      DateTime.now().toUtc(),
+      providers: donation.providers,
+    )) {
+      return true;
+    }
+
+    final dismissedIds = await StorageService.getDismissedDonationCampaignIds();
+    if (dismissedIds.contains(campaign.id)) return true;
+    if (!mounted) return false;
+
+    _startupModalActive = true;
+    try {
+      final shouldOpenChooser = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => _SupportCampaignDialog(
+          campaign: campaign,
+          onDismissForever: () async {
+            await StorageService.dismissDonationCampaign(campaign.id);
+          },
+        ),
+      );
+
+      if (shouldOpenChooser == true && mounted) {
+        await showSupportDonationChooserDialog(
+          context,
+          donation: donation,
+          title: donation.settingsLabel,
+        );
+      }
+      return true;
+    } finally {
+      _startupModalActive = false;
+    }
+  }
+
+  Future<bool> _performAutoUpdateCheck() async {
     try {
       final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
-      if (!autoEnabled) return;
+      if (!autoEnabled) return true;
       final packageInfo = await PackageInfo.fromPlatform();
       UpdateSummary summary;
       try {
@@ -910,20 +1102,35 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           currentVersion: packageInfo.version,
         );
       } catch (_) {
-        return;
+        return true;
       }
-      if (!summary.updateAvailable) return;
+      if (!summary.updateAvailable) return true;
       final ignored = await StorageService.getIgnoredUpdateVersion();
       final releaseVersion = summary.release.versionLabel;
       if (ignored != null &&
           releaseVersion.isNotEmpty &&
           ignored == releaseVersion) {
-        return;
+        return true;
       }
-      if (!mounted) return;
-      await _showAutoUpdateDialog(summary, packageInfo.version);
+      if (!mounted) return false;
+      if (_startupModalActive) {
+        Future<void>.delayed(const Duration(seconds: 3), () async {
+          if (!mounted) return;
+          await _runDeferredAutoUpdateCheck();
+        });
+        return false;
+      }
+      _startupModalActive = true;
+      try {
+        await _showAutoUpdateDialog(summary, packageInfo.version);
+        return true;
+      } finally {
+        _startupModalActive = false;
+      }
     } catch (_) {
+      _startupModalActive = false;
       // Ignore auto-update failures silently
+      return true;
     }
   }
 
