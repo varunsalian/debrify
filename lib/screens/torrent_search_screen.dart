@@ -324,6 +324,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   final FocusNode _sourceDropdownFocusNode = FocusNode(
     debugLabel: 'source_dropdown',
   );
+  final FocusNode _traktCalendarFocusNode = FocusNode(
+    debugLabel: 'trakt_calendar',
+  );
   final FocusNode _clearButtonFocusNode = FocusNode(debugLabel: 'clear_button');
   final FocusNode _searchToggleFocusNode = FocusNode(
     debugLabel: 'search_toggle',
@@ -379,6 +382,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _shouldShowQuickControlsLauncher({required bool isWide}) {
     // Quick controls now always include the home continue-watching toggle.
     return isWide || (!_isTelevision && !_isSelectionMode);
+  }
+
+  bool get _shouldShowTraktCalendarButton {
+    return _traktAuthenticated &&
+        _selectedSource.type == SearchSourceType.trakt;
   }
 
   bool _isQuickControlsLauncherVisibleForWidth(double width) {
@@ -2396,6 +2404,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Dispose Unified Search Source resources
     _sourceDropdownFocusNode.dispose();
+    _traktCalendarFocusNode.dispose();
     _clearButtonFocusNode.dispose();
     _searchToggleFocusNode.dispose();
     _traktSyncFocusNode.dispose();
@@ -3179,7 +3188,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       },
       // Right arrow: go to quick controls launcher if visible, otherwise Sources / control row
       onRightArrowPressed: () {
-        if (_isQuickControlsLauncherVisibleForWidth(
+        if (_shouldShowTraktCalendarButton) {
+          _traktCalendarFocusNode.requestFocus();
+        } else if (_isQuickControlsLauncherVisibleForWidth(
           MediaQuery.of(context).size.width,
         )) {
           _traktSyncFocusNode.requestFocus();
@@ -5692,7 +5703,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          _sourceDropdownFocusNode.requestFocus();
+          if (_shouldShowTraktCalendarButton) {
+            _traktCalendarFocusNode.requestFocus();
+          } else {
+            _sourceDropdownFocusNode.requestFocus();
+          }
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -5786,6 +5801,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               _searchController.text.isNotEmpty;
           if (isSearchActive) {
             _providerAccordionFocusNode.requestFocus();
+          } else if (_shouldShowTraktCalendarButton) {
+            _traktCalendarFocusNode.requestFocus();
           } else {
             _sourceDropdownFocusNode.requestFocus();
           }
@@ -5911,6 +5928,88 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                     ),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+
+  void _openTraktCalendar() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TraktCalendarScreen()));
+  }
+
+  Widget _buildTraktCalendarButton() {
+    final isSearchActive =
+        _showSearchField || _hasSearched || _searchController.text.isNotEmpty;
+
+    return Focus(
+      focusNode: _traktCalendarFocusNode,
+      onFocusChange: (focused) => setState(() {}),
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.select) {
+          _openTraktCalendar();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _sourceDropdownFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (isSearchActive) {
+            _providerAccordionFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (_isQuickControlsLauncherVisibleForWidth(
+                MediaQuery.of(context).size.width,
+              ) &&
+              MediaQuery.of(context).size.width >= 500) {
+            _traktSyncFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _focusBelowSourceBar();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          _focusSearchBar();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: _openTraktCalendar,
+        child: Builder(
+          builder: (context) {
+            final isFocused = _traktCalendarFocusNode.hasFocus;
+            return Tooltip(
+              message: 'Trakt calendar',
+              child: Container(
+                height: 40,
+                width: 40,
+                decoration: BoxDecoration(
+                  color: isFocused
+                      ? const Color(0xFFE50914).withValues(alpha: 0.22)
+                      : const Color(0xFF141414),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isFocused
+                        ? const Color(0xFFFF6B6B)
+                        : const Color(0xFFE50914).withValues(alpha: 0.42),
+                    width: isFocused ? 2 : 1,
+                  ),
+                ),
+                child: Icon(
+                  Icons.calendar_month_rounded,
+                  size: 20,
+                  color: isFocused ? Colors.white : const Color(0xFFFF6B6B),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -16484,6 +16583,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 const SizedBox(width: 10),
                                 // Source dropdown
                                 _buildSearchSourceSelector(),
+                                if (_shouldShowTraktCalendarButton) ...[
+                                  const SizedBox(width: 10),
+                                  _buildTraktCalendarButton(),
+                                ],
                                 // Sources icon — only when search is active
                                 if (_showSearchField ||
                                     _hasSearched ||
