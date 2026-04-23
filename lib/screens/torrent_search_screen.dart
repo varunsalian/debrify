@@ -5933,10 +5933,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
-  void _openTraktCalendar() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TraktCalendarScreen()));
+  Future<void> _openTraktCalendar({
+    bool returnToCalendarOnEpisodeExit = false,
+  }) async {
+    final result = await Navigator.of(context).push<TraktCalendarEntry?>(
+      MaterialPageRoute(builder: (_) => const TraktCalendarScreen()),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    _handleCalendarEntrySelected(
+      result,
+      returnToCalendarOnEpisodeExit: returnToCalendarOnEpisodeExit,
+    );
   }
 
   Widget _buildTraktCalendarButton() {
@@ -18050,7 +18059,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  void _handleHomeCalendarEntrySelected(TraktCalendarEntry entry) {
+  void _handleCalendarEntrySelected(
+    TraktCalendarEntry entry, {
+    bool returnToCalendarOnEpisodeExit = false,
+  }) {
     if (entry.showImdbId == null) return;
 
     final show = StremioMeta.fromJson({
@@ -18065,8 +18077,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       show,
       season: entry.seasonNumber,
       episode: entry.episodeNumber,
-      returnToCalendarOnEpisodeExit: true,
+      returnToCalendarOnEpisodeExit: returnToCalendarOnEpisodeExit,
     );
+  }
+
+  void _handleHomeCalendarEntrySelected(TraktCalendarEntry entry) {
+    _handleCalendarEntrySelected(entry, returnToCalendarOnEpisodeExit: true);
   }
 
   Future<void> _reopenTraktCalendar() async {
