@@ -5710,6 +5710,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             val contentType = map["contentType"] as? String
                             val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble()
 
+                            // Keep the underlying playback model in sync with the switched
+                            // Stremio TV channel so later title refreshes don't revert to the
+                            // previously selected source or episode payload.
+                            payload?.let { model ->
+                                val previousItem = model.items.getOrNull(currentIndex)
+                                val switchedItem = PlaybackItem(
+                                    id = "stremio_tv:${channel.id}",
+                                    title = title,
+                                    url = url,
+                                    index = 0,
+                                    season = null,
+                                    episode = null,
+                                    artwork = previousItem?.artwork,
+                                    description = previousItem?.description,
+                                    resumePositionMs = 0L,
+                                    durationMs = 0L,
+                                    updatedAt = System.currentTimeMillis(),
+                                    resumeId = null,
+                                    sizeBytes = null,
+                                    rating = previousItem?.rating,
+                                    provider = previousItem?.provider,
+                                )
+                                model.items.clear()
+                                model.items.add(switchedItem)
+                                model.contentType = contentType ?: ""
+                                model.imdbId = contentImdbId
+                                model.nextEpisodeMap = emptyMap()
+                                model.prevEpisodeMap = emptyMap()
+                                model.collectionGroups = null
+                                model.perItemImdbIds.clear()
+                                model.perItemImdbIds[0] = contentImdbId
+                                currentIndex = 0
+                            }
+
                             // Update ExoPlayer
                             val metadata = MediaMetadata.Builder()
                                 .setTitle(title)
@@ -5742,9 +5776,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             }
 
                             // Update title
-                            titleView.text = title
-                            titleOttContainer.visibility = View.GONE
-                            titleContainer.visibility = View.VISIBLE
+                            updateTitle(payload?.items?.getOrNull(currentIndex) ?: PlaybackItem(
+                                id = "stremio_tv:${channel.id}",
+                                title = title,
+                                url = url,
+                                index = 0,
+                                season = null,
+                                episode = null,
+                                artwork = null,
+                                description = null,
+                                resumePositionMs = 0L,
+                                durationMs = 0L,
+                                updatedAt = System.currentTimeMillis(),
+                                resumeId = null,
+                                sizeBytes = null,
+                                rating = null,
+                                provider = null,
+                            ))
 
                             // Update stremio sources for in-player source switching
                             val newSources = map["stremioSources"] as? List<*>
