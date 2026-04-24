@@ -1,10 +1,41 @@
-# Build Custom Stremio TV Catalogs
+# Build Your Own Stremio TV Catalogs
 
-Stremio TV lets you plug in your own curated catalogs for truly custom channels. Whether you're importing a JSON file from a repo, pasting raw data, or converting a Trakt list, everything flows through the same schema. This guide explains that schema, shows full examples, and covers each import path available in the app.
+Stremio TV lets you create your own channel lineups by importing JSON catalogs. You can build a catalog by hand, host it somewhere and import it by URL, keep it in a repo, or generate one from Trakt.
+
+This guide is for advanced users who want to create the catalog JSON itself. If you just want to use Stremio TV inside the app, start with the main Stremio TV guide first.
 
 > All examples here match the logic in `LocalCatalogImporter` inside `lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart`.
 
-## 1. Catalog schema
+## 1. Quick start
+
+If you want the shortest path:
+
+1. Create a `.json` file with:
+   - a catalog `name`
+   - a catalog `type`
+   - an `items` array
+2. Make sure every item has:
+   - `id`
+   - `name`
+3. Import it in Debrify from:
+   - `Stremio TV -> Import -> From File`
+
+A minimal catalog looks like this:
+
+```json
+{
+  "name": "My Movie Channel",
+  "type": "movie",
+  "items": [
+    {
+      "id": "tt0111161",
+      "name": "The Shawshank Redemption"
+    }
+  ]
+}
+```
+
+## 2. Catalog schema
 
 Each catalog is a JSON object with three core fields:
 
@@ -26,7 +57,7 @@ Each catalog is a JSON object with three core fields:
 
 Catalog IDs are auto-generated, so you never include `id` at the top level.
 
-## 2. Item schema
+## 3. Item schema
 
 Every entry inside `items` must be a JSON object with an `id` and `name`. Everything else is optional but strongly recommended for a richer UI.
 
@@ -58,7 +89,7 @@ Every entry inside `items` must be a JSON object with an `id` and `name`. Everyt
 
 > Validation rules: the importer rejects any catalog where `name` is empty, `items` is missing, or an item lacks `id` or `name` (see `LocalCatalogImporter.validate`).
 
-## 3. Full example (movies)
+## 4. Full example (movies)
 
 ```json
 {
@@ -90,7 +121,7 @@ Every entry inside `items` must be a JSON object with an `id` and `name`. Everyt
 
 Save this as `saturday-sci-fi.json` then open the **Stremio TV** tab in Debrify and use the `Import` menu → `From File`.
 
-## 4. Import options
+## 5. Import options
 
 On the Stremio TV tab, tap the **Import** button (gear icon in the action row) and choose from five sources:
 
@@ -100,9 +131,9 @@ On the Stremio TV tab, tap the **Import** button (gear icon in the action row) a
 4. **Browse repo** – Opens the built-in Stremio TV repo browser. Pick a catalog hosted on GitHub/community repos.
 5. **From Trakt** – Sign in with Trakt, then select watchlist/history/trending/custom/liked lists. Debrify fetches the items via `TraktService`, converts them to the catalog schema, and remembers the source so you can refresh later.
 
-> All five flows eventually call `LocalCatalogImporter.import`, so any JSON that passes validation can be imported through any path.
+> All import paths end in the same local catalog format, so once your JSON is valid you can import it in whichever way is most convenient.
 
-## 5. Trakt-specific behavior
+## 6. Trakt-specific behavior
 
 When the importer detects a raw Trakt list (JSON array where entries contain `movie`/`show` objects):
 
@@ -111,14 +142,14 @@ When the importer detects a raw Trakt list (JSON array where entries contain `mo
 - **Split mixed lists** – If the list contains both movies and shows, Debrify creates two catalogs (e.g., `My List — Movies` and `My List — Series`).
 - **Refresh metadata** – Trakt imports store `traktSource`, `traktSlug`, and `traktOwner` so the "Refresh from Trakt" button knows how to fetch fresh items.
 
-## 6. Tips & gotchas
+## 7. Tips & gotchas
 
 - **Unique names** – The importer rejects catalogs if another local catalog already uses the same `name`.
 - **IMDB IDs recommended** – Not required, but using IMDB IDs makes Trakt/metadata lookups more reliable.
 - **Storage location** – Catalogs live in Debrify’s local storage (via `StorageService.addStremioTvLocalCatalog`). Clearing app data or reinstalling removes them.
 - **Type consistency** – If you set `type: "movie"` but include shows, the UI still displays them, but Trakt refresh filters by type and may drop mismatching entries.
 
-## 7. Quick checklist
+## 8. Quick checklist
 
 - [ ] JSON object with `name`, optional `type`, and `items` array
 - [ ] Every item has `id` + `name`

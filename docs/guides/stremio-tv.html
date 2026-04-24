@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Stremio TV Guide</title>
+    <meta name="description" content="A visual guide to Stremio TV in Debrify, covering channels, guide playback, filtering, imports, and settings.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="../index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#overview">Overview</a>
+                    <a href="#watching">Watching</a>
+                    <a href="#importing">Importing</a>
+                    <a href="#settings">Settings</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="overview">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Stremio TV Guide</div>
+                    <h1>Turn catalogs into live channels.</h1>
+                    <p class="guide-lead">
+                        Stremio TV turns addon catalogs and imported catalogs into rotating TV-style channels. You can watch the current item, open the guide, filter channels, import your own catalogs, and tune playback behavior.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Stremio TV flow">
+                        <span class="guide-flow-step">Open Stremio TV</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Pick Channel</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Play or Guide</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Filter or Import</span>
+                    </div>
+
+                    <div class="guide-meta">
+                        <div class="guide-meta-card">
+                            <strong>Channels</strong>
+                            <span>Built from catalogs</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>5</strong>
+                            <span>Import options</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>Guide + Play</strong>
+                            <span>Two main viewing paths</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section" id="watching">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Using Stremio TV</h2>
+                    <p>Start from the Stremio TV tab, then watch the current item or browse the guide for the channel you want.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Open Stremio TV</h3>
+                            <p>Use the main navigation to switch into <code>Stremio TV</code>. This opens the channel-based view powered by your installed and imported catalogs.</p>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/nav-entry.png" alt="Stremio TV in the main navigation">
+                            </div>
+                            <div class="guide-shot-note">Open the Stremio TV tab from the main menu</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>Browse the channel rows</h3>
+                            <p>Each channel row shows the current item, its metadata, and the channel timing. Use <code>Play</code> to start the current item or <code>Guide</code> to open the channel guide.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Play current item</span>
+                                <span class="guide-chip">Open guide</span>
+                                <span class="guide-chip">Channel menu</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/channel-screen.png" alt="Stremio TV channel rows">
+                            </div>
+                            <div class="guide-shot-note">Each catalog becomes a rotating TV-style channel</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>Use the top menu</h3>
+                            <p>The top action menu gives you the main Stremio TV controls. This is where you can shuffle the lineup, refresh channels, filter visible channels, or import new catalogs.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Shuffle</span>
+                                <span class="guide-chip">Refresh</span>
+                                <span class="guide-chip">Filter channels</span>
+                                <span class="guide-chip">Import</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/top-menu.png" alt="Stremio TV top menu">
+                            </div>
+                            <div class="guide-shot-note">Main controls for the Stremio TV screen</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>Filter the visible channels</h3>
+                            <p>Use <code>Filter channels</code> to choose which addon catalogs and channel groups appear. This makes it easier to hide channels you do not want in the lineup.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Enable or disable channels</span>
+                                <span class="guide-chip">Group by addon</span>
+                                <span class="guide-chip">Quick all on/off</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/channel-filters.png" alt="Stremio TV channel filters">
+                            </div>
+                            <div class="guide-shot-note">Control which channels show up in the lineup</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="importing">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Importing Channels</h2>
+                    <p>Stremio TV can use local and remote catalogs, so you are not limited to the default addon lineup.</p>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>What import does</strong>
+                    <p>Importing adds local Stremio TV catalogs that behave like channels. These can come from files, links, pasted JSON, repositories, or Trakt-powered lists.</p>
+                    <p>Want to build your own JSON catalog?</p>
+                    <p><a class="guide-link-cta" href="../stremio/building-local-catalogs.md">Open the JSON Catalog Guide →</a></p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">5</div>
+                            <h3>Open the import menu</h3>
+                            <p>From the top menu, open <code>Import</code> to choose how you want to add new channels. Debrify supports local JSON catalogs, repository-based catalogs, and Trakt-powered imports.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">From File</span>
+                                <span class="guide-chip">From URL</span>
+                                <span class="guide-chip">Paste JSON</span>
+                                <span class="guide-chip">From Repository</span>
+                                <span class="guide-chip">From Trakt</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/import-menu.png" alt="Stremio TV import menu">
+                            </div>
+                            <div class="guide-shot-note">All available import paths for Stremio TV catalogs</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">6</div>
+                            <h3>Choose the right import option</h3>
+                            <p>Use the import type that matches where your catalog already lives. You do not need every option for every workflow.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Pick one import path</span>
+                                <span class="guide-chip">Same end result: a local channel catalog</span>
+                            </div>
+                            <p><strong>From File</strong>: import a local <code>.json</code> catalog from your device.</p>
+                            <p><strong>From URL</strong>: import a catalog from a direct JSON link. If the link contains a Trakt-style list export, provide a catalog name.</p>
+                            <p><strong>Paste JSON</strong>: paste raw catalog JSON directly into Debrify. This also works for raw Trakt list JSON if you enter a name.</p>
+                            <p><strong>From Repository</strong>: browse JSON catalogs from a supported repo and import one or more files.</p>
+                            <p><strong>From Trakt</strong>: import watchlists, history, trending, custom lists, or liked lists. This requires Trakt to be connected first in Settings.</p>
+                            <p><a class="guide-link-cta" href="../stremio/building-local-catalogs.md">Need the JSON format? Open the Catalog Structure Guide →</a></p>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/import-menu.png" alt="Stremio TV import options">
+                            </div>
+                            <div class="guide-shot-note">Choose the import path based on where your catalog comes from</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">7</div>
+                            <h3>Manage imported catalogs</h3>
+                            <p>The import submenu also includes <code>Manage</code>. Use it to review and manage your local Stremio TV catalogs after importing them.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Review imported catalogs</span>
+                                <span class="guide-chip">Manage local channels</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/import-menu.png" alt="Manage option in Stremio TV import menu">
+                            </div>
+                            <div class="guide-shot-note">Use Manage to work with catalogs you already imported</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="settings">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Settings</h2>
+                    <p>Use Stremio TV settings to tune how channels rotate and how playback is selected.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">8</div>
+                            <h3>Adjust playback behavior</h3>
+                            <p>The settings page controls how Stremio TV behaves. Key options include random episodes, preferred quality, start position, and which debrid provider should be used for streams.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Random episodes</span>
+                                <span class="guide-chip">Preferred quality</span>
+                                <span class="guide-chip">Start position</span>
+                                <span class="guide-chip">Debrid provider</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-tv-guide/settings.png" alt="Stremio TV settings page">
+                            </div>
+                            <div class="guide-shot-note">Tune how Stremio TV rotates and plays content</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>Stremio TV gives you a channel-style way to watch Stremio catalogs. Use <code>Play</code> for the current item, <code>Guide</code> to browse the lineup, <code>Filter channels</code> to clean up what you see, and <code>Import</code> to add your own catalog-based channels.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

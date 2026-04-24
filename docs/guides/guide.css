@@ -286,6 +286,24 @@ body.guide-page {
     color: var(--guide-muted);
 }
 
+.guide-link-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(118, 132, 255, 0.14);
+    border: 1px solid rgba(118, 132, 255, 0.2);
+    color: var(--guide-text);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.guide-link-cta:hover {
+    background: rgba(118, 132, 255, 0.2);
+}
+
 .guide-footer {
     padding: 0 0 52px;
 }
