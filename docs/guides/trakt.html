@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Trakt Guide</title>
+    <meta name="description" content="A visual guide to setting up Trakt in Debrify, using Trakt on the home screen, browsing Trakt lists, and opening the Trakt calendar.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="../index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#overview">Overview</a>
+                    <a href="#setup">Setup</a>
+                    <a href="#home">Home</a>
+                    <a href="#browse">Browse</a>
+                    <a href="#calendar">Calendar</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="overview">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Trakt Guide</div>
+                    <h1>Connect Trakt, then keep your watching in sync.</h1>
+                    <p class="guide-lead">
+                        Trakt in Debrify helps you resume what you were watching, browse your lists, and check upcoming episodes. This guide covers setup, home screen surfaces, the Trakt tab, and the calendar view.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Trakt flow">
+                        <span class="guide-flow-step">Connect Trakt</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Resume from Home</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Browse Lists</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Open Calendar</span>
+                    </div>
+
+                    <div class="guide-meta">
+                        <div class="guide-meta-card">
+                            <strong>4</strong>
+                            <span>Main areas covered</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>Home + Tab</strong>
+                            <span>Two main Trakt surfaces</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>Device code</strong>
+                            <span>Setup happens in Settings</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section" id="setup">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Set Up Trakt</h2>
+                    <p>Connect Trakt once in Settings, then Debrify can use your playback history, lists, and calendar data across the app.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Open Trakt from Settings</h3>
+                            <p>Go to <code>Settings</code> and open the <code>Trakt</code> integration. This is where you connect or manage your Trakt account.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Settings</span>
+                                <span class="guide-chip guide-chip-success">Trakt</span>
+                                <span class="guide-chip">Integration status</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/integrations-list.png" alt="Trakt integration in Debrify settings">
+                            </div>
+                            <div class="guide-shot-note">Open the Trakt integration from the settings integrations list</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>Finish login and review Trakt settings</h3>
+                            <p>If you are not connected yet, tap <code>Login with Trakt</code>. Debrify will show a code on screen. Enter that code at <code>trakt.tv/activate</code> on your phone or computer, then return to Debrify.</p>
+                            <p>Once connected, this page shows the connected state and lets you control <code>Sync Catalog Items</code>. Turn that on if you want Debrify to scrobble playback for addon and catalog content too, not just items opened from the Trakt section.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Connected</span>
+                                <span class="guide-chip">Login with Trakt</span>
+                                <span class="guide-chip">Sync Catalog Items</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/trakt-settings.png" alt="Trakt settings page in Debrify">
+                            </div>
+                            <div class="guide-shot-note">Trakt settings after the account is connected</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="home">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Trakt on the Home Screen</h2>
+                    <p>After setup, Trakt starts surfacing useful items on Home so you can jump back in without opening the Trakt tab first.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>Use Continue Watching</h3>
+                            <p>Home shows <code>Continue Watching</code> rows for Trakt movies and shows. These are based on Trakt playback progress, so you can quickly resume what you were already watching.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Movies</span>
+                                <span class="guide-chip">Shows</span>
+                                <span class="guide-chip guide-chip-success">Resume progress</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/home-surfaces.png" alt="Trakt continue watching and upcoming sections on the Debrify home screen">
+                            </div>
+                            <div class="guide-shot-note">Trakt adds continue watching rows to the home screen</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>Use the upcoming card at the top</h3>
+                            <p>The large card near the top of Home is your Trakt upcoming surface. Tap it to open the full <code>Trakt Calendar</code> screen and browse upcoming episodes.</p>
+                            <p>If Debrify is actively scrobbling something you are watching right now, the app can prioritize the now-playing surface instead of showing the calendar card.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Upcoming episodes</span>
+                                <span class="guide-chip">Open calendar</span>
+                                <span class="guide-chip">Now playing can take priority</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/home-surfaces.png" alt="Upcoming Trakt card on the Debrify home screen">
+                            </div>
+                            <div class="guide-shot-note">Tap the upcoming card to open Trakt Calendar</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="browse">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Browse Trakt in Debrify</h2>
+                    <p>The Trakt tab is where you can switch between list types, change movie or show mode, and open items for playback.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">5</div>
+                            <h3>Open the Trakt section</h3>
+                            <p>Use the dedicated <code>Trakt</code> section to browse your synced content. Open any item there and continue with <code>Sources</code> or <code>Play</code>, just like other Debrify content views.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Sources</span>
+                                <span class="guide-chip guide-chip-success">Play</span>
+                                <span class="guide-chip">Calendar button</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/trakt-results.png" alt="Trakt results view in Debrify">
+                            </div>
+                            <div class="guide-shot-note">Browse Trakt lists directly inside Debrify</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">6</div>
+                            <h3>Pick the list type you want</h3>
+                            <p>The first dropdown changes the Trakt feed you are browsing. Use it to switch between personal lists and discovery views.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Continue Watching</span>
+                                <span class="guide-chip">Watchlist</span>
+                                <span class="guide-chip">History</span>
+                                <span class="guide-chip">Collection</span>
+                                <span class="guide-chip">Trending</span>
+                                <span class="guide-chip">Popular</span>
+                            </div>
+                            <p>You can also browse <code>Custom Lists</code>, <code>Liked Lists</code>, <code>Ratings</code>, <code>Anticipated</code>, <code>Recommendations</code>, or run <code>Search Trakt</code>.</p>
+                            <p>The second dropdown switches between <code>Movie</code> and <code>Show</code>.</p>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/trakt-list-types.png" alt="Trakt list type selector in Debrify">
+                            </div>
+                            <div class="guide-shot-note">Switch list type and then choose movie or show mode</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="calendar">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Use Trakt Calendar</h2>
+                    <p>Open the calendar from Home or from the Trakt section when you want to check upcoming episodes.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">7</div>
+                            <h3>Browse your upcoming schedule</h3>
+                            <p><code>Trakt Calendar</code> shows upcoming episode dates in a monthly view. Use it to see what is airing soon and jump into the entries that matter to you.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Monthly view</span>
+                                <span class="guide-chip">Upcoming episodes</span>
+                                <span class="guide-chip guide-chip-success">Jump from Home or Trakt tab</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/trakt-guide/trakt-calendar.png" alt="Trakt Calendar screen in Debrify">
+                            </div>
+                            <div class="guide-shot-note">Use Trakt Calendar to check what is coming next</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>Connect Trakt once in <code>Settings</code>, use Home for quick resume and upcoming items, then open the <code>Trakt</code> section when you want full list browsing and calendar access.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
