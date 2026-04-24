@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
+  <a href="https://varunsalian.github.io/debrify/guides/index.html"><strong>Guides</strong></a> &bull;
   <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
@@ -29,16 +30,16 @@
 ---
 
 <p align="center">
-  <img src="assets/screenshots/torrent-search.png" alt="Torrent Search" width="49%">
-  <img src="assets/screenshots/stremio-catalog.png" alt="Stremio Catalog" width="49%">
+  <img src="docs/assets/screenshots/keyword-search/results.png" alt="Keyword Search Results" width="49%">
+  <img src="docs/assets/screenshots/catalog-search/movie-results.png" alt="Catalog Search Results" width="49%">
 </p>
 <p align="center">
-  <img src="assets/screenshots/downloads.png" alt="Downloads" width="49%">
-  <img src="assets/screenshots/player.png" alt="Player" width="49%">
+  <img src="docs/assets/screenshots/stremio-tv-guide/channel-screen.png" alt="Stremio TV Channels" width="49%">
+  <img src="docs/assets/screenshots/trakt-guide/home-surfaces.png" alt="Trakt Home Surfaces" width="49%">
 </p>
 <p align="center">
-  <img src="assets/screenshots/episodes.png" alt="Episodes" width="49%">
-  <img src="assets/screenshots/stremio-addons.png" alt="Stremio Addons" width="49%">
+  <img src="docs/assets/screenshots/catalog-search/series-episodes-bound.png" alt="Series Episodes" width="49%">
+  <img src="docs/assets/screenshots/stremio-tv-guide/import-menu.png" alt="Stremio TV Import Menu" width="49%">
 </p>
 
 <p align="center">
@@ -53,6 +54,8 @@
 ## What is Debrify?
 
 Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, and **Stremio Addons support** for discovering content.
+
+Need help using a feature? Browse the user guides on GitHub Pages: [Debrify Guides](https://varunsalian.github.io/debrify/guides/index.html)
 
 ---
 
@@ -178,16 +181,6 @@ Debrify is a **debrid manager** that lets you browse, stream, and download conte
 ## 📺 Android TV
 
 A dedicated lean-back experience for your living room.
-
-<p align="center">
-  <img src="assets/screenshots/tv-home.png" alt="TV Home" width="49%">
-  <img src="assets/screenshots/tv-search.png" alt="TV Search" width="49%">
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/tv-player.png" alt="TV Player" width="49%">
-  <img src="assets/screenshots/tv-player-channel.png" alt="TV Player Channel Mode" width="49%">
-</p>
 
 - **Remote-friendly player** — Full playback controls with D-pad navigation
 - **Subtitle customization** — Size, style, color, and background options
