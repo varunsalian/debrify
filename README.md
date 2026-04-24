@@ -20,6 +20,7 @@
 <p align="center">
   <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
   <a href="https://varunsalian.github.io/debrify/guides/index.html"><strong>Guides</strong></a> &bull;
+  <a href="https://ko-fi.com/debrify"><strong>Support</strong></a> &bull;
   <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
@@ -49,6 +50,11 @@
   <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
 </p>
 
+<p align="center">
+  <a href="https://ko-fi.com/debrify"><img src="https://img.shields.io/badge/Support_on-Ko--fi-ff5f5f?style=for-the-badge" alt="Support on Ko-fi"></a>
+  <a href="https://paypal.me/varunprojects"><img src="https://img.shields.io/badge/Support_via-PayPal-0070ba?style=for-the-badge" alt="Support via PayPal"></a>
+</p>
+
 ---
 
 ## What is Debrify?
@@ -56,6 +62,10 @@
 Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, and **Stremio Addons support** for discovering content.
 
 Need help using a feature? Browse the user guides on GitHub Pages: [Debrify Guides](https://varunsalian.github.io/debrify/guides/index.html)
+
+If Debrify has been useful to you, you can support development here:
+- [Ko-fi](https://ko-fi.com/debrify)
+- [PayPal](https://paypal.me/varunprojects)
 
 ---
 
@@ -252,6 +262,17 @@ Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See
 | Add magnets/links | ✅ | ✅ | ✅ |
 | Playlists | ✅ | ✅ | ✅ |
 | Episode tracking | ✅ | ✅ | ✅ |
+
+---
+
+## ❤️ Support Debrify
+
+If the app has been useful to you and you want to help fund development:
+
+- [Support on Ko-fi](https://ko-fi.com/debrify)
+- [Support via PayPal](https://paypal.me/varunprojects)
+
+Every bit helps keep the app improving.
 
 ---
 
