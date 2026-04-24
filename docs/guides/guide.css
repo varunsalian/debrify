@@ -325,6 +325,113 @@ body.guide-page {
     max-width: 60ch;
 }
 
+.guide-search-shell {
+    margin-bottom: 24px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.guide-search-label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: var(--guide-text);
+}
+
+.guide-search-input-wrap {
+    position: relative;
+}
+
+.guide-search-input {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--guide-border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--guide-text);
+    font: inherit;
+    transition: border-color 180ms ease, background 180ms ease;
+}
+
+.guide-search-input::placeholder {
+    color: var(--guide-muted);
+}
+
+.guide-search-input:focus {
+    outline: none;
+    border-color: rgba(118, 132, 255, 0.5);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.guide-search-meta {
+    margin-top: 10px;
+    color: var(--guide-muted);
+    font-size: 0.94rem;
+}
+
+.guide-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.guide-index-card {
+    display: block;
+    padding: 22px;
+    border-radius: 22px;
+    background: var(--guide-surface-strong);
+    border: 1px solid var(--guide-border);
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.guide-index-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(118, 132, 255, 0.28);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.guide-index-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 14px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(118, 132, 255, 0.12);
+    border: 1px solid rgba(118, 132, 255, 0.2);
+    color: #dce0ff;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.guide-index-card h3 {
+    margin-bottom: 10px;
+    font-size: clamp(1.25rem, 2vw, 1.6rem);
+}
+
+.guide-index-card p {
+    color: var(--guide-muted);
+    line-height: 1.65;
+}
+
+.guide-empty-state {
+    margin-top: 22px;
+    padding: 20px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
+.guide-empty-state strong {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.guide-empty-state p {
+    color: var(--guide-muted);
+}
+
 @media (max-width: 980px) {
     .guide-step,
     .guide-step:nth-child(even) {
@@ -337,6 +444,10 @@ body.guide-page {
     }
 
     .guide-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .guide-card-grid {
         grid-template-columns: 1fr;
     }
 }

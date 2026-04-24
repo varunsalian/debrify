@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Guides</title>
+    <meta name="description" content="Browse Debrify guides for search, catalog flows, Trakt, Stremio TV, and advanced catalog setup.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="../index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#all-guides">All Guides</a>
+                    <a href="#find-guide">Search</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="all-guides">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Guide Index</div>
+                    <h1>Find the guide you need.</h1>
+                    <p class="guide-lead">
+                        Search by feature or browse the main workflows below.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Guide index flow">
+                        <span class="guide-flow-step">Search</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Open Guide</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Follow Flow</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section" id="find-guide">
+            <div class="container">
+                <div class="guide-search-shell">
+                    <label class="guide-search-label" for="guide-search">Search guides</label>
+                    <div class="guide-search-input-wrap">
+                        <input
+                            id="guide-search"
+                            class="guide-search-input"
+                            type="search"
+                            placeholder="Search guides, flows, and features"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <p class="guide-search-meta"><span id="guide-count">5</span> guides</p>
+                </div>
+
+                <div class="guide-section-heading">
+                    <h2>All Guides</h2>
+                    <p>Try terms like <code>keyword</code>, <code>catalog</code>, <code>trakt</code>, <code>stremio</code>, <code>json</code>, or <code>calendar</code>.</p>
+                </div>
+
+                <div class="guide-card-grid" id="guide-card-grid">
+                    <a class="guide-index-card" href="keyword-search.html" data-guide-search="keyword search torrent results add provider open download device play playlist channel uncached">
+                        <span class="guide-index-eyebrow">Search</span>
+                        <h3>Keyword Search</h3>
+                        <p>Search by name, add a result to your provider, then open, play, or download it.</p>
+                        <div class="guide-chip-row">
+                            <span class="guide-chip">Keyword mode</span>
+                            <span class="guide-chip">Cached and uncached</span>
+                        </div>
+                    </a>
+
+                    <a class="guide-index-card" href="catalog-search.html" data-guide-search="catalog search movie series episodes sources bound source play trakt menu all mode">
+                        <span class="guide-index-eyebrow">Search</span>
+                        <h3>Catalog Search</h3>
+                        <p>Use catalog search for movies and series, including automatic play, source selection, and bound series sources.</p>
+                        <div class="guide-chip-row">
+                            <span class="guide-chip">Movies</span>
+                            <span class="guide-chip">Series</span>
+                            <span class="guide-chip">Bound sources</span>
+                        </div>
+                    </a>
+
+                    <a class="guide-index-card" href="stremio-tv.html" data-guide-search="stremio tv channels imports filter guide play settings repository trakt json">
+                        <span class="guide-index-eyebrow">TV</span>
+                        <h3>Stremio TV</h3>
+                        <p>Learn how channels work, how to filter them, and how to import your own catalogs into Stremio TV.</p>
+                        <div class="guide-chip-row">
+                            <span class="guide-chip">Channels</span>
+                            <span class="guide-chip">Imports</span>
+                            <span class="guide-chip">Settings</span>
+                        </div>
+                    </a>
+
+                    <a class="guide-index-card" href="trakt.html" data-guide-search="trakt setup continue watching history watchlist collection calendar sync catalog items login">
+                        <span class="guide-index-eyebrow">Tracking</span>
+                        <h3>Trakt</h3>
+                        <p>Connect Trakt, resume from Home, browse your Trakt lists, and open the upcoming calendar.</p>
+                        <div class="guide-chip-row">
+                            <span class="guide-chip">Setup</span>
+                            <span class="guide-chip">Continue Watching</span>
+                            <span class="guide-chip">Calendar</span>
+                        </div>
+                    </a>
+
+                    <a class="guide-index-card" href="../stremio/building-local-catalogs.md" data-guide-search="json catalog structure schema stremio local catalogs repository file url paste advanced">
+                        <span class="guide-index-eyebrow">Advanced</span>
+                        <h3>Build Your Own Stremio TV Catalogs</h3>
+                        <p>Advanced reference for the JSON structure used by local Stremio TV catalogs.</p>
+                        <div class="guide-chip-row">
+                            <span class="guide-chip">JSON</span>
+                            <span class="guide-chip">Schema</span>
+                            <span class="guide-chip">Advanced</span>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="guide-empty-state" id="guide-empty-state" hidden>
+                    <strong>No guides matched that search.</strong>
+                    <p>Try broader terms like <code>search</code>, <code>trakt</code>, <code>stremio</code>, or <code>json</code>.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            const input = document.getElementById('guide-search');
+            const cards = Array.from(document.querySelectorAll('.guide-index-card'));
+            const count = document.getElementById('guide-count');
+            const empty = document.getElementById('guide-empty-state');
+
+            function updateSearch() {
+                const query = input.value.trim().toLowerCase();
+                let visible = 0;
+
+                cards.forEach((card) => {
+                    const haystack = (card.dataset.guideSearch || '') + ' ' + card.textContent.toLowerCase();
+                    const match = !query || haystack.includes(query);
+                    card.hidden = !match;
+                    if (match) visible += 1;
+                });
+
+                count.textContent = String(visible);
+                empty.hidden = visible !== 0;
+            }
+
+            input.addEventListener('input', updateSearch);
+            updateSearch();
+        }());
+    </script>
+</body>
+</html>
