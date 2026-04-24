@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Catalog Search Guide</title>
+    <meta name="description" content="A visual guide to Debrify catalog search for movies and series, including automatic play, manual source selection, bound series sources, and title actions.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="../index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#movie-flow">Movie Flow</a>
+                    <a href="#series-flow">Series Flow</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="movie-flow">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Catalog Search Guide</div>
+                    <h1>Find a title, then play or pick a source.</h1>
+                    <p class="guide-lead">
+                        This guide covers both <code>Movie</code> and <code>Series</code> flows in catalog search. Search for a title, choose what you want, then either let Debrify pick a source automatically or select one yourself.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Catalog search flow">
+                        <span class="guide-flow-step">Search in All mode</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Choose Title</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Play or Browse</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Open / Play / Download</span>
+                    </div>
+
+                    <div class="guide-meta">
+                        <div class="guide-meta-card">
+                            <strong>2</strong>
+                            <span>Guide sections</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>2</strong>
+                            <span>Main title types</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>Auto + Manual</strong>
+                            <span>Playback paths covered</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Movie Search Flow</h2>
+                    <p>Use catalog search when you want Debrify to find the title first, then decide how you want to open it.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Search for the movie</h3>
+                            <p>Enter the movie name in catalog search. Debrify shows matching title cards with quick actions on each result.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Sources</span>
+                                <span class="guide-chip guide-chip-success">Play</span>
+                                <span class="guide-chip">More menu</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/movie-results.png" alt="Catalog movie results">
+                            </div>
+                            <div class="guide-shot-note">Catalog results for a movie search</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" id="play">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>If you tap Play</h3>
+                            <p>Debrify automatically picks a source for the movie and starts playback. This is the fastest path when you do not want to choose a source manually.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Automatic source selection</span>
+                                <span class="guide-chip guide-chip-success">Starts playback</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/movie-results.png" alt="Play button on movie result">
+                            </div>
+                            <div class="guide-shot-note">Use Play for the quickest route into the movie</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" id="sources">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>If you tap Sources</h3>
+                            <p>Debrify opens the source list for that movie. From there, you can sort, filter, and choose the source you want.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Sort results</span>
+                                <span class="guide-chip">Filter results</span>
+                                <span class="guide-chip">Pick source manually</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/source-list.png" alt="Source list for selected movie">
+                            </div>
+                            <div class="guide-shot-note">Manual source selection for the chosen movie</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>After selecting a source</h3>
+                            <p>Once the source is selected and added, Debrify shows the available actions for that movie.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Open</span>
+                                <span class="guide-chip guide-chip-success">Play now</span>
+                                <span class="guide-chip">Download to device</span>
+                                <span class="guide-chip">Add to playlist</span>
+                                <span class="guide-chip">Add to channel</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/source-actions.png" alt="Actions after selecting a source">
+                            </div>
+                            <div class="guide-shot-note">Actions shown after the movie source is ready</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" id="menu">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">5</div>
+                            <h3>Use the menu for title actions</h3>
+                            <p>The 3-dot menu on the movie card is for title-level actions. This is separate from playback and source selection. Trakt options appear only if your Trakt account is connected.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Trakt actions</span>
+                                <span class="guide-chip">Select Source</span>
+                                <span class="guide-chip">Add to Stremio TV</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/movie-menu.png" alt="Movie card menu actions">
+                            </div>
+                            <div class="guide-shot-note">Menu actions for the selected movie</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>For movies in catalog search, use <code>Play</code> if you want Debrify to pick a source automatically. Use <code>Sources</code> if you want to choose the source yourself.</p>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="series-flow">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Series Search Flow</h2>
+                    <p>Series search supports direct play, episode browsing, and optional bound sources for faster and more reliable episode playback.</p>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>What is a bound source?</strong>
+                    <p>A bound source is a complete series or season source that you attach to a show once. After that, Debrify can reuse it to match the correct episodes automatically instead of searching again every time you press <code>Play</code>.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Search for the series</h3>
+                            <p>Search for the series in catalog mode. Series results show <code>Episodes</code>, <code>Play</code>, and the menu on each result card.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Episodes</span>
+                                <span class="guide-chip guide-chip-success">Play</span>
+                                <span class="guide-chip">More menu</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-results.png" alt="Catalog series results">
+                            </div>
+                            <div class="guide-shot-note">Series results in catalog search</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>If you tap Play on the series</h3>
+                            <p>Debrify searches for the episode where you left off and starts playback from there. If a bound series source is already set, Debrify uses that source to pick the correct episode automatically. If no bound series source is set, Debrify searches each time and picks the episode automatically, which can be slower.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Resume where you left off</span>
+                                <span class="guide-chip">Uses bound source when available</span>
+                                <span class="guide-chip">Automatic episode search</span>
+                                <span class="guide-chip">Can be slower without a bound source</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-results.png" alt="Play button on series result">
+                            </div>
+                            <div class="guide-shot-note">Play on the series card uses the resume flow</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>Browse episodes</h3>
+                            <p>Tap <code>Episodes</code> to open the episode browser for the selected series. From there, you can switch seasons and open a specific episode.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Season picker</span>
+                                <span class="guide-chip">Episode list</span>
+                                <span class="guide-chip">Episode-level actions</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-episodes.png" alt="Series episode browser">
+                            </div>
+                            <div class="guide-shot-note">Episode browser for the selected series</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>Play or search sources for an episode</h3>
+                            <p>Each episode has its own <code>Play</code> and <code>Sources</code> buttons. The same logic applies here: <code>Play</code> auto-picks a source for that episode, while <code>Sources</code> opens the manual source list.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Play episode directly</span>
+                                <span class="guide-chip">Open episode source list</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-episodes-bound.png" alt="Episode actions inside series browser">
+                            </div>
+                            <div class="guide-shot-note">Episode-level Play and Sources buttons</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">5</div>
+                            <h3>Bind a series source for faster playback</h3>
+                            <p>Use the top <code>Source</code> button in the episode browser to manage a series-level source. A bound source is a complete series or season source that you attach to the show once, so Debrify can keep using it to match the correct episodes automatically.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Faster repeat playback</span>
+                                <span class="guide-chip">Better episode matching</span>
+                                <span class="guide-chip">Works across episodes</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-bound-source.png" alt="Bound series source list">
+                            </div>
+                            <div class="guide-shot-note">Bound sources are used before fresh search</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">6</div>
+                            <h3>Add or choose a bound source</h3>
+                            <p>From the series source panel, you can add a new source by searching torrents or choose one from your cloud provider. This is how you set up a bound series source.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Torrent Search</span>
+                                <span class="guide-chip">Real-Debrid</span>
+                                <span class="guide-chip">TorBox</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-add-source.png" alt="Add series source dialog">
+                            </div>
+                            <div class="guide-shot-note">Choose how to add a bound source</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">7</div>
+                            <h3>Search sources for a specific episode</h3>
+                            <p>If you want to choose a source manually for one episode, use <code>Sources</code> on that episode. Debrify opens the episode-specific source list so you can select exactly what you want.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Episode-specific search</span>
+                                <span class="guide-chip">Manual source selection</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/episode-source-list.png" alt="Episode-specific source list">
+                            </div>
+                            <div class="guide-shot-note">Source list for a single episode</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">8</div>
+                            <h3>After selecting the source</h3>
+                            <p>Once the source is ready, Debrify shows the available actions. This works the same way after a series or episode source is selected.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Open</span>
+                                <span class="guide-chip guide-chip-success">Play now</span>
+                                <span class="guide-chip">Download to device</span>
+                                <span class="guide-chip">Add to playlist</span>
+                                <span class="guide-chip">Add to channel</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/catalog-search/series-source-actions.png" alt="Actions after selecting a series or episode source">
+                            </div>
+                            <div class="guide-shot-note">Actions after the selected source is ready</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>For series, <code>Play</code> resumes from where you left off. A bound source means you have attached a complete series or season source to the show, so Debrify can reuse it for episode playback. Without a bound source, Debrify searches each time. Use <code>Episodes</code> to browse, and use <code>Sources</code> on an episode when you want manual control.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
