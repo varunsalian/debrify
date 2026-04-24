@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Keyword Search Guide</title>
+    <meta name="description" content="A visual guide to Debrify keyword search, covering cached and uncached torrent flows across Real-Debrid, Torbox, and PikPak.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="../index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#flow">Flow</a>
+                    <a href="#steps">Steps</a>
+                    <a href="#cached">Cached</a>
+                    <a href="#uncached">Uncached</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="flow">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Keyword Search Walkthrough</div>
+                    <h1>Find it fast. Send it anywhere.</h1>
+                    <p class="guide-lead">
+                        Use Keyword search when you already know what you want. Search by name, choose a result, send it to your selected provider, then open, play, or download it.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Keyword search flow">
+                        <span class="guide-flow-step">Search</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Pick Result</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Add to Provider</span>
+                        <span class="guide-flow-arrow">→</span>
+                        <span class="guide-flow-step">Open or Download</span>
+                    </div>
+
+                    <div class="guide-meta">
+                        <div class="guide-meta-card">
+                            <strong>3</strong>
+                            <span>Supported providers</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>2</strong>
+                            <span>Possible flows</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>1</strong>
+                            <span>Clean path to the file</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section" id="steps">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>The Flow</h2>
+                    <p>Minimal steps, with the exact screenshots from the app flow.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Start in Keyword mode</h3>
+                            <p>Enter what you want to find, then make sure the search mode is set to <code>Keyword</code>. This is the fastest option when you already know the file or title you want.</p>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/keyword-search/keyword-mode.png" alt="Keyword mode selected">
+                            </div>
+                            <div class="guide-shot-note">Keyword mode selected before searching</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>Browse the result list</h3>
+                            <p>Select the result you want, then add it to your selected cloud provider. You can also sort or filter results before choosing one.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Real-Debrid</span>
+                                <span class="guide-chip">Torbox</span>
+                                <span class="guide-chip">PikPak</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/keyword-search/results.png" alt="Keyword search results list">
+                            </div>
+                            <div class="guide-shot-note">Choose a result, then add it to a provider</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" id="cached">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>If the torrent is cached</h3>
+                            <p>If the torrent is already cached in your selected provider, Debrify shows the available actions right away.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Open</span>
+                                <span class="guide-chip guide-chip-success">Download to device</span>
+                                <span class="guide-chip">Play for video results</span>
+                                <span class="guide-chip">Add to playlist for video results</span>
+                                <span class="guide-chip">Add to channel may appear</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/keyword-search/actions.png" alt="Cached torrent actions dialog">
+                            </div>
+                            <div class="guide-shot-note">Cached torrents open straight into actions</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" id="uncached">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>If the torrent is not cached</h3>
+                            <p>If the torrent is not already cached, Debrify will ask if you want to add it anyway. Choose <code>Add Anyway</code>. Once the transfer finishes, the item will appear in that provider tab.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-accent">Add Anyway</span>
+                                <span class="guide-chip">Wait for transfer to finish</span>
+                                <span class="guide-chip">Open it from the provider tab</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/keyword-search/more-results.png" alt="Non-cached result example">
+                            </div>
+                            <div class="guide-shot-note">Example of a result that is not already cached</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>Keyword search is best when you already know what you want: search for it, pick a result, add it to your provider, then open, play, or download it.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="guide-footer">
+            <div class="container">
+                <div class="guide-summary">
+                    <h2>Fast path for regular users</h2>
+                    <p>Use Keyword search for direct lookups. If the torrent is cached, Debrify shows actions immediately. If it is not cached, add it to your provider and continue from that provider tab once the transfer is ready.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
