@@ -39,6 +39,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
     int? episode,
   })?
   onBrowseEpisodes;
+  final ValueChanged<bool>? onInitialLoadStateChanged;
 
   const HomeContinueWatchingSection({
     super.key,
@@ -52,6 +53,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
     this.onSelectSource,
     this.onSearchPacks,
     this.onBrowseEpisodes,
+    this.onInitialLoadStateChanged,
   });
 
   @override
@@ -65,6 +67,7 @@ class _HomeContinueWatchingSectionState
   Map<String, double> _progressMap = {};
   Map<String, ({int season, int episode})> _episodeInfoMap = {};
   bool _isLoading = true;
+  bool _initialLoadSettled = false;
 
   final List<FocusNode> _cardFocusNodes = [];
   final ScrollController _scrollController = ScrollController();
@@ -183,6 +186,7 @@ class _HomeContinueWatchingSectionState
         hasItems: _items.isNotEmpty,
         focusNodes: _cardFocusNodes,
       );
+      _notifyInitialLoadFinished();
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _updateScrollIndicators();
@@ -204,6 +208,13 @@ class _HomeContinueWatchingSectionState
       hasItems: false,
       focusNodes: [],
     );
+    _notifyInitialLoadFinished();
+  }
+
+  void _notifyInitialLoadFinished() {
+    if (_initialLoadSettled) return;
+    _initialLoadSettled = true;
+    widget.onInitialLoadStateChanged?.call(false);
   }
 
   void _onItemTap(Map<String, dynamic> item) async {

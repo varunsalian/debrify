@@ -31,6 +31,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
   final void Function(StremioMeta show)? onBrowseShow;
   final void Function(StremioMeta show)? onSelectSource;
   final void Function(StremioMeta show)? onSearchPacks;
+  final ValueChanged<bool>? onInitialLoadStateChanged;
 
   const HomeTraktContinueWatchingSection({
     super.key,
@@ -45,6 +46,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
     this.onBrowseShow,
     this.onSelectSource,
     this.onSearchPacks,
+    this.onInitialLoadStateChanged,
   });
 
   @override
@@ -65,6 +67,7 @@ class _HomeTraktContinueWatchingSectionState
   /// For shows, stores all playback IDs for that show.
   Map<String, List<int>> _playbackIds = {};
   bool _isLoading = true;
+  bool _initialLoadSettled = false;
   int _loadGeneration = 0;
 
   final List<FocusNode> _cardFocusNodes = [];
@@ -238,6 +241,7 @@ class _HomeTraktContinueWatchingSectionState
       hasItems: _items.isNotEmpty,
       focusNodes: _cardFocusNodes,
     );
+    _notifyInitialLoadFinished();
   }
 
   void _finishEmpty() {
@@ -252,6 +256,13 @@ class _HomeTraktContinueWatchingSectionState
       hasItems: false,
       focusNodes: [],
     );
+    _notifyInitialLoadFinished();
+  }
+
+  void _notifyInitialLoadFinished() {
+    if (_initialLoadSettled) return;
+    _initialLoadSettled = true;
+    widget.onInitialLoadStateChanged?.call(false);
   }
 
   Widget _buildMenuItem({

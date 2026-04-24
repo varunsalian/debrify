@@ -24,6 +24,7 @@ class HomeTodayCalendarCard extends StatefulWidget {
     required this.onRequestFocusAbove,
     required this.onRequestFocusBelow,
     required this.onItemSelected,
+    this.onInitialLoadStateChanged,
   });
 
   final HomeFocusController focusController;
@@ -31,6 +32,7 @@ class HomeTodayCalendarCard extends StatefulWidget {
   final VoidCallback onRequestFocusAbove;
   final VoidCallback onRequestFocusBelow;
   final void Function(TraktCalendarEntry entry) onItemSelected;
+  final ValueChanged<bool>? onInitialLoadStateChanged;
 
   @override
   State<HomeTodayCalendarCard> createState() => _HomeTodayCalendarCardState();
@@ -39,6 +41,7 @@ class HomeTodayCalendarCard extends StatefulWidget {
 class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
   bool _isAuth = false;
   bool _isLoading = true;
+  bool _initialLoadSettled = false;
   Map<DateTime, List<TraktCalendarEntry>> _grouped = const {};
   final FocusNode _cardFocusNode = FocusNode(
     debugLabel: 'home-today-calendar-card',
@@ -122,6 +125,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
         hasItems: false,
         focusNodes: const [],
       );
+      _notifyInitialLoadFinished();
       return;
     }
 
@@ -133,21 +137,43 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day);
     final end = start.add(const Duration(days: 7));
-    final grouped = await TraktCalendarService.instance.getRange(start, end);
+    try {
+      final grouped = await TraktCalendarService.instance.getRange(start, end);
 
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _grouped = grouped;
-    });
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _grouped = grouped;
+      });
 
-    final scrobbleActive = HomeTraktNowPlayingCard.isScrobbleActive.value;
-    final visible = !scrobbleActive && grouped.isNotEmpty;
-    widget.focusController.registerSection(
-      HomeSection.todayCalendar,
-      hasItems: visible,
-      focusNodes: visible ? [_cardFocusNode] : const [],
-    );
+      final scrobbleActive = HomeTraktNowPlayingCard.isScrobbleActive.value;
+      final visible = !scrobbleActive && grouped.isNotEmpty;
+      widget.focusController.registerSection(
+        HomeSection.todayCalendar,
+        hasItems: visible,
+        focusNodes: visible ? [_cardFocusNode] : const [],
+      );
+      _notifyInitialLoadFinished();
+    } catch (e) {
+      debugPrint('HomeTodayCalendarCard: load error: $e');
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _grouped = const {};
+      });
+      widget.focusController.registerSection(
+        HomeSection.todayCalendar,
+        hasItems: false,
+        focusNodes: const [],
+      );
+      _notifyInitialLoadFinished();
+    }
+  }
+
+  void _notifyInitialLoadFinished() {
+    if (_initialLoadSettled) return;
+    _initialLoadSettled = true;
+    widget.onInitialLoadStateChanged?.call(false);
   }
 
   @override

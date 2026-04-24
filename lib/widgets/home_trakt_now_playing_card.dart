@@ -18,6 +18,7 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
   final VoidCallback? onRequestFocusAbove;
   final VoidCallback? onRequestFocusBelow;
   final void Function(StremioMeta meta)? onItemSelected;
+  final ValueChanged<bool>? onInitialLoadStateChanged;
 
   const HomeTraktNowPlayingCard({
     super.key,
@@ -26,6 +27,7 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
     this.onRequestFocusAbove,
     this.onRequestFocusBelow,
     this.onItemSelected,
+    this.onInitialLoadStateChanged,
   });
 
   /// True when there's currently an active Trakt scrobble (something playing).
@@ -45,6 +47,7 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
 class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
   _NowPlayingData? _data;
   bool _isLoading = true;
+  bool _initialLoadSettled = false;
   int _loadGeneration = 0;
   Timer? _refreshTimer;
   Timer? _progressTimer;
@@ -127,6 +130,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
         hasItems: data != null,
         focusNodes: data != null ? [_focusNode] : [],
       );
+      _notifyInitialLoadFinished();
 
       _progressTimer?.cancel();
       if (data != null) {
@@ -157,6 +161,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
       hasItems: false,
       focusNodes: [],
     );
+    _notifyInitialLoadFinished();
     if (hadFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || widget.focusController == null) return;
@@ -180,6 +185,12 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
       });
     }
     _scheduleNextLoad(playing: false);
+  }
+
+  void _notifyInitialLoadFinished() {
+    if (_initialLoadSettled) return;
+    _initialLoadSettled = true;
+    widget.onInitialLoadStateChanged?.call(false);
   }
 
   // ── Parse /users/me/watching ──────────────────────────────────────────────

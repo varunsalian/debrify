@@ -321,6 +321,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
   int _homeTraktRefreshNonce = 0;
+  Set<HomeSection> _homeInitialLoadingSections = <HomeSection>{
+    HomeSection.todayCalendar,
+    HomeSection.traktNowPlaying,
+    HomeSection.continueWatching,
+    HomeSection.traktContinueWatchingMovies,
+    HomeSection.traktContinueWatchingShows,
+  };
   final FocusNode _sourceDropdownFocusNode = FocusNode(
     debugLabel: 'source_dropdown',
   );
@@ -896,6 +903,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       }
                                       setState(() {
                                         _continueWatchingEnabled = newValue;
+                                        _rearmInitialHomeLoadingSections();
                                       });
                                       setDialogState(() {});
                                       MainPageBridge.notifyHomeSettingsChanged();
@@ -2041,7 +2049,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
     if (!mounted) return;
     setState(() {
-      _homeTraktRefreshNonce++;
+      _rearmInitialHomeLoadingSections();
     });
   }
 
@@ -2053,6 +2061,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     setState(() {
       _continueWatchingEnabled = continueWatchingEnabled;
       _hideProviderCards = hideProviderCards;
+      _rearmInitialHomeLoadingSections();
     });
   }
 
@@ -2142,6 +2151,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _defaultCatalogId = defaultCatalogId;
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
+        _rearmInitialHomeLoadingSections();
         if (preservedOption != null) {
           _selectedSource = preservedOption;
         } else if (defaultOption != null) {
@@ -18142,6 +18152,32 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return contentSections.any(_homeFocusController.sectionHasItems);
   }
 
+  bool get _isResolvingInitialHomeContent =>
+      _homeInitialLoadingSections.isNotEmpty;
+
+  Set<HomeSection> _expectedInitialHomeLoadingSections() {
+    return <HomeSection>{
+      HomeSection.todayCalendar,
+      HomeSection.traktNowPlaying,
+      if (_continueWatchingEnabled) HomeSection.continueWatching,
+      HomeSection.traktContinueWatchingMovies,
+      HomeSection.traktContinueWatchingShows,
+    };
+  }
+
+  void _rearmInitialHomeLoadingSections() {
+    _homeInitialLoadingSections = _expectedInitialHomeLoadingSections();
+    _homeTraktRefreshNonce++;
+  }
+
+  void _setHomeSectionInitialLoading(HomeSection section, bool isLoading) {
+    final changed = isLoading
+        ? _homeInitialLoadingSections.add(section)
+        : _homeInitialLoadingSections.remove(section);
+    if (!changed || !mounted) return;
+    setState(() {});
+  }
+
   Widget _buildHomeSection() {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
@@ -18152,6 +18188,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             key: ValueKey('home_today_calendar_${_homeTraktRefreshNonce}'),
             focusController: _homeFocusController,
             isTelevision: _isTelevision,
+            onInitialLoadStateChanged: (isLoading) {
+              _setHomeSectionInitialLoading(
+                HomeSection.todayCalendar,
+                isLoading,
+              );
+            },
             onRequestFocusAbove: () {
               final prev = _homeFocusController.getPreviousSection(
                 HomeSection.todayCalendar,
@@ -18178,8 +18220,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         // Now Playing (Trakt live scrobble) — self-hides when nothing is playing
         RepaintBoundary(
           child: HomeTraktNowPlayingCard(
+            key: ValueKey('home_trakt_now_playing_${_homeTraktRefreshNonce}'),
             isTelevision: _isTelevision,
             focusController: _homeFocusController,
+            onInitialLoadStateChanged: (isLoading) {
+              _setHomeSectionInitialLoading(
+                HomeSection.traktNowPlaying,
+                isLoading,
+              );
+            },
             onRequestFocusAbove: () {
               final prev = _homeFocusController.getPreviousSection(
                 HomeSection.traktNowPlaying,
@@ -18216,8 +18265,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         if (_continueWatchingEnabled)
           RepaintBoundary(
             child: HomeContinueWatchingSection(
+              key: ValueKey(
+                'home_continue_watching_${_homeTraktRefreshNonce}',
+              ),
               focusController: _homeFocusController,
               isTelevision: _isTelevision,
+              onInitialLoadStateChanged: (isLoading) {
+                _setHomeSectionInitialLoading(
+                  HomeSection.continueWatching,
+                  isLoading,
+                );
+              },
               onItemSelected: (selection) {
                 _handleCatalogItemSelected(selection, updateSearchText: true);
               },
@@ -18327,6 +18385,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             isTelevision: _isTelevision,
             homeSection: HomeSection.traktContinueWatchingMovies,
             contentType: 'movies',
+            onInitialLoadStateChanged: (isLoading) {
+              _setHomeSectionInitialLoading(
+                HomeSection.traktContinueWatchingMovies,
+                isLoading,
+              );
+            },
             onItemSelected: (selection) {
               _handleCatalogItemSelected(selection, updateSearchText: true);
             },
@@ -18365,6 +18429,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             isTelevision: _isTelevision,
             homeSection: HomeSection.traktContinueWatchingShows,
             contentType: 'episodes',
+            onInitialLoadStateChanged: (isLoading) {
+              _setHomeSectionInitialLoading(
+                HomeSection.traktContinueWatchingShows,
+                isLoading,
+              );
+            },
             onItemSelected: (selection) {
               _handleCatalogItemSelected(selection, updateSearchText: true);
             },
@@ -18527,7 +18597,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               child: HomeEmptyState(
                 focusController: _homeFocusController,
                 isTelevision: _isTelevision,
-                isEmptyCandidate: !_hasVisibleHomeContent,
+                isEmptyCandidate:
+                    !_hasVisibleHomeContent && !_isResolvingInitialHomeContent,
                 onRequestFocusAbove: _focusControlRow,
                 onRequestFocusBelow: () {
                   final next = _homeFocusController.getNextSection(
