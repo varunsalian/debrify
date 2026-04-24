@@ -18529,6 +18529,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 isTelevision: _isTelevision,
                 isEmptyCandidate: !_hasVisibleHomeContent,
                 onRequestFocusAbove: _focusControlRow,
+                onRequestFocusBelow: () {
+                  final next = _homeFocusController.getNextSection(
+                    HomeSection.emptyState,
+                  );
+                  if (next != null) {
+                    _homeFocusController.focusSection(next);
+                  }
+                },
                 actions: [
                   HomeEmptyAction(
                     title: 'Start Continue Watching',

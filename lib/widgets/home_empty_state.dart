@@ -29,6 +29,7 @@ class HomeEmptyState extends StatefulWidget {
     required this.isTelevision,
     required this.isEmptyCandidate,
     required this.onRequestFocusAbove,
+    required this.onRequestFocusBelow,
     required this.actions,
   });
 
@@ -36,6 +37,7 @@ class HomeEmptyState extends StatefulWidget {
   final bool isTelevision;
   final bool isEmptyCandidate;
   final VoidCallback onRequestFocusAbove;
+  final VoidCallback onRequestFocusBelow;
   final List<HomeEmptyAction> actions;
 
   @override
@@ -171,7 +173,8 @@ class _HomeEmptyStateState extends State<HomeEmptyState> {
       final nextIndex = index + columns;
       if (nextIndex < _focusNodes.length) {
         _focusNodes[nextIndex].requestFocus();
-        return KeyEventResult.handled;
+      } else {
+        widget.onRequestFocusBelow();
       }
       return KeyEventResult.handled;
     }
