@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Privacy Policy</title>
+    <meta name="description" content="Privacy policy for Debrify, including provider tokens, analytics, third-party integrations, and GitHub Pages website analytics.">
+    <link rel="canonical" href="https://varunsalian.github.io/debrify/privacy.html">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <span class="logo-text">Debrify</span>
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="guides/index.html">Guides</a>
+                <a href="https://github.com/varunsalian/debrify/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero" style="padding-top: 7rem; padding-bottom: 3rem;">
+        <div class="hero-bg"></div>
+        <div class="container">
+            <div class="hero-content" style="max-width: 920px;">
+                <div class="hero-badge">Privacy Policy</div>
+                <h1>Privacy at Debrify</h1>
+                <p class="hero-subtitle">
+                    Debrify does not require a separate Debrify account. It connects to the providers and services
+                    you choose, stores the credentials needed to keep those integrations working on your device,
+                    and sends limited analytics to help improve the app.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" style="padding-top: 1rem;">
+        <div class="container">
+            <div class="features-grid" style="grid-template-columns: 1fr; gap: 1.5rem;">
+                <div class="feature-card">
+                    <h3>1. No Debrify Account Required</h3>
+                    <p>
+                        Debrify does not require you to register a separate Debrify account to use the app.
+                        You may choose to connect third-party services such as Torbox, Real-Debrid, PikPak, Trakt,
+                        Reddit, IPTV providers, or Stremio addons. Those integrations are optional and are only used
+                        when you enable them.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>2. What Debrify Stores Locally on Your Device</h3>
+                    <p>
+                        Debrify stores app settings and integration data locally on your device using platform storage.
+                        Depending on which features you use, this may include:
+                    </p>
+                    <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
+                        <li>Torbox API keys</li>
+                        <li>Real-Debrid API keys and endpoint preference</li>
+                        <li>PikPak email, password, access token, refresh token, device ID, captcha token, and user ID</li>
+                        <li>Trakt access token, refresh token, username, and token expiry</li>
+                        <li>Reddit access token, refresh token, and username</li>
+                        <li>Playback progress, continue-watching state, playlists, favorites, downloaded file metadata, and app preferences</li>
+                        <li>Configured Stremio addons, local Stremio TV catalogs, IPTV playlists, and remote-control pairing metadata</li>
+                    </ul>
+                    <p style="margin-top: 1rem;">
+                        This information is stored locally so Debrify can access your chosen services, remember your settings,
+                        and restore your playback state. It is not used to create a central Debrify user profile.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>3. What Debrify Sends to Third-Party Services</h3>
+                    <p>
+                        When you use an integration, Debrify sends the requests needed for that feature to the relevant service.
+                        For example:
+                    </p>
+                    <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
+                        <li>Provider account requests to Torbox, Real-Debrid, or PikPak</li>
+                        <li>Progress sync and list requests to Trakt</li>
+                        <li>Video or subreddit requests to Reddit when Reddit integration is enabled</li>
+                        <li>Catalog, metadata, and source requests to installed Stremio addons</li>
+                        <li>Remote configuration requests to Debrify’s GitLab-hosted support configuration</li>
+                    </ul>
+                    <p style="margin-top: 1rem;">
+                        The exact data sent depends on the feature you use. Those services process your requests under their own
+                        privacy policies and terms.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>4. Analytics</h3>
+                    <p>
+                        Debrify sends privacy-focused usage analytics to Aptabase to help improve the app. Analytics events may include:
+                    </p>
+                    <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
+                        <li>Event name</li>
+                        <li>Random session ID</li>
+                        <li>App version and build number</li>
+                        <li>Operating system name and version</li>
+                        <li>Device locale</li>
+                        <li>Debug/release state</li>
+                        <li>Limited event-specific properties related to app usage</li>
+                    </ul>
+                    <p style="margin-top: 1rem;">
+                        Debrify does not intentionally send your provider API keys, refresh tokens, passwords, or similar credentials
+                        to Aptabase.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>5. GitHub Pages Website Analytics</h3>
+                    <p>
+                        The Debrify website hosted on GitHub Pages uses GoatCounter for privacy-friendly website analytics.
+                        This helps measure page visits without adding a separate Debrify account system.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>6. Data Sharing</h3>
+                    <p>
+                        Debrify does not sell your personal data. Debrify shares data only as needed to operate the integrations
+                        you choose and to run app/site analytics described above.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>7. Your Choices</h3>
+                    <p>You can control your data by:</p>
+                    <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
+                        <li>Not connecting optional integrations you do not want to use</li>
+                        <li>Logging out of provider, Trakt, Reddit, or PikPak integrations</li>
+                        <li>Removing stored keys or tokens inside the app settings</li>
+                        <li>Clearing local app data from your device</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <h3>8. Contact</h3>
+                    <p>
+                        Project links:
+                        <a href="https://github.com/varunsalian/debrify" target="_blank" rel="noopener noreferrer">GitHub</a>,
+                        <a href="https://www.reddit.com/r/debrify/" target="_blank" rel="noopener noreferrer">Subreddit</a>,
+                        <a href="https://discord.gg/xuAc4Q2c9G" target="_blank" rel="noopener noreferrer">Discord</a>.
+                    </p>
+                    <p style="margin-top: 1rem;">Last updated: April 25, 2026</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-text">Debrify</span>
+                    <p>Stream and download from your debrid accounts.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="guides/index.html">Guides</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script data-goatcounter="https://debrify.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
