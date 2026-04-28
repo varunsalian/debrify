@@ -7,6 +7,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 
+class StremioAddonImportResult {
+  final int discovered;
+  final int imported;
+  final int skippedDuplicates;
+  final int skippedUnsupported;
+  final int failed;
+  final List<String> importedNames;
+  final List<String> skippedNames;
+  final List<String> errors;
+
+  const StremioAddonImportResult({
+    required this.discovered,
+    required this.imported,
+    required this.skippedDuplicates,
+    required this.skippedUnsupported,
+    required this.failed,
+    this.importedNames = const [],
+    this.skippedNames = const [],
+    this.errors = const [],
+  });
+
+  bool get hasChanges => imported > 0;
+}
+
 /// Service for managing Stremio addons and searching for streams.
 ///
 /// This service provides:
@@ -103,14 +127,7 @@ class StremioService {
   /// Returns the addon if successful, throws exception on failure.
   Future<StremioAddon> addAddon(String manifestUrl) async {
     // Normalize URL
-    manifestUrl = manifestUrl.trim();
-    if (!manifestUrl.endsWith('/manifest.json')) {
-      if (manifestUrl.endsWith('/')) {
-        manifestUrl = '${manifestUrl}manifest.json';
-      } else {
-        manifestUrl = '$manifestUrl/manifest.json';
-      }
-    }
+    manifestUrl = _normalizeManifestUrl(manifestUrl);
 
     // Check if already exists
     final existingAddons = await getAddons();
@@ -143,6 +160,120 @@ class StremioService {
 
     debugPrint('StremioService: Added addon: ${addon.name}');
     return addon;
+  }
+
+  /// Import addons from a Debrify Stremio Importer JSON file or a raw Stremio
+  /// addon collection JSON payload.
+  Future<StremioAddonImportResult> importAddonsFromJson(
+    String jsonContent, {
+    bool replaceExisting = false,
+  }) async {
+    final dynamic decoded;
+    try {
+      decoded = json.decode(jsonContent);
+    } catch (e) {
+      throw Exception('Invalid JSON file: $e');
+    }
+
+    final descriptors = _extractAddonDescriptors(decoded);
+    if (descriptors.isEmpty) {
+      throw Exception('No Stremio addon descriptors were found in this JSON.');
+    }
+
+    final addons = replaceExisting ? <StremioAddon>[] : await getAddons();
+    final knownUrlVariants = <String>{
+      for (final addon in addons) ..._duplicateUrlVariants(addon.manifestUrl),
+    };
+
+    var imported = 0;
+    var skippedDuplicates = 0;
+    var skippedUnsupported = 0;
+    var failed = 0;
+    final importedNames = <String>[];
+    final skippedNames = <String>[];
+    final errors = <String>[];
+
+    for (final descriptor in descriptors) {
+      if (descriptor is! Map) {
+        failed++;
+        errors.add('Skipped an invalid addon entry.');
+        continue;
+      }
+
+      final descriptorMap = Map<String, dynamic>.from(descriptor);
+      final rawUrl =
+          descriptorMap['transportUrl'] ??
+          descriptorMap['transport_url'] ??
+          descriptorMap['manifestUrl'] ??
+          descriptorMap['manifest_url'];
+
+      if (rawUrl is! String || rawUrl.trim().isEmpty) {
+        failed++;
+        errors.add('Skipped an addon without a manifest URL.');
+        continue;
+      }
+
+      final manifestUrl = _normalizeImportedTransportUrl(rawUrl);
+      final displayName = _addonDisplayNameFromDescriptor(descriptorMap);
+
+      if (_isLocalTransportUrl(manifestUrl)) {
+        skippedUnsupported++;
+        skippedNames.add(displayName);
+        continue;
+      }
+
+      final importUrlVariants = _duplicateUrlVariants(manifestUrl);
+      if (importUrlVariants.any(knownUrlVariants.contains)) {
+        skippedDuplicates++;
+        skippedNames.add(displayName);
+        continue;
+      }
+
+      try {
+        final rawManifest = descriptorMap['manifest'];
+        final StremioAddon addon;
+        if (rawManifest is Map) {
+          addon = StremioAddon.fromManifest(
+            Map<String, dynamic>.from(rawManifest),
+            manifestUrl,
+          );
+        } else {
+          addon = await fetchManifest(manifestUrl);
+        }
+
+        final validationError = _validateAddon(addon);
+        if (validationError != null) {
+          skippedUnsupported++;
+          skippedNames.add(addon.name);
+          continue;
+        }
+
+        addons.add(addon);
+        knownUrlVariants.addAll(_duplicateUrlVariants(manifestUrl));
+        imported++;
+        importedNames.add(addon.name);
+      } catch (e) {
+        failed++;
+        errors.add(
+          '$displayName: ${e.toString().replaceFirst('Exception: ', '')}',
+        );
+      }
+    }
+
+    if (imported > 0 || replaceExisting) {
+      await _saveAddons(addons);
+    }
+
+    return StremioAddonImportResult(
+      discovered: descriptors.length,
+      imported: imported,
+      skippedDuplicates: skippedDuplicates,
+      skippedUnsupported: skippedUnsupported,
+      failed: failed,
+      importedNames: importedNames,
+      skippedNames: skippedNames,
+      errors: errors,
+    );
   }
 
   /// Remove an addon by its manifest URL
@@ -241,9 +372,9 @@ class StremioService {
   /// 3. Fallback results are filtered to keep only season/series packs
   ///
   /// Returns a map with:
-  /// - 'torrents': List<Torrent> - deduplicated and sorted by seeders
-  /// - 'addonCounts': Map<String, int> - count of results per addon
-  /// - 'addonErrors': Map<String, String> - error messages per addon
+  /// - 'torrents': `List<Torrent>` - deduplicated and sorted by seeders
+  /// - 'addonCounts': `Map<String, int>` - count of results per addon
+  /// - 'addonErrors': `Map<String, String>` - error messages per addon
   Future<Map<String, dynamic>> searchStreams({
     required String type,
     required String imdbId,
@@ -270,13 +401,15 @@ class StremioService {
     final applicableAddons = addons.where((a) {
       // Check content type support
       bool supportsType = true;
-      if (type == 'movie')
+      if (type == 'movie') {
         supportsType = a.supportsMovies;
-      else if (type == 'series')
+      } else if (type == 'series') {
         supportsType = a.supportsSeries;
+      }
       // For other types (anime, tv, channel, etc.), allow if addon declares that type
-      else
+      else {
         supportsType = a.types.contains(type) || a.types.isEmpty;
+      }
 
       // Check if addon supports the content ID prefix (smart routing)
       final supportsId = a.supportsContentId(imdbId);
@@ -374,8 +507,6 @@ class StremioService {
     Duration? timeout,
   }) async {
     const int minResultsThreshold = 5;
-    const int maxConsecutiveEmpty = 3;
-
     debugPrint('StremioService: Using smart fallback for series search');
 
     // Step 1: Try bare IMDB ID first (parallel)
@@ -1266,11 +1397,11 @@ class StremioService {
           if (newScore > existingScore) {
             final taggedSource = tagged.sourceAddon;
             final existingSource = existing.sourceAddon;
-            final bestAddon = taggedSource != null
-                ? taggedSource
-                : (!addon.supportsMeta && existingSource?.supportsMeta == true)
-                ? existingSource!
-                : addon;
+            final bestAddon =
+                taggedSource ??
+                ((!addon.supportsMeta && existingSource?.supportsMeta == true)
+                    ? existingSource!
+                    : addon);
             uniqueResults[meta.id] = tagged.sourceAddon == bestAddon
                 ? tagged
                 : tagged.withSourceAddon(bestAddon);
@@ -1367,6 +1498,126 @@ class StremioService {
   // ============================================================
   // Validation Methods
   // ============================================================
+
+  String _normalizeManifestUrl(String manifestUrl) {
+    manifestUrl = manifestUrl.trim();
+
+    if (manifestUrl.startsWith('stremio://')) {
+      manifestUrl = 'https://${manifestUrl.substring('stremio://'.length)}';
+    }
+
+    if (!manifestUrl.endsWith('/manifest.json')) {
+      if (manifestUrl.endsWith('/')) {
+        manifestUrl = '${manifestUrl}manifest.json';
+      } else {
+        manifestUrl = '$manifestUrl/manifest.json';
+      }
+    }
+
+    return manifestUrl;
+  }
+
+  String _normalizeImportedTransportUrl(String transportUrl) {
+    transportUrl = transportUrl.trim();
+
+    if (transportUrl.startsWith('stremio://')) {
+      transportUrl = 'https://${transportUrl.substring('stremio://'.length)}';
+    }
+
+    while (transportUrl.length > 1 && transportUrl.endsWith('/')) {
+      final candidate = transportUrl.substring(0, transportUrl.length - 1);
+      final uri = Uri.tryParse(candidate);
+      if (uri != null && uri.hasScheme && uri.host.isEmpty) break;
+      transportUrl = candidate;
+    }
+
+    return transportUrl;
+  }
+
+  bool _isLocalTransportUrl(String transportUrl) {
+    try {
+      final uri = Uri.parse(transportUrl);
+      final host = uri.host.toLowerCase();
+      return host == 'localhost' ||
+          host == '127.0.0.1' ||
+          host == '::1' ||
+          host.startsWith('127.');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Set<String> _duplicateUrlVariants(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return const {};
+
+    final variants = <String>{trimmed};
+    const manifestSuffix = '/manifest.json';
+
+    if (trimmed.endsWith(manifestSuffix)) {
+      final base = trimmed.substring(0, trimmed.length - manifestSuffix.length);
+      if (base.isNotEmpty) {
+        variants.add(base);
+        variants.add('$base/');
+      }
+    } else {
+      final base = trimmed.endsWith('/')
+          ? trimmed.substring(0, trimmed.length - 1)
+          : trimmed;
+      if (base.isNotEmpty) {
+        variants.add(base);
+        variants.add('$base/');
+        variants.add('$base$manifestSuffix');
+      }
+    }
+
+    return variants;
+  }
+
+  List<dynamic> _extractAddonDescriptors(dynamic decoded) {
+    if (decoded is List) return decoded;
+
+    if (decoded is Map) {
+      final map = Map<String, dynamic>.from(decoded);
+
+      final addons = map['addons'];
+      if (addons is List) return addons;
+
+      final result = map['result'];
+      if (result is Map) {
+        final resultAddons = result['addons'];
+        if (resultAddons is List) return resultAddons;
+      }
+
+      final collection = map['addonCollection'] ?? map['addon_collection'];
+      if (collection is Map) {
+        final collectionAddons = collection['addons'];
+        if (collectionAddons is List) return collectionAddons;
+      }
+    }
+
+    return const [];
+  }
+
+  String _addonDisplayNameFromDescriptor(Map<String, dynamic> descriptor) {
+    final rawManifest = descriptor['manifest'];
+    if (rawManifest is Map) {
+      final name = rawManifest['name'];
+      if (name is String && name.trim().isNotEmpty) return name.trim();
+
+      final id = rawManifest['id'];
+      if (id is String && id.trim().isNotEmpty) return id.trim();
+    }
+
+    final url =
+        descriptor['transportUrl'] ??
+        descriptor['transport_url'] ??
+        descriptor['manifestUrl'] ??
+        descriptor['manifest_url'];
+    if (url is String && url.trim().isNotEmpty) return url.trim();
+
+    return 'Unknown addon';
+  }
 
   /// Validate that an addon has useful resources
   ///

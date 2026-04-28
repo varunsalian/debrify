@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -19,17 +22,30 @@ class StremioAddonsPageContent extends StatefulWidget {
   const StremioAddonsPageContent({super.key});
 
   @override
-  State<StremioAddonsPageContent> createState() => _StremioAddonsPageContentState();
+  State<StremioAddonsPageContent> createState() =>
+      _StremioAddonsPageContentState();
 }
 
 class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
   final StremioService _stremioService = StremioService.instance;
   final TextEditingController _urlController = TextEditingController();
-  final FocusNode _urlFieldFocusNode = FocusNode(debugLabel: 'url-field-content');
-  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'add-button-content');
+  final FocusNode _urlFieldFocusNode = FocusNode(
+    debugLabel: 'url-field-content',
+  );
+  final FocusNode _addButtonFocusNode = FocusNode(
+    debugLabel: 'add-button-content',
+  );
+  final FocusNode _importButtonFocusNode = FocusNode(
+    debugLabel: 'import-stremio-json-content',
+  );
+  final FocusNode _deleteAllButtonFocusNode = FocusNode(
+    debugLabel: 'delete-all-stremio-addons-content',
+  );
 
   bool _isLoading = true;
   bool _isAdding = false;
+  bool _isImporting = false;
+  bool _isDeletingAll = false;
   String? _error;
   List<StremioAddon> _addons = [];
   final Map<String, FocusNode> _addonFocusNodes = {};
@@ -60,6 +76,8 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     _urlFieldFocusNode.removeListener(_onUrlFieldFocusChanged);
     _urlFieldFocusNode.dispose();
     _addButtonFocusNode.dispose();
+    _importButtonFocusNode.dispose();
+    _deleteAllButtonFocusNode.dispose();
     for (final node in _addonFocusNodes.values) {
       node.dispose();
     }
@@ -79,8 +97,9 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
       }
       _addonFocusNodes.clear();
       for (final addon in _addons) {
-        _addonFocusNodes[addon.manifestUrl] =
-            FocusNode(debugLabel: 'addon-${addon.id}');
+        _addonFocusNodes[addon.manifestUrl] = FocusNode(
+          debugLabel: 'addon-${addon.id}',
+        );
       }
       setState(() {
         _isLoading = false;
@@ -130,6 +149,179 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     }
   }
 
+  Future<void> _importFromJsonFile() async {
+    if (_isImporting) return;
+
+    setState(() {
+      _isImporting = true;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        throw Exception('Please select the Stremio addon JSON export.');
+      }
+
+      final List<int> bytes;
+      if (file.bytes != null) {
+        bytes = file.bytes!;
+      } else if (file.path != null) {
+        bytes = await file.xFile.readAsBytes();
+      } else {
+        throw Exception('Could not read the selected file.');
+      }
+
+      final importResult = await _stremioService.importAddonsFromJson(
+        utf8.decode(bytes),
+      );
+      if (!mounted) return;
+
+      await _loadAddons();
+      if (!mounted) return;
+
+      await _showImportResult(importResult);
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImporting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showImportResult(StremioAddonImportResult result) {
+    final theme = Theme.of(context);
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Stremio import complete'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ImportResultRow(
+              icon: Icons.inventory_2_outlined,
+              label: 'Found',
+              value: '${result.discovered}',
+            ),
+            _ImportResultRow(
+              icon: Icons.check_circle_outline,
+              label: 'Imported',
+              value: '${result.imported}',
+            ),
+            _ImportResultRow(
+              icon: Icons.copy_all_outlined,
+              label: 'Already installed',
+              value: '${result.skippedDuplicates}',
+            ),
+            if (result.skippedUnsupported > 0)
+              _ImportResultRow(
+                icon: Icons.block_outlined,
+                label: 'Unsupported',
+                value: '${result.skippedUnsupported}',
+              ),
+            if (result.failed > 0)
+              _ImportResultRow(
+                icon: Icons.error_outline,
+                label: 'Failed',
+                value: '${result.failed}',
+                color: theme.colorScheme.error,
+              ),
+            if (result.errors.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                result.errors.take(3).join('\n'),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteAllAddons() async {
+    if (_addons.isEmpty || _isDeletingAll) return;
+
+    final count = _addons.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete all addons?'),
+        content: Text(
+          'This will remove all $count installed Stremio addon${count == 1 ? '' : 's'} from Debrify.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete all'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isDeletingAll = true;
+    });
+
+    try {
+      await _stremioService.clearAllAddons();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted $count Stremio addon${count == 1 ? '' : 's'}'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete addons: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeletingAll = false;
+        });
+      }
+    }
+  }
+
   Future<void> _toggleAddon(StremioAddon addon) async {
     await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
   }
@@ -159,14 +351,17 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     try {
       await _stremioService.removeAddon(addon.manifestUrl);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${addon.name} removed')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${addon.name} removed')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove addon: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to remove addon: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -204,10 +399,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                   label: 'ID Prefixes',
                   value: addon.idPrefixes!.join(', '),
                 ),
-              _DetailRow(
-                label: 'Added',
-                value: _formatDate(addon.addedAt),
-              ),
+              _DetailRow(label: 'Added', value: _formatDate(addon.addedAt)),
               if (addon.lastChecked != null)
                 _DetailRow(
                   label: 'Last Checked',
@@ -274,13 +466,13 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
         children: [
           Text(
             'Add Stremio Addon',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            'Paste the addon manifest URL.',
+            'Paste one manifest URL, or import a JSON export from Stremio Web.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 13,
@@ -296,52 +488,57 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
                       border: _urlFieldFocused
-                          ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                          ? Border.all(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            )
                           : null,
                     ),
                     child: Shortcuts(
                       shortcuts: const <ShortcutActivator, Intent>{
-                        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-                        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-                        SingleActivator(LogicalKeyboardKey.arrowRight): _MoveToAddButtonIntent(),
-                        SingleActivator(LogicalKeyboardKey.arrowLeft): _MoveToSidebarIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowDown):
+                            NextFocusIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowUp):
+                            PreviousFocusIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowRight):
+                            _MoveToAddButtonIntent(),
+                        SingleActivator(LogicalKeyboardKey.arrowLeft):
+                            _MoveToSidebarIntent(),
                       },
                       child: Actions(
                         actions: <Type, Action<Intent>>{
                           NextFocusIntent: CallbackAction<NextFocusIntent>(
                             onInvoke: (intent) {
-                              // Move to first addon in list or add button
-                              if (_addons.isNotEmpty && _addonFocusNodes.isNotEmpty) {
-                                _addonFocusNodes.values.first.requestFocus();
-                              } else {
-                                _addButtonFocusNode.requestFocus();
-                              }
+                              _importButtonFocusNode.requestFocus();
                               return null;
                             },
                           ),
-                          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-                            onInvoke: (intent) {
-                              // Move to tab bar if available
-                              if (AddonsScreen.focusCurrentTab != null) {
-                                AddonsScreen.focusCurrentTab!();
-                              }
-                              return null;
-                            },
-                          ),
-                          _MoveToAddButtonIntent: CallbackAction<_MoveToAddButtonIntent>(
-                            onInvoke: (intent) {
-                              _addButtonFocusNode.requestFocus();
-                              return null;
-                            },
-                          ),
-                          _MoveToSidebarIntent: CallbackAction<_MoveToSidebarIntent>(
-                            onInvoke: (intent) {
-                              if (MainPageBridge.focusTvSidebar != null) {
-                                MainPageBridge.focusTvSidebar!();
-                              }
-                              return null;
-                            },
-                          ),
+                          PreviousFocusIntent:
+                              CallbackAction<PreviousFocusIntent>(
+                                onInvoke: (intent) {
+                                  // Move to tab bar if available
+                                  if (AddonsScreen.focusCurrentTab != null) {
+                                    AddonsScreen.focusCurrentTab!();
+                                  }
+                                  return null;
+                                },
+                              ),
+                          _MoveToAddButtonIntent:
+                              CallbackAction<_MoveToAddButtonIntent>(
+                                onInvoke: (intent) {
+                                  _addButtonFocusNode.requestFocus();
+                                  return null;
+                                },
+                              ),
+                          _MoveToSidebarIntent:
+                              CallbackAction<_MoveToSidebarIntent>(
+                                onInvoke: (intent) {
+                                  if (MainPageBridge.focusTvSidebar != null) {
+                                    MainPageBridge.focusTvSidebar!();
+                                  }
+                                  return null;
+                                },
+                              ),
                         },
                         child: TextField(
                           controller: _urlController,
@@ -349,7 +546,10 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                           decoration: const InputDecoration(
                             hintText: 'https://addon.example.com/manifest.json',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 14,
+                            ),
                           ),
                           keyboardType: TextInputType.url,
                           textInputAction: TextInputAction.done,
@@ -371,7 +571,10 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.add),
                   label: const Text('Add'),
@@ -379,7 +582,134 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _buildImportActionsCard(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildImportActionsCard() {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.55,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 620;
+          final header = Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.upload_file_rounded,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Import Stremio export',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Select a Stremio addon JSON export, or clear the installed addon list.',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+
+          final actions = Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+            children: [
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: FilledButton.icon(
+                  focusNode: _importButtonFocusNode,
+                  onPressed: _isImporting ? null : _importFromJsonFile,
+                  icon: _isImporting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.file_open_rounded),
+                  label: Text(_isImporting ? 'Importing' : 'Import JSON'),
+                ),
+              ),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(3),
+                child: OutlinedButton.icon(
+                  focusNode: _deleteAllButtonFocusNode,
+                  onPressed: _addons.isEmpty || _isDeletingAll
+                      ? null
+                      : _deleteAllAddons,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                    side: BorderSide(color: theme.colorScheme.error),
+                  ),
+                  icon: _isDeletingAll
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: theme.colorScheme.error,
+                          ),
+                        )
+                      : const Icon(Icons.delete_sweep_outlined),
+                  label: Text(_isDeletingAll ? 'Deleting' : 'Delete all'),
+                ),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [header, const SizedBox(height: 12), actions],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: header),
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
@@ -405,9 +735,16 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 16),
-              Text('Failed to load addons', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Failed to load addons',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 24),
@@ -429,13 +766,22 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.extension_outlined, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.extension_outlined,
+                size: 64,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 16),
-              Text('No addons configured', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'No addons configured',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Text(
-                'Add a Stremio addon URL above to get started',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                'Add a manifest URL above or import your Stremio JSON export',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -453,14 +799,28 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
               children: [
-                Icon(Icons.extension, size: 20, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.extension,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Your Addons', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Your Addons',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -559,8 +919,9 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
       // Create focus nodes for each addon
       for (final addon in _addons) {
-        _addonFocusNodes[addon.manifestUrl] =
-            FocusNode(debugLabel: 'addon-${addon.id}');
+        _addonFocusNodes[addon.manifestUrl] = FocusNode(
+          debugLabel: 'addon-${addon.id}',
+        );
       }
 
       setState(() {
@@ -603,10 +964,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         // Clean up error message - remove "Exception: " prefix
         final errorMessage = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -636,9 +994,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Remove'),
           ),
         ],
@@ -652,9 +1008,9 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       // Note: _loadAddons() is called automatically via the addons changed listener
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${addon.name} removed')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${addon.name} removed')));
       }
     } catch (e) {
       if (mounted) {
@@ -700,10 +1056,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
                   label: 'ID Prefixes',
                   value: addon.idPrefixes!.join(', '),
                 ),
-              _DetailRow(
-                label: 'Added',
-                value: _formatDate(addon.addedAt),
-              ),
+              _DetailRow(label: 'Added', value: _formatDate(addon.addedAt)),
               if (addon.lastChecked != null)
                 _DetailRow(
                   label: 'Last Checked',
@@ -788,9 +1141,9 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         children: [
           Text(
             'Add Stremio Addon',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
@@ -803,9 +1156,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildUrlTextField(),
-              ),
+              Expanded(child: _buildUrlTextField()),
               const SizedBox(width: 12),
               FocusTraversalOrder(
                 order: const NumericFocusOrder(1),
@@ -987,8 +1338,8 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
                 Text(
                   'Your Addons',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Container(
@@ -997,10 +1348,9 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -1027,6 +1377,49 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           onDelete: () => _deleteAddon(addon),
         );
       },
+    );
+  }
+}
+
+class _ImportResultRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? color;
+
+  const _ImportResultRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final effectiveColor = color ?? theme.colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: effectiveColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: effectiveColor,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1119,7 +1512,7 @@ class _AddonTileState extends State<_AddonTile> {
     final theme = Theme.of(context);
 
     return FocusTraversalOrder(
-      order: NumericFocusOrder((widget.index + 2).toDouble()),
+      order: NumericFocusOrder((widget.index + 3).toDouble()),
       child: Focus(
         focusNode: widget.focusNode,
         onKeyEvent: (node, event) {
@@ -1139,10 +1532,7 @@ class _AddonTileState extends State<_AddonTile> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: _isFocused
-                ? BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 2,
-                  )
+                ? BorderSide(color: theme.colorScheme.primary, width: 2)
                 : BorderSide.none,
           ),
           elevation: _isFocused ? 8 : 1,
@@ -1318,7 +1708,10 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
+            Divider(
+              height: 1,
+              color: theme.dividerColor.withValues(alpha: 0.3),
+            ),
             const SizedBox(height: 8),
             // Options
             FocusTraversalOrder(
@@ -1428,22 +1821,14 @@ class _OptionTileState extends State<_OptionTile> {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: _isFocused
-              ? Border.all(
-                  color: theme.colorScheme.primary,
-                  width: 2,
-                )
+              ? Border.all(color: theme.colorScheme.primary, width: 2)
               : null,
         ),
         child: ListTile(
           leading: Icon(widget.icon, color: color),
-          title: Text(
-            widget.label,
-            style: TextStyle(color: color),
-          ),
+          title: Text(widget.label, style: TextStyle(color: color)),
           onTap: widget.onTap,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );
@@ -1470,9 +1855,7 @@ class _DetailRow extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(
-            child: Text(value),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );
