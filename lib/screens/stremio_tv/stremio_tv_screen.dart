@@ -52,6 +52,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
+  List<MapEntry<String, String>> _availableProviders = [];
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   bool _hideNowPlaying = false;
   double? _currentSlotProgress;
@@ -72,8 +73,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   // Header buttons
   final FocusNode _searchBtnFocusNode = FocusNode(debugLabel: 'searchBtn');
+  final FocusNode _providerFocusNode = FocusNode(debugLabel: 'providerBtn');
   final FocusNode _menuFocusNode = FocusNode(debugLabel: 'menuBtn');
   final FocusNode _submenuFocusNode = FocusNode(debugLabel: 'localCatalogs');
+  final MenuController _providerMenuController = MenuController();
   final MenuController _menuController = MenuController();
 
   // Search
@@ -139,6 +142,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _searchBtnFocusNode.dispose();
+    _providerFocusNode.dispose();
     _menuFocusNode.dispose();
     _submenuFocusNode.dispose();
     _searchController.dispose();
@@ -166,9 +170,36 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
-    _debridProvider = await StorageService.getStremioTvDebridProvider();
+    final debridProvider = await StorageService.getStremioTvDebridProvider();
+    _availableProviders = await _loadAvailableProviders();
+    if (debridProvider != 'auto' &&
+        !_availableProviders.any(
+          (provider) => provider.key == debridProvider,
+        )) {
+      _debridProvider = 'auto';
+      await StorageService.setStremioTvDebridProvider('auto');
+    } else {
+      _debridProvider = debridProvider;
+    }
     _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
     _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
+  }
+
+  Future<List<MapEntry<String, String>>> _loadAvailableProviders() async {
+    final providers = <MapEntry<String, String>>[];
+    final rdKey = await StorageService.getApiKey();
+    if (rdKey != null && rdKey.isNotEmpty) {
+      providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
+    }
+    final tbKey = await StorageService.getTorboxApiKey();
+    if (tbKey != null && tbKey.isNotEmpty) {
+      providers.add(const MapEntry('torbox', 'TorBox'));
+    }
+    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    if (pikpakEnabled) {
+      providers.add(const MapEntry('pikpak', 'PikPak'));
+    }
+    return providers;
   }
 
   Future<void> _discoverAndLoad() async {
@@ -297,6 +328,38 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
   }
 
+  Widget _topMenuItem({
+    required Widget leadingIcon,
+    required String label,
+    required VoidCallback onPressed,
+    required MenuController controller,
+    required FocusNode anchorFocusNode,
+    bool autofocus = false,
+    bool closeOnArrowUp = false,
+  }) {
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if ((closeOnArrowUp &&
+                event.logicalKey == LogicalKeyboardKey.arrowUp) ||
+            event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.goBack) {
+          controller.close();
+          anchorFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MenuItemButton(
+        autofocus: autofocus,
+        leadingIcon: leadingIcon,
+        onPressed: onPressed,
+        child: Text(label),
+      ),
+    );
+  }
+
   Future<void> _openChannelFilter() async {
     final filterTree = await _service.getFilterTree();
     final disabledBefore = await StorageService.getStremioTvDisabledFilters();
@@ -360,6 +423,39 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (!mounted) return;
     await _loadSettings();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _setDebridProvider(String value) async {
+    await StorageService.setStremioTvDebridProvider(value);
+    if (!mounted) return;
+    setState(() => _debridProvider = value);
+  }
+
+  String _providerShortLabel(String provider) {
+    switch (provider) {
+      case 'realdebrid':
+        return 'RD';
+      case 'torbox':
+        return 'TB';
+      case 'pikpak':
+        return 'PP';
+      default:
+        return 'AUTO';
+    }
+  }
+
+  String _providerFullLabel(String provider) {
+    switch (provider) {
+      case 'realdebrid':
+        return 'Real-Debrid';
+      case 'torbox':
+        return 'TorBox';
+      case 'pikpak':
+        return 'PikPak';
+      default:
+        if (_availableProviders.isEmpty) return 'Auto';
+        return 'Auto (${_availableProviders.first.value})';
+    }
   }
 
   // ============================================================================
@@ -2459,6 +2555,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               }
                               if (event.logicalKey ==
                                   LogicalKeyboardKey.arrowRight) {
+                                if (_availableProviders.isNotEmpty) {
+                                  _providerFocusNode.requestFocus();
+                                }
                                 return KeyEventResult.handled;
                               }
                               if (event.logicalKey ==
@@ -2495,19 +2594,20 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               builder: (context, child) => MenuAnchor(
                                 controller: _menuController,
                                 menuChildren: [
-                                  MenuItemButton(
+                                  _topMenuItem(
                                     autofocus: true,
                                     leadingIcon: const Icon(
                                       Icons.shuffle_rounded,
                                     ),
+                                    controller: _menuController,
+                                    anchorFocusNode: _menuFocusNode,
+                                    closeOnArrowUp: true,
                                     onPressed: () {
                                       setState(
                                         () => _mixSalt = (_mixSalt + 1) % 10,
                                       );
                                     },
-                                    child: Text(
-                                      'Shuffle (Mix ${_mixSalt + 1})',
-                                    ),
+                                    label: 'Shuffle (Mix ${_mixSalt + 1})',
                                   ),
                                   MenuItemButton(
                                     leadingIcon: const Icon(
@@ -2614,6 +2714,153 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               ),
                             ),
                           ),
+                          if (_availableProviders.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            // Provider selector
+                            Focus(
+                              focusNode: _providerFocusNode,
+                              onKeyEvent: (node, event) {
+                                if (event is! KeyDownEvent) {
+                                  return KeyEventResult.ignored;
+                                }
+                                if (_providerMenuController.isOpen) {
+                                  if (event.logicalKey ==
+                                          LogicalKeyboardKey.escape ||
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.goBack) {
+                                    _providerMenuController.close();
+                                    _providerFocusNode.requestFocus();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowUp) {
+                                  if (_showSearchField) {
+                                    _searchFocusNode.requestFocus();
+                                  }
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowLeft) {
+                                  _menuFocusNode.requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowRight) {
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowDown) {
+                                  final filtered = _filteredChannels;
+                                  if (filtered.isNotEmpty &&
+                                      _rowFocusNodes.isNotEmpty) {
+                                    final firstIdx = _channels.indexOf(
+                                      filtered.first,
+                                    );
+                                    if (firstIdx >= 0 &&
+                                        firstIdx < _rowFocusNodes.length) {
+                                      _rowFocusNodes[firstIdx].requestFocus();
+                                    }
+                                  }
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                        LogicalKeyboardKey.select ||
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.enter) {
+                                  _providerMenuController.open();
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: ListenableBuilder(
+                                listenable: _providerFocusNode,
+                                builder: (context, child) => MenuAnchor(
+                                  controller: _providerMenuController,
+                                  menuChildren: [
+                                    _topMenuItem(
+                                      autofocus: true,
+                                      leadingIcon: Icon(
+                                        _debridProvider == 'auto'
+                                            ? Icons.check_rounded
+                                            : Icons.circle_outlined,
+                                      ),
+                                      label: _providerFullLabel('auto'),
+                                      onPressed: () =>
+                                          _setDebridProvider('auto'),
+                                      controller: _providerMenuController,
+                                      anchorFocusNode: _providerFocusNode,
+                                      closeOnArrowUp: true,
+                                    ),
+                                    ..._availableProviders.map(
+                                      (provider) => MenuItemButton(
+                                        leadingIcon: Icon(
+                                          _debridProvider == provider.key
+                                              ? Icons.check_rounded
+                                              : Icons.circle_outlined,
+                                        ),
+                                        onPressed: () =>
+                                            _setDebridProvider(provider.key),
+                                        child: Text(provider.value),
+                                      ),
+                                    ),
+                                  ],
+                                  builder: (context, controller, child) =>
+                                      GestureDetector(
+                                        onTap: () {
+                                          if (controller.isOpen) {
+                                            controller.close();
+                                          } else {
+                                            controller.open();
+                                          }
+                                        },
+                                        child: Container(
+                                          height: 40,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 48,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: _providerFocusNode.hasFocus
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.15,
+                                                  )
+                                                : const Color(0xFF141414),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            border: _providerFocusNode.hasFocus
+                                                ? Border.all(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.6),
+                                                    width: 2,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: Text(
+                                            _providerShortLabel(
+                                              _debridProvider,
+                                            ),
+                                            style: TextStyle(
+                                              color: _providerFocusNode.hasFocus
+                                                  ? Colors.white
+                                                  : Colors.white.withValues(
+                                                      alpha: 0.68,
+                                                    ),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],
