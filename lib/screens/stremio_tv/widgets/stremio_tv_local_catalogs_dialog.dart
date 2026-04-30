@@ -171,6 +171,8 @@ class LocalCatalogImporter {
     final source = catalog['traktSource'] as String?;
     final slug = catalog['traktSlug'] as String?;
     final owner = catalog['traktOwner'] as String?;
+    final ownerSlug = catalog['traktOwnerSlug'] as String?;
+    final listId = catalog['traktListId']?.toString();
     if (source == null) return 'Not a Trakt catalog';
 
     final traktService = TraktService.instance;
@@ -196,16 +198,31 @@ class LocalCatalogImporter {
       final movies = await traktService.fetchCustomListItems(slug, 'movies');
       final shows = await traktService.fetchCustomListItems(slug, 'shows');
       rawItems = [...movies, ...shows];
-    } else if (source == 'liked' && owner != null && owner.isNotEmpty) {
+    } else if (source == 'liked' &&
+        ((listId != null && listId.isNotEmpty) ||
+            (owner != null && owner.isNotEmpty))) {
       if (slug == null || slug.isEmpty) return 'Missing list slug';
-      final movies = await traktService.fetchLikedListItems(
-        owner,
-        slug,
+      final list = <String, dynamic>{
+        'ids': {
+          if (listId != null && listId.isNotEmpty) 'trakt': listId,
+          'slug': slug,
+        },
+        'user': {
+          if (owner != null && owner.isNotEmpty) 'username': owner,
+          'ids': {
+            if (ownerSlug != null && ownerSlug.isNotEmpty)
+              'slug': ownerSlug
+            else if (owner != null && owner.isNotEmpty)
+              'slug': owner,
+          },
+        },
+      };
+      final movies = await traktService.fetchLikedListItemsFromList(
+        list,
         'movies',
       );
-      final shows = await traktService.fetchLikedListItems(
-        owner,
-        slug,
+      final shows = await traktService.fetchLikedListItemsFromList(
+        list,
         'shows',
       );
       rawItems = [...movies, ...shows];
@@ -2104,6 +2121,18 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
   Future<void> _importList(Map<String, dynamic> list) async {
     final name = list['name'] as String? ?? 'Unknown';
     final slug = list['ids']?['slug'] as String? ?? '';
+    final listId = list['ids']?['trakt']?.toString();
+    final listedCount = list['item_count'];
+    final ownerSlug =
+        (list['user'] as Map<String, dynamic>?)?['ids']?['slug'] as String?;
+    final owner =
+        (list['user'] as Map<String, dynamic>?)?['username'] as String?;
+    debugPrint(
+      'StremioTV TraktImport: start list="$name" slug="$slug" '
+      'listId=${listId ?? 'none'} source=${_source.label} '
+      'owner=${owner ?? 'none'} ownerSlug=${ownerSlug ?? 'none'} '
+      'itemCount=$listedCount',
+    );
     if (slug.isEmpty) return;
 
     setState(() {
@@ -2131,35 +2160,42 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
       if (_source == _TraktListSource.customLists) {
         final movies = await _traktService.fetchCustomListItems(slug, 'movies');
         final shows = await _traktService.fetchCustomListItems(slug, 'shows');
+        debugPrint(
+          'StremioTV TraktImport: fetched custom list="$name" '
+          'movies=${movies.length} shows=${shows.length}',
+        );
         rawItems = [...movies, ...shows];
       } else {
-        final owner =
-            (list['user'] as Map<String, dynamic>?)?['username'] as String? ??
-            '';
-        if (owner.isEmpty) {
+        if ((listId == null || listId.isEmpty) &&
+            (ownerSlug == null || ownerSlug.isEmpty) &&
+            (owner == null || owner.isEmpty)) {
+          debugPrint(
+            'StremioTV TraktImport: missing owner for liked list="$name"',
+          );
           setState(() {
             _error = 'Missing list owner';
             _importing = false;
           });
           return;
         }
-        final movies = await _traktService.fetchLikedListItems(
-          owner,
-          slug,
+        final movies = await _traktService.fetchLikedListItemsFromList(
+          list,
           'movies',
         );
-        final shows = await _traktService.fetchLikedListItems(
-          owner,
-          slug,
+        final shows = await _traktService.fetchLikedListItemsFromList(
+          list,
           'shows',
+        );
+        debugPrint(
+          'StremioTV TraktImport: fetched liked list="$name" '
+          'listId=${listId ?? 'none'} owner=${ownerSlug ?? owner ?? 'none'} '
+          'movies=${movies.length} shows=${shows.length}',
         );
         rawItems = [...movies, ...shows];
       }
 
       if (!mounted) return;
 
-      final owner =
-          (list['user'] as Map<String, dynamic>?)?['username'] as String?;
       await _saveAsCatalog(
         rawItems,
         name,
@@ -2168,6 +2204,8 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
               ? 'custom'
               : 'liked',
           'traktSlug': slug,
+          if (listId != null) 'traktListId': listId,
+          if (ownerSlug != null) 'traktOwnerSlug': ownerSlug,
           if (owner != null) 'traktOwner': owner,
         },
       );
@@ -2186,7 +2224,12 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     String name, {
     required Map<String, dynamic> traktMeta,
   }) async {
+    debugPrint(
+      'StremioTV TraktImport: save start name="$name" '
+      'rawItems=${rawItems.length} meta=$traktMeta',
+    );
     if (rawItems.isEmpty) {
+      debugPrint('StremioTV TraktImport: "$name" rejected: raw list is empty');
       setState(() {
         _error = '"$name" is empty';
         _importing = false;
@@ -2195,7 +2238,14 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
     }
 
     final metas = TraktItemTransformer.transformList(rawItems);
+    debugPrint(
+      'StremioTV TraktImport: transformed name="$name" '
+      'metas=${metas.length} rawItems=${rawItems.length}',
+    );
     if (metas.isEmpty) {
+      debugPrint(
+        'StremioTV TraktImport: "$name" rejected: no transformable IMDB items',
+      );
       setState(() {
         _error = 'No items with IMDB IDs found';
         _importing = false;
@@ -2221,6 +2271,10 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 
     final movies = catalogItems.where((i) => i['type'] != 'series').toList();
     final series = catalogItems.where((i) => i['type'] == 'series').toList();
+    debugPrint(
+      'StremioTV TraktImport: catalog split name="$name" '
+      'movies=${movies.length} series=${series.length}',
+    );
 
     if (movies.isNotEmpty && series.isNotEmpty) {
       for (final entry in [
@@ -2228,6 +2282,10 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
         (items: series, type: 'series', suffix: 'Series'),
       ]) {
         final catName = '$name — ${entry.suffix}';
+        debugPrint(
+          'StremioTV TraktImport: saving split catalog "$catName" '
+          'type=${entry.type} items=${entry.items.length}',
+        );
         await StorageService.addStremioTvLocalCatalog({
           'id': LocalCatalogImporter.generateId(catName),
           'name': catName,
@@ -2239,6 +2297,10 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
       }
     } else {
       final catalogType = series.length > movies.length ? 'series' : 'movie';
+      debugPrint(
+        'StremioTV TraktImport: saving catalog "$name" '
+        'type=$catalogType items=${catalogItems.length}',
+      );
       await StorageService.addStremioTvLocalCatalog({
         'id': LocalCatalogImporter.generateId(name),
         'name': name,

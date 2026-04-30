@@ -17,11 +17,84 @@ class TraktService {
 
   /// Common headers for all Trakt API requests.
   Map<String, String> _apiHeaders({String? accessToken}) => {
-        'Content-Type': 'application/json',
-        'trakt-api-version': kTraktApiVersion,
-        'trakt-api-key': kTraktClientId,
-        if (accessToken != null) 'Authorization': 'Bearer $accessToken',
-      };
+    'Content-Type': 'application/json',
+    'trakt-api-version': kTraktApiVersion,
+    'trakt-api-key': kTraktClientId,
+    if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+  };
+
+  String _bodySnippet(String body) {
+    const maxLength = 300;
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= maxLength) return compact;
+    return '${compact.substring(0, maxLength)}...';
+  }
+
+  String _userListItemTypeSegment(String contentType) {
+    switch (contentType) {
+      case 'movies':
+        return 'movie';
+      case 'shows':
+        return 'show';
+      case 'seasons':
+        return 'season';
+      case 'episodes':
+        return 'episode';
+      default:
+        return contentType;
+    }
+  }
+
+  int _paginationPageCount(http.Response response) {
+    final raw = response.headers['x-pagination-page-count'];
+    return int.tryParse(raw ?? '') ?? 1;
+  }
+
+  String _withQuerySeparator(String path) => path.contains('?') ? '&' : '?';
+
+  Future<List<dynamic>> _fetchPagedListItems({
+    required String basePath,
+    required String contentType,
+    required String logLabel,
+  }) async {
+    final items = <dynamic>[];
+    var page = 1;
+    var pageCount = 1;
+
+    do {
+      final separator = _withQuerySeparator(basePath);
+      final path = '$basePath${separator}page=$page&limit=100';
+      debugPrint('Trakt: $logLabel GET $path');
+      final response = await _authenticatedGet(path);
+      if (response == null || response.statusCode != 200) {
+        debugPrint(
+          'Trakt: $logLabel failed for $path '
+          '(${response?.statusCode}) body="${_bodySnippet(response?.body ?? '')}"',
+        );
+        return [];
+      }
+
+      try {
+        final decoded = jsonDecode(response.body) as List<dynamic>;
+        items.addAll(decoded);
+        pageCount = _paginationPageCount(response);
+        debugPrint(
+          'Trakt: $logLabel OK $contentType page=$page/$pageCount '
+          'pageCount=${decoded.length} total=${items.length}',
+        );
+      } catch (e) {
+        debugPrint(
+          'Trakt: $logLabel parse error for $path: $e '
+          'body="${_bodySnippet(response.body)}"',
+        );
+        return [];
+      }
+
+      page += 1;
+    } while (page <= pageCount);
+
+    return items;
+  }
 
   /// Check if the user is authenticated (has a non-expired access token).
   Future<bool> isAuthenticated() async {
@@ -45,16 +118,18 @@ class TraktService {
       final refreshToken = await StorageService.getTraktRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) return false;
 
-      final response = await http.post(
-        Uri.parse(kTraktTokenUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'refresh_token': refreshToken,
-          'client_id': kTraktClientId,
-          'client_secret': kTraktClientSecret,
-          'grant_type': 'refresh_token',
-        }),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse(kTraktTokenUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'refresh_token': refreshToken,
+              'client_id': kTraktClientId,
+              'client_secret': kTraktClientSecret,
+              'grant_type': 'refresh_token',
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -130,7 +205,9 @@ class TraktService {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
 
-      debugPrint('Trakt: Device code request failed (${response.statusCode}): ${response.body}');
+      debugPrint(
+        'Trakt: Device code request failed (${response.statusCode}): ${response.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('Trakt: Device code request error: $e');
@@ -144,15 +221,17 @@ class TraktService {
   /// "network_error" (transient — safe to retry), or "error" (fatal).
   Future<String?> pollDeviceToken(String deviceCode) async {
     try {
-      final response = await http.post(
-        Uri.parse(kTraktDeviceTokenUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'code': deviceCode,
-          'client_id': kTraktClientId,
-          'client_secret': kTraktClientSecret,
-        }),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse(kTraktDeviceTokenUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'code': deviceCode,
+              'client_id': kTraktClientId,
+              'client_secret': kTraktClientSecret,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -174,7 +253,9 @@ class TraktService {
         return 'slow_down';
       }
 
-      debugPrint('Trakt: Device token poll failed (${response.statusCode}): ${response.body}');
+      debugPrint(
+        'Trakt: Device token poll failed (${response.statusCode}): ${response.body}',
+      );
       return 'error';
     } catch (e) {
       // Network timeout, socket exception, etc. — transient, safe to retry
@@ -189,16 +270,20 @@ class TraktService {
 
   /// Authenticated POST request with automatic token refresh on 401.
   Future<http.Response?> _authenticatedPost(
-      String path, Map<String, dynamic> body) async {
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     var accessToken = await StorageService.getTraktAccessToken();
     if (accessToken == null) return null;
 
     try {
-      var response = await http.post(
-        Uri.parse('$kTraktApiBaseUrl$path'),
-        headers: _apiHeaders(accessToken: accessToken),
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 15));
+      var response = await http
+          .post(
+            Uri.parse('$kTraktApiBaseUrl$path'),
+            headers: _apiHeaders(accessToken: accessToken),
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
 
       // If unauthorized, try refreshing the token once
       if (response.statusCode == 401) {
@@ -208,11 +293,13 @@ class TraktService {
         accessToken = await StorageService.getTraktAccessToken();
         if (accessToken == null) return null;
 
-        response = await http.post(
-          Uri.parse('$kTraktApiBaseUrl$path'),
-          headers: _apiHeaders(accessToken: accessToken),
-          body: jsonEncode(body),
-        ).timeout(const Duration(seconds: 15));
+        response = await http
+            .post(
+              Uri.parse('$kTraktApiBaseUrl$path'),
+              headers: _apiHeaders(accessToken: accessToken),
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 15));
       }
 
       return response;
@@ -223,28 +310,60 @@ class TraktService {
   }
 
   /// Scrobble: notify Trakt that playback has started.
-  Future<bool> scrobbleStart(String imdbId, double progress,
-      {int? season, int? episode}) async {
-    return _scrobble('/scrobble/start', imdbId, progress,
-        season: season, episode: episode);
+  Future<bool> scrobbleStart(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) async {
+    return _scrobble(
+      '/scrobble/start',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
   }
 
   /// Scrobble: notify Trakt that playback was paused.
-  Future<bool> scrobblePause(String imdbId, double progress,
-      {int? season, int? episode}) async {
-    return _scrobble('/scrobble/pause', imdbId, progress,
-        season: season, episode: episode);
+  Future<bool> scrobblePause(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) async {
+    return _scrobble(
+      '/scrobble/pause',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
   }
 
   /// Scrobble: notify Trakt that playback was stopped.
-  Future<bool> scrobbleStop(String imdbId, double progress,
-      {int? season, int? episode}) async {
-    return _scrobble('/scrobble/stop', imdbId, progress,
-        season: season, episode: episode);
+  Future<bool> scrobbleStop(
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) async {
+    return _scrobble(
+      '/scrobble/stop',
+      imdbId,
+      progress,
+      season: season,
+      episode: episode,
+    );
   }
 
-  Future<bool> _scrobble(String path, String imdbId, double progress,
-      {int? season, int? episode}) async {
+  Future<bool> _scrobble(
+    String path,
+    String imdbId,
+    double progress, {
+    int? season,
+    int? episode,
+  }) async {
     // Treat 0 as null — Kotlin TV player sends 0 for movies instead of null
     if (season != null && season <= 0) season = null;
     if (episode != null && episode <= 0) episode = null;
@@ -252,7 +371,8 @@ class TraktService {
     // a movie body with a show IMDB ID, corrupting Trakt history.
     if ((season == null) != (episode == null)) {
       debugPrint(
-          'Trakt: Skipping scrobble — incomplete episode data (season: $season, episode: $episode)');
+        'Trakt: Skipping scrobble — incomplete episode data (season: $season, episode: $episode)',
+      );
       return false;
     }
     final Map<String, dynamic> body;
@@ -261,10 +381,7 @@ class TraktService {
         'show': {
           'ids': {'imdb': imdbId},
         },
-        'episode': {
-          'season': season,
-          'number': episode,
-        },
+        'episode': {'season': season, 'number': episode},
         'progress': progress,
       };
     } else {
@@ -282,7 +399,8 @@ class TraktService {
       return true;
     }
     debugPrint(
-        'Trakt: Scrobble $path failed (${response.statusCode}): ${response.body}');
+      'Trakt: Scrobble $path failed (${response.statusCode}): ${response.body}',
+    );
     return false;
   }
 
@@ -306,13 +424,16 @@ class TraktService {
       'ids': {'imdb': imdbId},
       if (extraItemFields != null) ...extraItemFields,
     };
-    final body = {apiKey: [item]};
+    final body = {
+      apiKey: [item],
+    };
     final response = await _authenticatedPost(path, body);
     if (response == null) return false;
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
       debugPrint(
-          'Trakt: $path failed (${response.statusCode}): ${response.body}');
+        'Trakt: $path failed (${response.statusCode}): ${response.body}',
+      );
     }
     return ok;
   }
@@ -335,20 +456,24 @@ class TraktService {
   Future<bool> removeFromHistory(String imdbId, String type) =>
       _syncAction('/sync/history/remove', imdbId, type);
 
-  Future<bool> rateItem(String imdbId, String type, int rating) =>
-      _syncAction('/sync/ratings', imdbId, type,
-          extraItemFields: {'rating': rating});
+  Future<bool> rateItem(String imdbId, String type, int rating) => _syncAction(
+    '/sync/ratings',
+    imdbId,
+    type,
+    extraItemFields: {'rating': rating},
+  );
 
   Future<bool> removeRating(String imdbId, String type) =>
       _syncAction('/sync/ratings/remove', imdbId, type);
 
-  Future<bool> addToCustomList(
-          String listId, String imdbId, String type) =>
+  Future<bool> addToCustomList(String listId, String imdbId, String type) =>
       _syncAction('/users/me/lists/$listId/items', imdbId, type);
 
   Future<bool> removeFromCustomList(
-          String listId, String imdbId, String type) =>
-      _syncAction('/users/me/lists/$listId/items/remove', imdbId, type);
+    String listId,
+    String imdbId,
+    String type,
+  ) => _syncAction('/users/me/lists/$listId/items/remove', imdbId, type);
 
   /// Episode-level sync action helper.
   /// Body format: { "shows": [{ "ids": {"imdb": ...}, "seasons": [{ "number": N, "episodes": [{ "number": M, ...extraFields }] }] }] }
@@ -371,9 +496,9 @@ class TraktService {
             {
               'number': season,
               'episodes': [ep],
-            }
+            },
           ],
-        }
+        },
       ],
     };
     final response = await _authenticatedPost(path, body);
@@ -381,23 +506,33 @@ class TraktService {
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
       debugPrint(
-          'Trakt: $path S${season}E$episode failed (${response.statusCode}): ${response.body}');
+        'Trakt: $path S${season}E$episode failed (${response.statusCode}): ${response.body}',
+      );
     }
     return ok;
   }
 
-  Future<bool> markEpisodeWatched(
-          String showImdbId, int season, int episode) =>
+  Future<bool> markEpisodeWatched(String showImdbId, int season, int episode) =>
       _syncEpisodeAction('/sync/history', showImdbId, season, episode);
 
   Future<bool> markEpisodeUnwatched(
-          String showImdbId, int season, int episode) =>
-      _syncEpisodeAction('/sync/history/remove', showImdbId, season, episode);
+    String showImdbId,
+    int season,
+    int episode,
+  ) => _syncEpisodeAction('/sync/history/remove', showImdbId, season, episode);
 
   Future<bool> rateEpisode(
-          String showImdbId, int season, int episode, int rating) =>
-      _syncEpisodeAction('/sync/ratings', showImdbId, season, episode,
-          extraEpisodeFields: {'rating': rating});
+    String showImdbId,
+    int season,
+    int episode,
+    int rating,
+  ) => _syncEpisodeAction(
+    '/sync/ratings',
+    showImdbId,
+    season,
+    episode,
+    extraEpisodeFields: {'rating': rating},
+  );
 
   // ============================================================================
   // List API Methods
@@ -409,10 +544,12 @@ class TraktService {
     if (accessToken == null) return null;
 
     try {
-      var response = await http.get(
-        Uri.parse('$kTraktApiBaseUrl$path'),
-        headers: _apiHeaders(accessToken: accessToken),
-      ).timeout(const Duration(seconds: 15));
+      var response = await http
+          .get(
+            Uri.parse('$kTraktApiBaseUrl$path'),
+            headers: _apiHeaders(accessToken: accessToken),
+          )
+          .timeout(const Duration(seconds: 15));
 
       // If unauthorized, try refreshing the token once
       if (response.statusCode == 401) {
@@ -422,10 +559,12 @@ class TraktService {
         accessToken = await StorageService.getTraktAccessToken();
         if (accessToken == null) return null;
 
-        response = await http.get(
-          Uri.parse('$kTraktApiBaseUrl$path'),
-          headers: _apiHeaders(accessToken: accessToken),
-        ).timeout(const Duration(seconds: 15));
+        response = await http
+            .get(
+              Uri.parse('$kTraktApiBaseUrl$path'),
+              headers: _apiHeaders(accessToken: accessToken),
+            )
+            .timeout(const Duration(seconds: 15));
       }
 
       return response;
@@ -440,10 +579,12 @@ class TraktService {
     if (accessToken == null) return null;
 
     try {
-      var response = await http.delete(
-        Uri.parse('$kTraktApiBaseUrl$path'),
-        headers: _apiHeaders(accessToken: accessToken),
-      ).timeout(const Duration(seconds: 15));
+      var response = await http
+          .delete(
+            Uri.parse('$kTraktApiBaseUrl$path'),
+            headers: _apiHeaders(accessToken: accessToken),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 401) {
         final refreshed = await refreshAccessToken();
@@ -452,10 +593,12 @@ class TraktService {
         accessToken = await StorageService.getTraktAccessToken();
         if (accessToken == null) return null;
 
-        response = await http.delete(
-          Uri.parse('$kTraktApiBaseUrl$path'),
-          headers: _apiHeaders(accessToken: accessToken),
-        ).timeout(const Duration(seconds: 15));
+        response = await http
+            .delete(
+              Uri.parse('$kTraktApiBaseUrl$path'),
+              headers: _apiHeaders(accessToken: accessToken),
+            )
+            .timeout(const Duration(seconds: 15));
       }
 
       return response;
@@ -487,7 +630,9 @@ class TraktService {
       path = '/sync/watched/$contentType?extended=full';
     } else if (listType == 'history') {
       path = '/sync/history/$contentType?extended=full&limit=100';
-    } else if (listType == 'trending' || listType == 'popular' || listType == 'anticipated') {
+    } else if (listType == 'trending' ||
+        listType == 'popular' ||
+        listType == 'anticipated') {
       path = '/$contentType/$listType?extended=full&limit=100';
     } else {
       path = '/sync/$listType/$contentType?extended=full';
@@ -550,37 +695,58 @@ class TraktService {
   /// [username] is the list owner's Trakt username.
   /// [listSlug] is the Trakt slug for the list.
   /// [contentType] is one of: movies, shows.
-  Future<List<dynamic>> fetchLikedListItems(String username, String listSlug, String contentType) async {
-    final response = await _authenticatedGet('/users/$username/lists/$listSlug/items/$contentType?extended=full');
-    if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchLikedListItems failed (${response?.statusCode})');
-      return [];
+  Future<List<dynamic>> fetchLikedListItems(
+    String username,
+    String listSlug,
+    String contentType,
+  ) async {
+    final itemType = _userListItemTypeSegment(contentType);
+    final path =
+        '/users/$username/lists/$listSlug/items/$itemType?extended=full';
+    return _fetchPagedListItems(
+      basePath: path,
+      contentType: contentType,
+      logLabel: 'fetchLikedListItems owner=$username slug=$listSlug',
+    );
+  }
+
+  Future<List<dynamic>> fetchLikedListItemsFromList(
+    Map<String, dynamic> list,
+    String contentType,
+  ) async {
+    final itemType = _userListItemTypeSegment(contentType);
+    final traktId = list['ids']?['trakt']?.toString();
+    if (traktId != null && traktId.isNotEmpty) {
+      final path = '/lists/$traktId/items/$itemType?extended=full';
+      return _fetchPagedListItems(
+        basePath: path,
+        contentType: contentType,
+        logLabel: 'fetchLikedListItems listId=$traktId',
+      );
     }
 
-    try {
-      return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchLikedListItems parse error: $e');
-      return [];
-    }
+    final slug = list['ids']?['slug'] as String? ?? '';
+    final user = list['user'] as Map<String, dynamic>?;
+    final owner =
+        user?['ids']?['slug'] as String? ?? user?['username'] as String? ?? '';
+    if (owner.isEmpty || slug.isEmpty) return [];
+    return fetchLikedListItems(owner, slug, contentType);
   }
 
   /// Fetch items from a specific custom list.
   /// [listId] is the Trakt slug for the list.
   /// [contentType] is one of: movies, shows.
-  Future<List<dynamic>> fetchCustomListItems(String listId, String contentType) async {
-    final response = await _authenticatedGet('/users/me/lists/$listId/items/$contentType?extended=full');
-    if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchCustomListItems failed (${response?.statusCode})');
-      return [];
-    }
-
-    try {
-      return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchCustomListItems parse error: $e');
-      return [];
-    }
+  Future<List<dynamic>> fetchCustomListItems(
+    String listId,
+    String contentType,
+  ) async {
+    final itemType = _userListItemTypeSegment(contentType);
+    final path = '/users/me/lists/$listId/items/$itemType?extended=full';
+    return _fetchPagedListItems(
+      basePath: path,
+      contentType: contentType,
+      logLabel: 'fetchCustomListItems slug=$listId',
+    );
   }
 
   /// Search Trakt for movies or shows by query.
@@ -589,14 +755,16 @@ class TraktService {
   Future<List<dynamic>> searchItems(String query, String type) async {
     if (query.trim().isEmpty) return [];
     final encoded = Uri.encodeComponent(query.trim());
-    final url = '$kTraktApiBaseUrl/search/$type?query=$encoded&extended=full&limit=30';
+    final url =
+        '$kTraktApiBaseUrl/search/$type?query=$encoded&extended=full&limit=30';
     try {
-      final response = await http.get(
-        Uri.parse(url),
-        headers: _apiHeaders(),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse(url), headers: _apiHeaders())
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        debugPrint('Trakt: search failed ($type, "$query") — ${response.statusCode}');
+        debugPrint(
+          'Trakt: search failed ($type, "$query") — ${response.statusCode}',
+        );
         return [];
       }
       return jsonDecode(response.body) as List<dynamic>;
@@ -610,15 +778,17 @@ class TraktService {
   /// [showId] can be an IMDB ID (e.g. 'tt1234567') or Trakt slug.
   /// This is a public endpoint — no auth token required.
   Future<List<Map<String, dynamic>>> fetchShowSeasons(String showId) async {
-    final url = '$kTraktApiBaseUrl/shows/$showId/seasons?extended=episodes,full';
+    final url =
+        '$kTraktApiBaseUrl/shows/$showId/seasons?extended=episodes,full';
     try {
-      final response = await http.get(
-        Uri.parse(url),
-        headers: _apiHeaders(),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse(url), headers: _apiHeaders())
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
-        debugPrint('Trakt: fetchShowSeasons failed for $showId (${response.statusCode})');
+        debugPrint(
+          'Trakt: fetchShowSeasons failed for $showId (${response.statusCode})',
+        );
         return [];
       }
 
@@ -681,11 +851,11 @@ class TraktService {
   /// Returns raw items from /sync/playback for transformation.
   /// Each item has shape: { "progress": N, "movie": { ... } } or { "progress": N, "show": { ... } }
   Future<List<dynamic>> fetchPlaybackItems(String contentType) async {
-    final response =
-        await _authenticatedGet('/sync/playback/$contentType?extended=full');
+    final response = await _authenticatedGet(
+      '/sync/playback/$contentType?extended=full',
+    );
     if (response == null || response.statusCode != 200) {
-      debugPrint(
-          'Trakt: fetchPlaybackItems failed (${response?.statusCode})');
+      debugPrint('Trakt: fetchPlaybackItems failed (${response?.statusCode})');
       return [];
     }
 
@@ -720,7 +890,8 @@ class TraktService {
     final response = await _authenticatedGet(path);
     if (response == null || response.statusCode != 200) {
       debugPrint(
-          'Trakt: fetchCalendarMyShows failed (${response?.statusCode})');
+        'Trakt: fetchCalendarMyShows failed (${response?.statusCode})',
+      );
       return [];
     }
     try {
@@ -774,7 +945,9 @@ class TraktService {
 
     if (seenShows.isEmpty) return [];
 
-    debugPrint('Trakt: Checking ${seenShows.length} recent shows for next episode');
+    debugPrint(
+      'Trakt: Checking ${seenShows.length} recent shows for next episode',
+    );
 
     // Check each show for a next episode (in parallel, with one retry on network failure)
     final results = await Future.wait(
@@ -783,14 +956,19 @@ class TraktService {
         final traktId = show['ids']?['trakt']?.toString() ?? entry.key;
         try {
           // First attempt: check if the API is reachable
-          final response = await _authenticatedGet('/shows/$traktId/progress/watched');
+          final response = await _authenticatedGet(
+            '/shows/$traktId/progress/watched',
+          );
           var nextEp = _parseNextEpisode(response);
 
           // Retry once on network/HTTP failure (null response or non-200),
           // but NOT when the show legitimately has no next episode (200 + null next_episode)
-          if (nextEp == null && (response == null || response.statusCode != 200)) {
+          if (nextEp == null &&
+              (response == null || response.statusCode != 200)) {
             await Future.delayed(const Duration(milliseconds: 500));
-            final retryResponse = await _authenticatedGet('/shows/$traktId/progress/watched');
+            final retryResponse = await _authenticatedGet(
+              '/shows/$traktId/progress/watched',
+            );
             nextEp = _parseNextEpisode(retryResponse);
           }
 
@@ -798,7 +976,10 @@ class TraktService {
               ? {
                   'show': show,
                   'type': 'episode',
-                  'episode': {'season': nextEp.season, 'number': nextEp.episode},
+                  'episode': {
+                    'season': nextEp.season,
+                    'number': nextEp.episode,
+                  },
                 }
               : null;
         } catch (e) {
@@ -822,7 +1003,9 @@ class TraktService {
   Future<Map<String, double>> fetchPlaybackProgress() async {
     final response = await _authenticatedGet('/sync/playback/movies');
     if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchPlaybackProgress failed (${response?.statusCode})');
+      debugPrint(
+        'Trakt: fetchPlaybackProgress failed (${response?.statusCode})',
+      );
       return {};
     }
 
@@ -880,7 +1063,9 @@ class TraktService {
   Future<Set<String>> fetchWatchedShowEpisodes(String showId) async {
     final response = await _authenticatedGet('/shows/$showId/progress/watched');
     if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchWatchedShowEpisodes failed (${response?.statusCode})');
+      debugPrint(
+        'Trakt: fetchWatchedShowEpisodes failed (${response?.statusCode})',
+      );
       return {};
     }
 
@@ -937,10 +1122,14 @@ class TraktService {
 
   /// Fetch playback progress for episodes of a specific show.
   /// Returns a map of `"season-episode"` → progress percentage (0-100).
-  Future<Map<String, double>> fetchEpisodePlaybackProgress(String showImdbId) async {
+  Future<Map<String, double>> fetchEpisodePlaybackProgress(
+    String showImdbId,
+  ) async {
     final response = await _authenticatedGet('/sync/playback/episodes');
     if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchEpisodePlaybackProgress failed (${response?.statusCode})');
+      debugPrint(
+        'Trakt: fetchEpisodePlaybackProgress failed (${response?.statusCode})',
+      );
       return {};
     }
 

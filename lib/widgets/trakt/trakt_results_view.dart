@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -419,16 +418,22 @@ class TraktResultsViewState extends State<TraktResultsView> {
           return;
         }
 
-        final listSlug =
-            _selectedLikedList!['ids']?['slug'] as String? ??
-            _selectedLikedList!['ids']?['trakt']?.toString();
+        final listId = _selectedLikedList!['ids']?['trakt']?.toString();
+        final listSlug = _selectedLikedList!['ids']?['slug'] as String?;
+        final ownerSlug =
+            (_selectedLikedList!['user']
+                    as Map<String, dynamic>?)?['ids']?['slug']
+                as String?;
         final owner =
             (_selectedLikedList!['user'] as Map<String, dynamic>?)?['username']
                 as String?;
-        if (listSlug == null ||
-            listSlug.isEmpty ||
-            owner == null ||
-            owner.isEmpty) {
+        final hasListId = listId != null && listId.isNotEmpty;
+        final hasOwnerPath =
+            listSlug != null &&
+            listSlug.isNotEmpty &&
+            ((ownerSlug != null && ownerSlug.isNotEmpty) ||
+                (owner != null && owner.isNotEmpty));
+        if (!hasListId && !hasOwnerPath) {
           if (!mounted) return;
           setState(() {
             _isLoading = false;
@@ -436,9 +441,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
           });
           return;
         }
-        rawItems = await _traktService.fetchLikedListItems(
-          owner,
-          listSlug,
+        rawItems = await _traktService.fetchLikedListItemsFromList(
+          _selectedLikedList!,
           _selectedContentType.apiValue,
         );
       } else if (_selectedListType == TraktListType.progress) {
@@ -1090,8 +1094,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
                                       () => _boundSources.remove(imdbId),
                                     );
                                   }
-                                  if (dialogContext.mounted)
+                                  if (dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
+                                  }
                                 },
                                 icon: const Icon(
                                   Icons.delete_sweep_outlined,
@@ -1129,8 +1134,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
                         builder: (context, snapshot) {
                           final rdEnabled = snapshot.data?[0] ?? false;
                           final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled)
+                          if (!rdEnabled && !torboxEnabled) {
                             return const SizedBox.shrink();
+                          }
 
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -1719,8 +1725,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
       }
       // Overlay playback progress (only for episodes not already fully watched)
       for (final entry in playback.entries) {
-        if (merged[entry.key] == 100.0)
+        if (merged[entry.key] == 100.0) {
           continue; // Don't downgrade fully watched
+        }
         if (entry.value > 5.0) {
           merged[entry.key] = entry.value;
         }
@@ -2349,8 +2356,6 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 
   Widget _buildEpisodeFiltersBar(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
@@ -3995,7 +4000,6 @@ class _TraktEpisodeCardState extends State<_TraktEpisodeCard> {
     final progress = widget.watchProgress;
     final seasonLabel = ep.season.toString().padLeft(2, '0');
     final epLabel = ep.number.toString().padLeft(2, '0');
-    final hasSecondRow = ep.runtime != null || ep.rating != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
