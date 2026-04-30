@@ -42,13 +42,9 @@ import '../utils/nsfw_filter.dart';
 import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
 import '../main.dart';
-import 'debrify_tv/widgets/gradient_spinner.dart';
 import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
-import 'debrify_tv/widgets/info_tile.dart';
-import 'debrify_tv/widgets/stats_tile.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
 import 'debrify_tv/widgets/switch_row.dart';
-import 'debrify_tv/widgets/tv_compact_button.dart';
 import 'debrify_tv/widgets/tv_focusable_button.dart';
 import 'debrify_tv/widgets/tv_focusable_card.dart';
 import 'debrify_tv/dialogs/cached_loading_dialog.dart';
@@ -89,6 +85,7 @@ int _parseRandomStartPercent(dynamic value) {
 
 enum _SettingsScope { quickPlay, channels }
 
+enum _DebrifyTvTopMenuAction { import, add, deleteAll, settings }
 
 enum _ChannelImportOrigin { device, url }
 
@@ -235,6 +232,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Set<String> _favoriteChannelIds = {};
   late final FocusNode _channelSearchFocusNode;
   final FocusNode _quickPlayFocusNode = FocusNode(debugLabel: 'DebrifyTVQuickPlay');
+  final FocusNode _channelSearchButtonFocusNode = FocusNode(
+    debugLabel: 'DebrifyTVChannelSearchButton',
+  );
+  final FocusNode _channelSearchClearFocusNode = FocusNode(
+    debugLabel: 'DebrifyTVChannelSearchClear',
+  );
+  final FocusNode _channelMenuFocusNode = FocusNode(
+    debugLabel: 'DebrifyTVChannelMenu',
+  );
+  final MenuController _channelMenuController = MenuController();
 
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
@@ -294,36 +301,71 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _channelSearchController.dispose();
     _channelSearchFocusNode.dispose();
     _quickPlayFocusNode.dispose();
+    _channelSearchButtonFocusNode.dispose();
+    _channelSearchClearFocusNode.dispose();
+    _channelMenuFocusNode.dispose();
     AndroidTvPlayerBridge.clearTorboxProvider();
     super.dispose();
   }
 
   KeyEventResult _handleChannelSearchKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_isAndroidTv) {
-      return KeyEventResult.ignored;
-    }
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    // Handle left arrow for TV sidebar
+
+    final text = _channelSearchController.text;
+    final selection = _channelSearchController.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
+
     if (key == LogicalKeyboardKey.arrowLeft) {
-      if (MainPageBridge.focusTvSidebar != null) {
-        MainPageBridge.focusTvSidebar!();
+      if (isTextEmpty || isAtStart) {
+        MainPageBridge.focusTvSidebar?.call();
         return KeyEventResult.handled;
       }
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (text.isNotEmpty && isAtEnd) {
+        _channelSearchClearFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
       final ctx = node.context;
       if (ctx != null) {
         FocusScope.of(ctx).nextFocus();
-        return KeyEventResult.handled;
       }
+      return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
-      final ctx = node.context;
-      if (ctx != null) {
-        FocusScope.of(ctx).previousFocus();
+      _channelSearchButtonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack) {
+      if (text.isNotEmpty) {
+        _channelSearchController.clear();
+        setState(() {
+          _channelSearchTerm = '';
+        });
+        return KeyEventResult.handled;
+      }
+      if (_showSearchBar) {
+        setState(() {
+          _showSearchBar = false;
+        });
+        _channelSearchButtonFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
     }
@@ -6949,6 +6991,287 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return _buildTvGridLayout(bottomInset);
   }
 
+  void _toggleChannelSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (_showSearchBar) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _channelSearchFocusNode.requestFocus();
+          }
+        });
+      } else {
+        _channelSearchController.clear();
+        _channelSearchTerm = '';
+      }
+    });
+  }
+
+  void _clearChannelSearchAndRefocus() {
+    _channelSearchController.clear();
+    setState(() {
+      _channelSearchTerm = '';
+    });
+    _channelSearchFocusNode.requestFocus();
+  }
+
+  void _handleTopMenuAction(_DebrifyTvTopMenuAction action) {
+    switch (action) {
+      case _DebrifyTvTopMenuAction.import:
+        _handleImportChannels();
+        break;
+      case _DebrifyTvTopMenuAction.add:
+        _handleAddChannel();
+        break;
+      case _DebrifyTvTopMenuAction.deleteAll:
+        _handleDeleteAllChannels();
+        break;
+      case _DebrifyTvTopMenuAction.settings:
+        _showGlobalSettingsDialog();
+        break;
+    }
+  }
+
+  Widget _buildTopActionButton({
+    required FocusNode focusNode,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required Color activeColor,
+    Color inactiveColor = const Color(0xFF141414),
+    bool isActive = false,
+    FocusNode? leftFocusNode,
+    FocusNode? rightFocusNode,
+    bool leftToSidebar = false,
+    bool upToSearch = false,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          if (leftToSidebar) {
+            MainPageBridge.focusTvSidebar?.call();
+          } else {
+            leftFocusNode?.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          rightFocusNode?.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          if (upToSearch && _showSearchBar) {
+            _channelSearchFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.space) {
+          onPressed?.call();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: focusNode,
+        builder: (context, _) {
+          final disabled = onPressed == null;
+          final focused = focusNode.hasFocus;
+          final highlighted = !disabled && (focused || isActive);
+
+          return Tooltip(
+            message: tooltip,
+            child: GestureDetector(
+              onTap: onPressed,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                height: 40,
+                width: 40,
+                decoration: BoxDecoration(
+                  color: disabled
+                      ? Colors.grey.withValues(alpha: 0.3)
+                      : (focused ? activeColor : inactiveColor),
+                  borderRadius: BorderRadius.circular(20),
+                  border: focused && !disabled
+                      ? Border.all(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          width: 2,
+                        )
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: disabled
+                      ? Colors.grey
+                      : (highlighted
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.5)),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTopMenuButton() {
+    return Focus(
+      focusNode: _channelMenuFocusNode,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+
+        if (_channelMenuController.isOpen) {
+          if (key == LogicalKeyboardKey.escape ||
+              key == LogicalKeyboardKey.goBack) {
+            _channelMenuController.close();
+            _channelMenuFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        }
+
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          _channelSearchButtonFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowUp) {
+          if (_showSearchBar) {
+            _channelSearchFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.space) {
+          _channelMenuController.open();
+          return KeyEventResult.handled;
+        }
+
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: _channelMenuFocusNode,
+        builder: (context, _) => MenuAnchor(
+          controller: _channelMenuController,
+          menuChildren: [
+            MenuItemButton(
+              autofocus: true,
+              leadingIcon: const Icon(Icons.cloud_download_rounded),
+              onPressed: _isBusy
+                  ? null
+                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.import),
+              child: const Text('Import'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.add_rounded),
+              onPressed: _isBusy
+                  ? null
+                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.add),
+              child: const Text('Add Channel'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.delete_outline_rounded),
+              onPressed: _isBusy || _channels.isEmpty
+                  ? null
+                  : () =>
+                        _handleTopMenuAction(_DebrifyTvTopMenuAction.deleteAll),
+              child: const Text('Delete All'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.settings_rounded),
+              onPressed: () =>
+                  _handleTopMenuAction(_DebrifyTvTopMenuAction.settings),
+              child: const Text('Settings'),
+            ),
+          ],
+          builder: (context, controller, child) {
+            final focused = _channelMenuFocusNode.hasFocus;
+
+            return Tooltip(
+              message: 'Options',
+              child: GestureDetector(
+                onTap: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  height: 40,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: focused
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : const Color(0xFF141414),
+                    borderRadius: BorderRadius.circular(20),
+                    border: focused
+                        ? Border.all(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            width: 2,
+                          )
+                        : null,
+                  ),
+                  child: Icon(
+                    Icons.more_vert_rounded,
+                    size: 20,
+                    color: focused
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopActions() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildTopActionButton(
+          focusNode: _quickPlayFocusNode,
+          icon: Icons.play_arrow_rounded,
+          tooltip: 'Play',
+          onPressed: _isBusy ? null : _showQuickPlayDialog,
+          activeColor: Colors.white.withValues(alpha: 0.15),
+          leftToSidebar: true,
+          rightFocusNode: _channelSearchButtonFocusNode,
+        ),
+        const SizedBox(width: 10),
+        _buildTopActionButton(
+          focusNode: _channelSearchButtonFocusNode,
+          icon: Icons.search_rounded,
+          tooltip: _showSearchBar ? 'Close search' : 'Search channels',
+          onPressed: _toggleChannelSearchBar,
+          activeColor: Colors.white.withValues(alpha: 0.15),
+          isActive: _showSearchBar || _channelSearchTerm.isNotEmpty,
+          leftFocusNode: _quickPlayFocusNode,
+          rightFocusNode: _channelMenuFocusNode,
+          upToSearch: true,
+        ),
+        const SizedBox(width: 10),
+        _buildTopMenuButton(),
+      ],
+    );
+  }
+
   // Grid Layout for all devices (responsive)
   Widget _buildTvGridLayout(double bottomInset) {
     final searchTerm = _channelSearchTerm.trim().toLowerCase();
@@ -6969,207 +7292,108 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top bar with compact action buttons - no title
-          // Use FittedBox on mobile to scale buttons to fit, fixed layout on TV for D-pad
-          SizedBox(
-            height: 36, // Fixed height for button bar
-            child: !_isAndroidTv
-                ? FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        // Quick Play button
-                        TvCompactButton(
-                          onPressed: _isBusy ? null : _showQuickPlayDialog,
-                          icon: Icons.play_arrow_rounded,
-                          label: 'Play',
-                          backgroundColor: const Color(0xFFE50914),
-                          focusNode: _quickPlayFocusNode,
-                        ),
-                        const SizedBox(width: 12),
-                        // Import button
-                        TvCompactButton(
-                          onPressed: _isBusy ? null : _handleImportChannels,
-                          icon: Icons.cloud_download_rounded,
-                          label: 'Import',
-                          backgroundColor: const Color(0xFF2563EB),
-                        ),
-                        const SizedBox(width: 12),
-                        // Add Channel button
-                        TvCompactButton(
-                          onPressed: _isBusy ? null : _handleAddChannel,
-                          icon: Icons.add_rounded,
-                          label: 'Add',
-                          backgroundColor: const Color(0xFF10B981),
-                        ),
-                        const SizedBox(width: 12),
-                        // Delete All button
-                        TvCompactButton(
-                          onPressed: _isBusy || _channels.isEmpty
-                              ? null
-                              : _handleDeleteAllChannels,
-                          icon: Icons.delete_outline_rounded,
-                          label: 'Delete All',
-                          backgroundColor: Colors.redAccent,
-                        ),
-                        const SizedBox(width: 12),
-                        // Search button
-                        TvCompactButton(
-                          onPressed: () {
-                            setState(() {
-                              _showSearchBar = !_showSearchBar;
-                              if (_showSearchBar) {
-                                Future.delayed(const Duration(milliseconds: 100), () {
-                                  _channelSearchFocusNode.requestFocus();
-                                });
-                              } else {
-                                _channelSearchController.clear();
-                                _channelSearchTerm = '';
-                              }
-                            });
-                          },
-                          icon: Icons.search_rounded,
-                          label: null,
-                          backgroundColor: const Color(0xFF9333EA),
-                        ),
-                        const SizedBox(width: 12),
-                        // Settings button
-                        TvCompactButton(
-                          onPressed: _showGlobalSettingsDialog,
-                          icon: Icons.settings_rounded,
-                          label: null,
-                          backgroundColor: const Color(0xFF64748B),
-                        ),
-                      ],
-                    ),
-                  )
-                : Row(
-                    children: [
-                      // Quick Play button
-                      TvCompactButton(
-                        onPressed: _isBusy ? null : _showQuickPlayDialog,
-                        icon: Icons.play_arrow_rounded,
-                        label: 'Play',
-                        backgroundColor: const Color(0xFFE50914),
-                        focusNode: _quickPlayFocusNode,
-                      ),
-                      const SizedBox(width: 12),
-                      // Import button
-                      TvCompactButton(
-                        onPressed: _isBusy ? null : _handleImportChannels,
-                        icon: Icons.cloud_download_rounded,
-                        label: 'Import',
-                        backgroundColor: const Color(0xFF2563EB),
-                      ),
-                      const SizedBox(width: 12),
-                      // Add Channel button
-                      TvCompactButton(
-                        onPressed: _isBusy ? null : _handleAddChannel,
-                        icon: Icons.add_rounded,
-                        label: 'Add',
-                        backgroundColor: const Color(0xFF10B981),
-                      ),
-                      const SizedBox(width: 12),
-                      // Delete All button
-                      TvCompactButton(
-                        onPressed: _isBusy || _channels.isEmpty
-                            ? null
-                            : _handleDeleteAllChannels,
-                        icon: Icons.delete_outline_rounded,
-                        label: 'Delete All',
-                        backgroundColor: Colors.redAccent,
-                      ),
-                      const Spacer(),
-                      // Search button
-                      TvCompactButton(
-                        onPressed: () {
-                          setState(() {
-                            _showSearchBar = !_showSearchBar;
-                            if (_showSearchBar) {
-                              Future.delayed(const Duration(milliseconds: 100), () {
-                                _channelSearchFocusNode.requestFocus();
-                              });
-                            } else {
-                              _channelSearchController.clear();
-                              _channelSearchTerm = '';
-                            }
-                          });
-                        },
-                        icon: Icons.search_rounded,
-                        label: null,
-                        backgroundColor: const Color(0xFF9333EA),
-                      ),
-                      const SizedBox(width: 12),
-                      // Settings button
-                      TvCompactButton(
-                        onPressed: _showGlobalSettingsDialog,
-                        icon: Icons.settings_rounded,
-                        label: null,
-                        backgroundColor: const Color(0xFF64748B),
-                      ),
-                    ],
-                  ),
-          ),
+          // Centered top controls: Play, Search, and overflow.
+          _buildTopActions(),
           // Search field for TV (only show when toggled)
           if (_showSearchBar) ...[
             const SizedBox(height: 16),
-            Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1,
+            TextField(
+              focusNode: _channelSearchFocusNode,
+              controller: _channelSearchController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Search channels...',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: Colors.white.withValues(alpha: 0.35),
+                ),
+                suffixIcon: _channelSearchTerm.isNotEmpty
+                    ? Focus(
+                        focusNode: _channelSearchClearFocusNode,
+                        skipTraversal: true,
+                        onKeyEvent: (node, event) {
+                          if (event is! KeyDownEvent) {
+                            return KeyEventResult.ignored;
+                          }
+                          final key = event.logicalKey;
+                          if (key == LogicalKeyboardKey.arrowLeft) {
+                            _channelSearchFocusNode.requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                          if (key == LogicalKeyboardKey.arrowRight) {
+                            _channelMenuFocusNode.requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                          if (key == LogicalKeyboardKey.arrowUp) {
+                            _channelSearchButtonFocusNode.requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                          if (key == LogicalKeyboardKey.select ||
+                              key == LogicalKeyboardKey.enter ||
+                              key == LogicalKeyboardKey.space) {
+                            _clearChannelSearchAndRefocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: Builder(
+                          builder: (context) {
+                            final focused = Focus.of(context).hasFocus;
+                            return Container(
+                              decoration: focused
+                                  ? BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: 0.3),
+                                        width: 1.5,
+                                      ),
+                                    )
+                                  : null,
+                              child: IconButton(
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: focused
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.5),
+                                ),
+                                onPressed: _clearChannelSearchAndRefocus,
+                              ),
+                            );
+                          },
+                        ),
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    width: 1,
+                  ),
+                ),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.07),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
                 ),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    color: Colors.white.withOpacity(0.5),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      focusNode: _channelSearchFocusNode,
-                      controller: _channelSearchController,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      decoration: InputDecoration(
-                        hintText: 'Search channels...',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 16,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _channelSearchTerm = value;
-                        });
-                      },
-                    ),
-                  ),
-                  if (_channelSearchTerm.isNotEmpty)
-                    IconButton(
-                      icon: Icon(
-                        Icons.clear_rounded,
-                        color: Colors.white.withOpacity(0.5),
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        _channelSearchController.clear();
-                        setState(() {
-                          _channelSearchTerm = '';
-                        });
-                      },
-                    ),
-                ],
-              ),
+              textInputAction: TextInputAction.search,
+              onChanged: (value) {
+                setState(() {
+                  _channelSearchTerm = value;
+                });
+              },
             ),
           ],
           const SizedBox(height: 16),
@@ -9049,4 +9273,3 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 }
-
