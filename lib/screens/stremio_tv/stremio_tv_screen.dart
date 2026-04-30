@@ -20,6 +20,7 @@ import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
 import '../../services/torrent_service.dart';
+import '../settings/stremio_tv_settings_page.dart';
 import 'stremio_tv_service.dart';
 import 'widgets/stremio_tv_channel_row.dart';
 import 'widgets/stremio_tv_empty_state.dart';
@@ -350,6 +351,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       context,
     );
     if (imported && mounted) _refresh();
+  }
+
+  Future<void> _openStremioTvSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const StremioTvSettingsPage()));
+    if (!mounted) return;
+    await _loadSettings();
+    if (mounted) setState(() {});
   }
 
   // ============================================================================
@@ -2236,7 +2246,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Controls row — search + settings centered
+                // Controls row — search + options centered
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Column(
@@ -2314,7 +2324,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               )
                             : const SizedBox.shrink(),
                       ),
-                      // Centered search + settings buttons
+                      // Centered search + options buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -2322,8 +2332,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                           Focus(
                             focusNode: _searchBtnFocusNode,
                             onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent)
+                              if (event is! KeyDownEvent) {
                                 return KeyEventResult.ignored;
+                              }
                               if (event.logicalKey ==
                                   LogicalKeyboardKey.arrowRight) {
                                 _menuFocusNode.requestFocus();
@@ -2421,12 +2432,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          // Settings/options button
+                          // Options button
                           Focus(
                             focusNode: _menuFocusNode,
                             onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent)
+                              if (event is! KeyDownEvent) {
                                 return KeyEventResult.ignored;
+                              }
                               if (_menuController.isOpen) {
                                 if (event.logicalKey ==
                                         LogicalKeyboardKey.escape ||
@@ -2511,6 +2523,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     onPressed: () => _openChannelFilter(),
                                     child: const Text('Filter channels'),
                                   ),
+                                  MenuItemButton(
+                                    leadingIcon: const Icon(
+                                      Icons.settings_rounded,
+                                    ),
+                                    onPressed: _openStremioTvSettings,
+                                    child: const Text('Stremio TV Settings'),
+                                  ),
                                   SubmenuButton(
                                     focusNode: _submenuFocusNode,
                                     leadingIcon: const Icon(
@@ -2574,7 +2593,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                       ),
                                       child: IconButton(
                                         icon: const Icon(
-                                          Icons.settings_rounded,
+                                          Icons.more_vert_rounded,
                                           size: 20,
                                         ),
                                         padding: EdgeInsets.zero,
@@ -2773,8 +2792,9 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
     final lower = name.toLowerCase();
     if (lower.contains('2160p') ||
         lower.contains('4k') ||
-        lower.contains('uhd'))
+        lower.contains('uhd')) {
       return '4K';
+    }
     if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
     if (lower.contains('720p')) return '720p';
     if (lower.contains('480p') || lower.contains('sd')) return '480p';
