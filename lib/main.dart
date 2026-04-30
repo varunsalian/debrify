@@ -1225,43 +1225,45 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => _openReleasesPage(release.htmlUrl),
-                      icon: const Icon(Icons.open_in_new_rounded),
-                      label: const Text('Open Releases Page'),
-                    ),
-                  ),
                 ],
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () async {
-                  await StorageService.setIgnoredUpdateVersion(
-                    release.versionLabel,
-                  );
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Skip this release'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Later'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  if (canInstallDirectly) {
-                    _startAutoUpdateDownload(release);
-                  } else {
-                    _openReleasesPage(release.htmlUrl);
-                  }
-                },
-                child: Text(
-                  canInstallDirectly ? 'Install update' : 'View release',
+              SizedBox(
+                width: 460,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        final navigator = Navigator.of(dialogContext);
+                        await StorageService.setIgnoredUpdateVersion(
+                          release.versionLabel,
+                        );
+                        navigator.pop();
+                      },
+                      child: const Text('Skip this release'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Later'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        if (canInstallDirectly) {
+                          _startAutoUpdateDownload(release);
+                        } else {
+                          _openReleasesPage(release.htmlUrl);
+                        }
+                      },
+                      child: Text(
+                        canInstallDirectly ? 'Install update' : 'View release',
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
