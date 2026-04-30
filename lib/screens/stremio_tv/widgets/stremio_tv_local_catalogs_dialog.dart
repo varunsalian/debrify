@@ -1375,14 +1375,157 @@ class _ImportUrlDialog extends StatefulWidget {
 class _ImportUrlDialogState extends State<_ImportUrlDialog> {
   final _urlController = TextEditingController();
   final _nameController = TextEditingController();
+  final _nameFocusNode = FocusNode(debugLabel: 'stremio-import-url-name');
+  final _urlFocusNode = FocusNode(debugLabel: 'stremio-import-url-url');
+  final _cancelFocusNode = FocusNode(debugLabel: 'stremio-import-url-cancel');
+  final _importFocusNode = FocusNode(debugLabel: 'stremio-import-url-import');
   String? _error;
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _nameFocusNode.onKeyEvent = _handleNameFieldKey;
+    _urlFocusNode.onKeyEvent = _handleUrlFieldKey;
+    _cancelFocusNode.onKeyEvent = _handleCancelButtonKey;
+    _importFocusNode.onKeyEvent = _handleImportButtonKey;
+  }
+
+  @override
   void dispose() {
+    _nameFocusNode.dispose();
+    _urlFocusNode.dispose();
+    _cancelFocusNode.dispose();
+    _importFocusNode.dispose();
     _urlController.dispose();
     _nameController.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _handleNameFieldKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final text = _nameController.text;
+    final selection = _nameController.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
+
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        _cancelFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.enter) {
+      if (isTextEmpty || isAtEnd) {
+        _urlFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleUrlFieldKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final text = _urlController.text;
+    final selection = _urlController.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
+
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        _nameFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.enter) {
+      if (isTextEmpty || isAtEnd) {
+        _importFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleCancelButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _urlFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _importFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _importFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      Navigator.of(context).pop();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleImportButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _urlFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      if (!_loading) {
+        _import();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _import() async {
@@ -1454,6 +1597,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
         children: [
           TextField(
             controller: _nameController,
+            focusNode: _nameFocusNode,
             decoration: InputDecoration(
               hintText: 'Catalog name (required for Trakt lists)',
               border: OutlineInputBorder(
@@ -1469,6 +1613,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
           const SizedBox(height: 12),
           TextField(
             controller: _urlController,
+            focusNode: _urlFocusNode,
             decoration: InputDecoration(
               hintText: 'https://example.com/catalog.json',
               border: OutlineInputBorder(
@@ -1490,10 +1635,12 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       ),
       actions: [
         TextButton(
+          focusNode: _cancelFocusNode,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
+          focusNode: _importFocusNode,
           onPressed: _loading ? null : _import,
           child: _loading
               ? const SizedBox(
@@ -1520,14 +1667,157 @@ class _ImportJsonDialog extends StatefulWidget {
 class _ImportJsonDialogState extends State<_ImportJsonDialog> {
   final _jsonController = TextEditingController();
   final _nameController = TextEditingController();
+  final _nameFocusNode = FocusNode(debugLabel: 'stremio-import-json-name');
+  final _jsonFocusNode = FocusNode(debugLabel: 'stremio-import-json-content');
+  final _cancelFocusNode = FocusNode(debugLabel: 'stremio-import-json-cancel');
+  final _importFocusNode = FocusNode(debugLabel: 'stremio-import-json-import');
   String? _error;
   bool _loading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _nameFocusNode.onKeyEvent = _handleNameFieldKey;
+    _jsonFocusNode.onKeyEvent = _handleJsonFieldKey;
+    _cancelFocusNode.onKeyEvent = _handleCancelButtonKey;
+    _importFocusNode.onKeyEvent = _handleImportButtonKey;
+  }
+
+  @override
   void dispose() {
+    _nameFocusNode.dispose();
+    _jsonFocusNode.dispose();
+    _cancelFocusNode.dispose();
+    _importFocusNode.dispose();
     _jsonController.dispose();
     _nameController.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _handleNameFieldKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final text = _nameController.text;
+    final selection = _nameController.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
+
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        _cancelFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.enter) {
+      if (isTextEmpty || isAtEnd) {
+        _jsonFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleJsonFieldKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final text = _jsonController.text;
+    final selection = _jsonController.selection;
+    final textLength = text.length;
+    final isTextEmpty = textLength == 0;
+    final isSelectionValid = selection.isValid && selection.baseOffset >= 0;
+    final isAtStart =
+        !isSelectionValid ||
+        (selection.baseOffset == 0 && selection.extentOffset == 0);
+    final isAtEnd =
+        !isSelectionValid ||
+        (selection.baseOffset == textLength &&
+            selection.extentOffset == textLength);
+
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (isTextEmpty || isAtStart) {
+        _nameFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.enter) {
+      if (isTextEmpty || isAtEnd) {
+        _importFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleCancelButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _jsonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _importFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _importFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      Navigator.of(context).pop();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleImportButtonKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _jsonFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _cancelFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      if (!_loading) {
+        _import();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _import() async {
@@ -1568,6 +1858,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
         children: [
           TextField(
             controller: _nameController,
+            focusNode: _nameFocusNode,
             decoration: InputDecoration(
               hintText: 'Catalog name (required for Trakt lists)',
               border: OutlineInputBorder(
@@ -1583,6 +1874,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
           const SizedBox(height: 12),
           TextField(
             controller: _jsonController,
+            focusNode: _jsonFocusNode,
             maxLines: 6,
             decoration: InputDecoration(
               hintText:
@@ -1600,10 +1892,12 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
       ),
       actions: [
         TextButton(
+          focusNode: _cancelFocusNode,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
+          focusNode: _importFocusNode,
           onPressed: _loading ? null : _import,
           child: _loading
               ? const SizedBox(
