@@ -187,6 +187,7 @@ class VideoPlayerLaunchArgs {
   final bool showVideoTitle;
   final bool hideOptions;
   final bool hideBackButton;
+  final Map<String, String>? httpHeaders;
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
   final PlaylistViewMode? viewMode;
@@ -247,6 +248,7 @@ class VideoPlayerLaunchArgs {
     this.showVideoTitle = true,
     this.hideOptions = false,
     this.hideBackButton = false,
+    this.httpHeaders,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
     this.viewMode,
@@ -298,6 +300,7 @@ class VideoPlayerLaunchArgs {
       showVideoTitle: showVideoTitle,
       hideOptions: hideOptions,
       hideBackButton: hideBackButton,
+      httpHeaders: httpHeaders,
       disableAutoResume: disableAutoResume,
       viewMode: viewMode,
       contentImdbId: contentImdbId,

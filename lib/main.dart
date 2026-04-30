@@ -15,6 +15,7 @@ import 'screens/torrent_search_screen.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/torbox/torbox_downloads_screen.dart';
 import 'screens/pikpak/pikpak_files_screen.dart';
+import 'screens/webdav/webdav_files_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/magic_tv_screen.dart';
@@ -539,6 +540,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _tbHiddenFromNav = false;
   bool _pikpakEnabled = false;
   bool _pikpakHiddenFromNav = false;
+  bool _webDavEnabled = false;
+  bool _webDavHiddenFromNav = false;
   bool _isAndroidTv = false;
 
   // Auto-launch overlay state
@@ -576,6 +579,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const AddonsScreen(), // 7: Addons
     const SettingsScreen(), // 8: Settings
     const StremioTvScreen(), // 9: Stremio TV
+    const WebDavFilesScreen(), // 10: WebDAV
   ];
 
   final List<String> _titles = [
@@ -589,6 +593,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Addons',
     'Settings',
     'Stremio TV',
+    'WebDAV',
   ];
 
   final List<IconData> _icons = [
@@ -602,6 +607,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.extension_rounded,
     Icons.settings_rounded,
     Icons.smart_display_rounded,
+    Icons.cloud_sync_rounded,
   ];
 
   @override
@@ -622,6 +628,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             _showTabHiddenSnack('PikPak');
           } else {
             _showMissingApiKeySnack('PikPak');
+          }
+        } else if (index == 10) {
+          if (_webDavEnabled && _webDavHiddenFromNav) {
+            _showTabHiddenSnack('WebDAV');
+          } else {
+            _showMissingApiKeySnack('WebDAV');
           }
         } else {
           _showIntegrationRequiredSnack();
@@ -1509,6 +1521,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 6:
         activeTabKey = 'pikpak';
         break;
+      case 10:
+        activeTabKey = 'webdav';
+        break;
     }
     MainPageBridge.setActiveTab(activeTabKey);
 
@@ -1781,6 +1796,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final tbHidden = await StorageService.getTorboxHiddenFromNav();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
+    final webDavEnabled = await StorageService.getWebDavEnabled();
+    final webDavBaseUrl = await StorageService.getWebDavBaseUrl();
+    final webDavHidden = await StorageService.getWebDavHiddenFromNav();
 
     if (!mounted) return;
 
@@ -1797,6 +1815,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       torboxHidden: tbHidden,
       pikpakEnabled: pikpakEnabled,
       pikpakHidden: pikpakHidden,
+      webDavEnabled:
+          webDavEnabled && webDavBaseUrl != null && webDavBaseUrl.isNotEmpty,
+      webDavHidden: webDavHidden,
     );
   }
 
@@ -1809,6 +1830,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool torboxHidden,
     required bool pikpakEnabled,
     required bool pikpakHidden,
+    required bool webDavEnabled,
+    required bool webDavHidden,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -1817,6 +1840,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       torboxHidden: torboxHidden,
       pikpakEnabled: pikpakEnabled,
       pikpakHidden: pikpakHidden,
+      webDavEnabled: webDavEnabled,
+      webDavHidden: webDavHidden,
     );
 
     int nextIndex = _selectedIndex;
@@ -1832,6 +1857,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _tbHiddenFromNav == torboxHidden &&
         _pikpakEnabled == pikpakEnabled &&
         _pikpakHiddenFromNav == pikpakHidden &&
+        _webDavEnabled == webDavEnabled &&
+        _webDavHiddenFromNav == webDavHidden &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -1845,6 +1872,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _tbHiddenFromNav = torboxHidden;
       _pikpakEnabled = pikpakEnabled;
       _pikpakHiddenFromNav = pikpakHidden;
+      _webDavEnabled = webDavEnabled;
+      _webDavHiddenFromNav = webDavHidden;
       _selectedIndex = nextIndex;
     });
   }
@@ -1856,6 +1885,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? torboxHidden,
     bool? pikpakEnabled,
     bool? pikpakHidden,
+    bool? webDavEnabled,
+    bool? webDavHidden,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
@@ -1864,6 +1895,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final tbHidden = torboxHidden ?? _tbHiddenFromNav;
       final pikpak = pikpakEnabled ?? _pikpakEnabled;
       final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
+      final webDav = webDavEnabled ?? _webDavEnabled;
+      final wdHidden = webDavHidden ?? _webDavHiddenFromNav;
       final indices = <int>[
         0,
         2,
@@ -1879,6 +1912,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (pikpak && !ppHidden) {
         indices.add(6); // PikPak
       }
+      if (webDav && !wdHidden) {
+        indices.add(10); // WebDAV
+      }
       indices.add(7); // Addons
       indices.add(8); // Settings
       return indices;
@@ -1890,7 +1926,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final tbHidden = torboxHidden ?? _tbHiddenFromNav;
     final pikpak = pikpakEnabled ?? _pikpakEnabled;
     final ppHidden = pikpakHidden ?? _pikpakHiddenFromNav;
-    if (!rd && !tb && !pikpak) {
+    final webDav = webDavEnabled ?? _webDavEnabled;
+    final wdHidden = webDavHidden ?? _webDavHiddenFromNav;
+    if (!rd && !tb && !pikpak && !webDav) {
       return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
     }
 
@@ -1898,6 +1936,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
+    if (webDav && !wdHidden) indices.add(10);
     indices.add(7); // Addons
     indices.add(8); // Settings
     return indices;
@@ -1906,8 +1945,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   void _showMissingApiKeySnack(String provider) {
     final bool integrationDisabled = provider == 'Real Debrid'
         ? !_rdIntegrationEnabled
-        : !_tbIntegrationEnabled;
-    final message = integrationDisabled
+        : provider == 'Torbox'
+        ? !_tbIntegrationEnabled
+        : false;
+    final message = provider == 'WebDAV'
+        ? 'Connect WebDAV in Settings to use this feature.'
+        : integrationDisabled
         ? 'Enable $provider in Settings to use this feature.'
         : 'Please add your $provider API key in Settings first!';
     ScaffoldMessenger.of(
@@ -1919,7 +1962,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Connect Real Debrid or Torbox in Settings to unlock more tabs.',
+          'Connect Real Debrid, Torbox, PikPak, or WebDAV in Settings to unlock more tabs.',
         ),
       ),
     );

@@ -39,6 +39,7 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/trakt_settings_page.dart';
+import 'settings/webdav_settings_page.dart';
 import '../widgets/remote/remote_control_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -69,6 +70,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pikpakConnected = false;
   String _pikpakStatus = 'Not connected';
   String _pikpakCaption = 'Tap to connect';
+
+  bool _webDavConnected = false;
+  String _webDavStatus = 'Not connected';
+  String _webDavCaption = 'Tap to connect';
 
   bool _traktConnected = false;
   String _traktStatus = 'Not connected';
@@ -121,6 +126,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getApiKey(),
       StorageService.getTorboxApiKey(),
       PikPakApiService.instance.isAuthenticated(),
+      StorageService.getWebDavEnabled(),
+      StorageService.getWebDavBaseUrl(),
       StorageService.getTraktAccessToken(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
@@ -135,13 +142,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final rdKey = results[0] as String?;
     final torboxKey = results[1] as String?;
     final pikpakAuth = results[2] as bool;
-    final traktToken = results[3] as String?;
-    final traktExpiry = results[4] as int?;
-    final traktUsername = results[5] as String?;
-    final packageInfo = results[6] as PackageInfo;
-    final isAndroidTv = results[7] as bool;
-    final autoCheckEnabled = results[8] as bool;
-    final indexerManagers = results[9] as List;
+    final webDavEnabled = results[3] as bool;
+    final webDavBaseUrl = results[4] as String?;
+    final traktToken = results[5] as String?;
+    final traktExpiry = results[6] as int?;
+    final traktUsername = results[7] as String?;
+    final packageInfo = results[8] as PackageInfo;
+    final isAndroidTv = results[9] as bool;
+    final autoCheckEnabled = results[10] as bool;
+    final indexerManagers = results[11] as List;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -174,6 +183,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _pikpakConnected = true;
       _pikpakStatus = 'Active';
       _pikpakCaption = 'Logged in';
+    }
+
+    if (webDavEnabled && webDavBaseUrl != null && webDavBaseUrl.isNotEmpty) {
+      _webDavConnected = true;
+      _webDavStatus = 'Active';
+      _webDavCaption = Uri.tryParse(webDavBaseUrl)?.host ?? webDavBaseUrl;
+    } else {
+      _webDavConnected = false;
+      _webDavStatus = 'Not connected';
+      _webDavCaption = 'Tap to connect';
     }
 
     if (traktToken != null && traktToken.isNotEmpty) {
@@ -323,6 +342,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.cloud_circle_rounded,
           onTap: _openPikPakSettings,
         ),
+        webDav: _ConnectionInfo(
+          title: 'WebDAV',
+          connected: _webDavConnected,
+          status: _webDavStatus,
+          caption: _webDavCaption,
+          icon: Icons.cloud_sync_rounded,
+          onTap: _openWebDavSettings,
+        ),
         reddit: _ConnectionInfo(
           title: 'Reddit',
           connected: true,
@@ -426,6 +453,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (loggedOut == true) {
       _focusFirstCard();
     }
+  }
+
+  Future<void> _openWebDavSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const WebDavSettingsPage()));
+    if (!mounted) return;
+    await _loadSummaries();
   }
 
   Future<void> _openRedditSettings() async {
@@ -626,6 +661,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
     await StorageService.clearPikPakAuth();
+    await StorageService.clearWebDav();
     await StorageService.clearTraktAuth();
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
@@ -1361,6 +1397,7 @@ class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
+  final _ConnectionInfo webDav;
   final _ConnectionInfo indexerManagers;
   final _ConnectionInfo reddit;
   final _ConnectionInfo iptv;
@@ -1371,6 +1408,7 @@ class _ConnectionsSummary extends StatefulWidget {
     required this.realDebrid,
     required this.torbox,
     required this.pikpak,
+    required this.webDav,
     required this.indexerManagers,
     required this.reddit,
     required this.iptv,
@@ -1389,6 +1427,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   //         [iptv]
   late final FocusNode _torboxFocusNode;
   late final FocusNode _pikpakFocusNode;
+  late final FocusNode _webDavFocusNode;
   late final FocusNode _indexerManagersFocusNode;
   late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
@@ -1399,6 +1438,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     super.initState();
     _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
     _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
+    _webDavFocusNode = FocusNode(debugLabel: 'settings-webdav');
     _indexerManagersFocusNode = FocusNode(
       debugLabel: 'settings-indexer-managers',
     );
@@ -1411,6 +1451,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   void dispose() {
     _torboxFocusNode.dispose();
     _pikpakFocusNode.dispose();
+    _webDavFocusNode.dispose();
     _indexerManagersFocusNode.dispose();
     _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
@@ -1440,9 +1481,9 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                 : constraints.maxWidth;
             // Grid layout (wide):
             // [RD]      [Torbox]
-            // [PikPak]  [Jackett & Prowlarr]
-            // [Reddit]  [IPTV]
-            // [Trakt]
+            // [PikPak]  [WebDAV]
+            // [Jackett] [Reddit]
+            // [IPTV]    [Trakt]
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1465,9 +1506,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     focusNode: _torboxFocusNode,
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? widget.firstCardFocusNode : null,
-                    downNeighbor: wide
-                        ? _indexerManagersFocusNode
-                        : _pikpakFocusNode,
+                    downNeighbor: wide ? _webDavFocusNode : _pikpakFocusNode,
                   ),
                 ),
                 // Row 2: PikPak (left), Jackett & Prowlarr (right)
@@ -1477,58 +1516,71 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     info: widget.pikpak,
                     focusNode: _pikpakFocusNode,
                     isLeftColumn: true,
-                    rightNeighbor: wide ? _indexerManagersFocusNode : null,
+                    rightNeighbor: wide ? _webDavFocusNode : null,
                     upNeighbor: widget.firstCardFocusNode,
+                    downNeighbor: wide
+                        ? _indexerManagersFocusNode
+                        : _webDavFocusNode,
+                  ),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.webDav,
+                    focusNode: _webDavFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _pikpakFocusNode : null,
+                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
                     downNeighbor: wide
                         ? _redditFocusNode
                         : _indexerManagersFocusNode,
                   ),
                 ),
+                // Row 3: Jackett & Prowlarr (left), Reddit (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.indexerManagers,
                     focusNode: _indexerManagersFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _pikpakFocusNode : null,
-                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
-                    downNeighbor: wide ? _iptvFocusNode : _redditFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _redditFocusNode : null,
+                    upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
+                    downNeighbor: _iptvFocusNode,
                   ),
                 ),
-                // Row 3: Reddit (left), IPTV (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.reddit,
                     focusNode: _redditFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _iptvFocusNode : null,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
                     upNeighbor: wide
-                        ? _pikpakFocusNode
+                        ? _webDavFocusNode
                         : _indexerManagersFocusNode,
-                    downNeighbor: _traktFocusNode,
+                    downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
                   ),
                 ),
+                // Row 4: IPTV (left), Trakt (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.iptv,
                     focusNode: _iptvFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _redditFocusNode : null,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _traktFocusNode : null,
                     upNeighbor: wide
                         ? _indexerManagersFocusNode
                         : _redditFocusNode,
-                    downNeighbor: wide ? _traktFocusNode : null,
                   ),
                 ),
-                // Row 4: Trakt
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
-                    isLeftColumn: true,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _iptvFocusNode : null,
                     upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
                   ),
                 ),

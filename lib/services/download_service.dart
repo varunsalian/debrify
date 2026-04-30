@@ -443,6 +443,13 @@ class DownloadService {
               return 'pp:$fileId';
             }
           }
+          final isWebDav = m['webdavDownload'] == true;
+          if (isWebDav) {
+            final webdavPath = (m['webdavPath'] ?? '').toString();
+            if (webdavPath.isNotEmpty) {
+              return 'wd:${webdavPath.hashCode}';
+            }
+          }
           // Torbox pattern: tb:${torrentId}:${fileId} or tb-zip:${torrentId}
           final isTorbox = m['torboxDownload'] == true;
           if (isTorbox) {
@@ -556,6 +563,7 @@ class DownloadService {
               'torrentName': p.torrentName,
               'contentKey': p.contentKey,
               'destPath': p.destPath,
+              'relativeSubDir': p.relativeSubDir,
             },
           )
           .toList();
@@ -583,6 +591,7 @@ class DownloadService {
               'torrentName': p.torrentName,
               'contentKey': p.contentKey,
               'destPath': p.destPath,
+              'relativeSubDir': p.relativeSubDir,
             },
           )
           .toList();
@@ -615,6 +624,7 @@ class DownloadService {
       torrentName: torrentName,
       contentKey: contentKey,
       destPath: item['destPath'] as String?,
+      relativeSubDir: item['relativeSubDir'] as String?,
     );
   }
 
@@ -645,6 +655,7 @@ class DownloadService {
       torrentName: torrentName,
       contentKey: contentKey,
       destPath: rec['destPath'] as String?,
+      relativeSubDir: rec['relativeSubDir'] as String?,
     );
   }
 
@@ -1329,6 +1340,7 @@ class DownloadService {
                 torrentName: torrentName,
                 insertAtFront: insertFront,
                 destPath: rec?['destPath'] as String?,
+                relativeSubDir: rec?['relativeSubDir'] as String?,
               );
             } else {
               debugPrint('DL INIT: skip re-enqueue duplicate contentKey=$ck');
@@ -1479,6 +1491,7 @@ class DownloadService {
     String? torrentName,
     bool insertAtFront = false,
     String? destPath,
+    String? relativeSubDir,
   }) async {
     await initialize();
 
@@ -1540,6 +1553,7 @@ class DownloadService {
       'retries': retries,
       'headers': headers,
       if (destPath != null) 'destPath': destPath,
+      if (relativeSubDir != null) 'relativeSubDir': relativeSubDir,
     });
 
     // Add to in-memory pending queue (prevent duplicates by contentKey)
@@ -1555,6 +1569,7 @@ class DownloadService {
       torrentName: torrentName,
       contentKey: contentKey,
       destPath: destPath,
+      relativeSubDir: relativeSubDir,
     );
     _addPendingRequest(_pending, _pendingById, pending, atFront: insertAtFront);
     await _persistPending();
@@ -1848,6 +1863,15 @@ class DownloadService {
     return cleaned.isEmpty ? 'download' : cleaned;
   }
 
+  static String _sanitizeRelativePath(String value) {
+    return value
+        .split(RegExp(r'[\\/]'))
+        .map((segment) => _sanitizeName(segment.trim()))
+        .where((segment) => segment.isNotEmpty && segment != '.')
+        .where((segment) => segment != '..')
+        .join(path.separator);
+  }
+
   (String contentUri, String mimeType)? getLastFileForTask(String taskId) =>
       _lastFileByTaskId[taskId];
 
@@ -1929,6 +1953,7 @@ class DownloadService {
         meta: jsonEncode(updatedMeta),
         torrentName: torrentName,
         destPath: destPath,
+        relativeSubDir: rec['relativeSubDir'] as String?,
         wifiOnly: wifiOnly,
         retries: retries,
         insertAtFront: true,
@@ -2267,9 +2292,23 @@ class DownloadService {
             name = fn;
           }
 
+          final sanitizedRelativeDir =
+              p.relativeSubDir != null && p.relativeSubDir!.trim().isNotEmpty
+              ? _sanitizeRelativePath(p.relativeSubDir!)
+              : '';
           final String subDir =
               p.torrentName != null && p.torrentName!.trim().isNotEmpty
-              ? 'Debrify/${_sanitizeName(p.torrentName!.trim())}'
+              ? (sanitizedRelativeDir.isNotEmpty
+                        ? path.join(
+                            'Debrify',
+                            _sanitizeName(p.torrentName!.trim()),
+                            sanitizedRelativeDir,
+                          )
+                        : path.join(
+                            'Debrify',
+                            _sanitizeName(p.torrentName!.trim()),
+                          ))
+                    .replaceAll(r'\', '/')
               : 'Debrify';
 
           final taskId = await AndroidNativeDownloader.start(
@@ -2315,7 +2354,13 @@ class DownloadService {
               finalFileName,
               p.torrentName,
             );
-            finalPath = path.join(dirAbsPath, filenamePart);
+            final sanitizedRelativeDir =
+                p.relativeSubDir != null && p.relativeSubDir!.trim().isNotEmpty
+                ? _sanitizeRelativePath(p.relativeSubDir!)
+                : '';
+            finalPath = sanitizedRelativeDir.isNotEmpty
+                ? path.join(dirAbsPath, sanitizedRelativeDir, filenamePart)
+                : path.join(dirAbsPath, filenamePart);
             _upsertRecord(p.queuedId, {'destPath': finalPath});
             p.destPath = finalPath;
           }
@@ -2457,6 +2502,7 @@ class DownloadService {
                         torrentName: p.torrentName,
                         contentKey: p.contentKey,
                         destPath: p.destPath,
+                        relativeSubDir: p.relativeSubDir,
                       );
                       _pending.insert(0, refreshed);
                       _pendingById[refreshed.queuedId] = refreshed;
@@ -2521,6 +2567,7 @@ class DownloadService {
                       torrentName: p.torrentName,
                       contentKey: p.contentKey,
                       destPath: p.destPath,
+                      relativeSubDir: p.relativeSubDir,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -2570,6 +2617,7 @@ class DownloadService {
                       torrentName: p.torrentName,
                       contentKey: p.contentKey,
                       destPath: p.destPath,
+                      relativeSubDir: p.relativeSubDir,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -2758,6 +2806,7 @@ class _PendingRequest {
   final String contentKey;
   bool canceled;
   String? destPath;
+  final String? relativeSubDir;
 
   _PendingRequest({
     required this.queuedId,
@@ -2772,6 +2821,7 @@ class _PendingRequest {
     required this.contentKey,
     this.canceled = false,
     this.destPath,
+    this.relativeSubDir,
   });
 }
 

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
+import '../models/webdav_item.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -157,6 +158,15 @@ class StorageService {
       'pikpak_restricted_folder_name';
   static const String _pikpakTorrentsFolderIdKey = 'pikpak_torrents_folder_id';
   static const String _pikpakTvFolderIdKey = 'pikpak_tv_folder_id';
+  static const String _webDavEnabledKey = 'webdav_enabled';
+  static const String _webDavHiddenFromNavKey = 'webdav_hidden_from_nav';
+  static const String _webDavBaseUrlKey = 'webdav_base_url';
+  static const String _webDavUsernameKey = 'webdav_username';
+  static const String _webDavPasswordKey = 'webdav_password';
+  static const String _webDavShowVideosOnlyKey = 'webdav_show_videos_only';
+  static const String _webDavServersKey = 'webdav_servers_v1';
+  static const String _webDavSelectedServerIdKey =
+      'webdav_selected_server_id_v1';
 
   // TVMaze series mapping keys
   static const String _tvMazeSeriesMappingKey = 'tvmaze_series_mappings';
@@ -1972,6 +1982,8 @@ class StorageService {
     await prefs.remove(_realDebridHiddenFromNavKey);
     await prefs.remove(_torboxIntegrationEnabledKey);
     await prefs.remove(_torboxHiddenFromNavKey);
+    await prefs.remove(_webDavEnabledKey);
+    await prefs.remove(_webDavHiddenFromNavKey);
   }
 
   /// Clear Debrify TV provider and legacy channels key
@@ -3430,6 +3442,188 @@ class StorageService {
   static Future<void> clearPikPakHiddenFromNav() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pikpakHiddenFromNavKey);
+  }
+
+  // WebDAV Settings
+  static Future<bool> getWebDavEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_webDavEnabledKey) ?? false;
+  }
+
+  static Future<void> setWebDavEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_webDavEnabledKey, value);
+  }
+
+  static Future<bool> getWebDavHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_webDavHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setWebDavHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_webDavHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearWebDavHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_webDavHiddenFromNavKey);
+  }
+
+  static Future<String?> getWebDavBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final selected = await getSelectedWebDavServer();
+    return selected?.baseUrl ?? prefs.getString(_webDavBaseUrlKey);
+  }
+
+  static Future<void> setWebDavBaseUrl(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_webDavBaseUrlKey, value);
+  }
+
+  static Future<String?> getWebDavUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    final selected = await getSelectedWebDavServer();
+    return selected?.username ?? prefs.getString(_webDavUsernameKey);
+  }
+
+  static Future<void> setWebDavUsername(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_webDavUsernameKey, value);
+  }
+
+  static Future<String?> getWebDavPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    final selected = await getSelectedWebDavServer();
+    return selected?.password ?? prefs.getString(_webDavPasswordKey);
+  }
+
+  static Future<void> setWebDavPassword(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_webDavPasswordKey, value);
+  }
+
+  static Future<bool> getWebDavShowVideosOnly() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_webDavShowVideosOnlyKey) ?? true;
+  }
+
+  static Future<void> setWebDavShowVideosOnly(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_webDavShowVideosOnlyKey, value);
+  }
+
+  static Future<void> clearWebDav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_webDavBaseUrlKey);
+    await prefs.remove(_webDavUsernameKey);
+    await prefs.remove(_webDavPasswordKey);
+    await prefs.remove(_webDavHiddenFromNavKey);
+    await prefs.remove(_webDavServersKey);
+    await prefs.remove(_webDavSelectedServerIdKey);
+    await prefs.setBool(_webDavEnabledKey, false);
+  }
+
+  static Future<List<WebDavConfig>> getWebDavServers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_webDavServersKey);
+    final servers = <WebDavConfig>[];
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map) {
+              final config = WebDavConfig.fromJson(
+                item.cast<String, dynamic>(),
+              );
+              if (config.baseUrl.trim().isNotEmpty) servers.add(config);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (servers.isEmpty) {
+      final legacyUrl = prefs.getString(_webDavBaseUrlKey);
+      if (legacyUrl != null && legacyUrl.trim().isNotEmpty) {
+        final config = WebDavConfig(
+          id: 'legacy-${legacyUrl.hashCode}',
+          name: Uri.tryParse(legacyUrl)?.host ?? 'WebDAV',
+          baseUrl: legacyUrl,
+          username: prefs.getString(_webDavUsernameKey) ?? '',
+          password: prefs.getString(_webDavPasswordKey) ?? '',
+        );
+        servers.add(config);
+        await saveWebDavServers(servers);
+        await setSelectedWebDavServerId(config.id);
+      }
+    }
+
+    return servers;
+  }
+
+  static Future<void> saveWebDavServers(List<WebDavConfig> servers) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _webDavServersKey,
+      jsonEncode(servers.map((server) => server.toJson()).toList()),
+    );
+    await prefs.setBool(_webDavEnabledKey, servers.isNotEmpty);
+  }
+
+  static Future<String?> getSelectedWebDavServerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_webDavSelectedServerIdKey);
+  }
+
+  static Future<void> setSelectedWebDavServerId(String? id) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (id == null || id.isEmpty) {
+      await prefs.remove(_webDavSelectedServerIdKey);
+    } else {
+      await prefs.setString(_webDavSelectedServerIdKey, id);
+    }
+  }
+
+  static Future<WebDavConfig?> getSelectedWebDavServer() async {
+    final servers = await getWebDavServers();
+    if (servers.isEmpty) return null;
+    final selectedId = await getSelectedWebDavServerId();
+    if (selectedId != null && selectedId.isNotEmpty) {
+      for (final server in servers) {
+        if (server.id == selectedId) return server;
+      }
+    }
+    await setSelectedWebDavServerId(servers.first.id);
+    return servers.first;
+  }
+
+  static Future<void> upsertWebDavServer(WebDavConfig config) async {
+    final servers = await getWebDavServers();
+    final index = servers.indexWhere((server) => server.id == config.id);
+    if (index == -1) {
+      servers.add(config);
+    } else {
+      servers[index] = config;
+    }
+    await saveWebDavServers(servers);
+    await setSelectedWebDavServerId(config.id);
+  }
+
+  static Future<void> deleteWebDavServer(String id) async {
+    final servers = await getWebDavServers();
+    servers.removeWhere((server) => server.id == id);
+    await saveWebDavServers(servers);
+    final selected = await getSelectedWebDavServerId();
+    if (selected == id) {
+      await setSelectedWebDavServerId(
+        servers.isEmpty ? null : servers.first.id,
+      );
+    }
+    if (servers.isEmpty) {
+      await setWebDavHiddenFromNav(false);
+    }
   }
 
   // TVMaze Series Mapping Methods
