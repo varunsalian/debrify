@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'indexer_managers_settings_page.dart';
 import 'widgets/dynamic_settings_builder.dart';
 
 class TorrentSettingsPage extends StatefulWidget {
@@ -26,6 +27,10 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
             _buildHeader(context),
 
             const SizedBox(height: 24),
+
+            _buildIndexerManagersCard(context),
+
+            const SizedBox(height: 16),
 
             // Use DynamicSettingsBuilder instead of hardcoded settings
             DynamicSettingsBuilder(
@@ -74,18 +79,17 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
                 Text(
                   'Search Engine Defaults',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Configure which search engines are enabled by default',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer
-                            .withValues(alpha: 0.7),
-                      ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ),
@@ -95,18 +99,37 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
     );
   }
 
+  Widget _buildIndexerManagersCard(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          Icons.manage_search_rounded,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        title: const Text('Indexer Managers'),
+        subtitle: const Text('Add Jackett or Prowlarr search sources'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const IndexerManagersSettingsPage(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildInfoMessage(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .secondaryContainer
-            .withValues(alpha: 0.3),
+        color: Theme.of(
+          context,
+        ).colorScheme.secondaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color:
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
+          color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -121,8 +144,8 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
             child: Text(
               'These settings only affect the default state. You can still toggle engines on/off in the search page.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

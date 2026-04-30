@@ -1,8 +1,8 @@
 /// Stream type for Stremio streams
 enum StreamType {
-  torrent,    // Has infoHash, needs debrid
-  directUrl,  // Direct playable URL, no debrid needed
-  externalUrl // Opens in browser/external app
+  torrent, // Has infoHash, needs debrid
+  directUrl, // Direct playable URL, no debrid needed
+  externalUrl, // Opens in browser/external app
 }
 
 class Torrent {
@@ -24,8 +24,15 @@ class Torrent {
   // Direct URL for non-torrent streams (directUrl or externalUrl types)
   final String? directUrl;
 
+  // Full torrent acquisition URLs from indexers. Prefer magnetUrl when present;
+  // torrentUrl is usually a protected .torrent download URL from Jackett/Prowlarr.
+  final String? magnetUrl;
+  final String? torrentUrl;
+  final bool hasRealInfoHash;
+
   // Coverage detection fields
-  final String? coverageType; // 'completeSeries', 'multiSeasonPack', 'seasonPack', 'singleEpisode'
+  final String?
+  coverageType; // 'completeSeries', 'multiSeasonPack', 'seasonPack', 'singleEpisode'
   final int? startSeason;
   final int? endSeason;
   final int? seasonNumber;
@@ -46,6 +53,9 @@ class Torrent {
     String? source,
     this.streamType = StreamType.torrent,
     this.directUrl,
+    this.magnetUrl,
+    this.torrentUrl,
+    this.hasRealInfoHash = true,
     this.coverageType,
     this.startSeason,
     this.endSeason,
@@ -60,10 +70,7 @@ class Torrent {
   /// Whether this opens in external browser/app
   bool get isExternalStream => streamType == StreamType.externalUrl;
 
-  factory Torrent.fromJson(
-    Map<String, dynamic> json, {
-    String? source,
-  }) {
+  factory Torrent.fromJson(Map<String, dynamic> json, {String? source}) {
     final dynamic rawSource =
         json['source'] ?? json['provider'] ?? json['engine'] ?? source;
 
@@ -90,6 +97,9 @@ class Torrent {
       source: rawSource?.toString(),
       streamType: streamType,
       directUrl: json['direct_url'] as String?,
+      magnetUrl: (json['magnet_url'] ?? json['magnet'])?.toString(),
+      torrentUrl: (json['torrent_url'] ?? json['download_url'])?.toString(),
+      hasRealInfoHash: json['has_real_infohash'] as bool? ?? true,
       coverageType: json['coverage_type']?.toString(),
       startSeason: json['start_season'] as int?,
       endSeason: json['end_season'] as int?,
@@ -114,6 +124,9 @@ class Torrent {
       if (source.isNotEmpty) 'source': source,
       if (streamType != StreamType.torrent) 'stream_type': streamType.name,
       if (directUrl != null) 'direct_url': directUrl,
+      if (magnetUrl != null) 'magnet_url': magnetUrl,
+      if (torrentUrl != null) 'torrent_url': torrentUrl,
+      if (!hasRealInfoHash) 'has_real_infohash': hasRealInfoHash,
       if (coverageType != null) 'coverage_type': coverageType,
       if (startSeason != null) 'start_season': startSeason,
       if (endSeason != null) 'end_season': endSeason,
@@ -132,7 +145,7 @@ class Torrent {
       final rest = name.substring(newlineIndex + 1).trim();
       // If first line is just the addon/source name, use the rest instead
       if (rest.isNotEmpty &&
-          (firstLine.toLowerCase() == (source ?? '').toLowerCase() ||
+          (firstLine.toLowerCase() == source.toLowerCase() ||
               (firstLine.length < 20 && rest.length > firstLine.length))) {
         return rest.split('\n').first.trim();
       }

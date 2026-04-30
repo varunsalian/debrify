@@ -34,6 +34,7 @@ import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import 'settings/filter_settings_page.dart';
+import 'settings/indexer_managers_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
@@ -73,6 +74,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _traktConnected = false;
   String _traktStatus = 'Not connected';
   String _traktCaption = 'Tap to connect';
+
+  bool _indexerManagersConfigured = false;
+  String _indexerManagersStatus = 'Not configured';
+  String _indexerManagersCaption = 'Connect Jackett or Prowlarr';
 
   String _appVersion = '';
   String _currentVersionName = '';
@@ -123,6 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       PackageInfo.fromPlatform(),
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
+      StorageService.getIndexerManagerConfigs(),
     ]);
 
     if (!mounted) return;
@@ -136,6 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final packageInfo = results[6] as PackageInfo;
     final isAndroidTv = results[7] as bool;
     final autoCheckEnabled = results[8] as bool;
+    final indexerManagers = results[9] as List;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -184,6 +191,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _traktStatus = 'Expired';
         _traktCaption = 'Tap to reconnect';
       }
+    }
+
+    if (indexerManagers.isNotEmpty) {
+      _indexerManagersConfigured = true;
+      _indexerManagersStatus = 'Active';
+      _indexerManagersCaption =
+          '${indexerManagers.length} engine${indexerManagers.length == 1 ? '' : 's'} configured';
     }
 
     _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
@@ -334,6 +348,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.movie_filter_rounded,
           onTap: _openTraktSettings,
         ),
+        indexerManagers: _ConnectionInfo(
+          title: 'Jackett & Prowlarr',
+          connected: _indexerManagersConfigured,
+          status: _indexerManagersStatus,
+          caption: _indexerManagersCaption,
+          icon: Icons.manage_search_rounded,
+          onTap: _openIndexerManagersSettings,
+        ),
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenTorrentSettings: _openTorrentSettings,
@@ -370,6 +392,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).push(MaterialPageRoute(builder: (_) => const TorrentSettingsPage()));
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _openIndexerManagersSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const IndexerManagersSettingsPage()),
+    );
+    if (!mounted) return;
+
+    final configs = await StorageService.getIndexerManagerConfigs();
+    if (!mounted) return;
+    setState(() {
+      _indexerManagersConfigured = configs.isNotEmpty;
+      _indexerManagersStatus = configs.isNotEmpty ? 'Active' : 'Not configured';
+      _indexerManagersCaption = configs.isNotEmpty
+          ? '${configs.length} engine${configs.length == 1 ? '' : 's'} configured'
+          : 'Connect Jackett or Prowlarr';
+    });
   }
 
   Future<void> _openDebrifyTvSettings() async {
@@ -1341,6 +1380,7 @@ class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
   final _ConnectionInfo pikpak;
+  final _ConnectionInfo indexerManagers;
   final _ConnectionInfo reddit;
   final _ConnectionInfo iptv;
   final _ConnectionInfo trakt;
@@ -1350,6 +1390,7 @@ class _ConnectionsSummary extends StatefulWidget {
     required this.realDebrid,
     required this.torbox,
     required this.pikpak,
+    required this.indexerManagers,
     required this.reddit,
     required this.iptv,
     required this.trakt,
@@ -1367,6 +1408,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   //         [iptv]
   late final FocusNode _torboxFocusNode;
   late final FocusNode _pikpakFocusNode;
+  late final FocusNode _indexerManagersFocusNode;
   late final FocusNode _redditFocusNode;
   late final FocusNode _iptvFocusNode;
   late final FocusNode _traktFocusNode;
@@ -1376,6 +1418,9 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
     super.initState();
     _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
     _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
+    _indexerManagersFocusNode = FocusNode(
+      debugLabel: 'settings-indexer-managers',
+    );
     _redditFocusNode = FocusNode(debugLabel: 'settings-reddit');
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
     _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
@@ -1385,6 +1430,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   void dispose() {
     _torboxFocusNode.dispose();
     _pikpakFocusNode.dispose();
+    _indexerManagersFocusNode.dispose();
     _redditFocusNode.dispose();
     _iptvFocusNode.dispose();
     _traktFocusNode.dispose();
@@ -1413,8 +1459,9 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                 : constraints.maxWidth;
             // Grid layout (wide):
             // [RD]      [Torbox]
-            // [PikPak]  [Reddit]
-            // [IPTV]    [Trakt]
+            // [PikPak]  [Jackett & Prowlarr]
+            // [Reddit]  [IPTV]
+            // [Trakt]
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1437,50 +1484,70 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     focusNode: _torboxFocusNode,
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? widget.firstCardFocusNode : null,
-                    downNeighbor: wide ? _redditFocusNode : _pikpakFocusNode,
+                    downNeighbor: wide
+                        ? _indexerManagersFocusNode
+                        : _pikpakFocusNode,
                   ),
                 ),
-                // Row 2: PikPak (left), Reddit (right)
+                // Row 2: PikPak (left), Jackett & Prowlarr (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.pikpak,
                     focusNode: _pikpakFocusNode,
                     isLeftColumn: true,
-                    rightNeighbor: wide ? _redditFocusNode : null,
+                    rightNeighbor: wide ? _indexerManagersFocusNode : null,
                     upNeighbor: widget.firstCardFocusNode,
-                    downNeighbor: _iptvFocusNode,
+                    downNeighbor: wide
+                        ? _redditFocusNode
+                        : _indexerManagersFocusNode,
                   ),
                 ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.indexerManagers,
+                    focusNode: _indexerManagersFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _pikpakFocusNode : null,
+                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
+                    downNeighbor: wide ? _iptvFocusNode : _redditFocusNode,
+                  ),
+                ),
+                // Row 3: Reddit (left), IPTV (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.reddit,
                     focusNode: _redditFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _pikpakFocusNode : null,
-                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
-                    downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _iptvFocusNode : null,
+                    upNeighbor: wide
+                        ? _pikpakFocusNode
+                        : _indexerManagersFocusNode,
+                    downNeighbor: _traktFocusNode,
                   ),
                 ),
-                // Row 3: IPTV (left), Trakt (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.iptv,
                     focusNode: _iptvFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _traktFocusNode : null,
-                    upNeighbor: _pikpakFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _redditFocusNode : null,
+                    upNeighbor: wide
+                        ? _indexerManagersFocusNode
+                        : _redditFocusNode,
+                    downNeighbor: wide ? _traktFocusNode : null,
                   ),
                 ),
+                // Row 4: Trakt
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _iptvFocusNode : null,
+                    isLeftColumn: true,
                     upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
                   ),
                 ),

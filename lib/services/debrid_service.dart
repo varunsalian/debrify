@@ -20,7 +20,8 @@ class TorrentNotCachedException implements Exception {
 
 class DebridService {
   static const String _primaryEndpoint = 'https://api.real-debrid.com/rest/1.0';
-  static const String _backupEndpoint = 'https://api-2.real-debrid.com/rest/1.0';
+  static const String _backupEndpoint =
+      'https://api-2.real-debrid.com/rest/1.0';
 
   // Get the saved endpoint preference (defaults to primary)
   static Future<String> _getBaseUrl() async {
@@ -29,16 +30,20 @@ class DebridService {
 
   // Validate API key with automatic fallback to backup endpoint
   // Returns map with: {success: bool, user: RDUser?, endpoint: String?}
-  static Future<Map<String, dynamic>> validateApiKeyWithFallback(String apiKey) async {
+  static Future<Map<String, dynamic>> validateApiKeyWithFallback(
+    String apiKey,
+  ) async {
     // Try primary endpoint first
     try {
-      final response = await http.get(
-        Uri.parse('$_primaryEndpoint/user'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            Uri.parse('$_primaryEndpoint/user'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         // Primary endpoint works - save it
@@ -53,7 +58,9 @@ class DebridService {
         // Invalid API key - don't try backup
         return {
           'success': false,
-          'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+          'error': response.statusCode == 401
+              ? 'Invalid API key'
+              : 'Account locked',
         };
       } else if (response.statusCode >= 500 || response.statusCode == 429) {
         // Server errors or rate limiting - trigger backup attempt
@@ -68,13 +75,15 @@ class DebridService {
     } catch (e) {
       // Primary endpoint failed (timeout or network error) - try backup
       try {
-        final response = await http.get(
-          Uri.parse('$_backupEndpoint/user'),
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-            'Content-Type': 'application/json',
-          },
-        ).timeout(const Duration(seconds: 10));
+        final response = await http
+            .get(
+              Uri.parse('$_backupEndpoint/user'),
+              headers: {
+                'Authorization': 'Bearer $apiKey',
+                'Content-Type': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 10));
 
         if (response.statusCode == 200) {
           // Backup endpoint works - save it
@@ -88,7 +97,9 @@ class DebridService {
         } else if (response.statusCode == 401 || response.statusCode == 403) {
           return {
             'success': false,
-            'error': response.statusCode == 401 ? 'Invalid API key' : 'Account locked',
+            'error': response.statusCode == 401
+                ? 'Invalid API key'
+                : 'Account locked',
           };
         } else {
           // Other errors - backup also failed
@@ -101,15 +112,13 @@ class DebridService {
         // Both endpoints failed
         return {
           'success': false,
-          'error': 'Could not connect to Real-Debrid. Please check your internet connection.',
+          'error':
+              'Could not connect to Real-Debrid. Please check your internet connection.',
         };
       }
     }
 
-    return {
-      'success': false,
-      'error': 'Failed to validate API key',
-    };
+    return {'success': false, 'error': 'Failed to validate API key'};
   }
 
   // Get user information
@@ -150,7 +159,8 @@ class DebridService {
   }
 
   // Get downloads list with pagination
-  static Future<Map<String, dynamic>> getDownloads(String apiKey, {
+  static Future<Map<String, dynamic>> getDownloads(
+    String apiKey, {
     int page = 1,
     int limit = 100,
   }) async {
@@ -161,8 +171,10 @@ class DebridService {
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse('$baseUrl/downloads').replace(queryParameters: queryParams);
-      
+      final uri = Uri.parse(
+        '$baseUrl/downloads',
+      ).replace(queryParameters: queryParams);
+
       final response = await http.get(
         uri,
         headers: {
@@ -174,15 +186,20 @@ class DebridService {
       if (response.statusCode == 200) {
         try {
           final List<dynamic> data = json.decode(response.body);
-          final downloads = data.map((json) => DebridDownload.fromJson(json)).toList();
-          
+          final downloads = data
+              .map((json) => DebridDownload.fromJson(json))
+              .toList();
+
           // Get total count from headers
-          final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
-          
+          final totalCount =
+              int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
+
           return {
             'downloads': downloads,
             'totalCount': totalCount,
-            'hasMore': downloads.length >= limit, // If we got a full page, there might be more
+            'hasMore':
+                downloads.length >=
+                limit, // If we got a full page, there might be more
           };
         } catch (e) {
           throw Exception('Failed to parse response data: $e');
@@ -205,7 +222,8 @@ class DebridService {
   }
 
   // Get torrents list with pagination
-  static Future<Map<String, dynamic>> getTorrents(String apiKey, {
+  static Future<Map<String, dynamic>> getTorrents(
+    String apiKey, {
     int page = 1,
     int limit = 100,
     String? filter,
@@ -221,8 +239,9 @@ class DebridService {
         queryParams['filter'] = filter;
       }
 
-      final uri = Uri.parse('$baseUrl/torrents').replace(queryParameters: queryParams);
-      
+      final uri = Uri.parse(
+        '$baseUrl/torrents',
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(
         uri,
@@ -232,30 +251,30 @@ class DebridService {
         },
       );
 
-
       if (response.statusCode == 200) {
         try {
           final List<dynamic> data = json.decode(response.body);
-          final torrents = data.map((json) => RDTorrent.fromJson(json)).toList();
-          
+          final torrents = data
+              .map((json) => RDTorrent.fromJson(json))
+              .toList();
+
           // Get total count from headers
-          final totalCount = int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
-          
+          final totalCount =
+              int.tryParse(response.headers['X-Total-Count'] ?? '0') ?? 0;
+
           return {
             'torrents': torrents,
             'totalCount': totalCount,
-            'hasMore': torrents.length >= limit, // If we got a full page, there might be more
+            'hasMore':
+                torrents.length >=
+                limit, // If we got a full page, there might be more
           };
         } catch (e) {
           throw Exception('Failed to parse response data: $e');
         }
       } else if (response.statusCode == 204) {
         // No content - no torrents found
-        return {
-          'torrents': <RDTorrent>[],
-          'totalCount': 0,
-          'hasMore': false,
-        };
+        return {'torrents': <RDTorrent>[], 'totalCount': 0, 'hasMore': false};
       } else if (response.statusCode == 401) {
         throw Exception('Invalid API key');
       } else {
@@ -267,7 +286,10 @@ class DebridService {
   }
 
   // Add magnet to Real Debrid
-  static Future<Map<String, dynamic>> addMagnet(String apiKey, String magnetLink) async {
+  static Future<Map<String, dynamic>> addMagnet(
+    String apiKey,
+    String magnetLink,
+  ) async {
     try {
       final baseUrl = await _getBaseUrl();
       final response = await http.post(
@@ -276,9 +298,7 @@ class DebridService {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: {
-          'magnet': magnetLink,
-        },
+        body: {'magnet': magnetLink},
       );
 
       if (response.statusCode == 201) {
@@ -293,15 +313,53 @@ class DebridService {
     }
   }
 
+  static Future<Map<String, dynamic>> addTorrentFile(
+    String apiKey,
+    List<int> torrentBytes,
+  ) async {
+    try {
+      final baseUrl = await _getBaseUrl();
+      final response = await http.put(
+        Uri.parse('$baseUrl/torrents/addTorrent'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/x-bittorrent',
+        },
+        body: torrentBytes,
+      );
+
+      if (response.statusCode == 201) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Invalid API key');
+      } else {
+        throw Exception('Failed to add torrent file: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  static Future<List<int>> _downloadTorrentFile(String torrentUrl) async {
+    final response = await http.get(Uri.parse(torrentUrl));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Failed to download torrent file: ${response.statusCode}',
+      );
+    }
+    return response.bodyBytes;
+  }
+
   // Get torrent info
-  static Future<Map<String, dynamic>> getTorrentInfo(String apiKey, String torrentId) async {
+  static Future<Map<String, dynamic>> getTorrentInfo(
+    String apiKey,
+    String torrentId,
+  ) async {
     try {
       final baseUrl = await _getBaseUrl();
       final response = await http.get(
         Uri.parse('$baseUrl/torrents/info/$torrentId'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-        },
+        headers: {'Authorization': 'Bearer $apiKey'},
       );
 
       if (response.statusCode == 200) {
@@ -317,7 +375,11 @@ class DebridService {
   }
 
   // Select files (select the largest file or all files)
-  static Future<void> selectFiles(String apiKey, String torrentId, List<int> fileIds) async {
+  static Future<void> selectFiles(
+    String apiKey,
+    String torrentId,
+    List<int> fileIds,
+  ) async {
     try {
       final baseUrl = await _getBaseUrl();
       String fileIdsString;
@@ -333,9 +395,7 @@ class DebridService {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: {
-          'files': fileIdsString,
-        },
+        body: {'files': fileIdsString},
       );
 
       if (response.statusCode != 204) {
@@ -351,7 +411,10 @@ class DebridService {
   }
 
   // Unrestrict link
-  static Future<Map<String, dynamic>> unrestrictLink(String apiKey, String link) async {
+  static Future<Map<String, dynamic>> unrestrictLink(
+    String apiKey,
+    String link,
+  ) async {
     try {
       final baseUrl = await _getBaseUrl();
       final response = await http.post(
@@ -360,9 +423,7 @@ class DebridService {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: {
-          'link': link,
-        },
+        body: {'link': link},
       );
 
       if (response.statusCode == 200) {
@@ -373,16 +434,22 @@ class DebridService {
         // Try to parse the error response from Real Debrid
         try {
           final errorData = json.decode(response.body);
-          if (errorData is Map<String, dynamic> && errorData.containsKey('error')) {
+          if (errorData is Map<String, dynamic> &&
+              errorData.containsKey('error')) {
             throw Exception(errorData['error'].toString());
-          } else if (errorData is Map<String, dynamic> && errorData.containsKey('message')) {
+          } else if (errorData is Map<String, dynamic> &&
+              errorData.containsKey('message')) {
             throw Exception(errorData['message'].toString());
           } else {
-            throw Exception('Failed to unrestrict link: ${response.statusCode} - ${response.body}');
+            throw Exception(
+              'Failed to unrestrict link: ${response.statusCode} - ${response.body}',
+            );
           }
         } catch (jsonError) {
           // If JSON parsing fails, return the raw response body
-          throw Exception('Failed to unrestrict link: ${response.statusCode} - ${response.body}');
+          throw Exception(
+            'Failed to unrestrict link: ${response.statusCode} - ${response.body}',
+          );
         }
       }
     } catch (e) {
@@ -396,7 +463,10 @@ class DebridService {
   }
 
   // Unrestrict multiple links
-  static Future<List<Map<String, dynamic>>> unrestrictLinks(String apiKey, List<String> links) async {
+  static Future<List<Map<String, dynamic>>> unrestrictLinks(
+    String apiKey,
+    List<String> links,
+  ) async {
     try {
       final futures = links.map((link) => unrestrictLink(apiKey, link));
       final results = await Future.wait(futures);
@@ -412,9 +482,7 @@ class DebridService {
       final baseUrl = await _getBaseUrl();
       final response = await http.delete(
         Uri.parse('$baseUrl/torrents/delete/$torrentId'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-        },
+        headers: {'Authorization': 'Bearer $apiKey'},
       );
 
       if (response.statusCode != 204) {
@@ -435,9 +503,7 @@ class DebridService {
       final baseUrl = await _getBaseUrl();
       final response = await http.delete(
         Uri.parse('$baseUrl/downloads/delete/$downloadId'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-        },
+        headers: {'Authorization': 'Bearer $apiKey'},
       );
 
       if (response.statusCode != 204) {
@@ -453,10 +519,16 @@ class DebridService {
   }
 
   // Complete workflow: Add magnet, select largest file, get download link
-  static Future<Map<String, dynamic>> addTorrentToDebrid(String apiKey, String magnetLink, {String? tempFileSelection}) async {
+  static Future<Map<String, dynamic>> addTorrentToDebrid(
+    String apiKey,
+    String magnetLink, {
+    String? tempFileSelection,
+  }) async {
     try {
-      // Step 1: Add magnet
-      final addResponse = await addMagnet(apiKey, magnetLink);
+      // Step 1: Add magnet or protected .torrent file URL
+      final addResponse = magnetLink.trim().toLowerCase().startsWith('http')
+          ? await addTorrentFile(apiKey, await _downloadTorrentFile(magnetLink))
+          : await addMagnet(apiKey, magnetLink);
       final torrentId = addResponse['id'];
 
       // Step 2: Get torrent info
@@ -469,7 +541,8 @@ class DebridService {
       }
 
       // Step 3: Get file selection preference (use temp selection if provided, otherwise use saved preference)
-      final fileSelection = tempFileSelection ?? await StorageService.getFileSelection();
+      final fileSelection =
+          tempFileSelection ?? await StorageService.getFileSelection();
       List<int> fileIdsToSelect = [];
 
       if (fileSelection == 'all') {
@@ -486,7 +559,9 @@ class DebridService {
         // Smart mode: classify by largest file being a playable video, with game flag override
         // Normalize names using path when needed
         final normalizedFiles = files.map((file) {
-          if (file is Map && (file['name'] == null || (file['name'] as String?)?.isEmpty == true)) {
+          if (file is Map &&
+              (file['name'] == null ||
+                  (file['name'] as String?)?.isEmpty == true)) {
             final path = file['path'] as String?;
             if (path != null && path.isNotEmpty) {
               final nameOnly = FileUtils.getFileName(path);
@@ -498,12 +573,21 @@ class DebridService {
 
         bool hasGameFlag = false;
         for (final f in normalizedFiles) {
-          final name = (f is Map) ? (f['name'] as String? ?? f['path'] as String? ?? '') : '';
+          final name = (f is Map)
+              ? (f['name'] as String? ?? f['path'] as String? ?? '')
+              : '';
           final lower = name.toLowerCase();
-          if (lower.endsWith('.iso') || lower.endsWith('.exe') || lower.endsWith('.msi') ||
-              lower.endsWith('.dmg') || lower.endsWith('.pkg') || lower.endsWith('.img') ||
-              lower.endsWith('.nrg') || lower.endsWith('.bin') || lower.endsWith('.cue') ||
-              lower.contains('/crack') || lower.contains('\\crack') ||
+          if (lower.endsWith('.iso') ||
+              lower.endsWith('.exe') ||
+              lower.endsWith('.msi') ||
+              lower.endsWith('.dmg') ||
+              lower.endsWith('.pkg') ||
+              lower.endsWith('.img') ||
+              lower.endsWith('.nrg') ||
+              lower.endsWith('.bin') ||
+              lower.endsWith('.cue') ||
+              lower.contains('/crack') ||
+              lower.contains('\\crack') ||
               lower.contains('_commonredist')) {
             hasGameFlag = true;
             break;
@@ -512,7 +596,9 @@ class DebridService {
 
         if (hasGameFlag) {
           // Non-media: select all files
-          fileIdsToSelect = normalizedFiles.map((file) => file['id'] as int).toList();
+          fileIdsToSelect = normalizedFiles
+              .map((file) => file['id'] as int)
+              .toList();
         } else {
           // Find largest file
           Map largest = normalizedFiles[0] as Map;
@@ -526,7 +612,8 @@ class DebridService {
           }
 
           final largestName = largest['name'] as String?;
-          final isLargestVideo = largestName != null && FileUtils.isVideoFile(largestName);
+          final isLargestVideo =
+              largestName != null && FileUtils.isVideoFile(largestName);
 
           if (isLargestVideo) {
             // Media path: try all videos first
@@ -534,10 +621,14 @@ class DebridService {
               final fileName = (file is Map) ? file['name'] as String? : null;
               return fileName != null && FileUtils.isVideoFile(fileName);
             }).toList();
-            fileIdsToSelect = videoFiles.map((file) => file['id'] as int).toList();
+            fileIdsToSelect = videoFiles
+                .map((file) => file['id'] as int)
+                .toList();
           } else {
             // Non-media: select all files
-            fileIdsToSelect = normalizedFiles.map((file) => file['id'] as int).toList();
+            fileIdsToSelect = normalizedFiles
+                .map((file) => file['id'] as int)
+                .toList();
           }
         }
       } else {
@@ -564,14 +655,19 @@ class DebridService {
       List<dynamic> links = updatedInfo['links'] as List<dynamic>;
 
       // Smart media fallback chain if initial 'smart' video selection yielded no links
-      if ((tempFileSelection ?? await StorageService.getFileSelection()) == 'smart') {
+      if ((tempFileSelection ?? await StorageService.getFileSelection()) ==
+          'smart') {
         // If we selected videos in smart mode and there are no links, try largest video then all files
         // Determine whether we selected videos by checking if fileIdsToSelect is not 'all' and all are videos
         final selectedIdsSet = fileIdsToSelect.toSet();
-        final selectedAreVideos = selectedIdsSet.isNotEmpty && files.where((f) => selectedIdsSet.contains(f['id'] as int)).every((f) {
-          final name = f['name'] as String?;
-          return name != null && FileUtils.isVideoFile(name);
-        });
+        final selectedAreVideos =
+            selectedIdsSet.isNotEmpty &&
+            files.where((f) => selectedIdsSet.contains(f['id'] as int)).every((
+              f,
+            ) {
+              final name = f['name'] as String?;
+              return name != null && FileUtils.isVideoFile(name);
+            });
 
         if (selectedAreVideos && links.isEmpty) {
           // Try largest video
@@ -612,7 +708,7 @@ class DebridService {
       // Step 6: Unrestrict the link
       final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
       final downloadLink = unrestrictResponse['download'] as String?;
-      
+
       if (downloadLink == null) {
         await deleteTorrent(apiKey, torrentId);
         throw Exception('Failed to get download link from Real Debrid');
@@ -637,7 +733,10 @@ class DebridService {
   }
 
   // Enhanced workflow for Magic TV: Prefer video files (all), fallback to largest video file
-  static Future<Map<String, dynamic>> addTorrentToDebridPreferVideos(String apiKey, String magnetLink) async {
+  static Future<Map<String, dynamic>> addTorrentToDebridPreferVideos(
+    String apiKey,
+    String magnetLink,
+  ) async {
     try {
       // Step 1: Add magnet
       final addResponse = await addMagnet(apiKey, magnetLink);
@@ -655,7 +754,9 @@ class DebridService {
       // Step 3: Try selecting all video files first
       // Some RD responses might use different keys. If name is missing, try fallback to 'path'
       final normalizedFiles = files.map((file) {
-        if (file is Map && (file['name'] == null || (file['name'] as String?)?.isEmpty == true)) {
+        if (file is Map &&
+            (file['name'] == null ||
+                (file['name'] as String?)?.isEmpty == true)) {
           final path = file['path'] as String?;
           if (path != null && path.isNotEmpty) {
             final nameOnly = FileUtils.getFileName(path);
@@ -672,7 +773,9 @@ class DebridService {
       }).toList();
 
       if (videoFiles.isNotEmpty) {
-        final allVideoIds = videoFiles.map((file) => file['id'] as int).toList();
+        final allVideoIds = videoFiles
+            .map((file) => file['id'] as int)
+            .toList();
         try {
           await selectFiles(apiKey, torrentId, allVideoIds);
         } catch (e) {
@@ -684,7 +787,8 @@ class DebridService {
         // Wait briefly and fetch updated links
         await Future.delayed(const Duration(seconds: 2));
         final updatedInfo = await getTorrentInfo(apiKey, torrentId);
-        List<dynamic> links = (updatedInfo['links'] as List<dynamic>? ?? const []);
+        List<dynamic> links =
+            (updatedInfo['links'] as List<dynamic>? ?? const []);
 
         // If no links yet, fallback to largest single video file
         if (links.isEmpty) {
@@ -704,7 +808,9 @@ class DebridService {
               await selectFiles(apiKey, torrentId, [largestVideoId]);
             } catch (e) {
               await deleteTorrent(apiKey, torrentId);
-              throw Exception('Failed to select files for Real Debrid torrent: $e');
+              throw Exception(
+                'Failed to select files for Real Debrid torrent: $e',
+              );
             }
             await Future.delayed(const Duration(seconds: 2));
             final updatedInfo2 = await getTorrentInfo(apiKey, torrentId);
@@ -765,7 +871,10 @@ class DebridService {
   // === New helper methods for folder navigation ===
 
   /// Get file nodes at root level of torrent
-  static Future<List<RDFileNode>> getTorrentRootNodes(String apiKey, String torrentId) async {
+  static Future<List<RDFileNode>> getTorrentRootNodes(
+    String apiKey,
+    String torrentId,
+  ) async {
     try {
       final info = await getTorrentInfo(apiKey, torrentId);
       final files = (info['files'] as List<dynamic>?) ?? [];
@@ -788,7 +897,10 @@ class DebridService {
   }
 
   /// Build complete folder tree for a torrent
-  static Future<RDFileNode> getTorrentFolderTree(String apiKey, String torrentId) async {
+  static Future<RDFileNode> getTorrentFolderTree(
+    String apiKey,
+    String torrentId,
+  ) async {
     try {
       final info = await getTorrentInfo(apiKey, torrentId);
       final files = (info['files'] as List<dynamic>?) ?? [];
@@ -810,14 +922,20 @@ class DebridService {
   }
 
   /// Unrestrict and get download URL for a specific file in a torrent
-  static Future<String> getFileDownloadUrl(String apiKey, String torrentId, int linkIndex) async {
+  static Future<String> getFileDownloadUrl(
+    String apiKey,
+    String torrentId,
+    int linkIndex,
+  ) async {
     try {
       // Get torrent info to get the links
       final info = await getTorrentInfo(apiKey, torrentId);
       final links = (info['links'] as List<dynamic>?) ?? [];
 
       if (linkIndex < 0 || linkIndex >= links.length) {
-        throw Exception('Invalid link index: $linkIndex (torrent has ${links.length} links)');
+        throw Exception(
+          'Invalid link index: $linkIndex (torrent has ${links.length} links)',
+        );
       }
 
       final link = links[linkIndex] as String;
@@ -853,7 +971,9 @@ class DebridService {
       // Validate all indices first
       for (final index in linkIndices) {
         if (index < 0 || index >= links.length) {
-          throw Exception('Invalid link index: $index (torrent has ${links.length} links)');
+          throw Exception(
+            'Invalid link index: $index (torrent has ${links.length} links)',
+          );
         }
       }
 
@@ -878,4 +998,4 @@ class DebridService {
       throw Exception('Failed to get multiple file download URLs: $e');
     }
   }
-} 
+}

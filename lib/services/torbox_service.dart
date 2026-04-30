@@ -63,9 +63,7 @@ class TorboxService {
     int limit = 50,
     int? torrentId,
   }) async {
-    final queryParameters = <String, String>{
-      'bypass_cache': 'true',
-    };
+    final queryParameters = <String, String>{'bypass_cache': 'true'};
     if (torrentId != null) {
       queryParameters['id'] = '$torrentId';
     } else {
@@ -73,8 +71,9 @@ class TorboxService {
       queryParameters['limit'] = '$limit';
     }
 
-    final uri = Uri.parse('$_baseUrl/torrents/mylist')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '$_baseUrl/torrents/mylist',
+    ).replace(queryParameters: queryParameters);
 
     try {
       if (torrentId != null) {
@@ -136,11 +135,7 @@ class TorboxService {
               .where((torrent) => torrent.isCachedOrCompleted)
               .toList();
           final torrent = torrents.isNotEmpty ? torrents.first : null;
-          return {
-            'torrents': torrents,
-            'hasMore': false,
-            'torrent': torrent,
-          };
+          return {'torrents': torrents, 'hasMore': false, 'torrent': torrent};
         }
       }
 
@@ -150,7 +145,8 @@ class TorboxService {
             .map(TorboxTorrent.fromJson)
             .where((torrent) => torrent.isCachedOrCompleted)
             .toList();
-        final bool hasMore = torrentId == null && rawList.length == limit && rawList.isNotEmpty;
+        final bool hasMore =
+            torrentId == null && rawList.length == limit && rawList.isNotEmpty;
         debugPrint(
           'TorboxService: Retrieved ${torrents.length} cached torrents (raw=${rawList.length}). hasMore=$hasMore',
         );
@@ -244,9 +240,7 @@ class TorboxService {
           }
         }
       } catch (e) {
-        debugPrint(
-          'TorboxService: checkcached chunk failed (ignored): $e',
-        );
+        debugPrint('TorboxService: checkcached chunk failed (ignored): $e');
       }
     }
 
@@ -288,17 +282,30 @@ class TorboxService {
   }) async {
     final uri = Uri.parse('$_baseUrl/torrents/createtorrent');
     final headers = {'Authorization': _formatAuthHeader(apiKey)};
+    final trimmedMagnet = magnet.trim();
 
     final request = http.MultipartRequest('POST', uri)
       ..headers.addAll(headers)
-      ..fields['magnet'] = magnet
       ..fields['seed'] = seed ? '1' : '0'
       ..fields['allow_zip'] = allowZip ? 'true' : 'false'
       ..fields['add_only_if_cached'] = addOnlyIfCached ? 'true' : 'false';
 
+    if (trimmedMagnet.toLowerCase().startsWith('http')) {
+      final torrentBytes = await _downloadTorrentFile(trimmedMagnet);
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          torrentBytes,
+          filename: 'debrify.torrent',
+        ),
+      );
+    } else {
+      request.fields['magnet'] = trimmedMagnet;
+    }
+
     try {
       debugPrint(
-        'TorboxService: createtorrent magnet hash=${magnet.length >= 80 ? magnet.substring(0, 80) : magnet}',
+        'TorboxService: createtorrent input=${_safeInputLabel(trimmedMagnet)}',
       );
       final response = await request.send().timeout(
         const Duration(seconds: 20),
@@ -325,7 +332,9 @@ class TorboxService {
         } else if (response.statusCode == 403) {
           throw Exception('Access denied by Torbox');
         } else if (response.statusCode == 429) {
-          throw Exception('Too many requests to Torbox. Please wait and try again');
+          throw Exception(
+            'Too many requests to Torbox. Please wait and try again',
+          );
         } else if (response.statusCode >= 500) {
           throw Exception('Torbox service is temporarily unavailable');
         }
@@ -337,6 +346,31 @@ class TorboxService {
       debugPrint('TorboxService: createTorrent failed: $e');
       rethrow;
     }
+  }
+
+  static String _safeInputLabel(String input) {
+    final lower = input.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      final uri = Uri.tryParse(input);
+      final host = uri?.host.isNotEmpty == true ? uri!.host : 'unknown-host';
+      return 'torrent_url:$host';
+    }
+    if (lower.startsWith('magnet:')) {
+      return input.length >= 80 ? input.substring(0, 80) : input;
+    }
+    return '<redacted>';
+  }
+
+  static Future<List<int>> _downloadTorrentFile(String torrentUrl) async {
+    final response = await http
+        .get(Uri.parse(torrentUrl))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Failed to download torrent file: ${response.statusCode}',
+      );
+    }
+    return response.bodyBytes;
   }
 
   static Future<String> requestFileDownloadLink({
@@ -385,7 +419,9 @@ class TorboxService {
         } else if (response.statusCode == 404) {
           throw Exception('File not found on Torbox');
         } else if (response.statusCode == 429) {
-          throw Exception('Too many requests to Torbox. Please wait and try again');
+          throw Exception(
+            'Too many requests to Torbox. Please wait and try again',
+          );
         } else if (response.statusCode >= 500) {
           throw Exception('Torbox service is temporarily unavailable');
         }
@@ -420,18 +456,17 @@ class TorboxService {
   }) async {
     for (int attempt = 0; attempt < attempts; attempt++) {
       try {
-        final result = await getTorrents(
-          apiKey,
-          torrentId: torrentId,
-        );
+        final result = await getTorrents(apiKey, torrentId: torrentId);
         final TorboxTorrent? torrent =
             result['torrent'] as TorboxTorrent? ??
-                _firstTorrent(result['torrents']);
+            _firstTorrent(result['torrents']);
         if (torrent != null) {
           return torrent;
         }
       } catch (e) {
-        debugPrint('TorboxService: getTorrentById attempt ${attempt + 1} failed: $e');
+        debugPrint(
+          'TorboxService: getTorrentById attempt ${attempt + 1} failed: $e',
+        );
       }
       if (attempt < attempts - 1) {
         await Future.delayed(delayBetweenAttempts);
@@ -460,9 +495,7 @@ class TorboxService {
     int limit = 50,
     int? webId,
   }) async {
-    final queryParameters = <String, String>{
-      'bypass_cache': 'true',
-    };
+    final queryParameters = <String, String>{'bypass_cache': 'true'};
     if (webId != null) {
       queryParameters['id'] = '$webId';
     } else {
@@ -470,8 +503,9 @@ class TorboxService {
       queryParameters['limit'] = '$limit';
     }
 
-    final uri = Uri.parse('$_baseUrl/webdl/mylist')
-        .replace(queryParameters: queryParameters);
+    final uri = Uri.parse(
+      '$_baseUrl/webdl/mylist',
+    ).replace(queryParameters: queryParameters);
 
     try {
       if (webId != null) {
@@ -492,7 +526,9 @@ class TorboxService {
         debugPrint(
           'TorboxService: Web download fetch status ${response.statusCode}. Body: ${response.body}',
         );
-        throw Exception('Failed to fetch web downloads: ${response.statusCode}');
+        throw Exception(
+          'Failed to fetch web downloads: ${response.statusCode}',
+        );
       }
 
       final Map<String, dynamic> payload =
@@ -513,14 +549,12 @@ class TorboxService {
             .map(TorboxWebDownload.fromJson)
             .where((wd) => wd.isCompleted)
             .toList();
-        final bool hasMore = webId == null && rawList.length == limit && rawList.isNotEmpty;
+        final bool hasMore =
+            webId == null && rawList.length == limit && rawList.isNotEmpty;
         debugPrint(
           'TorboxService: Retrieved ${webDownloads.length} completed web downloads (raw=${rawList.length}). hasMore=$hasMore',
         );
-        return {
-          'webDownloads': webDownloads,
-          'hasMore': hasMore,
-        };
+        return {'webDownloads': webDownloads, 'hasMore': hasMore};
       }
 
       debugPrint('TorboxService: Web download payload unexpected: $payload');
@@ -571,7 +605,9 @@ class TorboxService {
         } else if (response.statusCode == 404) {
           throw Exception('File not found on Torbox');
         } else if (response.statusCode == 429) {
-          throw Exception('Too many requests to Torbox. Please wait and try again');
+          throw Exception(
+            'Too many requests to Torbox. Please wait and try again',
+          );
         } else if (response.statusCode >= 500) {
           throw Exception('Torbox service is temporarily unavailable');
         }
@@ -662,7 +698,9 @@ class TorboxService {
         } else if (response.statusCode == 403) {
           throw Exception('Access denied by Torbox');
         } else if (response.statusCode == 429) {
-          throw Exception('Too many requests to Torbox. Please wait and try again');
+          throw Exception(
+            'Too many requests to Torbox. Please wait and try again',
+          );
         } else if (response.statusCode >= 500) {
           throw Exception('Torbox service is temporarily unavailable');
         }
@@ -687,10 +725,7 @@ class TorboxService {
       'Content-Type': 'application/json',
     };
 
-    final body = json.encode({
-      'webdl_id': webId,
-      'operation': 'delete',
-    });
+    final body = json.encode({'webdl_id': webId, 'operation': 'delete'});
 
     try {
       debugPrint('TorboxService: deleteWebDownload webId=$webId');
@@ -702,7 +737,9 @@ class TorboxService {
         debugPrint(
           'TorboxService: deleteWebDownload status ${response.statusCode}. Body: ${response.body}',
         );
-        throw Exception('Failed to delete web download: ${response.statusCode}');
+        throw Exception(
+          'Failed to delete web download: ${response.statusCode}',
+        );
       }
 
       final Map<String, dynamic> payload =

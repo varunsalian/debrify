@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:http/http.dart' as http;
 import '../models/playlist_view_mode.dart';
+import '../models/indexer_manager_config.dart';
 import '../models/torrent.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/torrent_filter_state.dart';
@@ -33,6 +34,7 @@ import 'video_player_screen.dart';
 import '../models/rd_torrent.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_service.dart';
+import '../services/torrent_file_service.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
@@ -2627,6 +2629,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           setState(() => _searchPhase = SearchPhase.checkingCache);
         }
         final uniqueHashes = combinedTorrents
+            .where((torrent) => torrent.hasRealInfoHash)
             .map((torrent) => torrent.infohash.trim().toLowerCase())
             .where((hash) => hash.isNotEmpty)
             .toSet()
@@ -2667,6 +2670,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torboxCacheMap != null) {
         filteredTorrents = combinedTorrents
             .where((torrent) {
+              if (!torrent.hasRealInfoHash && torrent.torrentUrl != null) {
+                return true;
+              }
               final hash = torrent.infohash.trim().toLowerCase();
               return torboxCacheMap![hash] ?? false;
             })
@@ -2935,6 +2941,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// E.g., 'pirate_bay' → 'Pirate Bay', 'torrents_csv' → 'Torrents CSV'
   String _friendlyEngineName(String name) {
     if (name.isEmpty) return name;
+    if (IndexerManagerConfig.isIndexerManagerEngine(name)) {
+      return IndexerManagerConfig.displayNameFromEngineId(name);
+    }
 
     // Common acronyms that should stay uppercase
     const acronyms = {'csv', 'yts', 'api', 'url', 'id', 'tv', 'hd'};
@@ -3589,7 +3598,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       try {
         final apiKey = _apiKey!;
-        final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+        final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
         final result = await DebridService.addTorrentToDebrid(
           apiKey,
           magnetLink,
@@ -3745,7 +3754,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   ) async {
     if (!mounted) return;
     final apiKey = _torboxApiKey!;
-    final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+    final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
 
     _showSelectSourceLoadingDialog(torrentName);
     try {
@@ -3838,8 +3847,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (!mounted) return;
     _showSelectSourceLoadingDialog(torrentName);
     try {
-      final magnet =
-          'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
+      final magnet = await _pikPakMagnet(infohash, torrentName);
       final pikpak = PikPakApiService.instance;
 
       // Use same subfolder logic as _sendToPikPak
@@ -6719,7 +6727,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _copyMagnetLink(String infohash) {
-    final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+    final magnetLink = _torrentAcquisitionUrl(infohash, '');
     Clipboard.setData(ClipboardData(text: magnetLink));
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -6754,6 +6762,69 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  String _torrentAcquisitionUrl(String infohash, String torrentName) {
+    final lowerHash = infohash.toLowerCase();
+    final hashMatch = _torrents.cast<Torrent?>().firstWhere(
+      (torrent) => torrent?.infohash.toLowerCase() == lowerHash,
+      orElse: () => null,
+    );
+    if (hashMatch != null) return _torrentAcquisitionUrlForTorrent(hashMatch);
+
+    final nameMatch = _torrents.cast<Torrent?>().firstWhere(
+      (torrent) => torrentName.isNotEmpty && torrent?.name == torrentName,
+      orElse: () => null,
+    );
+    if (nameMatch != null) return _torrentAcquisitionUrlForTorrent(nameMatch);
+
+    final nameParam = torrentName.isNotEmpty
+        ? '&dn=${Uri.encodeComponent(torrentName)}'
+        : '';
+    return 'magnet:?xt=urn:btih:$infohash$nameParam';
+  }
+
+  String _torrentAcquisitionUrlForTorrent(Torrent torrent) {
+    final magnetUrl = torrent.magnetUrl?.trim();
+    if (magnetUrl != null && magnetUrl.toLowerCase().startsWith('magnet:')) {
+      return magnetUrl;
+    }
+
+    final torrentUrl = torrent.torrentUrl?.trim();
+    if (torrentUrl != null && torrentUrl.isNotEmpty) {
+      return torrentUrl;
+    }
+
+    final infohash = torrent.infohash;
+    final nameParam = torrent.name.isNotEmpty
+        ? '&dn=${Uri.encodeComponent(torrent.name)}'
+        : '';
+    return 'magnet:?xt=urn:btih:$infohash$nameParam';
+  }
+
+  Future<String> _pikPakMagnetForTorrent(Torrent torrent) async {
+    final magnetUrl = torrent.magnetUrl?.trim();
+    if (magnetUrl != null && magnetUrl.toLowerCase().startsWith('magnet:')) {
+      return magnetUrl;
+    }
+
+    final torrentUrl = torrent.torrentUrl?.trim();
+    if (torrentUrl != null && torrentUrl.isNotEmpty) {
+      return TorrentFileService.magnetFromTorrentUrl(
+        torrentUrl,
+        fallbackName: torrent.name,
+      );
+    }
+
+    final nameParam = torrent.name.isNotEmpty
+        ? '&dn=${Uri.encodeComponent(torrent.name)}'
+        : '';
+    return 'magnet:?xt=urn:btih:${torrent.infohash}$nameParam';
+  }
+
+  Future<String> _pikPakMagnet(String infohash, String torrentName) async {
+    final torrent = _findTorrentByInfohash(infohash, torrentName);
+    return _pikPakMagnetForTorrent(torrent);
   }
 
   void _sortTorrents({
@@ -7380,8 +7451,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     bool forcePlay = false,
   }) async {
     try {
-      final magnet =
-          'magnet:?xt=urn:btih:$infohash&dn=${Uri.encodeComponent(torrentName)}';
+      final magnet = await _pikPakMagnet(infohash, torrentName);
 
       final pikpak = PikPakApiService.instance;
 
@@ -8227,8 +8297,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 });
               }
 
-              final magnet =
-                  'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+              final magnet = await _pikPakMagnetForTorrent(torrent);
 
               await pikpak.addOfflineDownload(
                 magnet,
@@ -8638,8 +8707,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             });
           }
 
-          final magnet =
-              'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+          final magnet = _torrentAcquisitionUrlForTorrent(torrent);
 
           await TorboxService.createTorrent(
             apiKey: _torboxApiKey!,
@@ -9037,7 +9105,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             });
           }
 
-          final magnetLink = 'magnet:?xt=urn:btih:${torrent.infohash}';
+          final magnetLink = _torrentAcquisitionUrlForTorrent(torrent);
 
           await DebridService.addTorrentToDebrid(_apiKey!, magnetLink);
 
@@ -10886,7 +10954,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     DebridLoadingOverlay.showRealDebrid(context, torrentName);
 
     try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
       final result = await DebridService.addTorrentToDebrid(apiKey, magnetLink);
 
       // Close loading dialog
@@ -11472,7 +11540,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
 
     try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
       final result = await DebridService.addTorrentToDebrid(
         apiKey,
         magnetLink,
@@ -11696,7 +11764,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _showTorboxLoadingDialog(torrentName);
 
     try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
+      final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
       final response = await TorboxService.createTorrent(
         apiKey: apiKey,
         magnet: magnetLink,
@@ -13077,13 +13145,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         (file.mimetype?.toLowerCase().startsWith('video/') ?? false);
   }
 
-  bool _torboxResultIsCached(String infohash) {
+  bool _torboxResultIsCached(Torrent torrent) {
     if (!_torboxCacheCheckEnabled) return true;
     final status = _torboxCacheStatus;
     if (status == null) return true;
+    if (!torrent.hasRealInfoHash) return false;
+    final infohash = torrent.infohash;
     final sanitized = infohash.trim().toLowerCase();
     if (sanitized.isEmpty) return true;
     return status[sanitized] ?? false;
+  }
+
+  bool _torboxResultCanBeAdded(Torrent torrent) {
+    if (!_torboxCacheCheckEnabled) return true;
+    if (!_torboxResultIsCached(torrent) && torrent.torrentUrl == null) {
+      return false;
+    }
+    return true;
   }
 
   String _formatTorboxError(Object error) {
@@ -15142,8 +15220,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
       if (torrent.streamType != StreamType.torrent) return null;
 
-      final magnet =
-          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final magnet = _torrentAcquisitionUrlForTorrent(torrent);
 
       // Respect the user's selected provider from Settings → Provider Settings
       final defaultProvider = await StorageService.getDefaultTorrentProvider();
@@ -15251,9 +15328,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Future<List<PlaylistEntry>?> _resolveSourceViaPikPak(
     Torrent torrent,
-    String magnet,
+    String _,
   ) async {
     try {
+      final pikpakMagnet = await _pikPakMagnetForTorrent(torrent);
       final pikpak = PikPakApiService.instance;
       final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
       String? subFolderId;
@@ -15269,7 +15347,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       final addResult = await pikpak.addOfflineDownload(
-        magnet,
+        pikpakMagnet,
         parentFolderId: subFolderId,
       );
       String? fileId;
@@ -16097,6 +16175,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String name = engineId;
     if (name.startsWith('stremio:')) {
       name = name.substring(8); // Remove 'stremio:' prefix
+    }
+    if (IndexerManagerConfig.isIndexerManagerEngine(name)) {
+      name = IndexerManagerConfig.displayNameFromEngineId(
+        name,
+      ).toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
     }
 
     if (name.contains('_')) {
@@ -18265,9 +18348,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         if (_continueWatchingEnabled)
           RepaintBoundary(
             child: HomeContinueWatchingSection(
-              key: ValueKey(
-                'home_continue_watching_${_homeTraktRefreshNonce}',
-              ),
+              key: ValueKey('home_continue_watching_${_homeTraktRefreshNonce}'),
               focusController: _homeFocusController,
               isTelevision: _isTelevision,
               onInitialLoadStateChanged: (isLoading) {
@@ -18722,12 +18803,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       focusNode: focusNode,
       isTelevision: _isTelevision,
       qualityTier: torrent.qualityTier,
-      isCached: _torboxResultIsCached(torrent.infohash),
+      isCached: _torboxResultIsCached(torrent),
       // Only show cache badge if we actually checked cache status (not just assuming cached)
       cacheService:
           (_torboxCacheCheckEnabled &&
               _torboxCacheStatus != null &&
-              _torboxResultIsCached(torrent.infohash))
+              _torboxResultIsCached(torrent))
           ? 'torbox'
           : null,
       isSelectionMode: _isSelectionMode,
@@ -19246,7 +19327,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         }
 
         Widget buildTorboxButton() {
-          final bool isCached = _torboxResultIsCached(torrent.infohash);
+          final bool isCached = _torboxResultIsCached(torrent);
+          final bool canAdd = _torboxResultCanBeAdded(torrent);
           final gradientColors = isCached
               ? const [Color(0xFF7C3AED), Color(0xFFDB2777)]
               : const [Color(0xFF475569), Color(0xFF1F2937)];
@@ -19256,13 +19338,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           final textColor = isCached ? Colors.white : Colors.white70;
 
           return Opacity(
-            opacity: isCached ? 1.0 : 0.55,
+            opacity: canAdd ? 1.0 : 0.55,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 focusColor: const Color(0xFF7C3AED).withValues(alpha: 0.25),
-                onTap: isCached
+                onTap: canAdd
                     ? () => _addToTorbox(torrent.infohash, torrent.name)
                     : null,
                 child: Container(

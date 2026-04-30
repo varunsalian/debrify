@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
 import '../models/iptv_playlist.dart';
+import '../models/indexer_manager_config.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
@@ -254,6 +255,7 @@ class StorageService {
   // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
   static const String _defaultTorrentProviderKey =
       'default_torrent_provider_v1';
+  static const String _indexerManagerConfigsKey = 'indexer_manager_configs_v1';
 
   // Quick Play VR Settings
   // VR Player Mode: 'disabled' (always regular player), 'auto' (detect VR content), 'always' (always use DeoVR)
@@ -3790,6 +3792,34 @@ class StorageService {
   static Future<void> clearDefaultTorrentProvider() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_defaultTorrentProviderKey);
+  }
+
+  static Future<List<IndexerManagerConfig>> getIndexerManagerConfigs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawList = prefs.getStringList(_indexerManagerConfigsKey) ?? [];
+    return rawList
+        .map((raw) {
+          try {
+            return IndexerManagerConfig.fromJson(
+              Map<String, dynamic>.from(jsonDecode(raw) as Map),
+            );
+          } catch (e) {
+            debugPrint('Error loading indexer manager config: $e');
+            return null;
+          }
+        })
+        .whereType<IndexerManagerConfig>()
+        .toList();
+  }
+
+  static Future<void> setIndexerManagerConfigs(
+    List<IndexerManagerConfig> configs,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawList = configs
+        .map((config) => jsonEncode(config.toJson()))
+        .toList();
+    await prefs.setStringList(_indexerManagerConfigsKey, rawList);
   }
 
   static Future<String?> getSupportRemoteConfigCache() async {

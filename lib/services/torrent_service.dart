@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/engine_config/engine_config.dart';
+import '../models/indexer_manager_config.dart';
 import '../models/torrent.dart';
 import 'engine/engine_registry.dart';
 import 'engine/dynamic_engine.dart';
 import 'engine/settings_manager.dart';
+import 'indexer_manager_service.dart';
 import 'stremio_service.dart';
 
 /// Service for searching torrents across multiple dynamic engines.
@@ -78,12 +81,26 @@ class TorrentService {
         // Use specified engine
         engine = _registry.getEngine(engineId);
         if (engine == null) {
+          final indexerConfig = await IndexerManagerService.getConfigForEngine(
+            engineId,
+          );
+          if (indexerConfig != null) {
+            final maxResults = await _settings.getMaxResults(
+              engineId,
+              indexerConfig.maxResults,
+            );
+            return IndexerManagerService.searchKeyword(
+              indexerConfig,
+              query,
+              maxResults: maxResults,
+            );
+          }
           debugPrint('TorrentService: Engine not found: $engineId');
           return [];
         }
       } else {
         // Use first keyword-capable engine
-        final engines = _registry.getKeywordSearchEngines();
+        final engines = await _getKeywordSearchEngines();
         if (engines.isEmpty) {
           debugPrint('TorrentService: No keyword search engines available');
           return [];
@@ -120,9 +137,9 @@ class TorrentService {
   ///   If provided for an engine, uses this instead of stored settings.
   ///
   /// Returns a map with:
-  /// - 'torrents': List<Torrent> - deduplicated and sorted by seeders
-  /// - 'engineCounts': Map<String, int> - count of results per engine
-  /// - 'engineErrors': Map<String, String> - error messages per engine
+  /// - 'torrents': `List<Torrent>` - deduplicated and sorted by seeders
+  /// - 'engineCounts': `Map<String, int>` - count of results per engine
+  /// - 'engineErrors': `Map<String, String>` - error messages per engine
   static Future<Map<String, dynamic>> searchAllEngines(
     String query, {
     Map<String, bool>? engineStates,
@@ -135,7 +152,7 @@ class TorrentService {
     final Map<String, String> engineErrors = {};
 
     // Get all keyword search capable engines
-    final allEngines = _registry.getKeywordSearchEngines();
+    final allEngines = await _getKeywordSearchEngines();
 
     if (allEngines.isEmpty) {
       debugPrint('TorrentService: No keyword search engines available');
@@ -150,18 +167,7 @@ class TorrentService {
     final List<DynamicEngine> selectedEngines = [];
 
     for (final engine in allEngines) {
-      final engineId = engine.name;
-      bool isEnabled;
-
-      if (engineStates != null && engineStates.containsKey(engineId)) {
-        // Use provided state
-        isEnabled = engineStates[engineId] ?? false;
-      } else {
-        // Check stored settings, default to config default
-        final defaultEnabled =
-            engine.settingsConfig.enabled?.defaultBool ?? true;
-        isEnabled = await _settings.getEnabled(engineId, defaultEnabled);
-      }
+      final isEnabled = await _isEngineSelected(engine, engineStates);
 
       if (isEnabled) {
         selectedEngines.add(engine);
@@ -180,8 +186,9 @@ class TorrentService {
 
     // Determine effective query
     final override = imdbIdOverride?.trim();
-    final effectiveQuery =
-        override != null && override.isNotEmpty ? override : query;
+    final effectiveQuery = override != null && override.isNotEmpty
+        ? override
+        : query;
 
     // Search all selected engines in parallel
     final List<Future<List<Torrent>>> futures = [];
@@ -191,33 +198,38 @@ class TorrentService {
 
       // Get max results setting for this engine (check override first)
       final int maxResults;
-      if (maxResultsOverrides != null && maxResultsOverrides.containsKey(engineId)) {
+      if (maxResultsOverrides != null &&
+          maxResultsOverrides.containsKey(engineId)) {
         maxResults = maxResultsOverrides[engineId]!;
-        debugPrint('TorrentService: $engineId - using override maxResults: $maxResults');
+        debugPrint(
+          'TorrentService: $engineId - using override maxResults: $maxResults',
+        );
       } else {
         final maxResultsSetting = engine.settingsConfig.maxResults;
         final defaultMax = maxResultsSetting?.defaultInt ?? 50;
         maxResults = await _settings.getMaxResults(engineId, defaultMax);
-        debugPrint('TorrentService: $engineId - settingExists: ${maxResultsSetting != null}, '
-            'yamlDefault: ${maxResultsSetting?.defaultValue}, defaultInt: $defaultMax, '
-            'finalMax: $maxResults');
+        debugPrint(
+          'TorrentService: $engineId - settingExists: ${maxResultsSetting != null}, '
+          'yamlDefault: ${maxResultsSetting?.defaultValue}, defaultInt: $defaultMax, '
+          'finalMax: $maxResults',
+        );
       }
 
       futures.add(
-        engine.executeSearch(
-          query: effectiveQuery,
-          maxResults: maxResults,
-        ).then((results) {
-          engineCounts[engineId] = results.length;
-          debugPrint(
-              'TorrentService: $engineId returned ${results.length} results (max: $maxResults)');
-          return results;
-        }).catchError((error, _) {
-          engineCounts[engineId] = 0;
-          engineErrors[engineId] = error.toString();
-          debugPrint('TorrentService: $engineId error: $error');
-          return <Torrent>[];
-        }),
+        _executeKeywordSearch(engine, effectiveQuery, maxResults)
+            .then((results) {
+              engineCounts[engineId] = results.length;
+              debugPrint(
+                'TorrentService: $engineId returned ${results.length} results (max: $maxResults)',
+              );
+              return results;
+            })
+            .catchError((error, _) {
+              engineCounts[engineId] = 0;
+              engineErrors[engineId] = error.toString();
+              debugPrint('TorrentService: $engineId error: $error');
+              return <Torrent>[];
+            }),
       );
     }
 
@@ -266,7 +278,7 @@ class TorrentService {
     final Map<String, String> engineErrors = {};
 
     // Get all IMDB search capable engines
-    final allEngines = _registry.getImdbSearchEngines();
+    final allEngines = await _getImdbSearchEngines();
 
     if (allEngines.isEmpty) {
       debugPrint('TorrentService: No IMDB search engines available');
@@ -281,16 +293,7 @@ class TorrentService {
     final List<DynamicEngine> selectedEngines = [];
 
     for (final engine in allEngines) {
-      final engineId = engine.name;
-      bool isEnabled;
-
-      if (engineStates != null && engineStates.containsKey(engineId)) {
-        isEnabled = engineStates[engineId] ?? false;
-      } else {
-        final defaultEnabled =
-            engine.settingsConfig.enabled?.defaultBool ?? true;
-        isEnabled = await _settings.getEnabled(engineId, defaultEnabled);
-      }
+      final isEnabled = await _isEngineSelected(engine, engineStates);
 
       if (isEnabled) {
         selectedEngines.add(engine);
@@ -316,32 +319,41 @@ class TorrentService {
       final defaultMax = engine.settingsConfig.maxResults?.defaultInt ?? 50;
       final maxResults = await _settings.getMaxResults(engineId, defaultMax);
 
-      // Use executeSearch which supports maxResults
-      var future = engine.executeSearch(
-          imdbId: imdbId,
-          isSeries: !isMovie,
-          season: (!isMovie && engine.supportsSeriesSearch) ? season : null,
-          episode: (!isMovie && engine.supportsSeriesSearch) ? episode : null,
-          maxResults: maxResults,
-          availableSeasons: (!isMovie && engine.supportsSeriesSearch) ? availableSeasons : null,
-        ).then((results) {
-          engineCounts[engineId] = results.length;
-          debugPrint(
-              'TorrentService: $engineId (IMDB) returned ${results.length} results (max: $maxResults)');
-          return results;
-        }).catchError((error, _) {
-          engineCounts[engineId] = 0;
-          engineErrors[engineId] = error.toString();
-          debugPrint('TorrentService: $engineId (IMDB) error: $error');
-          return <Torrent>[];
-        });
+      var future =
+          _executeImdbSearch(
+                engine,
+                imdbId,
+                isMovie: isMovie,
+                season: season,
+                episode: episode,
+                availableSeasons: availableSeasons,
+                maxResults: maxResults,
+              )
+              .then((results) {
+                engineCounts[engineId] = results.length;
+                debugPrint(
+                  'TorrentService: $engineId (IMDB) returned ${results.length} results (max: $maxResults)',
+                );
+                return results;
+              })
+              .catchError((error, _) {
+                engineCounts[engineId] = 0;
+                engineErrors[engineId] = error.toString();
+                debugPrint('TorrentService: $engineId (IMDB) error: $error');
+                return <Torrent>[];
+              });
       if (timeout != null) {
-        future = future.timeout(timeout, onTimeout: () {
-          engineCounts[engineId] = 0;
-          engineErrors[engineId] = 'Timeout after ${timeout.inSeconds}s';
-          debugPrint('TorrentService: $engineId (IMDB) timed out after ${timeout.inSeconds}s');
-          return <Torrent>[];
-        });
+        future = future.timeout(
+          timeout,
+          onTimeout: () {
+            engineCounts[engineId] = 0;
+            engineErrors[engineId] = 'Timeout after ${timeout.inSeconds}s';
+            debugPrint(
+              'TorrentService: $engineId (IMDB) timed out after ${timeout.inSeconds}s',
+            );
+            return <Torrent>[];
+          },
+        );
       }
       futures.add(future);
     }
@@ -385,12 +397,16 @@ class TorrentService {
     int? episode,
     bool includeStremio = true,
     List<int>? availableSeasons,
-    String? contentType, // Optional explicit content type (for TV channels, etc.)
+    String?
+    contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? stremioTimeout,
     Duration? engineTimeout,
   }) async {
     // For non-IMDB content types (TV channels, etc.), skip traditional engine search
-    final isNonImdbContent = contentType != null && contentType != 'movie' && contentType != 'series';
+    final isNonImdbContent =
+        contentType != null &&
+        contentType != 'movie' &&
+        contentType != 'series';
 
     // Start searches in parallel
     final List<Future<Map<String, dynamic>>> searchFutures = [];
@@ -435,7 +451,8 @@ class TorrentService {
     for (final result in results) {
       final torrents = result['torrents'] as List<Torrent>? ?? [];
       final counts = result['engineCounts'] as Map<String, int>? ?? {};
-      final errors = result['engineErrors'] as Map<String, String>? ??
+      final errors =
+          result['engineErrors'] as Map<String, String>? ??
           result['addonErrors'] as Map<String, String>? ??
           {};
 
@@ -464,7 +481,9 @@ class TorrentService {
     // Deduplicate and sort all results together
     final torrents = _deduplicateAndSort(allTorrentLists);
 
-    debugPrint('TorrentService: Total torrents after dedup: ${torrents.length}');
+    debugPrint(
+      'TorrentService: Total torrents after dedup: ${torrents.length}',
+    );
 
     // Recalculate counts based on actual deduplicated results
     // This ensures filter counts match what's actually available
@@ -504,7 +523,8 @@ class TorrentService {
     int? season,
     int? episode,
     List<int>? availableSeasons,
-    String? contentType, // Optional explicit content type (for TV channels, etc.)
+    String?
+    contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? timeout,
   }) async {
     try {
@@ -565,25 +585,26 @@ class TorrentService {
   /// contains no engines.
   static Future<List<DynamicEngine>> getAvailableEngines() async {
     await ensureInitialized();
-    return _registry.getAllEngines();
+    return _getAllEngines();
   }
 
   /// Get engines that support keyword search.
   static Future<List<DynamicEngine>> getKeywordSearchEngines() async {
     await ensureInitialized();
-    return _registry.getKeywordSearchEngines();
+    return _getKeywordSearchEngines();
   }
 
   /// Get engines that support IMDB search.
   static Future<List<DynamicEngine>> getImdbSearchEngines() async {
     await ensureInitialized();
-    return _registry.getImdbSearchEngines();
+    return _getImdbSearchEngines();
   }
 
   /// Get engines that support series/TV show search.
   static Future<List<DynamicEngine>> getSeriesSearchEngines() async {
     await ensureInitialized();
-    return _registry.getSeriesSearchEngines();
+    final engines = _registry.getSeriesSearchEngines();
+    return [...engines, ...await _getIndexerManagerEngines()];
   }
 
   /// Get engines configured for TV mode.
@@ -597,7 +618,10 @@ class TorrentService {
   /// Returns null if the engine doesn't exist.
   static Future<DynamicEngine?> getEngine(String engineId) async {
     await ensureInitialized();
-    return _registry.getEngine(engineId);
+    final engine = _registry.getEngine(engineId);
+    if (engine != null) return engine;
+    final config = await IndexerManagerService.getConfigForEngine(engineId);
+    return config == null ? null : _dynamicEngineForIndexerManager(config);
   }
 
   // ============================================================
@@ -607,22 +631,29 @@ class TorrentService {
   /// Get list of all available engine IDs.
   static Future<List<String>> getAvailableEngineIds() async {
     await ensureInitialized();
-    return _registry.getEngineIds();
+    return (await _getAllEngines()).map((engine) => engine.name).toList();
   }
 
   /// Get list of all engine display names.
   static Future<List<String>> getAvailableEngineDisplayNames() async {
     await ensureInitialized();
-    return _registry.getDisplayNames();
+    return (await _getAllEngines())
+        .map((engine) => engine.displayName)
+        .toList();
   }
 
   /// Get engines filtered by category.
   ///
   /// Categories might include: 'movies', 'tv', 'anime', 'general', etc.
   static Future<List<DynamicEngine>> getEnginesByCategory(
-      String category) async {
+    String category,
+  ) async {
     await ensureInitialized();
-    return _registry.getEnginesByCategory(category);
+    final engines = _registry.getEnginesByCategory(category);
+    if (category == 'general' || category == 'movies' || category == 'tv') {
+      return [...engines, ...await _getIndexerManagerEngines()];
+    }
+    return engines;
   }
 
   // ============================================================
@@ -632,7 +663,7 @@ class TorrentService {
   /// Check if an engine is enabled in settings.
   static Future<bool> isEngineEnabled(String engineId) async {
     await ensureInitialized();
-    final engine = _registry.getEngine(engineId);
+    final engine = await getEngine(engineId);
     if (engine == null) return false;
 
     final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
@@ -647,7 +678,7 @@ class TorrentService {
   /// Get the max results setting for an engine.
   static Future<int> getEngineMaxResults(String engineId) async {
     await ensureInitialized();
-    final engine = _registry.getEngine(engineId);
+    final engine = await getEngine(engineId);
     if (engine == null) return 50;
 
     final defaultMax = engine.settingsConfig.maxResults?.defaultInt ?? 50;
@@ -675,6 +706,148 @@ class TorrentService {
   // Private Helpers
   // ============================================================
 
+  static Future<List<DynamicEngine>> _getAllEngines() async {
+    return [..._registry.getAllEngines(), ...await _getIndexerManagerEngines()];
+  }
+
+  static Future<List<DynamicEngine>> _getKeywordSearchEngines() async {
+    return [
+      ..._registry.getKeywordSearchEngines(),
+      ...await _getIndexerManagerEngines(),
+    ];
+  }
+
+  static Future<List<DynamicEngine>> _getImdbSearchEngines() async {
+    return [
+      ..._registry.getImdbSearchEngines(),
+      ...await _getIndexerManagerEngines(),
+    ];
+  }
+
+  static Future<List<DynamicEngine>> _getIndexerManagerEngines() async {
+    final configs = await IndexerManagerService.getConfigs();
+    return configs.map(_dynamicEngineForIndexerManager).toList();
+  }
+
+  static DynamicEngine _dynamicEngineForIndexerManager(
+    IndexerManagerConfig config,
+  ) {
+    return DynamicEngine(
+      EngineConfig(
+        metadata: EngineMetadata(
+          id: config.engineId,
+          displayName: config.displayName,
+          description:
+              'Direct ${config.type.label} search engine configured in Debrify.',
+          icon: 'hub',
+          categories: const ['general', 'movies', 'tv'],
+          capabilities: const EngineCapabilities(
+            keywordSearch: true,
+            imdbSearch: true,
+            seriesSupport: true,
+          ),
+        ),
+        request: RequestConfig(
+          baseUrl: config.normalizedBaseUrl,
+          method: 'GET',
+          timeoutSeconds: config.timeoutSeconds,
+          urlBuilder: const UrlBuilder(type: 'custom', encode: true),
+          params: const [],
+        ),
+        pagination: const PaginationConfig(type: 'none'),
+        response: const ResponseConfig(
+          format: 'custom',
+          resultsPath: '',
+          fieldMapping: {},
+        ),
+        settings: SettingsConfig(
+          settings: {
+            'enabled': SettingConfig(
+              type: 'toggle',
+              label: 'Enabled',
+              defaultValue: config.enabled,
+            ),
+            'max_results': SettingConfig(
+              type: 'dropdown',
+              label: 'Max Results',
+              defaultValue: config.maxResults,
+              options: const [25, 50, 100, 200],
+            ),
+          },
+        ),
+      ),
+    );
+  }
+
+  static Future<bool> _isEngineSelected(
+    DynamicEngine engine,
+    Map<String, bool>? engineStates,
+  ) async {
+    final engineId = engine.name;
+
+    if (engineStates != null && engineStates.containsKey(engineId)) {
+      return engineStates[engineId] ?? false;
+    }
+
+    if (engineStates != null &&
+        IndexerManagerConfig.isIndexerManagerEngine(engineId)) {
+      return false;
+    }
+
+    final defaultEnabled = engine.settingsConfig.enabled?.defaultBool ?? true;
+    return _settings.getEnabled(engineId, defaultEnabled);
+  }
+
+  static Future<List<Torrent>> _executeKeywordSearch(
+    DynamicEngine engine,
+    String query,
+    int maxResults,
+  ) async {
+    final config = await IndexerManagerService.getConfigForEngine(engine.name);
+    if (config != null) {
+      return IndexerManagerService.searchKeyword(
+        config,
+        query,
+        maxResults: maxResults,
+      );
+    }
+
+    return engine.executeSearch(query: query, maxResults: maxResults);
+  }
+
+  static Future<List<Torrent>> _executeImdbSearch(
+    DynamicEngine engine,
+    String imdbId, {
+    required bool isMovie,
+    int? season,
+    int? episode,
+    List<int>? availableSeasons,
+    required int maxResults,
+  }) async {
+    final config = await IndexerManagerService.getConfigForEngine(engine.name);
+    if (config != null) {
+      return IndexerManagerService.searchByImdb(
+        config,
+        imdbId,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        maxResults: maxResults,
+      );
+    }
+
+    return engine.executeSearch(
+      imdbId: imdbId,
+      isSeries: !isMovie,
+      season: (!isMovie && engine.supportsSeriesSearch) ? season : null,
+      episode: (!isMovie && engine.supportsSeriesSearch) ? episode : null,
+      maxResults: maxResults,
+      availableSeasons: (!isMovie && engine.supportsSeriesSearch)
+          ? availableSeasons
+          : null,
+    );
+  }
+
   /// Deduplicate torrent results by infohash and sort by seeders descending.
   static List<Torrent> _deduplicateAndSort(List<List<Torrent>> allResults) {
     final Map<String, Torrent> uniqueTorrents = {};
@@ -695,7 +868,8 @@ class TorrentService {
     deduplicatedResults.sort((a, b) => b.seeders.compareTo(a.seeders));
 
     debugPrint(
-        'TorrentService: Deduplicated to ${deduplicatedResults.length} unique torrents');
+      'TorrentService: Deduplicated to ${deduplicatedResults.length} unique torrents',
+    );
 
     return deduplicatedResults;
   }
