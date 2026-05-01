@@ -5,14 +5,18 @@ import 'package:flutter/services.dart';
 ///
 /// Options:
 /// - Torrent Search (always shown, in SEARCH section)
+/// - Local File / Folder (only if [onLocal] is non-null, in LOCAL section)
+/// - Disabled Local File / Folder (only if [localDisabledReason] is non-null)
 /// - Real-Debrid (only if [onRealDebrid] is non-null, in CLOUD section)
 /// - TorBox (only if [onTorbox] is non-null, in CLOUD section)
 ///
-/// If both [onRealDebrid] and [onTorbox] are null, callers should
-/// skip showing this dialog and call [onTorrentSearch] directly.
+/// If [onLocal], [onRealDebrid], and [onTorbox] are null, callers may skip
+/// showing this dialog and call [onTorrentSearch] directly.
 Future<void> showAddSourcePickerDialog(
   BuildContext context, {
   required VoidCallback onTorrentSearch,
+  VoidCallback? onLocal,
+  String? localDisabledReason,
   VoidCallback? onRealDebrid,
   VoidCallback? onTorbox,
 }) {
@@ -22,9 +26,7 @@ Future<void> showAddSourcePickerDialog(
     builder: (dialogContext) {
       return Dialog(
         backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
@@ -36,7 +38,11 @@ Future<void> showAddSourcePickerDialog(
                 // Header
                 Row(
                   children: const [
-                    Icon(Icons.add_link_rounded, color: Color(0xFF60A5FA), size: 24),
+                    Icon(
+                      Icons.add_link_rounded,
+                      color: Color(0xFF60A5FA),
+                      size: 24,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'Add Source',
@@ -67,12 +73,34 @@ Future<void> showAddSourcePickerDialog(
                   },
                 ),
 
+                if (onLocal != null || localDisabledReason != null) ...[
+                  const SizedBox(height: 16),
+                  const _SectionHeader(
+                    title: 'LOCAL',
+                    subtitle: 'Use files on this device',
+                  ),
+                  const SizedBox(height: 8),
+                  _SourceOption(
+                    icon: Icons.folder_open_rounded,
+                    iconColor: const Color(0xFF60A5FA),
+                    label: 'Local File or Folder',
+                    subtitle: localDisabledReason,
+                    onTap: onLocal == null
+                        ? null
+                        : () {
+                            Navigator.of(dialogContext).pop();
+                            onLocal();
+                          },
+                  ),
+                ],
+
                 // CLOUD section (only if at least one provider enabled)
                 if (onRealDebrid != null || onTorbox != null) ...[
                   const SizedBox(height: 16),
                   const _SectionHeader(
                     title: 'CLOUD',
-                    subtitle: 'Pick an already downloaded source from your cloud',
+                    subtitle:
+                        'Pick an already downloaded source from your cloud',
                   ),
                   const SizedBox(height: 8),
                   if (onRealDebrid != null)
@@ -105,7 +133,10 @@ Future<void> showAddSourcePickerDialog(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white54),
+                    ),
                   ),
                 ),
               ],
@@ -140,10 +171,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 11,
-          ),
+          style: const TextStyle(color: Colors.white38, fontSize: 11),
         ),
       ],
     );
@@ -154,14 +182,16 @@ class _SourceOption extends StatefulWidget {
   final IconData icon;
   final Color iconColor;
   final String label;
+  final String? subtitle;
   final bool autofocus;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _SourceOption({
     required this.icon,
     required this.iconColor,
     required this.label,
     required this.onTap,
+    this.subtitle,
     this.autofocus = false,
   });
 
@@ -195,14 +225,19 @@ class _SourceOptionState extends State<_SourceOption> {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    final iconColor = enabled ? widget.iconColor : Colors.white30;
+    final textColor = enabled ? Colors.white : Colors.white38;
     return Focus(
       focusNode: _focusNode,
-      autofocus: widget.autofocus,
+      autofocus: enabled && widget.autofocus,
+      canRequestFocus: enabled,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
+        if (enabled &&
+            event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter)) {
-          widget.onTap();
+          widget.onTap!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -218,21 +253,45 @@ class _SourceOptionState extends State<_SourceOption> {
                 : Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: _isFocused ? widget.iconColor : Colors.white.withValues(alpha: 0.1),
+              color: _isFocused
+                  ? widget.iconColor
+                  : Colors.white.withValues(alpha: 0.1),
               width: _isFocused ? 1.5 : 1,
             ),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, color: widget.iconColor, size: 20),
+              Icon(widget.icon, color: iconColor, size: 20),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  widget.label,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (widget.subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.subtitle!,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: enabled ? Colors.white38 : Colors.white24,
+              ),
             ],
           ),
         ),

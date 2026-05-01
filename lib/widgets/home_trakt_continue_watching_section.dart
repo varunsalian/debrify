@@ -11,6 +11,7 @@ import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
 import '../services/series_source_service.dart';
+import '../services/local_bound_source_service.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../screens/debrid_downloads_screen.dart';
@@ -483,7 +484,7 @@ class _HomeTraktContinueWatchingSectionState
                             ),
                             onPressed: () {
                               Navigator.of(dialogContext).pop();
-                              widget.onSelectSource?.call(show);
+                              _showAddSourcePicker(show);
                             },
                           ),
                         ],
@@ -499,8 +500,7 @@ class _HomeTraktContinueWatchingSectionState
     );
   }
 
-  /// Show the add-source picker (Torrent Search / Real-Debrid / TorBox).
-  /// Skips the picker if no cloud providers are enabled.
+  /// Show the add-source picker (Torrent Search / Local / Real-Debrid / TorBox).
   Future<void> _showAddSourcePicker(StremioMeta item) async {
     final imdbId = item.effectiveImdbId ?? item.id;
     final rdKey = await StorageService.getApiKey();
@@ -510,7 +510,8 @@ class _HomeTraktContinueWatchingSectionState
 
     if (!mounted) return;
 
-    if (!rdEnabled && !torboxEnabled) {
+    final supportsLocal = item.type == 'movie' || item.type == 'series';
+    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
       widget.onSelectSource?.call(item);
       return;
     }
@@ -518,6 +519,12 @@ class _HomeTraktContinueWatchingSectionState
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
+          ? () => _pickAndSaveLocalSource(item, imdbId)
+          : null,
+      localDisabledReason: supportsLocal
+          ? LocalBoundSourceService.localDisabledReason
+          : null,
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
               show: item,
@@ -534,6 +541,40 @@ class _HomeTraktContinueWatchingSectionState
               torboxEnabled: true,
             )
           : null,
+    );
+  }
+
+  Future<void> _pickAndSaveLocalSource(StremioMeta item, String imdbId) async {
+    final SeriesSource? source;
+    if (item.type == 'series') {
+      source = await LocalBoundSourceService.pickSeriesSource(
+        context,
+        title: item.name,
+      );
+    } else {
+      source = await LocalBoundSourceService.pickMovieSource(
+        context,
+        title: item.name,
+        year: item.year,
+      );
+    }
+    if (source == null) return;
+
+    if (item.type == 'series') {
+      await SeriesSourceService.addSource(imdbId, source);
+    } else {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          item.type == 'series'
+              ? 'Local series source added'
+              : 'Local movie source saved',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+      ),
     );
   }
 

@@ -9,6 +9,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
@@ -519,8 +520,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
 
     if (!mounted) return;
 
-    // No cloud providers — skip picker, go straight to torrent search
-    if (!rdEnabled && !torboxEnabled) {
+    final isMovie = item.type == 'movie';
+    final supportsLocal = isMovie || item.type == 'series';
+
+    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
       widget.onSelectSource?.call(item);
       return;
     }
@@ -528,6 +531,12 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
+          ? () => _pickAndSaveLocalSource(item, imdbId)
+          : null,
+      localDisabledReason: supportsLocal
+          ? LocalBoundSourceService.localDisabledReason
+          : null,
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
               show: item,
@@ -544,6 +553,38 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               torboxEnabled: true,
             )
           : null,
+    );
+  }
+
+  Future<void> _pickAndSaveLocalSource(StremioMeta item, String imdbId) async {
+    final SeriesSource? source;
+    if (item.type == 'series') {
+      source = await LocalBoundSourceService.pickSeriesSource(
+        context,
+        title: item.name,
+      );
+    } else {
+      source = await LocalBoundSourceService.pickMovieSource(
+        context,
+        title: item.name,
+        year: item.year,
+      );
+    }
+    if (source == null) return;
+
+    if (item.type == 'series') {
+      await SeriesSourceService.addSource(imdbId, source);
+    } else {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    }
+    final updated = await SeriesSourceService.getSources(imdbId);
+    if (!mounted) return;
+    setState(() => _boundSources[imdbId] = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Local source set: ${source.torrentName}'),
+        backgroundColor: const Color(0xFF10B981),
+      ),
     );
   }
 
@@ -722,7 +763,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                             child: FilledButton.icon(
                               onPressed: () {
                                 Navigator.of(dialogContext).pop();
-                                widget.onSelectSource?.call(show);
+                                _showAddSourcePicker(show, imdbId);
                               },
                               icon: Icon(
                                 isMovie
@@ -1032,6 +1073,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       case 'pikpak':
         serviceColor = const Color(0xFFF59E0B);
         serviceLabel = 'PikPak';
+      case SeriesSource.localService:
+        serviceColor = const Color(0xFF60A5FA);
+        serviceLabel = 'Local';
       default:
         serviceColor = Colors.white54;
         serviceLabel = source.debridService;

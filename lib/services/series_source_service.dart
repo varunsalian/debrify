@@ -1,14 +1,24 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Represents a bound torrent source for a series.
 /// When set, episode playback skips torrent search and uses this source directly.
 class SeriesSource {
+  static const String localService = 'local';
+  static const String localKindMovieFile = 'movie_file';
+  static const String localKindSeriesFolder = 'series_folder';
+
   final String torrentHash;
   final String torrentName;
-  final String debridService; // 'rd', 'torbox', 'pikpak'
+  final String debridService; // 'rd', 'torbox', 'pikpak', 'local'
   final String debridTorrentId;
   final int boundAt; // epoch millis
+  final String? localPath;
+  final String? localUri;
+  final String? localKind;
+  final int? localSizeBytes;
+  final int? localModifiedAt;
 
   const SeriesSource({
     required this.torrentHash,
@@ -16,23 +26,49 @@ class SeriesSource {
     required this.debridService,
     required this.debridTorrentId,
     required this.boundAt,
+    this.localPath,
+    this.localUri,
+    this.localKind,
+    this.localSizeBytes,
+    this.localModifiedAt,
   });
 
+  bool get isLocal => debridService == localService;
+  bool get isLocalMovieFile =>
+      isLocal && (localKind == null || localKind == localKindMovieFile);
+  bool get isLocalSeriesFolder => isLocal && localKind == localKindSeriesFolder;
+
+  static String localSourceHash(String path) {
+    final normalizedPath = path.trim();
+    final digest = sha1.convert(utf8.encode(normalizedPath)).toString();
+    return 'local:$digest';
+  }
+
   Map<String, dynamic> toJson() => {
-        'torrentHash': torrentHash,
-        'torrentName': torrentName,
-        'debridService': debridService,
-        'debridTorrentId': debridTorrentId,
-        'boundAt': boundAt,
-      };
+    'torrentHash': torrentHash,
+    'torrentName': torrentName,
+    'debridService': debridService,
+    'debridTorrentId': debridTorrentId,
+    'boundAt': boundAt,
+    if (localPath != null) 'localPath': localPath,
+    if (localUri != null) 'localUri': localUri,
+    if (localKind != null) 'localKind': localKind,
+    if (localSizeBytes != null) 'localSizeBytes': localSizeBytes,
+    if (localModifiedAt != null) 'localModifiedAt': localModifiedAt,
+  };
 
   factory SeriesSource.fromJson(Map<String, dynamic> json) => SeriesSource(
-        torrentHash: json['torrentHash'] as String? ?? '',
-        torrentName: json['torrentName'] as String? ?? '',
-        debridService: json['debridService'] as String? ?? 'rd',
-        debridTorrentId: json['debridTorrentId'] as String? ?? '',
-        boundAt: json['boundAt'] as int? ?? 0,
-      );
+    torrentHash: json['torrentHash'] as String? ?? '',
+    torrentName: json['torrentName'] as String? ?? '',
+    debridService: json['debridService'] as String? ?? 'rd',
+    debridTorrentId: json['debridTorrentId'] as String? ?? '',
+    boundAt: json['boundAt'] as int? ?? 0,
+    localPath: json['localPath'] as String?,
+    localUri: json['localUri'] as String?,
+    localKind: json['localKind'] as String?,
+    localSizeBytes: json['localSizeBytes'] as int?,
+    localModifiedAt: json['localModifiedAt'] as int?,
+  );
 }
 
 /// Manages series-to-torrent source bindings (multiple sources per series).
@@ -80,7 +116,9 @@ class SeriesSourceService {
     final prefs = await SharedPreferences.getInstance();
     final sources = await getSources(imdbId);
     // Replace if same hash already exists
-    final existingIdx = sources.indexWhere((s) => s.torrentHash == source.torrentHash);
+    final existingIdx = sources.indexWhere(
+      (s) => s.torrentHash == source.torrentHash,
+    );
     if (existingIdx >= 0) {
       sources[existingIdx] = source;
     } else {
@@ -90,7 +128,10 @@ class SeriesSourceService {
   }
 
   /// Remove a specific source by torrentHash.
-  static Future<void> removeSourceByHash(String imdbId, String torrentHash) async {
+  static Future<void> removeSourceByHash(
+    String imdbId,
+    String torrentHash,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final sources = await getSources(imdbId);
     sources.removeWhere((s) => s.torrentHash == torrentHash);
@@ -108,7 +149,10 @@ class SeriesSourceService {
   }
 
   /// Replace the entire source list (for reordering).
-  static Future<void> setSources(String imdbId, List<SeriesSource> sources) async {
+  static Future<void> setSources(
+    String imdbId,
+    List<SeriesSource> sources,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
@@ -129,8 +173,7 @@ class SeriesSourceService {
       addSource(imdbId, source);
 
   /// @deprecated Use removeAllSources instead.
-  static Future<void> removeSource(String imdbId) =>
-      removeAllSources(imdbId);
+  static Future<void> removeSource(String imdbId) => removeAllSources(imdbId);
 
   static Future<void> _saveSources(
     SharedPreferences prefs,

@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/storage_service.dart';
 import '../services/series_source_service.dart';
+import '../services/local_bound_source_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/main_page_bridge.dart';
 import '../screens/debrid_downloads_screen.dart';
@@ -699,7 +700,7 @@ class _HomeContinueWatchingSectionState
                             ),
                             onPressed: () {
                               Navigator.of(dialogContext).pop();
-                              widget.onSelectSource?.call(selection);
+                              _showAddSourcePicker(selection);
                             },
                           ),
                         ],
@@ -715,8 +716,7 @@ class _HomeContinueWatchingSectionState
     );
   }
 
-  /// Show the add-source picker (Torrent Search / Real-Debrid / TorBox).
-  /// Skips the picker if no cloud providers are enabled.
+  /// Show the add-source picker (Torrent Search / Local / Real-Debrid / TorBox).
   Future<void> _showAddSourcePicker(AdvancedSearchSelection selection) async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
@@ -725,7 +725,8 @@ class _HomeContinueWatchingSectionState
 
     if (!mounted) return;
 
-    if (!rdEnabled && !torboxEnabled) {
+    final supportsLocal = !selection.isNonImdb;
+    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
       widget.onSelectSource?.call(selection);
       return;
     }
@@ -733,6 +734,12 @@ class _HomeContinueWatchingSectionState
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(selection),
+      onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
+          ? () => _pickAndSaveLocalSource(selection)
+          : null,
+      localDisabledReason: supportsLocal
+          ? LocalBoundSourceService.localDisabledReason
+          : null,
       onRealDebrid: rdEnabled
           ? () => _pushDebridSelectSource(
               selection: selection,
@@ -747,6 +754,42 @@ class _HomeContinueWatchingSectionState
               torboxEnabled: true,
             )
           : null,
+    );
+  }
+
+  Future<void> _pickAndSaveLocalSource(
+    AdvancedSearchSelection selection,
+  ) async {
+    final SeriesSource? source;
+    if (selection.isSeries) {
+      source = await LocalBoundSourceService.pickSeriesSource(
+        context,
+        title: selection.title,
+      );
+    } else {
+      source = await LocalBoundSourceService.pickMovieSource(
+        context,
+        title: selection.title,
+        year: selection.year,
+      );
+    }
+    if (source == null) return;
+
+    if (selection.isSeries) {
+      await SeriesSourceService.addSource(selection.imdbId, source);
+    } else {
+      await SeriesSourceService.setSources(selection.imdbId, [source]);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          selection.isSeries
+              ? 'Local series source added'
+              : 'Local movie source saved',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+      ),
     );
   }
 

@@ -76,6 +76,7 @@ import '../services/trakt/trakt_service.dart';
 import '../widgets/home_focus_controller.dart';
 import '../models/iptv_playlist.dart';
 import '../services/imdb_lookup_service.dart';
+import '../services/local_bound_source_service.dart';
 import '../services/stremio_service.dart';
 import '../services/aptabase_service.dart';
 import '../models/stremio_addon.dart';
@@ -4532,6 +4533,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 showNotFoundHint: isLastSource,
                 showUnavailableHint: isLastSource,
               );
+            case SeriesSource.localService:
+              result = await _tryPlayFromLocalBoundSource(
+                selection,
+                source,
+                showUnavailableHint: isLastSource,
+              );
             default:
               result = false;
           }
@@ -4750,6 +4757,172 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
 
     if (mounted) _goBackAndRefreshSources();
+  }
+
+  // ── Local bound source playback ───────────────────────────────────────────
+
+  Future<bool> _tryPlayFromLocalBoundSource(
+    AdvancedSearchSelection selection,
+    SeriesSource source, {
+    bool showUnavailableHint = true,
+  }) async {
+    final localPath = source.localPath?.trim().isNotEmpty == true
+        ? source.localPath!.trim()
+        : source.debridTorrentId.trim();
+    if (localPath.isEmpty) return false;
+
+    if (selection.isSeries || source.isLocalSeriesFolder) {
+      return _tryPlayFromLocalSeriesFolder(
+        selection,
+        source,
+        localPath,
+        showUnavailableHint: showUnavailableHint,
+      );
+    }
+
+    final file = File(localPath);
+    final exists = await file.exists();
+    final fileName = FileUtils.getFileName(localPath);
+    if (!exists || !FileUtils.isVideoFile(fileName)) {
+      await SeriesSourceService.removeSourceByHash(
+        selection.imdbId,
+        source.torrentHash,
+      );
+      if (!mounted) return false;
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved local source is no longer available. Falling back to search.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final stat = await file.stat();
+    final videoUrl = source.localUri?.trim().isNotEmpty == true
+        ? source.localUri!.trim()
+        : Uri.file(localPath).toString();
+    final title = source.torrentName.trim().isNotEmpty
+        ? source.torrentName
+        : fileName;
+    final playlist = [
+      PlaylistEntry(
+        url: videoUrl,
+        title: title,
+        provider: SeriesSource.localService,
+        sizeBytes: stat.size,
+      ),
+    ];
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: title,
+      playlist: playlist,
+      startIndex: 0,
+      selection: selection,
+    );
+    return true;
+  }
+
+  Future<bool> _tryPlayFromLocalSeriesFolder(
+    AdvancedSearchSelection selection,
+    SeriesSource source,
+    String folderPath, {
+    bool showUnavailableHint = true,
+  }) async {
+    if (!selection.isSeries ||
+        selection.season == null ||
+        selection.episode == null) {
+      return false;
+    }
+
+    final folder = Directory(folderPath);
+    if (!await folder.exists()) {
+      await SeriesSourceService.removeSourceByHash(
+        selection.imdbId,
+        source.torrentHash,
+      );
+      if (!mounted) return false;
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved local folder is no longer available. Falling back to search.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final episodes = await LocalBoundSourceService.scanSeriesFolder(folderPath);
+    if (!mounted) return false;
+
+    if (episodes.isEmpty) {
+      await SeriesSourceService.removeSourceByHash(
+        selection.imdbId,
+        source.torrentHash,
+      );
+      if (!mounted) return false;
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved local folder has no playable episodes. Falling back to search.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final targetIndex = episodes.indexWhere(
+      (episode) =>
+          episode.season == selection.season &&
+          episode.episode == selection.episode,
+    );
+    if (targetIndex < 0) {
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'S${selection.season!.toString().padLeft(2, '0')}E${selection.episode!.toString().padLeft(2, '0')} not found in local source. Falling back to search.',
+            ),
+            backgroundColor: const Color(0xFFF59E0B),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final playlist = episodes.map((episode) {
+      return PlaylistEntry(
+        url: Uri.file(episode.file.path).toString(),
+        title: episode.relativePath,
+        relativePath: episode.relativePath,
+        provider: SeriesSource.localService,
+        sizeBytes: episode.sizeBytes,
+      );
+    }).toList();
+
+    await _launchBoundSourcePlayer(
+      videoUrl: playlist[targetIndex].url,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
+    );
+    return true;
   }
 
   // ── Real-Debrid bound source playback ─────────────────────────────────────
