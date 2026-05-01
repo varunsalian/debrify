@@ -6,6 +6,7 @@ import 'torbox_service.dart';
 import 'video_player_launcher.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
+import 'webdav_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -14,6 +15,7 @@ import '../models/playlist_view_mode.dart';
 import '../models/rd_file_node.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
+import '../models/webdav_item.dart';
 import '../screens/video_player_screen.dart';
 
 /// Standalone service for playing playlist items.
@@ -47,6 +49,10 @@ class PlaylistPlayerService {
     }
     if (provider == 'pikpak') {
       await _playPikPakItem(context, freshItem, fallbackTitle: title);
+      return;
+    }
+    if (provider == 'webdav') {
+      await _playWebDavItem(context, freshItem, fallbackTitle: title);
       return;
     }
     await _playRealDebridItem(context, freshItem, title: title);
@@ -1027,6 +1033,320 @@ class PlaylistPlayerService {
     }
   }
 
+  // ── WebDAV ─────────────────────────────────────────────────────────────────
+
+  static Future<void> _playWebDavItem(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    required String fallbackTitle,
+  }) async {
+    final config = await _resolveWebDavConfig(item);
+    if (!context.mounted) return;
+    if (config == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WebDAV server is no longer configured.')),
+      );
+      return;
+    }
+
+    final String kind = (item['kind'] as String?) ?? 'single';
+    if (kind == 'single') {
+      await _playSingleWebDavItem(context, item, config, fallbackTitle);
+      return;
+    }
+
+    await _playWebDavCollection(context, item, config, fallbackTitle);
+  }
+
+  static Future<void> _playSingleWebDavItem(
+    BuildContext context,
+    Map<String, dynamic> item,
+    WebDavConfig config,
+    String fallbackTitle,
+  ) async {
+    final file = _asStringDynamicMap(item['webdavFile']);
+    final path = (item['webdavPath'] ?? file?['path'] ?? '').toString().trim();
+    if (path.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing WebDAV file information.')),
+      );
+      return;
+    }
+
+    final title = _webDavFileName(file, fallbackTitle);
+    final sizeBytes = _asInt(item['sizeBytes'] ?? file?['sizeBytes']);
+    final url = WebDavService.directUrl(config, path);
+    final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+      item,
+    );
+    final viewMode =
+        PlaylistViewModeStorage.fromStorageString(savedViewModeString) ??
+        PlaylistViewMode.sorted;
+
+    if (!context.mounted) return;
+    await _openWebDavPlayer(
+      context,
+      config,
+      VideoPlayerLaunchArgs(
+        videoUrl: url,
+        title: title,
+        subtitle: sizeBytes != null && sizeBytes > 0
+            ? Formatters.formatFileSize(sizeBytes)
+            : null,
+        playlist: [
+          PlaylistEntry(
+            url: url,
+            title: title,
+            relativePath: path,
+            provider: 'webdav',
+            sizeBytes: sizeBytes,
+          ),
+        ],
+        startIndex: 0,
+        viewMode: viewMode,
+        httpHeaders: WebDavService.authHeaders(config),
+        contentImdbId: item['imdbId'] as String?,
+        contentType: item['contentType'] as String?,
+        suppressTraktAutoSync: true,
+      ),
+    );
+  }
+
+  static Future<void> _playWebDavCollection(
+    BuildContext context,
+    Map<String, dynamic> item,
+    WebDavConfig config,
+    String fallbackTitle,
+  ) async {
+    final rawFiles = item['webdavFiles'];
+    if (rawFiles is! List || rawFiles.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing WebDAV files information.')),
+      );
+      return;
+    }
+
+    final candidates = <_WebDavPlaylistCandidate>[];
+    for (final raw in rawFiles) {
+      final file = _asStringDynamicMap(raw);
+      if (file == null) continue;
+      final path = (file['path'] ?? '').toString().trim();
+      if (path.isEmpty) continue;
+      final name = _webDavFileName(file, path.split('/').last);
+      if (!FileUtils.isVideoFile(name)) continue;
+      candidates.add(
+        _WebDavPlaylistCandidate(
+          file: file,
+          info: SeriesParser.parseFilename(name),
+          displayName: name,
+        ),
+      );
+    }
+
+    if (candidates.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No playable WebDAV video files found.')),
+      );
+      return;
+    }
+
+    final filenames = candidates
+        .map((candidate) => candidate.displayName)
+        .toList();
+    final bool isSeriesCollection =
+        candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+    final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+      item,
+    );
+
+    if (savedViewModeString == 'sortedAZ') {
+      candidates.sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    } else if (savedViewModeString != 'raw' && isSeriesCollection) {
+      candidates.sort((a, b) {
+        final aInfo = a.info;
+        final bInfo = b.info;
+        final aIsSeries =
+            aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
+        final bIsSeries =
+            bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
+        if (aIsSeries && bIsSeries) {
+          final seasonCompare = (aInfo.season ?? 0).compareTo(
+            bInfo.season ?? 0,
+          );
+          if (seasonCompare != 0) return seasonCompare;
+          final episodeCompare = (aInfo.episode ?? 0).compareTo(
+            bInfo.episode ?? 0,
+          );
+          if (episodeCompare != 0) return episodeCompare;
+        } else if (aIsSeries != bIsSeries) {
+          return aIsSeries ? -1 : 1;
+        }
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
+      });
+    }
+
+    int startIndex = 0;
+    if (isSeriesCollection) {
+      startIndex = _findFirstEpisodeIndex(
+        candidates.map((candidate) => candidate.info).toList(),
+      );
+    }
+    if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (final candidate in candidates) {
+      final file = candidate.file;
+      final path = (file['path'] ?? '').toString();
+      final seriesInfo = candidate.info;
+      final episodeLabel = _formatWebDavPlaylistTitle(
+        info: seriesInfo,
+        fallback: candidate.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final title = _composeWebDavEntryTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: candidate.displayName,
+      );
+
+      playlistEntries.add(
+        PlaylistEntry(
+          url: WebDavService.directUrl(config, path),
+          title: title,
+          relativePath: path,
+          provider: 'webdav',
+          sizeBytes: _asInt(file['sizeBytes']),
+        ),
+      );
+    }
+
+    final totalBytes = playlistEntries.fold<int>(
+      0,
+      (sum, entry) => sum + (entry.sizeBytes ?? 0),
+    );
+    final subtitle = totalBytes > 0
+        ? '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}'
+        : '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'}';
+    final viewMode =
+        PlaylistViewModeStorage.fromStorageString(savedViewModeString) ??
+        (isSeriesCollection
+            ? PlaylistViewMode.series
+            : PlaylistViewMode.sorted);
+
+    if (!context.mounted) return;
+    await _openWebDavPlayer(
+      context,
+      config,
+      VideoPlayerLaunchArgs(
+        videoUrl: playlistEntries[startIndex].url,
+        title: fallbackTitle,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+        viewMode: viewMode,
+        httpHeaders: WebDavService.authHeaders(config),
+        contentImdbId: item['imdbId'] as String?,
+        contentType: item['contentType'] as String?,
+        suppressTraktAutoSync: true,
+      ),
+    );
+  }
+
+  static Future<WebDavConfig?> _resolveWebDavConfig(
+    Map<String, dynamic> item,
+  ) async {
+    final serverId = (item['webdavServerId'] ?? '').toString();
+    final baseUrl = (item['webdavBaseUrl'] ?? '').toString();
+    final servers = await StorageService.getWebDavServers();
+    for (final server in servers) {
+      if (serverId.isNotEmpty && server.id == serverId) return server;
+    }
+    for (final server in servers) {
+      if (baseUrl.isNotEmpty && server.baseUrl == baseUrl) return server;
+    }
+    if (serverId.isEmpty && baseUrl.isEmpty && servers.length == 1) {
+      return servers.first;
+    }
+    return null;
+  }
+
+  static Future<void> _openWebDavPlayer(
+    BuildContext context,
+    WebDavConfig config,
+    VideoPlayerLaunchArgs args,
+  ) async {
+    MainPageBridge.notifyPlayerLaunching();
+    if (_hasWebDavCredentials(config)) {
+      await Navigator.of(context).push<Map<String, dynamic>?>(
+        MaterialPageRoute(builder: (_) => args.toWidget()),
+      );
+      return;
+    }
+    await VideoPlayerLauncher.push(context, args);
+  }
+
+  static bool _hasWebDavCredentials(WebDavConfig config) {
+    return config.username.isNotEmpty || config.password.isNotEmpty;
+  }
+
+  static Map<String, dynamic>? _asStringDynamicMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return null;
+  }
+
+  static String _webDavFileName(Map<String, dynamic>? file, String fallback) {
+    final name = (file?['name'] ?? '').toString().trim();
+    if (name.isNotEmpty) return name;
+    return fallback;
+  }
+
+  static String _formatWebDavPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) return fallback;
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+          ? info.title!.trim()
+          : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+    return fallback;
+  }
+
+  static String _composeWebDavEntryTitle({
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
+  }) {
+    if (!isSeriesCollection) return fallback;
+    final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
+    if (cleanSeries != null && cleanSeries.isNotEmpty) {
+      return '$cleanSeries $episodeLabel';
+    }
+    return fallback;
+  }
+
   // ── Recovery ─────────────────────────────────────────────────────────────
 
   static Future<void> _attemptRecovery(
@@ -1644,6 +1964,17 @@ class _PikPakPlaylistCandidate {
   final SeriesInfo info;
   final String displayName;
   _PikPakPlaylistCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
+}
+
+class _WebDavPlaylistCandidate {
+  final Map<String, dynamic> file;
+  final SeriesInfo info;
+  final String displayName;
+  _WebDavPlaylistCandidate({
     required this.file,
     required this.info,
     required this.displayName,

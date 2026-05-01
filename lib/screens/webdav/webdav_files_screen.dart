@@ -370,6 +370,110 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     }
   }
 
+  Future<void> _addItemToPlaylist(WebDavItem item) async {
+    final config = _config;
+    if (config == null) return;
+
+    if (item.isDirectory) {
+      await _addFolderToPlaylist(config, item);
+      return;
+    }
+
+    await _addFileToPlaylist(config, item);
+  }
+
+  Future<void> _addFileToPlaylist(WebDavConfig config, WebDavItem file) async {
+    if (!FileUtils.isVideoFile(file.name)) {
+      _showSnack('Only video files can be added to playlist', error: true);
+      return;
+    }
+
+    try {
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'webdav',
+        'title': FileUtils.cleanPlaylistTitle(file.name),
+        'kind': 'single',
+        'webdavServerId': config.id,
+        'webdavServerName': config.name,
+        'webdavPath': file.path,
+        'webdavFile': _playlistFileData(file),
+        'sizeBytes': file.sizeBytes,
+      });
+
+      _showSnack(
+        added ? 'Added to playlist' : 'Already in playlist',
+        error: !added,
+      );
+    } catch (e) {
+      _showSnack('Failed to add to playlist: ${e.toString()}', error: true);
+    }
+  }
+
+  Future<void> _addFolderToPlaylist(
+    WebDavConfig config,
+    WebDavItem folder,
+  ) async {
+    try {
+      _showLoading('Scanning folder for videos...');
+      final files =
+          _virtualFolders[folder.path] ??
+          await WebDavService.collectVideoFiles(config: config, folder: folder);
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (!mounted) return;
+
+      if (files.isEmpty) {
+        _showSnack('This folder does not contain any videos', error: true);
+        return;
+      }
+
+      final sorted = _sortItems(files);
+      if (sorted.length == 1) {
+        await _addFileToPlaylist(config, sorted.first);
+        return;
+      }
+
+      final totalBytes = sorted.fold<int>(
+        0,
+        (sum, file) => sum + (file.sizeBytes ?? 0),
+      );
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'webdav',
+        'title': FileUtils.cleanPlaylistTitle(folder.name),
+        'kind': 'collection',
+        'webdavServerId': config.id,
+        'webdavServerName': config.name,
+        'webdavFolderPath': folder.path,
+        'webdavFiles': sorted.map(_playlistFileData).toList(),
+        'count': sorted.length,
+        'totalBytes': totalBytes,
+      });
+
+      _showSnack(
+        added
+            ? 'Added ${sorted.length} videos to playlist'
+            : 'Already in playlist',
+        error: !added,
+      );
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      _showSnack('Failed to add to playlist: ${e.toString()}', error: true);
+    }
+  }
+
+  Map<String, dynamic> _playlistFileData(WebDavItem item) {
+    return {
+      'name': item.name,
+      'path': item.path,
+      'sizeBytes': item.sizeBytes,
+      'contentType': item.contentType,
+      'modifiedAt': item.modifiedAt?.toIso8601String(),
+    };
+  }
+
   Future<void> _downloadItem(WebDavItem item) async {
     final config = _config;
     if (config == null) return;
@@ -913,10 +1017,11 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                   tooltip: 'More options',
                   onSelected: (value) {
                     if (value == 'download') _downloadItem(item);
+                    if (value == 'add_to_playlist') _addItemToPlaylist(item);
                     if (value == 'delete') _deleteItem(item);
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
                       value: 'download',
                       child: Row(
                         children: [
@@ -930,7 +1035,22 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                         ],
                       ),
                     ),
-                    PopupMenuItem(
+                    if (canPlay)
+                      const PopupMenuItem(
+                        value: 'add_to_playlist',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.playlist_add,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
+                            SizedBox(width: 12),
+                            Text('Add to Playlist'),
+                          ],
+                        ),
+                      ),
+                    const PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [

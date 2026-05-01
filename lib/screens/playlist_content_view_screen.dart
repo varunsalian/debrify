@@ -15,6 +15,7 @@ import '../services/main_page_bridge.dart';
 import '../services/android_native_downloader.dart';
 import '../services/episode_info_service.dart';
 import '../services/tvmaze_service.dart';
+import '../services/webdav_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -22,6 +23,7 @@ import '../utils/rd_folder_tree_builder.dart';
 import '../utils/torbox_folder_tree_builder.dart';
 import '../widgets/view_mode_dropdown.dart';
 import '../widgets/tvmaze_search_dialog.dart';
+import '../models/webdav_item.dart';
 import 'video_player_screen.dart';
 
 /// Screen for viewing contents of a playlist item
@@ -293,10 +295,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       final provider =
           (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
 
-      if (provider == 'torbox') {
+      final normalizedProvider = provider.toLowerCase();
+      if (normalizedProvider == 'torbox') {
         await _loadTorboxContent();
-      } else if (provider == 'pikpak') {
+      } else if (normalizedProvider == 'pikpak') {
         await _loadPikPakContent();
+      } else if (normalizedProvider == 'webdav') {
+        await _loadWebDavContent();
       } else {
         await _loadRealDebridContent();
       }
@@ -505,6 +510,134 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     return RDFileNode.folder(name: 'Root', children: nodes);
+  }
+
+  /// Load WebDAV content from the file metadata stored in the playlist item.
+  Future<void> _loadWebDavContent() async {
+    final files = <Map<String, dynamic>>[];
+    final singleFile = _asStringDynamicMap(widget.playlistItem['webdavFile']);
+    if (singleFile != null) {
+      files.add(singleFile);
+    }
+
+    final cachedFiles = widget.playlistItem['webdavFiles'];
+    if (cachedFiles is List) {
+      for (final rawFile in cachedFiles) {
+        final file = _asStringDynamicMap(rawFile);
+        if (file != null) files.add(file);
+      }
+    }
+
+    final fallbackPath = (widget.playlistItem['webdavPath'] ?? '').toString();
+    if (files.isEmpty && fallbackPath.isNotEmpty) {
+      files.add({
+        'name': _fileNameFromPath(fallbackPath, fallbackPath),
+        'path': fallbackPath,
+        'sizeBytes': widget.playlistItem['sizeBytes'],
+      });
+    }
+
+    if (files.isEmpty) {
+      throw Exception(
+        'No WebDAV file data found. Please remove and re-add this item to playlist.',
+      );
+    }
+
+    _rootContent = _buildWebDavFileTree(
+      files,
+      rootPath: (widget.playlistItem['webdavFolderPath'] ?? '').toString(),
+    );
+  }
+
+  RDFileNode _buildWebDavFileTree(
+    List<Map<String, dynamic>> files, {
+    required String rootPath,
+  }) {
+    final rootChildren = <RDFileNode>[];
+    var fileIndex = 0;
+
+    for (final file in files) {
+      final path = (file['path'] ?? '').toString();
+      if (path.isEmpty) continue;
+
+      final fallbackName = _fileNameFromPath(path, path);
+      final name = ((file['name'] ?? '').toString().trim().isNotEmpty)
+          ? file['name'].toString()
+          : fallbackName;
+      final relativePath = _relativeWebDavPath(rootPath, path, name);
+      final segments = relativePath
+          .split('/')
+          .where((segment) => segment.trim().isNotEmpty)
+          .toList();
+      final safeSegments = segments.isEmpty ? [name] : segments;
+      var currentChildren = rootChildren;
+
+      for (final folderName in safeSegments.take(safeSegments.length - 1)) {
+        final existingIndex = currentChildren.indexWhere(
+          (node) => node.isFolder && node.name == folderName,
+        );
+        RDFileNode folder;
+        if (existingIndex == -1) {
+          folder = RDFileNode.folder(
+            name: folderName,
+            children: <RDFileNode>[],
+          );
+          currentChildren.add(folder);
+        } else {
+          folder = currentChildren[existingIndex];
+        }
+        currentChildren = folder.children;
+      }
+
+      final fileName = safeSegments.last;
+      currentChildren.add(
+        RDFileNode.file(
+          name: fileName,
+          fileId: fileIndex,
+          path: path,
+          relativePath: relativePath,
+          bytes: _asInt(file['sizeBytes']) ?? 0,
+          linkIndex: fileIndex,
+        ),
+      );
+      fileIndex++;
+    }
+
+    if (rootChildren.isEmpty) {
+      throw Exception('No playable WebDAV files found');
+    }
+
+    return RDFileNode.folder(name: 'Root', children: rootChildren);
+  }
+
+  String _relativeWebDavPath(String rootPath, String filePath, String name) {
+    final normalizedRoot = rootPath.replaceFirst(RegExp(r'/+$'), '');
+    final normalizedFile = filePath.replaceFirst(RegExp(r'/+$'), '');
+    if (normalizedRoot.isNotEmpty &&
+        normalizedFile.startsWith('$normalizedRoot/')) {
+      return normalizedFile.substring(normalizedRoot.length + 1);
+    }
+    return normalizedFile.isNotEmpty ? normalizedFile : name;
+  }
+
+  String _fileNameFromPath(String path, String fallback) {
+    final parts = path.split('/').where((part) => part.isNotEmpty).toList();
+    return parts.isEmpty ? fallback : parts.last;
+  }
+
+  Map<String, dynamic>? _asStringDynamicMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return null;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   /// Apply view mode transformation
@@ -893,6 +1026,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playTorboxPlaylist(videoFiles, startIndex);
       } else if (provider == 'pikpak') {
         await _playPikPakPlaylist(videoFiles, startIndex);
+      } else if (provider == 'webdav') {
+        await _playWebDavPlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -3061,6 +3196,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playTorboxPlaylist(videoFiles, startIndex);
       } else if (provider == 'pikpak') {
         await _playPikPakPlaylist(videoFiles, startIndex);
+      } else if (provider == 'webdav') {
+        await _playWebDavPlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -3408,6 +3545,92 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         suppressTraktAutoSync: true,
       ),
     );
+  }
+
+  /// Play WebDAV playlist
+  Future<void> _playWebDavPlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
+    final config = await _resolveWebDavConfig();
+    if (config == null) {
+      throw Exception('WebDAV server is no longer configured');
+    }
+
+    final entries = <PlaylistEntry>[];
+    for (final file in videoFiles) {
+      final path = file.path;
+      if (path == null || path.isEmpty) continue;
+      entries.add(
+        PlaylistEntry(
+          url: WebDavService.directUrl(config, path),
+          title: file.name,
+          relativePath: file.relativePath ?? path,
+          sizeBytes: file.bytes,
+          provider: 'webdav',
+        ),
+      );
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+    if (startIndex < 0 || startIndex >= entries.length) {
+      startIndex = 0;
+    }
+
+    final seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
+
+    if (!mounted) return;
+
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    final args = VideoPlayerLaunchArgs(
+      videoUrl: entries[startIndex].url,
+      title: seriesTitle,
+      subtitle: '${entries.length} episodes',
+      playlist: entries,
+      startIndex: startIndex,
+      disableAutoResume: true,
+      viewMode: _convertToPlaylistViewMode(_currentViewMode),
+      httpHeaders: WebDavService.authHeaders(config),
+      contentImdbId: widget.playlistItem['imdbId'] as String?,
+      contentType: widget.playlistItem['contentType'] as String?,
+      suppressTraktAutoSync: true,
+    );
+
+    if (_hasWebDavCredentials(config)) {
+      await Navigator.of(context).push<Map<String, dynamic>?>(
+        MaterialPageRoute(builder: (_) => args.toWidget()),
+      );
+      return;
+    }
+
+    await VideoPlayerLauncher.push(context, args);
+  }
+
+  Future<WebDavConfig?> _resolveWebDavConfig() async {
+    final serverId = (widget.playlistItem['webdavServerId'] ?? '').toString();
+    final baseUrl = (widget.playlistItem['webdavBaseUrl'] ?? '').toString();
+    final servers = await StorageService.getWebDavServers();
+    for (final server in servers) {
+      if (serverId.isNotEmpty && server.id == serverId) return server;
+    }
+    for (final server in servers) {
+      if (baseUrl.isNotEmpty && server.baseUrl == baseUrl) return server;
+    }
+    if (serverId.isEmpty && baseUrl.isEmpty && servers.length == 1) {
+      return servers.first;
+    }
+    return null;
+  }
+
+  bool _hasWebDavCredentials(WebDavConfig config) {
+    return config.username.isNotEmpty || config.password.isNotEmpty;
   }
 
   /// Clean Torbox path by removing "TorrentName..." prefix

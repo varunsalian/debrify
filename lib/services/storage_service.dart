@@ -1770,6 +1770,15 @@ class StorageService {
   static String computePlaylistDedupeKey(Map<String, dynamic> item) {
     final providerRaw = (item['provider'] as String?) ?? 'realdebrid';
     final provider = providerRaw.toLowerCase();
+    if (provider == 'webdav') {
+      final server = (item['webdavServerId'] ?? item['webdavBaseUrl'] ?? '')
+          .toString();
+      final path = (item['webdavPath'] ?? item['webdavFolderPath'] ?? '')
+          .toString();
+      if (server.isNotEmpty && path.isNotEmpty) {
+        return '$provider|server:${server.toLowerCase()}|path:$path';
+      }
+    }
     final String? torrentHash = item['torrent_hash'] as String?;
     if (torrentHash != null && torrentHash.isNotEmpty) {
       return '$provider|hash:${torrentHash.toLowerCase()}';
