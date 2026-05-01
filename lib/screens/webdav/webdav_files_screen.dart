@@ -195,15 +195,6 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     WebDavConfig config,
     VideoPlayerLaunchArgs args,
   ) async {
-    if (_hasWebDavCredentials(config)) {
-      // Authenticated WebDAV streams need HTTP headers; external/TV handoff
-      // paths can drop them, so use the in-app player where headers are honored.
-      await Navigator.of(context).push<Map<String, dynamic>?>(
-        MaterialPageRoute(builder: (_) => args.toWidget()),
-      );
-      return;
-    }
-
     await VideoPlayerLauncher.push(context, args);
   }
 
@@ -315,6 +306,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
             : null,
         viewMode: PlaylistViewMode.sorted,
         httpHeaders: WebDavService.authHeaders(config),
+        disableExternalPlayer: _hasWebDavCredentials(config),
       ),
     );
   }
@@ -360,6 +352,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               ? PlaylistViewMode.series
               : PlaylistViewMode.sorted,
           httpHeaders: WebDavService.authHeaders(config),
+          disableExternalPlayer: _hasWebDavCredentials(config),
         ),
       );
     } catch (e) {

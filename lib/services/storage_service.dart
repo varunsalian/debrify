@@ -2072,12 +2072,17 @@ class StorageService {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? webDavServerId,
+    String? webDavBaseUrl,
+    String? webDavPath,
   }) async {
     print('🎨 updatePlaylistItemPoster called with:');
     print('  posterUrl: $posterUrl');
     print('  rdTorrentId: $rdTorrentId');
     print('  torboxTorrentId: $torboxTorrentId');
     print('  pikpakCollectionId: $pikpakCollectionId');
+    print('  webDavServerId: $webDavServerId');
+    print('  webDavPath: $webDavPath');
 
     final items = await getPlaylistItemsRaw();
     print('  Total playlist items: ${items.length}');
@@ -2138,6 +2143,27 @@ class StorageService {
       });
       if (itemIndex != -1) {
         print('  ✅ Found item by pikpakCollectionId at index $itemIndex');
+      }
+    }
+
+    if (itemIndex == -1 &&
+        webDavPath != null &&
+        webDavPath.isNotEmpty &&
+        ((webDavServerId != null && webDavServerId.isNotEmpty) ||
+            (webDavBaseUrl != null && webDavBaseUrl.isNotEmpty))) {
+      final webDavKey = computePlaylistDedupeKey({
+        'provider': 'webdav',
+        if (webDavServerId != null && webDavServerId.isNotEmpty)
+          'webdavServerId': webDavServerId,
+        if (webDavBaseUrl != null && webDavBaseUrl.isNotEmpty)
+          'webdavBaseUrl': webDavBaseUrl,
+        'webdavPath': webDavPath,
+      });
+      itemIndex = items.indexWhere(
+        (item) => computePlaylistDedupeKey(item) == webDavKey,
+      );
+      if (itemIndex != -1) {
+        print('  ✅ Found item by WebDAV key at index $itemIndex');
       }
     }
 
@@ -3639,6 +3665,13 @@ class StorageService {
 
   /// Get a unique key for a playlist item based on available identifiers
   static String _getPlaylistItemUniqueKey(Map<String, dynamic> playlistItem) {
+    final provider = ((playlistItem['provider'] as String?) ?? 'realdebrid')
+        .toLowerCase();
+
+    if (provider == 'webdav') {
+      return computePlaylistDedupeKey(playlistItem);
+    }
+
     // Try different identifiers in order of preference
     if (playlistItem['rdTorrentId'] != null) {
       return 'rd_${playlistItem['rdTorrentId']}';

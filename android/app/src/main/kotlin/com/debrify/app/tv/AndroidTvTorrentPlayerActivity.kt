@@ -33,6 +33,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -702,6 +704,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioSourcesTabTorrent = findViewById(R.id.stremio_sources_tab_torrent)
     }
 
+    private fun buildProtectedMediaOrigins(items: List<PlaybackItem>): Set<String> {
+        return items
+            .mapNotNull { item ->
+                if (item.url.isBlank()) {
+                    null
+                } else {
+                    originKey(Uri.parse(item.url))
+                }
+            }
+            .toSet()
+    }
+
+    private fun originKey(uri: Uri): String? {
+        val scheme = uri.scheme?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        val host = uri.host?.lowercase() ?: return null
+        val port = when {
+            uri.port != -1 -> uri.port
+            scheme == "http" -> 80
+            scheme == "https" -> 443
+            else -> -1
+        }
+        return "$scheme://$host:$port"
+    }
+
     private fun setupPlayer() {
         trackSelector = DefaultTrackSelector(this)
 
@@ -764,7 +791,32 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
-        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+        val upstreamDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+        val playbackHeaders = payload?.httpHeaders.orEmpty()
+        val protectedMediaOrigins = buildProtectedMediaOrigins(payload?.items.orEmpty())
+        val dataSourceFactory = if (playbackHeaders.isNotEmpty() && protectedMediaOrigins.isNotEmpty()) {
+            android.util.Log.d(
+                "AndroidTvPlayer",
+                "setupPlayer - scoped ${playbackHeaders.size} HTTP header(s) to ${protectedMediaOrigins.size} media origin(s)"
+            )
+            ResolvingDataSource.Factory(
+                upstreamDataSourceFactory,
+                object : ResolvingDataSource.Resolver {
+                    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+                        val origin = originKey(dataSpec.uri)
+                        return if (origin != null && protectedMediaOrigins.contains(origin)) {
+                            dataSpec.withAdditionalHeaders(playbackHeaders)
+                        } else {
+                            dataSpec
+                        }
+                    }
+
+                    override fun resolveReportedUri(uri: Uri): Uri = uri
+                }
+            )
+        } else {
+            upstreamDataSourceFactory
+        }
 
         // Create media source factory that uses the data source
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
@@ -5132,6 +5184,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Parse IMDB ID for external subtitles
             val imdbId = obj.optString("imdbId").takeIf { it.isNotEmpty() }
 
+            val httpHeaders = mutableMapOf<String, String>()
+            obj.optJSONObject("httpHeaders")?.let { headersObj ->
+                headersObj.keys().forEach { key ->
+                    val value = headersObj.optString(key)
+                    if (key.isNotBlank() && value.isNotEmpty()) {
+                        httpHeaders[key] = value
+                    }
+                }
+            }
+
             // Parse startAtPercent for seeking to a specific position (e.g., Stremio TV slot progress)
             val startAtPercent = obj.optDouble("startAtPercent", 0.0).let {
                 if (it.isNaN() || it.isInfinite()) 0.0 else it
@@ -5170,6 +5232,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 prevEpisodeMap = prevEpisodeMap,
                 collectionGroups = collectionGroups,
                 imdbId = imdbId,
+                httpHeaders = httpHeaders,
                 startAtPercent = startAtPercent,
                 traktProgressPercent = traktProgressPercent,
             )
@@ -6128,6 +6191,7 @@ private data class PlaybackPayload(
     var prevEpisodeMap: Map<Int, Int> = emptyMap(),
     var collectionGroups: List<JSONObject>? = null, // Collection groups from Flutter
     var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
+    val httpHeaders: Map<String, String> = emptyMap(), // Optional per-session headers for protected direct streams
     val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
     val startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration
     val traktProgressPercent: Double = 0.0, // Trakt watch progress (0-100) for resume — takes priority over local resume

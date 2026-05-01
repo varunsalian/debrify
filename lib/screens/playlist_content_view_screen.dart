@@ -24,7 +24,7 @@ import '../utils/torbox_folder_tree_builder.dart';
 import '../widgets/view_mode_dropdown.dart';
 import '../widgets/tvmaze_search_dialog.dart';
 import '../models/webdav_item.dart';
-import 'video_player_screen.dart';
+import 'video_player/models/playlist_entry.dart';
 
 /// Screen for viewing contents of a playlist item
 /// Supports Raw, Sort, and Series Arrange view modes
@@ -2053,6 +2053,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             )
             .then((_) async {
               await _saveImdbIdToPlaylist();
+              await _saveDetectedSeriesPosterToPlaylist();
               if (mounted) {
                 setState(() {
                   _isLoadingSeriesMetadata = false;
@@ -2132,6 +2133,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (_seriesPlaylist != null && _seriesPlaylist!.isSeries && mounted) {
         // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping
         _seriesPlaylist!.tvmazeShowId = null;
+        _seriesPlaylist!.showPosterUrl = null;
 
         setState(() {
           _isLoadingSeriesMetadata = true;
@@ -2144,6 +2146,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             )
             .then((_) async {
               await _saveImdbIdToPlaylist(force: true);
+              await _saveDetectedSeriesPosterToPlaylist();
               if (mounted) {
                 setState(() {
                   _isLoadingSeriesMetadata = false;
@@ -2159,6 +2162,33 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               }
             });
       }
+    }
+  }
+
+  Future<void> _saveDetectedSeriesPosterToPlaylist() async {
+    final posterUrl = _seriesPlaylist?.showPosterUrl;
+    if (posterUrl == null || posterUrl.isEmpty) return;
+
+    try {
+      await StorageService.savePlaylistPosterOverride(
+        playlistItem: widget.playlistItem,
+        posterUrl: posterUrl,
+      );
+
+      final itemKey = StorageService.computePlaylistDedupeKey(
+        widget.playlistItem,
+      );
+      final items = await StorageService.getPlaylistItemsRaw();
+      final itemIndex = items.indexWhere(
+        (item) => StorageService.computePlaylistDedupeKey(item) == itemKey,
+      );
+
+      if (itemIndex >= 0) {
+        items[itemIndex]['posterUrl'] = posterUrl;
+        await StorageService.savePlaylistItemsRaw(items);
+      }
+    } catch (e) {
+      debugPrint('Error saving detected series poster: $e');
     }
   }
 
@@ -3598,17 +3628,20 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       disableAutoResume: true,
       viewMode: _convertToPlaylistViewMode(_currentViewMode),
       httpHeaders: WebDavService.authHeaders(config),
+      disableExternalPlayer: _hasWebDavCredentials(config),
+      webDavServerId: (widget.playlistItem['webdavServerId'] ?? config.id)
+          .toString(),
+      webDavBaseUrl: (widget.playlistItem['webdavBaseUrl'] ?? config.baseUrl)
+          .toString(),
+      webDavPath:
+          (widget.playlistItem['webdavFolderPath'] ??
+                  widget.playlistItem['webdavPath'] ??
+                  '')
+              .toString(),
       contentImdbId: widget.playlistItem['imdbId'] as String?,
       contentType: widget.playlistItem['contentType'] as String?,
       suppressTraktAutoSync: true,
     );
-
-    if (_hasWebDavCredentials(config)) {
-      await Navigator.of(context).push<Map<String, dynamic>?>(
-        MaterialPageRoute(builder: (_) => args.toWidget()),
-      );
-      return;
-    }
 
     await VideoPlayerLauncher.push(context, args);
   }

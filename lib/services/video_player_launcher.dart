@@ -175,6 +175,9 @@ class VideoPlayerLaunchArgs {
   final String? rdTorrentId;
   final String? torboxTorrentId;
   final String? pikpakCollectionId;
+  final String? webDavServerId;
+  final String? webDavBaseUrl;
+  final String? webDavPath;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   final bool startFromRandom;
@@ -188,6 +191,7 @@ class VideoPlayerLaunchArgs {
   final bool hideOptions;
   final bool hideBackButton;
   final Map<String, String>? httpHeaders;
+  final bool disableExternalPlayer;
   final bool Function()? isAndroidTvOverride;
   final bool disableAutoResume;
   final PlaylistViewMode? viewMode;
@@ -236,6 +240,9 @@ class VideoPlayerLaunchArgs {
     this.rdTorrentId,
     this.torboxTorrentId,
     this.pikpakCollectionId,
+    this.webDavServerId,
+    this.webDavBaseUrl,
+    this.webDavPath,
     this.requestMagicNext,
     this.requestNextChannel,
     this.startFromRandom = false,
@@ -249,6 +256,7 @@ class VideoPlayerLaunchArgs {
     this.hideOptions = false,
     this.hideBackButton = false,
     this.httpHeaders,
+    this.disableExternalPlayer = false,
     this.isAndroidTvOverride,
     this.disableAutoResume = false,
     this.viewMode,
@@ -384,6 +392,9 @@ class VideoPlayerLauncher {
           rdTorrentId: args.rdTorrentId,
           torboxTorrentId: args.torboxTorrentId,
           pikpakCollectionId: args.pikpakCollectionId,
+          webDavServerId: args.webDavServerId,
+          webDavBaseUrl: args.webDavBaseUrl,
+          webDavPath: args.webDavPath,
           requestMagicNext: args.requestMagicNext,
           requestNextChannel: args.requestNextChannel,
           startFromRandom: args.startFromRandom,
@@ -396,6 +407,8 @@ class VideoPlayerLauncher {
           showVideoTitle: args.showVideoTitle,
           hideOptions: args.hideOptions,
           hideBackButton: args.hideBackButton,
+          httpHeaders: args.httpHeaders,
+          disableExternalPlayer: args.disableExternalPlayer,
           isAndroidTvOverride: args.isAndroidTvOverride,
           disableAutoResume: args.disableAutoResume,
           viewMode: args.viewMode,
@@ -469,13 +482,15 @@ class VideoPlayerLauncher {
     // Check default player mode
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
 
-    if (defaultPlayerMode == 'external') {
+    if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
       final launched = await _launchWithExternalPlayer(context, args);
       if (launched) {
         return;
       }
       // If external player failed, fall through to in-app player
-    } else if (defaultPlayerMode == 'deovr' && Platform.isAndroid) {
+    } else if (!args.disableExternalPlayer &&
+        defaultPlayerMode == 'deovr' &&
+        Platform.isAndroid) {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
         return;
@@ -1377,6 +1392,9 @@ class VideoPlayerLauncher {
         rdTorrentId: args.rdTorrentId,
         torboxTorrentId: args.torboxTorrentId,
         pikpakCollectionId: args.pikpakCollectionId,
+        webDavServerId: args.webDavServerId,
+        webDavBaseUrl: args.webDavBaseUrl,
+        webDavPath: args.webDavPath,
         contentImdbId: args.contentImdbId,
         contentType: args.contentType,
       );
@@ -1442,6 +1460,9 @@ class VideoPlayerLauncher {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? webDavServerId,
+    String? webDavBaseUrl,
+    String? webDavPath,
     String? contentImdbId,
     String? contentType,
   }) {
@@ -1563,6 +1584,9 @@ class VideoPlayerLauncher {
           rdTorrentId: rdTorrentId,
           torboxTorrentId: torboxTorrentId,
           pikpakCollectionId: pikpakCollectionId,
+          webDavServerId: webDavServerId,
+          webDavBaseUrl: webDavBaseUrl,
+          webDavPath: webDavPath,
         );
 
         // Build metadata updates for each item
@@ -1647,13 +1671,17 @@ class VideoPlayerLauncher {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? webDavServerId,
+    String? webDavBaseUrl,
+    String? webDavPath,
   }) async {
     final posterUrl = seriesPlaylist.showPosterUrl;
     if (posterUrl == null || posterUrl.isEmpty) return;
 
     if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
         (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
-        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
+        (pikpakCollectionId == null || pikpakCollectionId.isEmpty) &&
+        (webDavPath == null || webDavPath.isEmpty)) {
       return;
     }
 
@@ -1674,6 +1702,14 @@ class VideoPlayerLauncher {
         await StorageService.updatePlaylistItemPoster(
           posterUrl,
           pikpakCollectionId: pikpakCollectionId,
+        );
+      }
+      if (webDavPath != null && webDavPath.isNotEmpty) {
+        await StorageService.updatePlaylistItemPoster(
+          posterUrl,
+          webDavServerId: webDavServerId,
+          webDavBaseUrl: webDavBaseUrl,
+          webDavPath: webDavPath,
         );
       }
     } catch (e) {
@@ -2098,6 +2134,7 @@ class _AndroidTvPlaybackPayload {
   final Map<int, int> prevEpisodeMap;
   final List<_AndroidTvCollectionGroup>? collectionGroups;
   final String? imdbId;
+  final Map<String, String>? httpHeaders;
 
   final double? startAtPercent;
   final List<Map<String, dynamic>>? stremioSources;
@@ -2118,6 +2155,7 @@ class _AndroidTvPlaybackPayload {
     this.prevEpisodeMap = const {},
     this.collectionGroups,
     this.imdbId,
+    this.httpHeaders,
     this.startAtPercent,
     this.stremioSources,
     this.stremioCurrentSourceIndex,
@@ -2140,6 +2178,8 @@ class _AndroidTvPlaybackPayload {
       'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
       'collectionGroups': collectionGroups?.map((e) => e.toMap()).toList(),
       'imdbId': imdbId,
+      if (httpHeaders != null && httpHeaders!.isNotEmpty)
+        'httpHeaders': httpHeaders,
       if (startAtPercent != null && startAtPercent! > 0)
         'startAtPercent': startAtPercent,
       if (stremioSources != null && stremioSources!.isNotEmpty)
@@ -2546,6 +2586,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       prevEpisodeMap: navigationMaps.prevMap,
       collectionGroups: collectionGroups,
       imdbId: effectiveImdbId,
+      httpHeaders: args.httpHeaders?.isNotEmpty == true
+          ? Map<String, String>.from(args.httpHeaders!)
+          : null,
       startAtPercent: args.startAtPercent,
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,

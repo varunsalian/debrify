@@ -16,7 +16,7 @@ import '../models/rd_file_node.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/webdav_item.dart';
-import '../screens/video_player_screen.dart';
+import '../screens/video_player/models/playlist_entry.dart';
 
 /// Standalone service for playing playlist items.
 /// Extracted from PlaylistScreen so it can be called from any screen.
@@ -1106,6 +1106,10 @@ class PlaylistPlayerService {
         startIndex: 0,
         viewMode: viewMode,
         httpHeaders: WebDavService.authHeaders(config),
+        disableExternalPlayer: _hasWebDavCredentials(config),
+        webDavServerId: (item['webdavServerId'] ?? config.id).toString(),
+        webDavBaseUrl: (item['webdavBaseUrl'] ?? config.baseUrl).toString(),
+        webDavPath: path,
         contentImdbId: item['imdbId'] as String?,
         contentType: item['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -1120,6 +1124,7 @@ class PlaylistPlayerService {
     String fallbackTitle,
   ) async {
     final rawFiles = item['webdavFiles'];
+    final folderPath = (item['webdavFolderPath'] ?? '').toString().trim();
     if (rawFiles is! List || rawFiles.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1254,6 +1259,10 @@ class PlaylistPlayerService {
         startIndex: startIndex,
         viewMode: viewMode,
         httpHeaders: WebDavService.authHeaders(config),
+        disableExternalPlayer: _hasWebDavCredentials(config),
+        webDavServerId: (item['webdavServerId'] ?? config.id).toString(),
+        webDavBaseUrl: (item['webdavBaseUrl'] ?? config.baseUrl).toString(),
+        webDavPath: folderPath,
         contentImdbId: item['imdbId'] as String?,
         contentType: item['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -1285,12 +1294,6 @@ class PlaylistPlayerService {
     VideoPlayerLaunchArgs args,
   ) async {
     MainPageBridge.notifyPlayerLaunching();
-    if (_hasWebDavCredentials(config)) {
-      await Navigator.of(context).push<Map<String, dynamic>?>(
-        MaterialPageRoute(builder: (_) => args.toWidget()),
-      );
-      return;
-    }
     await VideoPlayerLauncher.push(context, args);
   }
 

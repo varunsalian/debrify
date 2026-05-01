@@ -43,8 +43,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _isDeletionInProgress = false;
 
   // GlobalKeys for playlist sections (for TV focus management)
-  final GlobalKey<AdaptivePlaylistSectionState> _favoritesSectionKey = GlobalKey();
-  final GlobalKey<AdaptivePlaylistSectionState> _allItemsSectionKey = GlobalKey();
+  final GlobalKey<AdaptivePlaylistSectionState> _favoritesSectionKey =
+      GlobalKey();
+  final GlobalKey<AdaptivePlaylistSectionState> _allItemsSectionKey =
+      GlobalKey();
 
   @override
   void initState() {
@@ -78,13 +80,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       _searchFocusNode.requestFocus();
     };
     MainPageBridge.registerTvContentFocusHandler(1, _tvContentFocusHandler!);
-
   }
 
   @override
   void dispose() {
     if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(1, _tvContentFocusHandler!);
+      MainPageBridge.unregisterTvContentFocusHandler(
+        1,
+        _tvContentFocusHandler!,
+      );
     }
     // Remove listener before disposing controller
     _searchController.removeListener(_onSearchChanged);
@@ -108,7 +112,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     final text = _searchController.text;
     final selection = _searchController.selection;
-    final isAtStart = !selection.isValid ||
+    final isAtStart =
+        !selection.isValid ||
         (selection.baseOffset == 0 && selection.extentOffset == 0);
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -156,7 +161,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     // Apply poster overrides for items that have saved custom posters
     for (var item in items) {
-      final posterOverride = await StorageService.getPlaylistPosterOverride(item);
+      final posterOverride = await StorageService.getPlaylistPosterOverride(
+        item,
+      );
       if (posterOverride != null && posterOverride.isNotEmpty) {
         item['posterUrl'] = posterOverride;
       }
@@ -182,12 +189,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   // Section getter: All items sorted by addedAt (most recent first)
   List<Map<String, dynamic>> get _allItemsSorted {
-    return _allItems.toList()
-      ..sort((a, b) {
-        final aAdded = a['addedAt'] as int? ?? 0;
-        final bAdded = b['addedAt'] as int? ?? 0;
-        return bAdded.compareTo(aAdded); // Descending (most recent first)
-      });
+    return _allItems.toList()..sort((a, b) {
+      final aAdded = a['addedAt'] as int? ?? 0;
+      final bAdded = b['addedAt'] as int? ?? 0;
+      return bAdded.compareTo(aAdded); // Descending (most recent first)
+    });
   }
 
   // Search-filtered items
@@ -230,7 +236,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(isCurrentlyFavorited ? 'Removed from favorites' : 'Added to favorites'),
+        content: Text(
+          isCurrentlyFavorited
+              ? 'Removed from favorites'
+              : 'Added to favorites',
+        ),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -248,6 +258,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     // Refresh data when returning from view screen
     // This ensures poster updates are reflected immediately
+    await _refresh();
+  }
+
+  Future<void> _playItem(Map<String, dynamic> item) async {
+    await PlaylistPlayerService.play(context, item);
+    if (!mounted) return;
     await _refresh();
   }
 
@@ -303,16 +319,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       try {
         // Find the index of the item being deleted for focus restoration
         final currentIndex = _allItems.indexWhere(
-          (playlistItem) => StorageService.computePlaylistDedupeKey(playlistItem) ==
-                           StorageService.computePlaylistDedupeKey(item)
+          (playlistItem) =>
+              StorageService.computePlaylistDedupeKey(playlistItem) ==
+              StorageService.computePlaylistDedupeKey(item),
         );
 
         final dedupeKey = StorageService.computePlaylistDedupeKey(item);
         await StorageService.removePlaylistItemByKey(dedupeKey);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Removed from playlist')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Removed from playlist')));
 
         // Set focus restoration flags BEFORE refresh
         // Only restore focus if there will be items remaining after deletion
@@ -394,13 +411,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final title = item['title'] as String? ?? '';
       await StorageService.clearPlaylistProgress(title: title);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Watch progress cleared')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Watch progress cleared')));
       await _refresh();
     }
   }
-
 
   // Show search dialog
   void _toggleSearchField() {
@@ -467,9 +483,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     cacheExtent: 500.0,
                     slivers: [
                       // Search area - inline bar + toggle button
-                      SliverToBoxAdapter(
-                        child: _buildSearchArea(query),
-                      ),
+                      SliverToBoxAdapter(child: _buildSearchArea(query)),
 
                       // Favorites Section
                       if (favoriteItems.isNotEmpty) ...[
@@ -483,13 +497,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               items: favoriteItems,
                               progressMap: _progressMap,
                               favoriteKeys: _favoriteKeys,
-                              onItemPlay: (item) => PlaylistPlayerService.play(context, item),
+                              onItemPlay: _playItem,
                               onItemView: _viewItem,
                               onItemDelete: _removeItem,
                               onItemClearProgress: _clearPlaylistProgress,
                               onItemToggleFavorite: _toggleFavorite,
                               shouldAutofocusFirst: false,
-                              targetFocusIndex: _shouldRestoreFocus ? _targetFocusIndex : null,
+                              targetFocusIndex: _shouldRestoreFocus
+                                  ? _targetFocusIndex
+                                  : null,
                               shouldRestoreFocus: _shouldRestoreFocus,
                               onFocusRestored: () {
                                 setState(() {
@@ -498,10 +514,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 });
                               },
                               // UP from Favorites -> Search button
-                              onUpArrowPressed: () => _searchFocusNode.requestFocus(),
+                              onUpArrowPressed: () =>
+                                  _searchFocusNode.requestFocus(),
                               // DOWN from Favorites -> First item in All Items
                               onDownArrowPressed: () {
-                                _allItemsSectionKey.currentState?.requestFocusOnFirstItem();
+                                _allItemsSectionKey.currentState
+                                    ?.requestFocusOnFirstItem();
                               },
                             ),
                           ),
@@ -514,20 +532,28 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         child: RepaintBoundary(
                           child: AdaptivePlaylistSection(
                             key: _allItemsSectionKey,
-                            sectionTitle: favoriteItems.isNotEmpty ? 'All Items' : '',
-                            sectionIcon: favoriteItems.isNotEmpty ? Icons.grid_view_rounded : null,
+                            sectionTitle: favoriteItems.isNotEmpty
+                                ? 'All Items'
+                                : '',
+                            sectionIcon: favoriteItems.isNotEmpty
+                                ? Icons.grid_view_rounded
+                                : null,
                             sectionIconColor: const Color(0xFF6366F1),
                             items: allItems,
                             progressMap: _progressMap,
                             favoriteKeys: _favoriteKeys,
-                            onItemPlay: (item) => PlaylistPlayerService.play(context, item),
+                            onItemPlay: _playItem,
                             onItemView: _viewItem,
                             onItemDelete: _removeItem,
                             onItemClearProgress: _clearPlaylistProgress,
                             onItemToggleFavorite: _toggleFavorite,
                             shouldAutofocusFirst: false,
-                            targetFocusIndex: _shouldRestoreFocus && favoriteItems.isEmpty ? _targetFocusIndex : null,
-                            shouldRestoreFocus: _shouldRestoreFocus && favoriteItems.isEmpty,
+                            targetFocusIndex:
+                                _shouldRestoreFocus && favoriteItems.isEmpty
+                                ? _targetFocusIndex
+                                : null,
+                            shouldRestoreFocus:
+                                _shouldRestoreFocus && favoriteItems.isEmpty,
                             onFocusRestored: () {
                               setState(() {
                                 _shouldRestoreFocus = false;
@@ -538,7 +564,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             onUpArrowPressed: () {
                               if (_favoritesSectionKey.currentState != null &&
                                   _favoritesSectionKey.currentState!.hasItems) {
-                                _favoritesSectionKey.currentState!.requestFocusOnFirstItem();
+                                _favoritesSectionKey.currentState!
+                                    .requestFocusOnFirstItem();
                               } else {
                                 _searchFocusNode.requestFocus();
                               }
@@ -589,7 +616,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         suffixIcon: ValueListenableBuilder<TextEditingValue>(
                           valueListenable: _searchController,
                           builder: (context, value, _) {
-                            if (value.text.isEmpty) return const SizedBox.shrink();
+                            if (value.text.isEmpty)
+                              return const SizedBox.shrink();
                             return IconButton(
                               icon: Icon(
                                 Icons.close_rounded,
@@ -630,9 +658,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           // Search toggle button (centered)
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildSearchButton(hasActiveSearch),
-            ],
+            children: [_buildSearchButton(hasActiveSearch)],
           ),
         ],
       ),
@@ -658,7 +684,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
             if (_favoritesSectionKey.currentState != null &&
                 _favoritesSectionKey.currentState!.hasItems) {
-              if (_favoritesSectionKey.currentState!.requestFocusOnFirstItem()) {
+              if (_favoritesSectionKey.currentState!
+                  .requestFocusOnFirstItem()) {
                 return KeyEventResult.handled;
               }
             }
@@ -692,7 +719,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     : const Color(0xFF141414),
                 borderRadius: BorderRadius.circular(20),
                 border: isFocused
-                    ? Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2)
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        width: 2,
+                      )
                     : null,
               ),
               child: Icon(
@@ -790,7 +820,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
 /// Search dialog for playlist search - TV optimized
 /// Custom focus traversal policy that prevents focus from escaping upward to navbar
-class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with DirectionalFocusTraversalPolicyMixin {
+class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy
+    with DirectionalFocusTraversalPolicyMixin {
   @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {
     // Let the default behavior handle most directions
@@ -806,7 +837,10 @@ class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with Directiona
   }
 
   @override
-  Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) {
+  Iterable<FocusNode> sortDescendants(
+    Iterable<FocusNode> descendants,
+    FocusNode currentNode,
+  ) {
     // Use reading order (left-to-right, top-to-bottom)
     return descendants.toList()..sort((a, b) {
       final aRect = a.rect;
@@ -819,4 +853,3 @@ class _PlaylistFocusTraversalPolicy extends FocusTraversalPolicy with Directiona
     });
   }
 }
-
