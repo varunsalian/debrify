@@ -219,6 +219,7 @@ class VideoPlayerLaunchArgs {
   stremioTvGuideDataProvider;
   final Future<Map<String, dynamic>?> Function(String)?
   stremioTvChannelSwitchProvider;
+  final Future<Map<String, dynamic>?> Function(String)? stremioTvNextProvider;
   // Trakt scrobble: send playback progress to Trakt
   final bool traktScrobble;
   // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
@@ -277,6 +278,7 @@ class VideoPlayerLaunchArgs {
     this.stremioTvMixSalt,
     this.stremioTvGuideDataProvider,
     this.stremioTvChannelSwitchProvider,
+    this.stremioTvNextProvider,
     this.traktScrobble = false,
     this.suppressTraktAutoSync = false,
     this.traktProgressPercent,
@@ -326,6 +328,7 @@ class VideoPlayerLaunchArgs {
       stremioTvCurrentChannelId: stremioTvCurrentChannelId,
       stremioTvGuideDataProvider: stremioTvGuideDataProvider,
       stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
+      stremioTvNextProvider: stremioTvNextProvider,
       traktScrobble: traktScrobble,
       traktProgressPercent: traktProgressPercent,
     );
@@ -429,6 +432,7 @@ class VideoPlayerLauncher {
           stremioTvMixSalt: args.stremioTvMixSalt,
           stremioTvGuideDataProvider: args.stremioTvGuideDataProvider,
           stremioTvChannelSwitchProvider: args.stremioTvChannelSwitchProvider,
+          stremioTvNextProvider: args.stremioTvNextProvider,
           traktScrobble: true,
           suppressTraktAutoSync: args.suppressTraktAutoSync,
           traktProgressPercent: args.traktProgressPercent,
@@ -1262,33 +1266,46 @@ class VideoPlayerLauncher {
       }
 
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
+      Map<String, dynamic>? prepareStremioTvPlaybackResult(
+        Map<String, dynamic>? playbackResult,
+      ) {
+        if (playbackResult == null) return null;
+
+        // Update mutable sources holder with the new item's sources.
+        final newSourcesList = playbackResult['stremioSources'] as List?;
+        final newResolver =
+            playbackResult['sourceResolver']
+                as Future<String?> Function(Torrent)?;
+        if (newSourcesList != null) {
+          currentStremioSources = newSourcesList
+              .map((s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)))
+              .toList();
+        }
+        if (newResolver != null) {
+          currentStremioResolver = newResolver;
+        }
+
+        // Remove the sourceResolver from the result (it's a function, not serializable)
+        final resultMap = Map<String, dynamic>.from(playbackResult);
+        resultMap.remove('sourceResolver');
+        return resultMap;
+      }
+
       final channelSwitchProvider = args.stremioTvChannelSwitchProvider;
       Future<Map<String, dynamic>?> Function(String)? channelSwitchForTv;
       if (channelSwitchProvider != null) {
         channelSwitchForTv = (String channelId) async {
           final switchResult = await channelSwitchProvider(channelId);
-          if (switchResult == null) return null;
+          return prepareStremioTvPlaybackResult(switchResult);
+        };
+      }
 
-          // Update mutable sources holder with new channel's sources
-          final newSourcesList = switchResult['stremioSources'] as List?;
-          final newResolver =
-              switchResult['sourceResolver']
-                  as Future<String?> Function(Torrent)?;
-          if (newSourcesList != null) {
-            currentStremioSources = newSourcesList
-                .map(
-                  (s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)),
-                )
-                .toList();
-          }
-          if (newResolver != null) {
-            currentStremioResolver = newResolver;
-          }
-
-          // Remove the sourceResolver from the result (it's a function, not serializable)
-          final resultMap = Map<String, dynamic>.from(switchResult);
-          resultMap.remove('sourceResolver');
-          return resultMap;
+      final stremioTvNextProvider = args.stremioTvNextProvider;
+      Future<Map<String, dynamic>?> Function(String)? stremioTvNextForTv;
+      if (stremioTvNextProvider != null) {
+        stremioTvNextForTv = (String channelId) async {
+          final nextResult = await stremioTvNextProvider(channelId);
+          return prepareStremioTvPlaybackResult(nextResult);
         };
       }
 
@@ -1374,6 +1391,7 @@ class VideoPlayerLauncher {
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
+        onRequestStremioTvNext: stremioTvNextForTv,
       );
 
       if (!launched) {

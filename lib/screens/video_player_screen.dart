@@ -71,7 +71,7 @@ export 'video_player/models/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
 
 /// A full-featured video player screen with playlist support and navigation controls.
-/// 
+///
 /// Features:
 /// - Play/pause controls
 /// - Next/Previous episode navigation (when playlist is available)
@@ -97,7 +97,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
   // Optional: Switch to a specific channel by ID
   final Future<Map<String, dynamic>?> Function(String channelId)?
-      requestChannelById;
+  requestChannelById;
   // Optional: Channel directory for channel guide
   final List<Map<String, dynamic>>? channelDirectory;
   // Advanced: start each video at a random timestamp
@@ -141,8 +141,11 @@ class VideoPlayerScreen extends StatefulWidget {
   // Stremio TV channel guide data
   final List<Map<String, dynamic>>? stremioTvChannels;
   final String? stremioTvCurrentChannelId;
-  final Future<Map<String, dynamic>?> Function(List<String>)? stremioTvGuideDataProvider;
-  final Future<Map<String, dynamic>?> Function(String)? stremioTvChannelSwitchProvider;
+  final Future<Map<String, dynamic>?> Function(List<String>)?
+  stremioTvGuideDataProvider;
+  final Future<Map<String, dynamic>?> Function(String)?
+  stremioTvChannelSwitchProvider;
+  final Future<Map<String, dynamic>?> Function(String)? stremioTvNextProvider;
   // Trakt scrobble: send playback progress to Trakt when playing from Trakt screen
   final bool traktScrobble;
   // Trakt progress: resume fallback when no local resume exists (0-100)
@@ -190,10 +193,11 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioTvCurrentChannelId,
     this.stremioTvGuideDataProvider,
     this.stremioTvChannelSwitchProvider,
+    this.stremioTvNextProvider,
     this.traktScrobble = false,
     this.traktProgressPercent,
-  })  : assert(randomStartMaxPercent >= 0),
-        super(key: key);
+  }) : assert(randomStartMaxPercent >= 0),
+       super(key: key);
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -218,14 +222,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isPikPakRetrying = false;
   int _pikPakRetryCount = 0;
   String? _pikPakRetryMessage;
-  int _pikPakRetryId = 0; // Cancellation token: increments on each new video to cancel old retries
+  int _pikPakRetryId =
+      0; // Cancellation token: increments on each new video to cancel old retries
 
   /// Construct playlist item data for the Fix Metadata feature
   Map<String, dynamic>? _constructPlaylistItemData() {
     // Need at least one identifier
     if ((widget.rdTorrentId == null || widget.rdTorrentId!.isEmpty) &&
         (widget.torboxTorrentId == null || widget.torboxTorrentId!.isEmpty) &&
-        (widget.pikpakCollectionId == null || widget.pikpakCollectionId!.isEmpty) &&
+        (widget.pikpakCollectionId == null ||
+            widget.pikpakCollectionId!.isEmpty) &&
         (_activePlaylist == null || _activePlaylist!.isEmpty)) {
       return null;
     }
@@ -243,7 +249,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Add PikPak collection ID if available
-    if (widget.pikpakCollectionId != null && widget.pikpakCollectionId!.isNotEmpty) {
+    if (widget.pikpakCollectionId != null &&
+        widget.pikpakCollectionId!.isNotEmpty) {
       data['pikpakFileId'] = widget.pikpakCollectionId;
     }
 
@@ -277,8 +284,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   String? get _channelBadgeText {
-    final String? nameSource =
-        (_currentChannelName ?? widget.channelName)?.trim();
+    final String? nameSource = (_currentChannelName ?? widget.channelName)
+        ?.trim();
     final int? numberSource = _currentChannelNumber;
 
     final bool hasName = nameSource != null && nameSource.isNotEmpty;
@@ -349,13 +356,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Stremio TV guide state
   bool _showStremioTvGuide = false;
   String? _currentStremioTvChannelId;
+  List<Map<String, dynamic>>? _stremioTvChannelsOverride;
+  bool _showStremioTvNextLoading = false;
+  String? _currentStremioTvContentImdbId;
+  String? _currentStremioTvContentType;
+  int? _currentStremioTvContentSeason;
+  int? _currentStremioTvContentEpisode;
+  String? _currentStremioTvContentTitle;
 
   /// Effective sources: override from channel switch, or initial widget sources.
-  List<Torrent>? get _effectiveSources => _stremioSourcesOverride ?? widget.stremioSources;
+  List<Torrent>? get _effectiveSources =>
+      _stremioSourcesOverride ?? widget.stremioSources;
 
   /// Effective source resolver: override from channel switch, or initial widget resolver.
   Future<String?> Function(Torrent)? get _effectiveResolver =>
       _resolveStremioSourceOverride ?? widget.resolveStremioSource;
+
+  List<Map<String, dynamic>>? get _effectiveStremioTvChannels =>
+      _stremioTvChannelsOverride ?? widget.stremioTvChannels;
+
+  String? get _effectiveContentImdbId =>
+      _currentStremioTvContentImdbId ?? widget.contentImdbId;
+  String? get _effectiveContentType =>
+      _currentStremioTvContentType ?? widget.contentType;
+  int? get _effectiveContentSeason =>
+      _currentStremioTvContentSeason ?? widget.contentSeason;
+  int? get _effectiveContentEpisode =>
+      _currentStremioTvContentEpisode ?? widget.contentEpisode;
+  String? get _effectiveContentTitle =>
+      _currentStremioTvContentTitle ?? widget.contentTitle;
 
   // Subtitle style settings
   SubtitleSettingsData? _subtitleSettings;
@@ -363,10 +392,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Cached Stremio addon subtitles (per-item cache like Android TV)
   List<StremioSubtitle>? _cachedStremioSubtitles;
   String? _cachedSubtitleKey; // Format: "imdbId:season:episode" or "imdbId"
-  String? _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
-  bool _embeddedSubtitleApplied = false; // Track if embedded subtitle was auto-selected
-  bool _userManuallySelectedSubtitle = false; // Track if user manually selected a subtitle
-  int _addonSubtitleFetchToken = 0; // Guard against stale async fetches on content switch
+  String?
+  _selectedStremioSubtitleId; // Track selected addon subtitle for UI state
+  bool _embeddedSubtitleApplied =
+      false; // Track if embedded subtitle was auto-selected
+  bool _userManuallySelectedSubtitle =
+      false; // Track if user manually selected a subtitle
+  int _addonSubtitleFetchToken =
+      0; // Guard against stale async fetches on content switch
   // Paths of temp SRT/VTT files we've written for addon subtitles. We hand
   // these to libmpv as file URIs so it auto-detects encoding (GBK, Big5,
   // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
@@ -448,8 +481,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _traktHeartbeatTimer;
 
   Duration? _randomStartOffset(Duration duration) {
-    final num clampedPercent =
-        widget.randomStartMaxPercent.clamp(0, 99);
+    final num clampedPercent = widget.randomStartMaxPercent.clamp(0, 99);
     if (duration <= Duration.zero || clampedPercent <= 0) {
       return null;
     }
@@ -482,10 +514,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Log playlist entries to trace relativePath
     if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-      debugPrint('📺 VideoPlayerScreen.initState: Initialized with ${_activePlaylist!.length} playlist entries');
+      debugPrint(
+        '📺 VideoPlayerScreen.initState: Initialized with ${_activePlaylist!.length} playlist entries',
+      );
       for (int i = 0; i < _activePlaylist!.length && i < 5; i++) {
         final entry = _activePlaylist![i];
-        debugPrint('  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"');
+        debugPrint(
+          '  Entry[$i]: title="${entry.title}", relativePath="${entry.relativePath}"',
+        );
       }
     }
 
@@ -547,8 +583,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   double _traktProgress() {
     if (_duration.inMilliseconds <= 0) return 0.0;
-    return (_position.inMilliseconds / _duration.inMilliseconds * 100)
-        .clamp(0.0, 100.0);
+    return (_position.inMilliseconds / _duration.inMilliseconds * 100).clamp(
+      0.0,
+      100.0,
+    );
   }
 
   /// Resolve season/episode: prefer current playlist entry (tracks auto-advance),
@@ -559,8 +597,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return (season: null, episode: null);
     }
     // Prefer current playlist entry — correct even after auto-advance
-    if (_activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-      final info = SeriesParser.parseFilename(_activePlaylist![_currentIndex].title);
+    if (_activePlaylist != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      final info = SeriesParser.parseFilename(
+        _activePlaylist![_currentIndex].title,
+      );
       if (info.season != null && info.episode != null) {
         return (season: info.season, episode: info.episode);
       }
@@ -586,16 +628,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _traktLastScrobbleAction = action;
     switch (action) {
       case 'start':
-        TraktService.instance.scrobbleStart(imdbId, progress,
-            season: se.season, episode: se.episode);
+        TraktService.instance.scrobbleStart(
+          imdbId,
+          progress,
+          season: se.season,
+          episode: se.episode,
+        );
         break;
       case 'pause':
-        TraktService.instance.scrobblePause(imdbId, progress,
-            season: se.season, episode: se.episode);
+        TraktService.instance.scrobblePause(
+          imdbId,
+          progress,
+          season: se.season,
+          episode: se.episode,
+        );
         break;
       case 'stop':
-        TraktService.instance.scrobbleStop(imdbId, progress,
-            season: se.season, episode: se.episode);
+        TraktService.instance.scrobbleStop(
+          imdbId,
+          progress,
+          season: se.season,
+          episode: se.episode,
+        );
         break;
     }
   }
@@ -612,17 +666,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Trakt rejects start/pause above 80% — send stop and end heartbeat
       if (progress > 80) {
         _traktLastScrobbleAction = 'stop';
-        TraktService.instance.scrobbleStop(imdbId, progress,
-            season: se.season, episode: se.episode);
-        debugPrint('Trakt: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)');
+        TraktService.instance.scrobbleStop(
+          imdbId,
+          progress,
+          season: se.season,
+          episode: se.episode,
+        );
+        debugPrint(
+          'Trakt: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)',
+        );
         _stopTraktHeartbeat();
         return;
       }
       // Force-send start (bypass dedup) to keep session alive and checkpoint progress
       _traktLastScrobbleAction = 'start';
-      TraktService.instance.scrobbleStart(imdbId, progress,
-          season: se.season, episode: se.episode);
-      debugPrint('Trakt: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%');
+      TraktService.instance.scrobbleStart(
+        imdbId,
+        progress,
+        season: se.season,
+        episode: se.episode,
+      );
+      debugPrint(
+        'Trakt: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%',
+      );
     });
   }
 
@@ -636,18 +702,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
-    final progress = (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(0.0, 100.0);
+    final progress =
+        (seekTarget.inMilliseconds / _duration.inMilliseconds * 100).clamp(
+          0.0,
+          100.0,
+        );
     final se = _traktSeasonEpisode();
     // Trakt rejects start above 80% — send stop instead
     if (progress > 80) {
       _traktLastScrobbleAction = 'stop';
-      TraktService.instance.scrobbleStop(imdbId, progress,
-          season: se.season, episode: se.episode);
+      TraktService.instance.scrobbleStop(
+        imdbId,
+        progress,
+        season: se.season,
+        episode: se.episode,
+      );
       _stopTraktHeartbeat();
     } else {
       _traktLastScrobbleAction = 'start';
-      TraktService.instance.scrobbleStart(imdbId, progress,
-          season: se.season, episode: se.episode);
+      TraktService.instance.scrobbleStart(
+        imdbId,
+        progress,
+        season: se.season,
+        episode: se.episode,
+      );
       _startTraktHeartbeat();
     }
   }
@@ -679,7 +757,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // If auto-resume is disabled, use startIndex directly
       if (widget.disableAutoResume) {
         initialIndex = widget.startIndex ?? 0;
-        debugPrint('VideoPlayer: auto-resume disabled, using startIndex=$initialIndex');
+        debugPrint(
+          'VideoPlayer: auto-resume disabled, using startIndex=$initialIndex',
+        );
       } else {
         // Check if this is a series and we should find the first episode by season/episode
         final seriesPlaylist = _seriesPlaylist;
@@ -689,7 +769,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           bool targetEpisodeResolved = false;
           if (widget.contentSeason != null && widget.contentEpisode != null) {
             final targetIndex = seriesPlaylist.findOriginalIndexBySeasonEpisode(
-              widget.contentSeason!, widget.contentEpisode!,
+              widget.contentSeason!,
+              widget.contentEpisode!,
             );
             if (targetIndex != -1) {
               initialIndex = targetIndex;
@@ -723,46 +804,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
           }
         } else {
-        // For non-series playlists, try to restore the last played video
-		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-			// Try to find the last played video by checking each playlist entry
-			int lastPlayedIndex = -1;
-			Map<String, dynamic>? lastPlayedState;
+          // For non-series playlists, try to restore the last played video
+          if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+            // Try to find the last played video by checking each playlist entry
+            int lastPlayedIndex = -1;
+            Map<String, dynamic>? lastPlayedState;
 
-			for (int i = 0; i < _activePlaylist!.length; i++) {
-				final entry = _activePlaylist![i];
-				final resumeId = _resumeIdForEntry(entry);
-				debugPrint('Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId');
-				final state = await StorageService.getVideoPlaybackState(
-					videoTitle: resumeId,
-				);
-				if (state != null) {
-					debugPrint('Resume: found state for entry[$i] resumeId=$resumeId updatedAt=${state['updatedAt']}');
-					final updatedAt = state['updatedAt'] as int? ?? 0;
-					if (lastPlayedState == null ||
-						updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
-						lastPlayedState = state;
-						lastPlayedIndex = i;
-					}
-				}
-			}
+            for (int i = 0; i < _activePlaylist!.length; i++) {
+              final entry = _activePlaylist![i];
+              final resumeId = _resumeIdForEntry(entry);
+              debugPrint(
+                'Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId',
+              );
+              final state = await StorageService.getVideoPlaybackState(
+                videoTitle: resumeId,
+              );
+              if (state != null) {
+                debugPrint(
+                  'Resume: found state for entry[$i] resumeId=$resumeId updatedAt=${state['updatedAt']}',
+                );
+                final updatedAt = state['updatedAt'] as int? ?? 0;
+                if (lastPlayedState == null ||
+                    updatedAt > (lastPlayedState['updatedAt'] as int? ?? 0)) {
+                  lastPlayedState = state;
+                  lastPlayedIndex = i;
+                }
+              }
+            }
 
-			if (lastPlayedIndex != -1) {
-				debugPrint('Resume: restoring playlist index $lastPlayedIndex');
-				initialIndex = lastPlayedIndex;
-			} else {
-				debugPrint('Resume: no prior playback state found, using default ordering');
-				// Pick the first item from Main group (by year asc then size desc)
-				final indices = _getMainGroupIndices(_activePlaylist!);
-				initialIndex = indices.isNotEmpty
-					? indices.first
-					: (widget.startIndex ?? 0);
-			}
-		} else {
-			// Not a series or no series playlist, use the provided startIndex
-			initialIndex = widget.startIndex ?? 0;
-		}
-	}
+            if (lastPlayedIndex != -1) {
+              debugPrint('Resume: restoring playlist index $lastPlayedIndex');
+              initialIndex = lastPlayedIndex;
+            } else {
+              debugPrint(
+                'Resume: no prior playback state found, using default ordering',
+              );
+              // Pick the first item from Main group (by year asc then size desc)
+              final indices = _getMainGroupIndices(_activePlaylist!);
+              initialIndex = indices.isNotEmpty
+                  ? indices.first
+                  : (widget.startIndex ?? 0);
+            }
+          } else {
+            // Not a series or no series playlist, use the provided startIndex
+            initialIndex = widget.startIndex ?? 0;
+          }
+        }
       }
     } else {}
 
@@ -817,13 +904,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (initialUrl.isNotEmpty) {
       // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
       final currentEntry = _activePlaylist?[_currentIndex];
-      final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
+      final isPikPak =
+          currentEntry?.provider?.toLowerCase() == 'pikpak' ||
+          currentEntry?.pikpakFileId != null;
       // For non-playlist flows (Debrify TV, Stremio TV, etc.), detect PikPak by URL
-      final isPikPakUrl = _activePlaylist == null && initialUrl.contains('mypikpak.com');
+      final isPikPakUrl =
+          _activePlaylist == null && initialUrl.contains('mypikpak.com');
       final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
       if ((isPikPak && _activePlaylist != null) || isPikPakUrl) {
-        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((_) async {
+        _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((
+          _,
+        ) async {
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
           // Random start takes precedence over resume, then startAtPercent
@@ -846,29 +938,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _restoreTrackPreferences();
         });
       } else {
-        _player.open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders)).then((_) async {
-          // Wait for the video to load and duration to be available
-          await _waitForVideoReady();
-          // Random start takes precedence over resume, then startAtPercent
-          if (widget.startFromRandom) {
-            final offset = _randomStartOffset(_duration);
-            if (offset != null) {
-              await _player.seek(offset);
-            } else {
-              await _maybeRestoreResume();
-            }
-          } else if (widget.startAtPercent != null) {
-            final offset = _percentStartOffset(_duration);
-            if (offset != null) {
-              await _player.seek(offset);
-            }
-          } else {
-            await _maybeRestoreResume();
-          }
-          _scheduleAutoHide();
-          // Restore audio and subtitle track preferences
-          await _restoreTrackPreferences();
-        });
+        _player
+            .open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders))
+            .then((_) async {
+              // Wait for the video to load and duration to be available
+              await _waitForVideoReady();
+              // Random start takes precedence over resume, then startAtPercent
+              if (widget.startFromRandom) {
+                final offset = _randomStartOffset(_duration);
+                if (offset != null) {
+                  await _player.seek(offset);
+                } else {
+                  await _maybeRestoreResume();
+                }
+              } else if (widget.startAtPercent != null) {
+                final offset = _percentStartOffset(_duration);
+                if (offset != null) {
+                  await _player.seek(offset);
+                }
+              } else {
+                await _maybeRestoreResume();
+              }
+              _scheduleAutoHide();
+              // Restore audio and subtitle track preferences
+              await _restoreTrackPreferences();
+            });
       }
     } else {
       // If no valid URL, try to load the first playlist entry
@@ -897,7 +991,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (_traktLastScrobbleAction == 'start') {
           _startTraktHeartbeat();
         }
-      } else if (!p && wasPlaying && !_isTransitioning && _traktLastScrobbleAction != 'stop') {
+      } else if (!p &&
+          wasPlaying &&
+          !_isTransitioning &&
+          _traktLastScrobbleAction != 'stop') {
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
@@ -937,7 +1034,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _bufferingDebounceTimer = Timer(
           VideoPlayerTimingConstants.bufferingDebounceDelay,
           () {
-            if (mounted && _player.state.buffering && _isReady && !_isTransitioning && !_isPikPakRetrying) {
+            if (mounted &&
+                _player.state.buffering &&
+                _isReady &&
+                !_isTransitioning &&
+                !_isPikPakRetrying) {
               _showBufferingIndicator.value = true;
             }
           },
@@ -966,7 +1067,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         setState(() {
           _currentChannelName = null;
         });
-      } else if (trimmed != null && trimmed.isNotEmpty &&
+      } else if (trimmed != null &&
+          trimmed.isNotEmpty &&
           _currentChannelName != widget.channelName) {
         setState(() {
           _currentChannelName = widget.channelName;
@@ -994,8 +1096,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (token != _addonSubtitleFetchToken) return;
       final tracks = _player.state.tracks.subtitle;
       // Check if we have any real tracks (not just 'auto' and 'no')
-      final hasRealTracks = tracks.any((t) =>
-        t.id != 'auto' && t.id != 'no' && t.id.isNotEmpty
+      final hasRealTracks = tracks.any(
+        (t) => t.id != 'auto' && t.id != 'no' && t.id.isNotEmpty,
       );
       if (hasRealTracks) {
         return;
@@ -1058,6 +1160,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
 
+    // Playlist auto-advance keeps priority over guide-based Stremio TV next.
+    final nextIndex = _findNextEpisodeIndex();
+    if (nextIndex != -1) {
+      _isAutoAdvancing = true;
+      await _loadPlaylistIndex(nextIndex, autoplay: true);
+      return;
+    }
+
+    if (_hasStremioTvNext) {
+      final handled = await _goToNextStremioTvSlot(
+        resumeCurrentOnFailure: false,
+      );
+      if (handled) return;
+      debugPrint(
+        'Player: Stremio TV auto-next unavailable; leaving playback ended.',
+      );
+      return;
+    }
+
     // Debrify TV (no playlist): auto-advance using provider if available
     if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
         widget.requestMagicNext != null) {
@@ -1071,17 +1192,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    // Find the next logical episode
-    final nextIndex = _findNextEpisodeIndex();
-    if (nextIndex == -1) {
-      // End of playlist — try series next episode
-      await _handleSeriesNextEpisode();
-      return;
-    }
-
-    // Mark this as auto-advancing to the next episode
-    _isAutoAdvancing = true;
-    await _loadPlaylistIndex(nextIndex, autoplay: true);
+    // End of playlist — try series next episode
+    await _handleSeriesNextEpisode();
   }
 
   void _startTransitionOverlay() {
@@ -1092,12 +1204,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _transitionPhaseTimer?.cancel();
     _transitionPhase = 1;
     // Pick a random retro TV message and reset subtext
-    _tvStaticMessage = _tvStaticMessages[
-        math.Random().nextInt(_tvStaticMessages.length)];
+    _tvStaticMessage =
+        _tvStaticMessages[math.Random().nextInt(_tvStaticMessages.length)];
     _tvStaticSubtext = ''; // Clear subtext until video is ready
     debugPrint('Player: Transition overlay started.');
     // Match Android TV: update every 50ms for smooth static effect
-    _rainbowController.repeat(period: VideoPlayerTimingConstants.rainbowRepeatPeriod);
+    _rainbowController.repeat(
+      period: VideoPlayerTimingConstants.rainbowRepeatPeriod,
+    );
     if (mounted) setState(() {});
   }
 
@@ -1241,7 +1355,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
       // Raw mode OR Sorted mode: sequential navigation through all files
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
+      if (widget.viewMode == PlaylistViewMode.raw ||
+          widget.viewMode == PlaylistViewMode.sorted) {
         if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
         if (_currentIndex + 1 < _activePlaylist!.length) {
           return _currentIndex + 1;
@@ -1344,7 +1459,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
       // Raw mode OR Sorted mode: sequential navigation through all files
       // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (widget.viewMode == PlaylistViewMode.raw || widget.viewMode == PlaylistViewMode.sorted) {
+      if (widget.viewMode == PlaylistViewMode.raw ||
+          widget.viewMode == PlaylistViewMode.sorted) {
         if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
         if (_currentIndex - 1 >= 0) {
           return _currentIndex - 1;
@@ -1451,6 +1567,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    if (_hasStremioTvNext) {
+      final handled = await _goToNextStremioTvSlot();
+      if (handled) return;
+    }
+
     // Series content without season pack: find next episode and trigger Quick Play
     if (widget.requestMagicNext == null) {
       final handled = await _handleSeriesNextEpisode();
@@ -1465,10 +1586,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final url = result != null ? (result['url'] ?? '') : '';
         final title = result != null ? (result['title'] ?? '') : '';
         final provider = result != null ? (result['provider'] ?? '') : '';
-        final pikpakFileId = result != null ? (result['pikpakFileId'] ?? '') : '';
+        final pikpakFileId = result != null
+            ? (result['pikpakFileId'] ?? '')
+            : '';
 
         if (url.isNotEmpty) {
-          debugPrint('Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).');
+          debugPrint(
+            'Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).',
+          );
 
           // Clear subtitle, IMDB, and episode-finished state when switching content
           _resetSubtitleState();
@@ -1485,15 +1610,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
 
           // Use PikPak retry logic if this is a PikPak video
-          final isPikPak = provider.toLowerCase() == 'pikpak' || pikpakFileId.isNotEmpty;
+          final isPikPak =
+              provider.toLowerCase() == 'pikpak' || pikpakFileId.isNotEmpty;
           if (isPikPak) {
-            debugPrint('Player: Detected PikPak video from Debrify TV, using retry logic');
+            debugPrint(
+              'Player: Detected PikPak video from Debrify TV, using retry logic',
+            );
             // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
-            await _playPikPakVideoWithRetry(url, overrideProvider: provider, overridePikPakFileId: pikpakFileId, isDebrifyTV: true);
+            await _playPikPakVideoWithRetry(
+              url,
+              overrideProvider: provider,
+              overridePikPakFileId: pikpakFileId,
+              isDebrifyTV: true,
+            );
           } else {
             // Cancel any ongoing PikPak retry when switching to non-PikPak video
             _pikPakRetryId++;
-            await _player.open(mk.Media(url, httpHeaders: widget.httpHeaders), play: true);
+            await _player.open(
+              mk.Media(url, httpHeaders: widget.httpHeaders),
+              play: true,
+            );
           }
           _currentStreamUrl = url;
           // Disable auto-enabled embedded subtitles to prevent duplicates
@@ -1574,7 +1710,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (currentSeason == null || currentEpisode == null) return false;
 
-    debugPrint('Player: Looking up next episode after S${currentSeason}E$currentEpisode');
+    debugPrint(
+      'Player: Looking up next episode after S${currentSeason}E$currentEpisode',
+    );
     final nextEp = await NextEpisodeService.findNextEpisode(
       widget.contentImdbId!,
       currentSeason,
@@ -1582,11 +1720,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
 
     if (nextEp == null) {
-      debugPrint('Player: No next episode found (last episode or lookup failed)');
+      debugPrint(
+        'Player: No next episode found (last episode or lookup failed)',
+      );
       return false;
     }
 
-    debugPrint('Player: Found next episode S${nextEp.season}E${nextEp.episode}, popping for Quick Play');
+    debugPrint(
+      'Player: Found next episode S${nextEp.season}E${nextEp.episode}, popping for Quick Play',
+    );
     if (mounted) {
       Navigator.of(context).pop(<String, dynamic>{
         'quickPlayNext': true,
@@ -1770,7 +1912,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  Future<void> _switchToSourcePlaylist(int sourceIndex, List<PlaylistEntry> newPlaylist) async {
+  Future<void> _switchToSourcePlaylist(
+    int sourceIndex,
+    List<PlaylistEntry> newPlaylist,
+  ) async {
     _hideSourceSheet();
     _clearBufferingIndicator();
     setState(() {
@@ -1778,7 +1923,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _currentSourceIndex = sourceIndex;
     });
     _startTransitionOverlay();
-    try { await _player.pause(); } catch (_) {}
+    try {
+      await _player.pause();
+    } catch (_) {}
     if (!mounted) return;
 
     // Replace playlist and invalidate series cache
@@ -1796,7 +1943,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _transitionPhaseTimer?.cancel();
     _transitionPhase = 2;
     _transitionPhase2Started = DateTime.now();
-    setState(() { _isTransitioning = false; });
+    setState(() {
+      _isTransitioning = false;
+    });
     _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
       _rainbowController.stop();
       _transitionRunning = false;
@@ -1865,9 +2014,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   bool get _hasStremioTvGuide =>
-      widget.stremioTvChannels != null &&
-      widget.stremioTvChannels!.isNotEmpty &&
+      _effectiveStremioTvChannels != null &&
+      _effectiveStremioTvChannels!.isNotEmpty &&
       widget.stremioTvChannelSwitchProvider != null;
+
+  bool get _hasStremioTvNext =>
+      _currentStremioTvChannelId != null &&
+      widget.stremioTvNextProvider != null;
+
+  bool get _hasAnyNext =>
+      _hasNextEpisode() || widget.requestMagicNext != null || _hasStremioTvNext;
 
   void _showStremioTvGuideOverlay() {
     if (!_hasStremioTvGuide) return;
@@ -1883,12 +2039,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  void _setStremioTvNextLoading(bool loading) {
+    if (!mounted || _showStremioTvNextLoading == loading) return;
+    setState(() {
+      _showStremioTvNextLoading = loading;
+    });
+  }
+
+  void _applyStremioTvGuidePlaybackData(
+    String channelId, {
+    Map<String, dynamic>? nowPlaying,
+    Map<String, dynamic>? nextUp,
+  }) {
+    final current = _effectiveStremioTvChannels;
+    if (current == null || current.isEmpty) return;
+
+    _stremioTvChannelsOverride = current
+        .map((entry) {
+          final copy = Map<String, dynamic>.from(entry);
+          if (copy['id'] == channelId) {
+            if (nowPlaying != null) {
+              copy['nowPlaying'] = Map<String, dynamic>.from(nowPlaying);
+            }
+            if (nextUp != null) {
+              copy['nextUp'] = Map<String, dynamic>.from(nextUp);
+            }
+          }
+          return copy;
+        })
+        .toList(growable: false);
+  }
+
+  List<Torrent>? _parseStremioTvSources(dynamic rawSources) {
+    if (rawSources is! List) return null;
+    return rawSources
+        .map(
+          (s) =>
+              s is Map ? Torrent.fromJson(Map<String, dynamic>.from(s)) : null,
+        )
+        .whereType<Torrent>()
+        .toList();
+  }
+
   Future<void> _switchToStremioTvChannel(
     String channelId,
     String url,
     String title, {
     String? contentImdbId,
     String? contentType,
+    int? contentSeason,
+    int? contentEpisode,
+    Map<String, dynamic>? nowPlaying,
+    Map<String, dynamic>? nextUp,
     double? startAtPercent,
     List<Torrent>? newSources,
     int? newSourceIndex,
@@ -1900,6 +2102,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _isTransitioning = true;
       _currentStremioTvChannelId = channelId;
       _dynamicTitle = title;
+      _currentStremioTvContentImdbId = contentImdbId;
+      _currentStremioTvContentType = contentType;
+      _currentStremioTvContentSeason = contentSeason;
+      _currentStremioTvContentEpisode = contentEpisode;
+      _currentStremioTvContentTitle = title;
+      _applyStremioTvGuidePlaybackData(
+        channelId,
+        nowPlaying: nowPlaying,
+        nextUp: nextUp,
+      );
       if (newSources != null) {
         _stremioSourcesOverride = newSources;
         _currentSourceIndex = newSourceIndex ?? 0;
@@ -1914,13 +2126,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _player.pause();
     } catch (_) {}
 
+    _resetSubtitleState();
+    _singleFileImdbId = null;
+    _singleFileImdbFetched = false;
+    _currentEpisodeMarkedAsFinished = false;
+
     try {
+      _pikPakRetryId++;
       await _player.open(mk.Media(url), play: true);
+      _currentStreamUrl = url;
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
       if (startAtPercent != null && startAtPercent > 0) {
         // Apply start position once duration is known
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((d) {
           if (mounted) {
-            final seekTo = Duration(milliseconds: (d.inMilliseconds * startAtPercent).round());
+            final seekTo = Duration(
+              milliseconds: (d.inMilliseconds * startAtPercent).round(),
+            );
             _player.seek(seekTo);
           }
         });
@@ -1945,6 +2167,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _rainbowActive = false;
       if (mounted) setState(() {});
     });
+  }
+
+  Future<bool> _goToNextStremioTvSlot({
+    bool resumeCurrentOnFailure = true,
+  }) async {
+    final requestNext = widget.stremioTvNextProvider;
+    final channelId = _currentStremioTvChannelId;
+    if (requestNext == null || channelId == null || channelId.isEmpty) {
+      return false;
+    }
+    if (_showStremioTvNextLoading) {
+      return true;
+    }
+
+    Map<String, dynamic>? result;
+    _setStremioTvNextLoading(true);
+    try {
+      result = await requestNext(channelId);
+    } catch (e) {
+      debugPrint('Player: Stremio TV next failed: $e');
+    }
+
+    if (!mounted) return true;
+    _setStremioTvNextLoading(false);
+
+    if (result == null) {
+      setState(() => _isTransitioning = false);
+      if (!resumeCurrentOnFailure) return false;
+      try {
+        await _player.play();
+      } catch (_) {}
+      return true;
+    }
+
+    final url = result['url'] as String?;
+    final title = result['title'] as String? ?? _dynamicTitle;
+    if (url == null || url.isEmpty) {
+      setState(() => _isTransitioning = false);
+      if (!resumeCurrentOnFailure) return false;
+      try {
+        await _player.play();
+      } catch (_) {}
+      return true;
+    }
+
+    final newSources = _parseStremioTvSources(result['stremioSources']);
+    final sourceResolver =
+        result['sourceResolver'] as Future<String?> Function(Torrent)?;
+
+    await _switchToStremioTvChannel(
+      result['channelId'] as String? ?? channelId,
+      url,
+      title,
+      contentImdbId: result['contentImdbId'] as String?,
+      contentType: result['contentType'] as String?,
+      contentSeason: (result['contentSeason'] as num?)?.toInt(),
+      contentEpisode: (result['contentEpisode'] as num?)?.toInt(),
+      nowPlaying: result['nowPlaying'] is Map
+          ? Map<String, dynamic>.from(result['nowPlaying'] as Map)
+          : null,
+      nextUp: result['nextUp'] is Map
+          ? Map<String, dynamic>.from(result['nextUp'] as Map)
+          : null,
+      startAtPercent: (result['startAtPercent'] as num?)?.toDouble(),
+      newSources: newSources,
+      newSourceIndex: (result['stremioCurrentSourceIndex'] as num?)?.toInt(),
+      sourceResolver: sourceResolver,
+    );
+    return true;
   }
 
   /// Switch to a specific channel by ID (from channel guide)
@@ -2049,8 +2340,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       _pikPakRetryId++;
       await _player.open(
-          mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
-          play: true);
+        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        play: true,
+      );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
       await _player.setSubtitleTrack(mk.SubtitleTrack.no());
@@ -2174,7 +2466,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
-      await _player.open(mk.Media(nextUrl, httpHeaders: widget.httpHeaders), play: true);
+      await _player.open(
+        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        play: true,
+      );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
       await _player.setSubtitleTrack(mk.SubtitleTrack.no());
@@ -2255,7 +2550,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } catch (_) {}
       return;
     }
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries || seriesPlaylist.seriesTitle == null) return;
+    if (seriesPlaylist == null ||
+        !seriesPlaylist.isSeries ||
+        seriesPlaylist.seriesTitle == null)
+      return;
     _currentEpisodeMarkedAsFinished = true;
     try {
       // Find the current episode info
@@ -2296,7 +2594,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         index >= _activePlaylist!.length)
       return;
 
-    print('PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay');
+    print(
+      'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
+    );
 
     // Scrobble stop for the current episode before switching
     _stopTraktHeartbeat();
@@ -2320,7 +2620,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       });
     }
 
-    print('PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}');
+    print(
+      'PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}',
+    );
 
     // Resolve the actual streaming URL if needed
     String videoUrl = entry.url;
@@ -2365,7 +2667,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Check if this is a PikPak video
     final currentEntry = _activePlaylist?[index];
-    final isPikPak = currentEntry?.provider?.toLowerCase() == 'pikpak' || currentEntry?.pikpakFileId != null;
+    final isPikPak =
+        currentEntry?.provider?.toLowerCase() == 'pikpak' ||
+        currentEntry?.pikpakFileId != null;
 
     // ALWAYS use retry logic for PikPak videos, regardless of autoplay
     if (isPikPak) {
@@ -2382,7 +2686,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Non-PikPak videos play normally
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
-      await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: autoplay);
+      await _player.open(
+        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        play: autoplay,
+      );
     }
 
     // Wait for the video to load and duration to be available
@@ -2418,7 +2725,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final hasTorboxWebDownloadMetadata =
         entry.torboxWebDownloadId != null && entry.torboxFileId != null;
 
-    if (provider == 'torbox' || hasTorboxMetadata || hasTorboxWebDownloadMetadata) {
+    if (provider == 'torbox' ||
+        hasTorboxMetadata ||
+        hasTorboxWebDownloadMetadata) {
       final torrentId = entry.torboxTorrentId;
       final webDownloadId = entry.torboxWebDownloadId;
       final fileId = entry.torboxFileId;
@@ -2515,7 +2824,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     while (stopwatch.elapsed.inSeconds < totalTimeoutSeconds) {
       // Check if this retry has been cancelled (user navigated to different video)
       if (_pikPakRetryId != retryId) {
-        print('PikPak: Retry cancelled (token mismatch: current=$_pikPakRetryId, expected=$retryId)');
+        print(
+          'PikPak: Retry cancelled (token mismatch: current=$_pikPakRetryId, expected=$retryId)',
+        );
         return false;
       }
 
@@ -2530,15 +2841,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // For the first video, streams might not fire reliably, so we need the direct state check
       final streamDuration = _duration;
       final directDuration = _player.state.duration;
-      final effectiveDuration = streamDuration > Duration.zero ? streamDuration : directDuration;
+      final effectiveDuration = streamDuration > Duration.zero
+          ? streamDuration
+          : directDuration;
 
       if (effectiveDuration > Duration.zero) {
-        print('PikPak: Video duration available (stream: $streamDuration, direct: $directDuration, effective: $effectiveDuration)');
+        print(
+          'PikPak: Video duration available (stream: $streamDuration, direct: $directDuration, effective: $effectiveDuration)',
+        );
 
         // Additional verification: wait a bit longer to ensure playback actually started
         // This gives the player time to transition from "has duration" to "is playing"
         // and allows all stream listeners to synchronize their state updates
-        print('PikPak: Duration detected, waiting for playback to stabilize...');
+        print(
+          'PikPak: Duration detected, waiting for playback to stabilize...',
+        );
         await Future.delayed(const Duration(milliseconds: 800));
 
         // Check mounted state after delay
@@ -2549,7 +2866,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Final cancellation check after stabilization delay
         if (_pikPakRetryId != retryId) {
-          print('PikPak: Retry cancelled during stabilization (navigation occurred)');
+          print(
+            'PikPak: Retry cancelled during stabilization (navigation occurred)',
+          );
           return false;
         }
 
@@ -2560,11 +2879,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final directPlaying = _player.state.playing;
 
         if (streamPlaying || directPlaying) {
-          print('PikPak: Video confirmed playing - duration: $effectiveDuration, playing: true (stream: $streamPlaying, direct: $directPlaying)');
+          print(
+            'PikPak: Video confirmed playing - duration: $effectiveDuration, playing: true (stream: $streamPlaying, direct: $directPlaying)',
+          );
         } else {
           // Duration is available but playback hasn't started yet
           // This is acceptable - duration alone is sufficient for cold storage detection
-          print('PikPak: Duration available ($effectiveDuration), playback will start shortly');
+          print(
+            'PikPak: Duration available ($effectiveDuration), playback will start shortly',
+          );
         }
 
         // CRITICAL FIX: Clear retry state IMMEDIATELY when video loads
@@ -2587,29 +2910,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Timeout - video metadata never loaded, file is likely in cold storage
-    print('PikPak: Timeout waiting for video metadata (${totalTimeoutSeconds}s elapsed)');
+    print(
+      'PikPak: Timeout waiting for video metadata (${totalTimeoutSeconds}s elapsed)',
+    );
     return false;
   }
 
   /// Attempts to play a PikPak video with retry logic for cold storage
-  Future<void> _playPikPakVideoWithRetry(String videoUrl, {String? overrideProvider, String? overridePikPakFileId, bool isDebrifyTV = false}) async {
+  Future<void> _playPikPakVideoWithRetry(
+    String videoUrl, {
+    String? overrideProvider,
+    String? overridePikPakFileId,
+    bool isDebrifyTV = false,
+  }) async {
     // Only apply retry logic for PikPak videos
     // Support both playlist entries and Debrify TV (requestMagicNext) flows
-    final currentEntry = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
+    final currentEntry =
+        _activePlaylist != null &&
+            _currentIndex >= 0 &&
+            _currentIndex < _activePlaylist!.length
         ? _activePlaylist![_currentIndex]
         : null;
-    final isPikPak = overrideProvider?.toLowerCase() == 'pikpak' ||
+    final isPikPak =
+        overrideProvider?.toLowerCase() == 'pikpak' ||
         overridePikPakFileId != null ||
         currentEntry?.provider?.toLowerCase() == 'pikpak' ||
         currentEntry?.pikpakFileId != null ||
         isDebrifyTV ||
-        videoUrl.contains('mypikpak.com'); // Detect PikPak by URL (Stremio TV, etc.)
+        videoUrl.contains(
+          'mypikpak.com',
+        ); // Detect PikPak by URL (Stremio TV, etc.)
 
-    print('PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV');
+    print(
+      'PikPak: _playPikPakVideoWithRetry called for index $_currentIndex, isPikPak: $isPikPak, overrideProvider: $overrideProvider, overridePikPakFileId: $overridePikPakFileId, isDebrifyTV: $isDebrifyTV',
+    );
 
     if (!isPikPak) {
       // Not a PikPak video, play normally
-      await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+      await _player.open(
+        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        play: true,
+      );
       return;
     }
 
@@ -2636,7 +2977,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This prevents resetting the video to 0:00 if it loads during a retry delay
     print('PikPak: Initial playback attempt - opening media...');
     try {
-      await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+      await _player.open(
+        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        play: true,
+      );
     } catch (e) {
       print('PikPak: Initial player.open() failed with error: $e');
       // Continue with retry loop - might work on subsequent attempts
@@ -2647,7 +2991,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       try {
         // Check if cancelled before starting attempt
         if (_pikPakRetryId != myRetryId) {
-          print('PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)');
+          print(
+            'PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)',
+          );
           // Clear state synchronously
           _isPikPakRetrying = false;
           _pikPakRetryMessage = null;
@@ -2661,12 +3007,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         print('PikPak: Monitoring attempt ${attempt + 1}/${maxRetries + 1}...');
 
         // Calculate delay for this attempt (0 for first attempt)
-        final delaySeconds = attempt == 0 ? 0 : (baseDelaySeconds * (1 << (attempt - 1)));
-        final cappedDelay = delaySeconds > maxDelaySeconds ? maxDelaySeconds : delaySeconds;
+        final delaySeconds = attempt == 0
+            ? 0
+            : (baseDelaySeconds * (1 << (attempt - 1)));
+        final cappedDelay = delaySeconds > maxDelaySeconds
+            ? maxDelaySeconds
+            : delaySeconds;
 
         // CRITICAL FIX: Wait for video metadata with EXTENDED monitoring during delay period
         // This allows detection of video loading DURING the delay, preventing unnecessary player resets
-        print('PikPak: Waiting for video duration (${metadataTimeoutSeconds}s) + monitoring during delay (${cappedDelay}s)...');
+        print(
+          'PikPak: Waiting for video duration (${metadataTimeoutSeconds}s) + monitoring during delay (${cappedDelay}s)...',
+        );
         final loadSuccess = await _waitForVideoMetadata(
           timeoutSeconds: metadataTimeoutSeconds,
           retryId: myRetryId,
@@ -2682,7 +3034,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
 
         // Video didn't load even after monitoring during delay
-        print('PikPak: Video metadata failed to load after ${metadataTimeoutSeconds + cappedDelay}s - file likely in cold storage');
+        print(
+          'PikPak: Video metadata failed to load after ${metadataTimeoutSeconds + cappedDelay}s - file likely in cold storage',
+        );
 
         // Check if this was the last attempt (all retries exhausted)
         if (attempt >= maxRetries) {
@@ -2731,7 +3085,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Still have retries left - continue with retry logic
         // Calculate delay for NEXT attempt
         final nextDelaySeconds = baseDelaySeconds * (1 << attempt);
-        final nextDelay = nextDelaySeconds > maxDelaySeconds ? maxDelaySeconds : nextDelaySeconds;
+        final nextDelay = nextDelaySeconds > maxDelaySeconds
+            ? maxDelaySeconds
+            : nextDelaySeconds;
 
         // Update UI to show retry state
         if (mounted) {
@@ -2742,7 +3098,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           });
         }
 
-        print('PikPak: Retry ${attempt + 1} - reopening player and waiting ${nextDelay}s before next check...');
+        print(
+          'PikPak: Retry ${attempt + 1} - reopening player and waiting ${nextDelay}s before next check...',
+        );
 
         // Check if widget was disposed
         if (!mounted) {
@@ -2752,7 +3110,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Check if cancelled
         if (_pikPakRetryId != myRetryId) {
-          print('PikPak: Retry loop cancelled before reopening player (navigation occurred)');
+          print(
+            'PikPak: Retry loop cancelled before reopening player (navigation occurred)',
+          );
           // Clear state synchronously
           _isPikPakRetrying = false;
           _pikPakRetryMessage = null;
@@ -2765,9 +3125,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player (might help reactivate cold storage file)
         try {
-          await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+          await _player.open(
+            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            play: true,
+          );
         } catch (e) {
-          print('PikPak: Retry ${attempt + 1} - player.open() failed with error: $e');
+          print(
+            'PikPak: Retry ${attempt + 1} - player.open() failed with error: $e',
+          );
           // Continue - the monitoring in next iteration might still detect if it loads
         }
       } catch (e) {
@@ -2776,7 +3141,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if this was the last attempt (all retries exhausted)
         if (attempt >= maxRetries) {
           // ALL RETRIES EXHAUSTED - handle here
-          print('PikPak: All retry attempts exhausted after error. Video failed to load.');
+          print(
+            'PikPak: All retry attempts exhausted after error. Video failed to load.',
+          );
 
           // Clear retry state
           _isPikPakRetrying = false;
@@ -2820,7 +3187,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Still have retries left - continue with retry logic
         // Calculate delay for next attempt
         final delaySeconds = baseDelaySeconds * (1 << attempt);
-        final nextDelay = delaySeconds > maxDelaySeconds ? maxDelaySeconds : delaySeconds;
+        final nextDelay = delaySeconds > maxDelaySeconds
+            ? maxDelaySeconds
+            : delaySeconds;
 
         if (mounted) {
           setState(() {
@@ -2830,7 +3199,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           });
         }
 
-        print('PikPak: Error in attempt ${attempt + 1}, waiting ${nextDelay}s before retry...');
+        print(
+          'PikPak: Error in attempt ${attempt + 1}, waiting ${nextDelay}s before retry...',
+        );
 
         // Check if widget was disposed
         if (!mounted) {
@@ -2840,7 +3211,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Check if cancelled
         if (_pikPakRetryId != myRetryId) {
-          print('PikPak: Retry loop cancelled during error handling (navigation occurred)');
+          print(
+            'PikPak: Retry loop cancelled during error handling (navigation occurred)',
+          );
           // Clear state synchronously
           _isPikPakRetrying = false;
           _pikPakRetryMessage = null;
@@ -2853,9 +3226,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player for next attempt
         try {
-          await _player.open(mk.Media(videoUrl, httpHeaders: widget.httpHeaders), play: true);
+          await _player.open(
+            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            play: true,
+          );
         } catch (reopenError) {
-          print('PikPak: Error retry - player.open() failed with error: $reopenError');
+          print(
+            'PikPak: Error retry - player.open() failed with error: $reopenError',
+          );
           // Continue - next iteration might succeed
         }
       }
@@ -2942,7 +3320,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    debugPrint('MovieMetadata: Parsed single-file title="${movieInfo.title}", year=${movieInfo.year}');
+    debugPrint(
+      'MovieMetadata: Parsed single-file title="${movieInfo.title}", year=${movieInfo.year}',
+    );
 
     try {
       final metadata = await MovieMetadataService.lookupMovie(
@@ -2952,7 +3332,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (metadata != null) {
         _singleFileImdbId = metadata.imdbId;
-        debugPrint('MovieMetadata: Found IMDB ID "${metadata.imdbId}" for single-file "${metadata.title}"');
+        debugPrint(
+          'MovieMetadata: Found IMDB ID "${metadata.imdbId}" for single-file "${metadata.title}"',
+        );
         if (mounted) {
           setState(() {});
         }
@@ -3096,90 +3478,102 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _autosaveTimer;
 
-	String get _resumeKey {
-		if (_activePlaylist != null &&
-			_activePlaylist!.isNotEmpty &&
-			_currentIndex >= 0 &&
-			_currentIndex < _activePlaylist!.length) {
-			final entry = _activePlaylist![_currentIndex];
+  String get _resumeKey {
+    if (_activePlaylist != null &&
+        _activePlaylist!.isNotEmpty &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      final entry = _activePlaylist![_currentIndex];
 
-			// Check for Torbox-specific key
-			final torboxKey = _torboxResumeKeyForEntry(entry);
-			if (torboxKey != null) {
-				debugPrint('ResumeKey: using torbox key $torboxKey for index $_currentIndex');
-				return torboxKey;
-			}
+      // Check for Torbox-specific key
+      final torboxKey = _torboxResumeKeyForEntry(entry);
+      if (torboxKey != null) {
+        debugPrint(
+          'ResumeKey: using torbox key $torboxKey for index $_currentIndex',
+        );
+        return torboxKey;
+      }
 
-			// Check for PikPak-specific key
-			final pikpakKey = _pikpakResumeKeyForEntry(entry);
-			if (pikpakKey != null) {
-				debugPrint('ResumeKey: using pikpak key $pikpakKey for index $_currentIndex');
-				return pikpakKey;
-			}
-		}
+      // Check for PikPak-specific key
+      final pikpakKey = _pikpakResumeKeyForEntry(entry);
+      if (pikpakKey != null) {
+        debugPrint(
+          'ResumeKey: using pikpak key $pikpakKey for index $_currentIndex',
+        );
+        return pikpakKey;
+      }
+    }
 
-		// Use playlist-specific resume ID for other items
-		if (_activePlaylist != null &&
-			_activePlaylist!.isNotEmpty &&
-			_currentIndex >= 0 &&
-			_currentIndex < _activePlaylist!.length) {
-			final id = _resumeIdForEntry(_activePlaylist![_currentIndex]);
-			debugPrint('ResumeKey: using playlist entry id $id for index $_currentIndex');
-			return id;
-		}
+    // Use playlist-specific resume ID for other items
+    if (_activePlaylist != null &&
+        _activePlaylist!.isNotEmpty &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      final id = _resumeIdForEntry(_activePlaylist![_currentIndex]);
+      debugPrint(
+        'ResumeKey: using playlist entry id $id for index $_currentIndex',
+      );
+      return id;
+    }
 
-		// Fallback to videoUrl for single items
-		// Note: This is the expected path for Debrify TV mode
-		return widget.videoUrl;
-	}
+    // Fallback to videoUrl for single items
+    // Note: This is the expected path for Debrify TV mode
+    return widget.videoUrl;
+  }
 
-	String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
-		final provider = entry.provider?.toLowerCase();
-		if (provider == 'torbox') {
-			final torrentId = entry.torboxTorrentId;
-			final webDownloadId = entry.torboxWebDownloadId;
-			final fileId = entry.torboxFileId;
-			if (webDownloadId != null && fileId != null) {
-				debugPrint('ResumeKey: torbox web download detected web=$webDownloadId file=$fileId');
-				return 'torbox_web_${webDownloadId}_$fileId';
-			}
-			if (torrentId != null && fileId != null) {
-				debugPrint('ResumeKey: torbox entry detected torrent=$torrentId file=$fileId');
-				return 'torbox_${torrentId}_$fileId';
-			}
-			debugPrint('ResumeKey: torbox entry missing IDs torrent=$torrentId web=$webDownloadId file=$fileId');
-		}
-		return null;
-	}
+  String? _torboxResumeKeyForEntry(PlaylistEntry entry) {
+    final provider = entry.provider?.toLowerCase();
+    if (provider == 'torbox') {
+      final torrentId = entry.torboxTorrentId;
+      final webDownloadId = entry.torboxWebDownloadId;
+      final fileId = entry.torboxFileId;
+      if (webDownloadId != null && fileId != null) {
+        debugPrint(
+          'ResumeKey: torbox web download detected web=$webDownloadId file=$fileId',
+        );
+        return 'torbox_web_${webDownloadId}_$fileId';
+      }
+      if (torrentId != null && fileId != null) {
+        debugPrint(
+          'ResumeKey: torbox entry detected torrent=$torrentId file=$fileId',
+        );
+        return 'torbox_${torrentId}_$fileId';
+      }
+      debugPrint(
+        'ResumeKey: torbox entry missing IDs torrent=$torrentId web=$webDownloadId file=$fileId',
+      );
+    }
+    return null;
+  }
 
-	String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
-		final provider = entry.provider?.toLowerCase();
-		if (provider == 'pikpak') {
-			final fileId = entry.pikpakFileId;
-			if (fileId != null && fileId.isNotEmpty) {
-				debugPrint('ResumeKey: pikpak entry detected fileId=$fileId');
-				return 'pikpak_$fileId';
-			}
-			debugPrint('ResumeKey: pikpak entry missing fileId');
-		}
-		return null;
-	}
+  String? _pikpakResumeKeyForEntry(PlaylistEntry entry) {
+    final provider = entry.provider?.toLowerCase();
+    if (provider == 'pikpak') {
+      final fileId = entry.pikpakFileId;
+      if (fileId != null && fileId.isNotEmpty) {
+        debugPrint('ResumeKey: pikpak entry detected fileId=$fileId');
+        return 'pikpak_$fileId';
+      }
+      debugPrint('ResumeKey: pikpak entry missing fileId');
+    }
+    return null;
+  }
 
-	String _resumeIdForEntry(PlaylistEntry entry) {
-		// Check for Torbox-specific key
-		final torboxKey = _torboxResumeKeyForEntry(entry);
-		if (torboxKey != null) {
-			return torboxKey;
-		}
-		// Check for PikPak-specific key
-		final pikpakKey = _pikpakResumeKeyForEntry(entry);
-		if (pikpakKey != null) {
-			return pikpakKey;
-		}
-		// Fallback to filename hash
-		final name = entry.title.isNotEmpty ? entry.title : widget.title;
-		return _generateFilenameHash(name);
-	}
+  String _resumeIdForEntry(PlaylistEntry entry) {
+    // Check for Torbox-specific key
+    final torboxKey = _torboxResumeKeyForEntry(entry);
+    if (torboxKey != null) {
+      return torboxKey;
+    }
+    // Check for PikPak-specific key
+    final pikpakKey = _pikpakResumeKeyForEntry(entry);
+    if (pikpakKey != null) {
+      return pikpakKey;
+    }
+    // Fallback to filename hash
+    final name = entry.title.isNotEmpty ? entry.title : widget.title;
+    return _generateFilenameHash(name);
+  }
 
   Future<void> _maybeRestoreResume() async {
     // If this is auto-advancing, don't restore position
@@ -3195,7 +3589,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // If playing from Trakt and Trakt has progress, prefer it over local resume (first load only)
-    if (!_traktProgressApplied && widget.traktProgressPercent != null && widget.traktProgressPercent! > 0 && widget.traktProgressPercent! < 100) {
+    if (!_traktProgressApplied &&
+        widget.traktProgressPercent != null &&
+        widget.traktProgressPercent! > 0 &&
+        widget.traktProgressPercent! < 100) {
       _traktProgressApplied = true;
       await _waitForDuration();
       _maybeSeekToTraktProgress();
@@ -3217,7 +3614,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (dur > Duration.zero &&
           position > const Duration(seconds: 2) &&
           position < dur * 0.9) {
-        debugPrint('Resume: restored from local state at ${(posMs / 1000).round()}s');
+        debugPrint(
+          'Resume: restored from local state at ${(posMs / 1000).round()}s',
+        );
         await _player.seek(position);
       }
 
@@ -3291,24 +3690,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content, check if we have a playlist
-		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-			PlaylistEntry? currentEntry;
-			if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-				currentEntry = _activePlaylist![_currentIndex];
-			}
+        if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+          PlaylistEntry? currentEntry;
+          if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+            currentEntry = _activePlaylist![_currentIndex];
+          }
 
-			if (currentEntry != null) {
-				final resumeId = _resumeIdForEntry(currentEntry);
-				debugPrint('Resume Load: fetching state for resumeId=$resumeId');
-				final videoState = await StorageService.getVideoPlaybackState(
-					videoTitle: resumeId,
-				);
-				if (videoState != null) {
-					debugPrint('Resume Load: found state for resumeId=$resumeId updatedAt=${videoState['updatedAt']}');
-					return videoState;
-				}
-			}
-		}
+          if (currentEntry != null) {
+            final resumeId = _resumeIdForEntry(currentEntry);
+            debugPrint('Resume Load: fetching state for resumeId=$resumeId');
+            final videoState = await StorageService.getVideoPlaybackState(
+              videoTitle: resumeId,
+            );
+            if (videoState != null) {
+              debugPrint(
+                'Resume Load: found state for resumeId=$resumeId updatedAt=${videoState['updatedAt']}',
+              );
+              return videoState;
+            }
+          }
+        }
 
         // Fallback to collection-based state (legacy behavior)
         final videoTitle = widget.title.isNotEmpty
@@ -3371,79 +3772,89 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // For non-series content
-		if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-			PlaylistEntry? currentEntry;
-			if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-				currentEntry = _activePlaylist![_currentIndex];
-			}
+        if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+          PlaylistEntry? currentEntry;
+          if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
+            currentEntry = _activePlaylist![_currentIndex];
+          }
 
-			if (currentEntry != null) {
-				final resumeId = _resumeIdForEntry(currentEntry);
-				debugPrint('Resume Save: storing state resumeId=$resumeId pos=${pos.inMilliseconds} dur=${dur.inMilliseconds}');
-				String currentVideoUrl = '';
-				if (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty) {
-					currentVideoUrl = _currentStreamUrl!;
-				} else if (currentEntry.url.isNotEmpty) {
-					currentVideoUrl = currentEntry.url;
-				} else if (widget.videoUrl.isNotEmpty) {
-					currentVideoUrl = widget.videoUrl;
-				}
+          if (currentEntry != null) {
+            final resumeId = _resumeIdForEntry(currentEntry);
+            debugPrint(
+              'Resume Save: storing state resumeId=$resumeId pos=${pos.inMilliseconds} dur=${dur.inMilliseconds}',
+            );
+            String currentVideoUrl = '';
+            if (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty) {
+              currentVideoUrl = _currentStreamUrl!;
+            } else if (currentEntry.url.isNotEmpty) {
+              currentVideoUrl = currentEntry.url;
+            } else if (widget.videoUrl.isNotEmpty) {
+              currentVideoUrl = widget.videoUrl;
+            }
 
-				await StorageService.saveVideoPlaybackState(
-					videoTitle: resumeId,
-					videoUrl: currentVideoUrl,
-					positionMs: pos.inMilliseconds,
-					durationMs: dur.inMilliseconds,
-					speed: _playbackSpeed,
-					aspect: aspectStr,
-					imdbId: widget.contentImdbId,
-				);
-
-				// ALSO save in collection format for playlist progress tracking
-				// This allows the playlist screen to display progress indicators
-				debugPrint('💾 Collection Save Check: seriesPlaylist=${seriesPlaylist != null}, seriesTitle="${seriesPlaylist?.seriesTitle}", isSeries=${seriesPlaylist?.isSeries}');
-				if (seriesPlaylist != null && seriesPlaylist.seriesTitle != null) {
-					// Parse season/episode from filename for consistent progress tracking across view modes
-					final seriesInfo = SeriesParser.parseFilename(currentEntry.title);
-					final season = seriesInfo.season ?? 0;
-					final episode = seriesInfo.episode ?? (_currentIndex + 1);
-
-					await StorageService.saveSeriesPlaybackState(
-						seriesTitle: seriesPlaylist.seriesTitle!,
-						season: season, // Parsed from filename, fallback to 0
-						episode: episode, // Parsed from filename, fallback to index
-						positionMs: pos.inMilliseconds,
-						durationMs: dur.inMilliseconds,
-						speed: _playbackSpeed,
-						aspect: aspectStr,
-						imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
-					);
-					debugPrint('✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=${_currentIndex}) filename="${currentEntry.title}"');
-				} else {
-					debugPrint('❌ Collection Save SKIPPED: seriesPlaylist is null or has no title');
-				}
-			}
-		} else {
-			// Single video file (no playlist)
-          // If it's a series episode (from Quick Play next episode), save as series state
-          if (widget.contentType == 'series' &&
-              widget.contentSeason != null &&
-              widget.contentEpisode != null) {
-            await StorageService.saveSeriesPlaybackState(
-              seriesTitle: widget.contentTitle ?? widget.title,
-              season: widget.contentSeason!,
-              episode: widget.contentEpisode!,
+            await StorageService.saveVideoPlaybackState(
+              videoTitle: resumeId,
+              videoUrl: currentVideoUrl,
               positionMs: pos.inMilliseconds,
               durationMs: dur.inMilliseconds,
               speed: _playbackSpeed,
               aspect: aspectStr,
               imdbId: widget.contentImdbId,
             );
+
+            // ALSO save in collection format for playlist progress tracking
+            // This allows the playlist screen to display progress indicators
+            debugPrint(
+              '💾 Collection Save Check: seriesPlaylist=${seriesPlaylist != null}, seriesTitle="${seriesPlaylist?.seriesTitle}", isSeries=${seriesPlaylist?.isSeries}',
+            );
+            if (seriesPlaylist != null && seriesPlaylist.seriesTitle != null) {
+              // Parse season/episode from filename for consistent progress tracking across view modes
+              final seriesInfo = SeriesParser.parseFilename(currentEntry.title);
+              final season = seriesInfo.season ?? 0;
+              final episode = seriesInfo.episode ?? (_currentIndex + 1);
+
+              await StorageService.saveSeriesPlaybackState(
+                seriesTitle: seriesPlaylist.seriesTitle!,
+                season: season, // Parsed from filename, fallback to 0
+                episode: episode, // Parsed from filename, fallback to index
+                positionMs: pos.inMilliseconds,
+                durationMs: dur.inMilliseconds,
+                speed: _playbackSpeed,
+                aspect: aspectStr,
+                imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
+              );
+              debugPrint(
+                '✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=${_currentIndex}) filename="${currentEntry.title}"',
+              );
+            } else {
+              debugPrint(
+                '❌ Collection Save SKIPPED: seriesPlaylist is null or has no title',
+              );
+            }
+          }
+        } else {
+          // Single video file (no playlist)
+          // If it's a series episode (from Quick Play next episode), save as series state
+          if (_effectiveContentType == 'series' &&
+              _effectiveContentSeason != null &&
+              _effectiveContentEpisode != null) {
+            await StorageService.saveSeriesPlaybackState(
+              seriesTitle: _effectiveContentTitle ?? widget.title,
+              season: _effectiveContentSeason!,
+              episode: _effectiveContentEpisode!,
+              positionMs: pos.inMilliseconds,
+              durationMs: dur.inMilliseconds,
+              speed: _playbackSpeed,
+              aspect: aspectStr,
+              imdbId: _effectiveContentImdbId,
+            );
           } else {
-            final currentUrl = widget.videoUrl;
-            final videoTitle = widget.title.isNotEmpty
-                ? widget.title
-                : 'Unknown Video';
+            final currentUrl =
+                (_currentStreamUrl != null && _currentStreamUrl!.isNotEmpty)
+                ? _currentStreamUrl!
+                : widget.videoUrl;
+            final title = _currentStremioTvContentTitle ?? widget.title;
+            final videoTitle = title.isNotEmpty ? title : 'Unknown Video';
 
             await StorageService.saveVideoPlaybackState(
               videoTitle: videoTitle,
@@ -3452,7 +3863,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               durationMs: dur.inMilliseconds,
               speed: _playbackSpeed,
               aspect: aspectStr,
-              imdbId: widget.contentImdbId,
+              imdbId: _effectiveContentImdbId,
             );
           }
         }
@@ -3501,13 +3912,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showChannelBadge = true;
     });
     // Hide after 4 seconds (matching Android TV behavior)
-    _channelBadgeTimer = Timer(VideoPlayerTimingConstants.badgeDisplayDuration, () {
-      if (mounted) {
-        setState(() {
-          _showChannelBadge = false;
-        });
-      }
-    });
+    _channelBadgeTimer = Timer(
+      VideoPlayerTimingConstants.badgeDisplayDuration,
+      () {
+        if (mounted) {
+          setState(() {
+            _showChannelBadge = false;
+          });
+        }
+      },
+    );
   }
 
   void _showTitleBadgeWithTimer() {
@@ -3518,13 +3932,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showTitleBadge = true;
     });
     // Hide after 4 seconds (matching Android TV behavior)
-    _titleBadgeTimer = Timer(VideoPlayerTimingConstants.badgeDisplayDuration, () {
-      if (mounted) {
-        setState(() {
-          _showTitleBadge = false;
-        });
-      }
-    });
+    _titleBadgeTimer = Timer(
+      VideoPlayerTimingConstants.badgeDisplayDuration,
+      () {
+        if (mounted) {
+          setState(() {
+            _showTitleBadge = false;
+          });
+        }
+      },
+    );
   }
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
@@ -3548,7 +3965,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (isAndroid && localPos.dx > farRightThreshold) {
       // Double tap on far right for next episode on Android
-      if (_hasNextEpisode() || widget.requestMagicNext != null) {
+      if (_hasAnyNext) {
         _ripple = DoubleTapRipple(
           center: localPos,
           icon: Icons.skip_next_rounded,
@@ -3702,10 +4119,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _isManualEpisodeSelection = true;
     _allowResumeForManualSelection = allowResume;
     _manualSelectionResetTimer?.cancel();
-    _manualSelectionResetTimer = Timer(VideoPlayerTimingConstants.manualSelectionResetDuration, () {
-      _isManualEpisodeSelection = false;
-      _allowResumeForManualSelection = false;
-    });
+    _manualSelectionResetTimer = Timer(
+      VideoPlayerTimingConstants.manualSelectionResetDuration,
+      () {
+        _isManualEpisodeSelection = false;
+        _allowResumeForManualSelection = false;
+      },
+    );
   }
 
   void _cycleAspectMode() {
@@ -3833,7 +4253,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Build video with custom aspect ratio
   Widget _buildCustomAspectRatioVideo() {
     return AspectRatioVideo(
-      key: ValueKey('video_elevation_${_subtitleSettings?.elevationIndex ?? 0}'),
+      key: ValueKey(
+        'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
+      ),
       videoController: _videoController,
       customAspectRatio: _getCustomAspectRatio(),
       currentFit: _currentFit(),
@@ -3850,7 +4272,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Widget _buildChannelBadge(String badgeText) => ChannelBadge(badgeText: badgeText);
+  Widget _buildStremioTvNextLoadingOverlay() {
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _showStremioTvNextLoading ? 1 : 0,
+        duration: const Duration(milliseconds: 160),
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.55),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 14),
+                  Text(
+                    'Loading next...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChannelBadge(String badgeText) =>
+      ChannelBadge(badgeText: badgeText);
 
   Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
@@ -3872,7 +4339,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -3946,7 +4412,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // G -> Channel guide (Debrify TV or Stremio TV)
             if (key == LogicalKeyboardKey.keyG) {
-              if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
+              if (_channelEntries.isNotEmpty &&
+                  widget.requestChannelById != null) {
                 _showChannelGuideOverlay();
                 return KeyEventResult.handled;
               }
@@ -3958,7 +4425,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // C -> IPTV channel sheet
             if (key == LogicalKeyboardKey.keyC) {
-              if (widget.iptvChannels != null && widget.iptvChannels!.isNotEmpty) {
+              if (widget.iptvChannels != null &&
+                  widget.iptvChannels!.isNotEmpty) {
                 _showIptvChannelSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -3966,8 +4434,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // S -> Stremio source sheet
             if (key == LogicalKeyboardKey.keyS) {
-              if (_effectiveSources != null && _effectiveSources!.isNotEmpty &&
-                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null)) {
+              if (_effectiveSources != null &&
+                  _effectiveSources!.isNotEmpty &&
+                  (_effectiveResolver != null ||
+                      widget.resolveSourceToPlaylist != null)) {
                 _showSourceSheetOverlay();
                 return KeyEventResult.handled;
               }
@@ -3982,7 +4452,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Up arrow -> Channel guide (if channels available) or Volume
             if (key == LogicalKeyboardKey.arrowUp) {
               // If channels are available, show channel guide
-              if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
+              if (_channelEntries.isNotEmpty &&
+                  widget.requestChannelById != null) {
                 _showChannelGuideOverlay();
                 return KeyEventResult.handled;
               }
@@ -4060,7 +4531,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // DPAD left/right seek 10s
             if (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.mediaRewind) {
-              final candidate = _position - VideoPlayerTimingConstants.seekDelta;
+              final candidate =
+                  _position - VideoPlayerTimingConstants.seekDelta;
               final newPos = candidate < Duration.zero
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
@@ -4071,7 +4543,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
             if (key == LogicalKeyboardKey.arrowRight ||
                 key == LogicalKeyboardKey.mediaFastForward) {
-              final candidate = _position + VideoPlayerTimingConstants.seekDelta;
+              final candidate =
+                  _position + VideoPlayerTimingConstants.seekDelta;
               final newPos = candidate < Duration.zero
                   ? Duration.zero
                   : (candidate > _duration ? _duration : candidate);
@@ -4091,7 +4564,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // N key for next episode (Mac)
             if (key == LogicalKeyboardKey.keyN) {
-              if (_hasNextEpisode() || widget.requestMagicNext != null) {
+              if (_hasAnyNext) {
                 _goToNextEpisode();
                 return KeyEventResult.handled;
               }
@@ -4120,7 +4593,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
             // Next/Previous episode navigation
             if (key == LogicalKeyboardKey.mediaSkipForward) {
-              if (_hasNextEpisode() || widget.requestMagicNext != null) {
+              if (_hasAnyNext) {
                 _goToNextEpisode();
                 return KeyEventResult.handled;
               }
@@ -4148,7 +4621,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _getCustomAspectRatio() != null
                     ? _buildCustomAspectRatioVideo()
                     : mkv.Video(
-                        key: ValueKey('video_elevation_${_subtitleSettings?.elevationIndex ?? 0}'),
+                        key: ValueKey(
+                          'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
+                        ),
                         controller: _videoController,
                         controls: null,
                         fit: _currentFit(),
@@ -4163,12 +4638,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               // Transition overlay above video
               if (_rainbowActive) _buildTransitionOverlay(),
+              if (_showStremioTvNextLoading)
+                _buildStremioTvNextLoadingOverlay(),
               // Double-tap ripple
               if (_ripple != null)
                 IgnorePointer(
-                  child: CustomPaint(
-                    painter: DoubleTapRipplePainter(_ripple!),
-                  ),
+                  child: CustomPaint(painter: DoubleTapRipplePainter(_ripple!)),
                 ),
               // HUDs
               ValueListenableBuilder<SeekHudState?>(
@@ -4283,10 +4758,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       child: IgnorePointer(
                         ignoring: !visible,
                         child: Controls(
-                          title: widget.showVideoTitle && !widget.showChannelName
+                          title:
+                              widget.showVideoTitle && !widget.showChannelName
                               ? _getCurrentEpisodeTitle()
                               : '',
-                          subtitle: widget.showVideoTitle && !widget.showChannelName
+                          subtitle:
+                              widget.showVideoTitle && !widget.showChannelName
                               ? _getCurrentEpisodeSubtitle()
                               : null,
                           enhancedMetadata: _getEnhancedMetadata(),
@@ -4323,45 +4800,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               _lastSliderSeekPos = null;
                             }
                           },
-                          onNext:
-                              (_hasNextEpisode() ||
-                                  widget.requestMagicNext != null)
-                              ? _goToNextEpisode
+                          onNext: _hasAnyNext ? _goToNextEpisode : null,
+                          onNextChannel: widget.requestNextChannel != null
+                              ? _goToNextChannel
                               : null,
-                          onNextChannel:
-                              widget.requestNextChannel != null
-                                  ? _goToNextChannel
-                                  : null,
                           onPrevious: _hasPreviousEpisode()
                               ? _goToPreviousEpisode
                               : null,
-                          hasNext:
-                              _hasNextEpisode() ||
-                              widget.requestMagicNext != null,
+                          hasNext: _hasAnyNext,
                           hasNextChannel: widget.requestNextChannel != null,
-                          hasGuide: (_channelEntries.isNotEmpty && widget.requestChannelById != null) || _hasStremioTvGuide,
-                          onShowGuide: _channelEntries.isNotEmpty && widget.requestChannelById != null
+                          hasGuide:
+                              (_channelEntries.isNotEmpty &&
+                                  widget.requestChannelById != null) ||
+                              _hasStremioTvGuide,
+                          onShowGuide:
+                              _channelEntries.isNotEmpty &&
+                                  widget.requestChannelById != null
                               ? _showChannelGuideOverlay
                               : _hasStremioTvGuide
-                                  ? _showStremioTvGuideOverlay
-                                  : null,
+                              ? _showStremioTvGuideOverlay
+                              : null,
                           hasPrevious: _hasPreviousEpisode(),
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
                           hideBackButton: widget.hideBackButton,
                           onRandom: _playRandom,
-                          hasIptvChannels: widget.iptvChannels != null &&
+                          hasIptvChannels:
+                              widget.iptvChannels != null &&
                               widget.iptvChannels!.isNotEmpty,
-                          onShowIptvChannels: widget.iptvChannels != null &&
+                          onShowIptvChannels:
+                              widget.iptvChannels != null &&
                                   widget.iptvChannels!.isNotEmpty
                               ? _showIptvChannelSheetOverlay
                               : null,
-                          hasStremioSources: _effectiveSources != null &&
+                          hasStremioSources:
+                              _effectiveSources != null &&
                               _effectiveSources!.isNotEmpty &&
-                              (_effectiveResolver != null || widget.resolveSourceToPlaylist != null),
-                          onShowStremioSources: _effectiveSources != null &&
+                              (_effectiveResolver != null ||
+                                  widget.resolveSourceToPlaylist != null),
+                          onShowStremioSources:
+                              _effectiveSources != null &&
                                   _effectiveSources!.isNotEmpty &&
-                                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null)
+                                  (_effectiveResolver != null ||
+                                      widget.resolveSourceToPlaylist != null)
                               ? _showSourceSheetOverlay
                               : null,
                         ),
@@ -4433,7 +4914,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               if (_showSourceSheet &&
                   _effectiveSources != null &&
                   _effectiveSources!.isNotEmpty &&
-                  (_effectiveResolver != null || widget.resolveSourceToPlaylist != null))
+                  (_effectiveResolver != null ||
+                      widget.resolveSourceToPlaylist != null))
                 Positioned.fill(
                   child: SourceSheet(
                     sources: _effectiveSources!,
@@ -4447,10 +4929,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               if (_showStremioTvGuide && _hasStremioTvGuide)
                 Positioned.fill(
                   child: StremioTvGuideSheet(
-                    channels: widget.stremioTvChannels!,
+                    channels: _effectiveStremioTvChannels!,
                     currentChannelId: _currentStremioTvChannelId,
                     guideDataProvider: widget.stremioTvGuideDataProvider,
-                    channelSwitchProvider: widget.stremioTvChannelSwitchProvider!,
+                    channelSwitchProvider:
+                        widget.stremioTvChannelSwitchProvider!,
                     onChannelSwitched: _switchToStremioTvChannel,
                     onClose: _hideStremioTvGuide,
                   ),
@@ -4464,12 +4947,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _showTracksSheet(BuildContext context) async {
     // Dynamically parse season/episode from current video's filename
-    final currentTitle = _activePlaylist != null && _currentIndex >= 0 && _currentIndex < _activePlaylist!.length
+    final currentTitle =
+        _activePlaylist != null &&
+            _currentIndex >= 0 &&
+            _currentIndex < _activePlaylist!.length
         ? _activePlaylist![_currentIndex].title
-        : widget.title;
+        : _currentStremioTvContentTitle ?? widget.title;
     final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season = seriesInfo.season ?? widget.contentSeason;
-    final episode = seriesInfo.episode ?? widget.contentEpisode;
+    final season = seriesInfo.season ?? _effectiveContentSeason;
+    final episode = seriesInfo.episode ?? _effectiveContentEpisode;
 
     // Get IMDB ID for current item
     // For series: uses shared IMDB ID (all episodes share same show ID)
@@ -4480,28 +4966,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (seriesPlaylist != null) {
       if (seriesPlaylist.isSeries) {
         // Series: use shared IMDB ID
-        effectiveImdbId = seriesPlaylist.imdbId ?? widget.contentImdbId;
+        effectiveImdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId;
       } else {
         // Movie collection: try to get/fetch IMDB ID for current index
         effectiveImdbId = seriesPlaylist.getImdbIdForIndex(_currentIndex);
 
         // If not cached, try to fetch it now (async but we wait for it)
-        if (effectiveImdbId == null && widget.contentImdbId == null) {
-          debugPrint('VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks');
-          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(_currentIndex);
+        if (effectiveImdbId == null && _effectiveContentImdbId == null) {
+          debugPrint(
+            'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks',
+          );
+          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(
+            _currentIndex,
+          );
         }
 
         // Fall back to widget's contentImdbId if still null
-        effectiveImdbId ??= widget.contentImdbId;
+        effectiveImdbId ??= _effectiveContentImdbId;
       }
     } else {
       // Single-file playback (no playlist)
       // Try cached single-file IMDB ID, then widget's contentImdbId
-      effectiveImdbId = _singleFileImdbId ?? widget.contentImdbId;
+      effectiveImdbId = _singleFileImdbId ?? _effectiveContentImdbId;
 
       // If not cached yet, try to fetch it now
       if (effectiveImdbId == null && !_singleFileImdbFetched) {
-        debugPrint('VideoPlayer: Fetching single-file movie metadata before showing tracks');
+        debugPrint(
+          'VideoPlayer: Fetching single-file movie metadata before showing tracks',
+        );
         await _fetchSingleFileMovieMetadata();
         effectiveImdbId = _singleFileImdbId;
       }
@@ -4509,7 +5001,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Determine content type
     // Priority: widget.contentType > series detection > movie detection
-    String? effectiveContentType = widget.contentType;
+    String? effectiveContentType = _effectiveContentType;
     if (effectiveContentType == null) {
       if (seriesPlaylist?.isSeries == true) {
         effectiveContentType = 'series';
@@ -4520,25 +5012,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
 
-    debugPrint('VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
-        'contentType=$effectiveContentType, '
-        'season=$season, episode=$episode (parsed from: $currentTitle)');
+    debugPrint(
+      'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
+      'contentType=$effectiveContentType, '
+      'season=$season, episode=$episode (parsed from: $currentTitle)',
+    );
 
     // Build cache key for subtitle caching (per-item like Android TV)
     final String? cacheKey = effectiveImdbId != null
         ? (season != null && episode != null
-            ? '$effectiveImdbId:$season:$episode'
-            : effectiveImdbId)
+              ? '$effectiveImdbId:$season:$episode'
+              : effectiveImdbId)
         : null;
 
     // Check if we have cached subtitles for this content
     final List<StremioSubtitle>? cachedSubs =
         (cacheKey != null && _cachedSubtitleKey == cacheKey)
-            ? _cachedStremioSubtitles
-            : null;
+        ? _cachedStremioSubtitles
+        : null;
 
     if (cachedSubs != null) {
-      debugPrint('VideoPlayer: Using ${cachedSubs.length} cached subtitles for key: $cacheKey');
+      debugPrint(
+        'VideoPlayer: Using ${cachedSubs.length} cached subtitles for key: $cacheKey',
+      );
     }
 
     await TracksSheet.show(
@@ -4557,7 +5053,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onSubtitlesFetched: (subtitles) {
         // Cache the fetched subtitles for this content
         if (cacheKey != null) {
-          debugPrint('VideoPlayer: Caching ${subtitles.length} subtitles for key: $cacheKey');
+          debugPrint(
+            'VideoPlayer: Caching ${subtitles.length} subtitles for key: $cacheKey',
+          );
           _cachedStremioSubtitles = subtitles;
           _cachedSubtitleKey = cacheKey;
         }
@@ -4643,7 +5141,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (subtitleTrackId != null && subtitleTrackId.isNotEmpty) {
           final tracks = _player.state.tracks;
           // Check if the stored track actually exists in this video
-          final trackExists = tracks.subtitle.any((t) => t.id == subtitleTrackId);
+          final trackExists = tracks.subtitle.any(
+            (t) => t.id == subtitleTrackId,
+          );
           if (trackExists) {
             final subtitleTrack = tracks.subtitle.firstWhere(
               (track) => track.id == subtitleTrackId,
@@ -4760,7 +5260,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// auto-detect the character encoding via its `sub-codepage=auto` default,
   /// which correctly handles GBK, Big5, EUC-KR, Windows-125x, etc. Pre-decoding
   /// via `http.Response.body` would silently corrupt non-UTF-8 subtitle files.
-  Future<String?> _downloadStremioSubtitleToTempFile(StremioSubtitle sub) async {
+  Future<String?> _downloadStremioSubtitleToTempFile(
+    StremioSubtitle sub,
+  ) async {
     try {
       final uri = Uri.parse(sub.url);
       final urlPath = uri.path.toLowerCase();
@@ -4786,18 +5288,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return file.path;
       }
 
-      final response =
-          await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         debugPrint(
-            'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}');
+          'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}',
+        );
         return null;
       }
 
       await file.writeAsBytes(response.bodyBytes);
       _tempSubtitleFiles.add(file.path);
       debugPrint(
-          'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)');
+        'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)',
+      );
       return file.path;
     } catch (e) {
       debugPrint('VideoPlayer: Subtitle download/write failed: $e');
@@ -4835,7 +5338,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         imdbId = seriesPlaylist.imdbId;
         contentType = 'series';
         // Get current episode info from playlist using current index
-        if (_currentIndex >= 0 && _currentIndex < seriesPlaylist.allEpisodes.length) {
+        if (_currentIndex >= 0 &&
+            _currentIndex < seriesPlaylist.allEpisodes.length) {
           final currentEp = seriesPlaylist.allEpisodes[_currentIndex];
           season = currentEp.seriesInfo.season;
           episode = currentEp.seriesInfo.episode;
@@ -4844,7 +5348,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Use widget's content IMDB ID or single file IMDB ID
         imdbId = widget.contentImdbId ?? _singleFileImdbId;
         // Single-file series playback: use widget params for S/E
-        if (widget.contentType == 'series' && widget.contentSeason != null && widget.contentEpisode != null) {
+        if (widget.contentType == 'series' &&
+            widget.contentSeason != null &&
+            widget.contentEpisode != null) {
           contentType = 'series';
           season = widget.contentSeason;
           episode = widget.contentEpisode;
@@ -4868,7 +5374,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       List<StremioSubtitle> subtitles;
       if (_cachedSubtitleKey == cacheKey && _cachedStremioSubtitles != null) {
         subtitles = _cachedStremioSubtitles!;
-        debugPrint('VideoPlayer: Using ${subtitles.length} cached addon subtitles');
+        debugPrint(
+          'VideoPlayer: Using ${subtitles.length} cached addon subtitles',
+        );
       } else {
         // Fetch Stremio subtitles proactively
         debugPrint('VideoPlayer: Fetching addon subtitles (IMDB: $imdbId)');
@@ -4882,24 +5390,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Check if content changed during fetch
         if (fetchToken != _addonSubtitleFetchToken) {
-          debugPrint('VideoPlayer: Content changed during addon subtitle fetch, discarding results');
+          debugPrint(
+            'VideoPlayer: Content changed during addon subtitle fetch, discarding results',
+          );
           return;
         }
 
         // Cache the results
         _cachedStremioSubtitles = subtitles;
         _cachedSubtitleKey = cacheKey;
-        debugPrint('VideoPlayer: Fetched and cached ${subtitles.length} addon subtitles');
+        debugPrint(
+          'VideoPlayer: Fetched and cached ${subtitles.length} addon subtitles',
+        );
       }
 
       // Only auto-select if no embedded subtitle was applied and user hasn't manually selected
       if (_embeddedSubtitleApplied) {
-        debugPrint('VideoPlayer: Embedded subtitle already applied, skipping addon auto-select');
+        debugPrint(
+          'VideoPlayer: Embedded subtitle already applied, skipping addon auto-select',
+        );
         return;
       }
 
       if (_userManuallySelectedSubtitle) {
-        debugPrint('VideoPlayer: User manually selected subtitle, skipping addon auto-select');
+        debugPrint(
+          'VideoPlayer: User manually selected subtitle, skipping addon auto-select',
+        );
         return;
       }
 
@@ -4933,18 +5449,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
 
-      debugPrint('VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})');
+      debugPrint(
+        'VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})',
+      );
 
       // Download to a temp file so libmpv can detect the encoding itself.
       final filePath = await _downloadStremioSubtitleToTempFile(matchingSub);
 
       // Check if content changed or user manually selected during download
       if (fetchToken != _addonSubtitleFetchToken) {
-        debugPrint('VideoPlayer: Content changed during addon subtitle download, discarding');
+        debugPrint(
+          'VideoPlayer: Content changed during addon subtitle download, discarding',
+        );
         return;
       }
       if (_userManuallySelectedSubtitle) {
-        debugPrint('VideoPlayer: User manually selected subtitle during addon download, discarding');
+        debugPrint(
+          'VideoPlayer: User manually selected subtitle during addon download, discarding',
+        );
         return;
       }
       if (filePath == null) {
@@ -4961,7 +5483,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _player.setSubtitleTrack(track);
       _selectedStremioSubtitleId = matchingSub.id;
 
-      debugPrint('VideoPlayer: Auto-enabled ${matchingSub.lang} addon subtitle');
+      debugPrint(
+        'VideoPlayer: Auto-enabled ${matchingSub.lang} addon subtitle',
+      );
     } catch (e) {
       debugPrint('VideoPlayer: Addon subtitle fetch/auto-selection failed: $e');
     }

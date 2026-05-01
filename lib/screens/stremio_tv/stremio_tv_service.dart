@@ -269,13 +269,30 @@ class StremioTvService {
     int rotationMinutes = 90,
     int salt = 0,
   }) {
+    return getPlayingAtSlotOffset(
+      channel,
+      slotOffset: 0,
+      rotationMinutes: rotationMinutes,
+      salt: salt,
+    );
+  }
+
+  /// Get a scheduled item at an offset from the current slot.
+  ///
+  /// `slotOffset == 0` is now playing, `1` is the next guide slot, etc.
+  StremioTvNowPlaying? getPlayingAtSlotOffset(
+    StremioTvChannel channel, {
+    int slotOffset = 0,
+    int rotationMinutes = 90,
+    int salt = 0,
+  }) {
     if (channel.items.isEmpty) return null;
 
     final now = DateTime.now();
     final slotDurationMs = rotationMinutes * 60 * 1000;
     final offset = _channelOffsetMs(channel.id, slotDurationMs);
     final adjusted = now.millisecondsSinceEpoch - offset;
-    final slotNumber = adjusted ~/ slotDurationMs;
+    final slotNumber = (adjusted ~/ slotDurationMs) + slotOffset;
 
     final seed = salt == 0
         ? '${channel.id}:$slotNumber'
@@ -349,32 +366,11 @@ class StremioTvService {
     int rotationMinutes = 90,
     int salt = 0,
   }) {
-    if (channel.items.isEmpty) return null;
-
-    final now = DateTime.now();
-    final slotDurationMs = rotationMinutes * 60 * 1000;
-    final offset = _channelOffsetMs(channel.id, slotDurationMs);
-    final adjusted = now.millisecondsSinceEpoch - offset;
-    final currentSlotNumber = adjusted ~/ slotDurationMs;
-    final nextSlotNumber = currentSlotNumber + 1;
-
-    final seed = salt == 0
-        ? '${channel.id}:$nextSlotNumber'
-        : '${channel.id}:$nextSlotNumber:$salt';
-    final hash = _djb2(seed);
-    final index = hash % channel.items.length;
-
-    final slotStartMs = nextSlotNumber * slotDurationMs + offset;
-    final slotStart = DateTime.fromMillisecondsSinceEpoch(slotStartMs);
-    final slotEnd = DateTime.fromMillisecondsSinceEpoch(
-      slotStartMs + slotDurationMs,
-    );
-
-    return StremioTvNowPlaying(
-      item: channel.items[index],
-      itemIndex: index,
-      slotStart: slotStart,
-      slotEnd: slotEnd,
+    return getPlayingAtSlotOffset(
+      channel,
+      slotOffset: 1,
+      rotationMinutes: rotationMinutes,
+      salt: salt,
     );
   }
 

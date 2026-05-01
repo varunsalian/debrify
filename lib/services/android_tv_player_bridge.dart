@@ -13,14 +13,17 @@ import 'subtitle_font_service.dart';
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
 typedef ChannelSwitchProvider = Future<Map<String, dynamic>?> Function();
-typedef ChannelByIdSwitchProvider = Future<Map<String, dynamic>?> Function(
-    String channelId);
+typedef ChannelByIdSwitchProvider =
+    Future<Map<String, dynamic>?> Function(String channelId);
+typedef StremioTvNextProvider =
+    Future<Map<String, dynamic>?> Function(String channelId);
 typedef PlaybackFinishedCallback = Future<void> Function();
-typedef AndroidTvProgressCallback = Future<void> Function(
-    Map<String, dynamic> progress);
-typedef TorrentStreamProvider = Future<Map<String, dynamic>?> Function(
-    Map<String, dynamic> request);
-typedef MovieMetadataProvider = Future<String?> Function(int index, String filename);
+typedef AndroidTvProgressCallback =
+    Future<void> Function(Map<String, dynamic> progress);
+typedef TorrentStreamProvider =
+    Future<Map<String, dynamic>?> Function(Map<String, dynamic> request);
+typedef MovieMetadataProvider =
+    Future<String?> Function(int index, String filename);
 
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
@@ -28,8 +31,9 @@ typedef MovieMetadataProvider = Future<String?> Function(int index, String filen
 /// When active, native playback requests additional streams via the
 /// [StreamNextProvider] callback.
 class AndroidTvPlayerBridge {
-  static const MethodChannel _channel =
-      MethodChannel('com.debrify.app/android_tv_player');
+  static const MethodChannel _channel = MethodChannel(
+    'com.debrify.app/android_tv_player',
+  );
 
   static StreamNextProvider? _streamNextProvider;
   static ChannelSwitchProvider? _channelSwitchProvider;
@@ -41,9 +45,13 @@ class AndroidTvPlayerBridge {
   static TorrentStreamProvider? _torrentStreamProvider;
   static MovieMetadataProvider? _movieMetadataProvider;
   static Future<String?> Function(int)? _stremioSourceResolver;
-  static Future<List<Map<String, dynamic>>?> Function(int)? _sourcePlaylistResolver;
-  static Future<Map<String, dynamic>?> Function(List<String>)? _stremioTvGuideDataProvider;
-  static Future<Map<String, dynamic>?> Function(String)? _stremioTvChannelSwitchProvider;
+  static Future<List<Map<String, dynamic>>?> Function(int)?
+  _sourcePlaylistResolver;
+  static Future<Map<String, dynamic>?> Function(List<String>)?
+  _stremioTvGuideDataProvider;
+  static Future<Map<String, dynamic>?> Function(String)?
+  _stremioTvChannelSwitchProvider;
+  static StremioTvNextProvider? _stremioTvNextProvider;
 
   // Quick Play next episode result from Android TV player
   static Map<String, dynamic>? _quickPlayNextEpisodeResult;
@@ -56,24 +64,24 @@ class AndroidTvPlayerBridge {
   // Session ID to track which launch the metadata belongs to
   // Prevents stale metadata from previous sessions being sent to new sessions
   static String? _currentSessionId;
-  
+
   // Deprecated: use _streamNextProvider
   static StreamNextProvider? get _torboxNextProvider => _streamNextProvider;
-  static set _torboxNextProvider(StreamNextProvider? provider) => _streamNextProvider = provider;
-  
+  static set _torboxNextProvider(StreamNextProvider? provider) =>
+      _streamNextProvider = provider;
+
   // Deprecated: use _playbackFinishedCallback
-  static PlaybackFinishedCallback? get _torboxFinishedCallback => _playbackFinishedCallback;
-  static set _torboxFinishedCallback(PlaybackFinishedCallback? callback) => _playbackFinishedCallback = callback;
+  static PlaybackFinishedCallback? get _torboxFinishedCallback =>
+      _playbackFinishedCallback;
+  static set _torboxFinishedCallback(PlaybackFinishedCallback? callback) =>
+      _playbackFinishedCallback = callback;
 
   /// Get custom font info for Android TV player
   static Future<Map<String, String?>> _getCustomFontInfo() async {
     try {
       final font = await SubtitleFontService.instance.getSelectedFont();
       if (font.isCustom && font.path != null) {
-        return {
-          'customFontPath': font.path,
-          'customFontName': font.label,
-        };
+        return {'customFontPath': font.path, 'customFontName': font.label};
       }
     } catch (e) {
       debugPrint('AndroidTvPlayerBridge: Error getting custom font info: $e');
@@ -127,7 +135,9 @@ class AndroidTvPlayerBridge {
             channelId = args.trim();
           }
           final selectProvider = _channelByIdSwitchProvider;
-          if (channelId == null || channelId.isEmpty || selectProvider == null) {
+          if (channelId == null ||
+              channelId.isEmpty ||
+              selectProvider == null) {
             return null;
           }
           try {
@@ -150,7 +160,9 @@ class AndroidTvPlayerBridge {
             try {
               await finished();
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: onFinished callback threw: $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: onFinished callback threw: $e\n$stack',
+              );
             }
           }
           return null;
@@ -164,15 +176,21 @@ class AndroidTvPlayerBridge {
             try {
               await handler(Map<String, dynamic>.from(args));
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: progress callback error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: progress callback error $e\n$stack',
+              );
             }
           }
           return null;
         case 'requestStremioSourceResolve':
-          debugPrint('AndroidTvPlayerBridge: requestStremioSourceResolve received - args: ${call.arguments}');
+          debugPrint(
+            'AndroidTvPlayerBridge: requestStremioSourceResolve received - args: ${call.arguments}',
+          );
           final stremioResolver = _stremioSourceResolver;
           if (stremioResolver == null) {
-            debugPrint('AndroidTvPlayerBridge: ERROR - no stremio source resolver registered!');
+            debugPrint(
+              'AndroidTvPlayerBridge: ERROR - no stremio source resolver registered!',
+            );
             return null;
           }
           final stremioArgs = call.arguments;
@@ -184,10 +202,14 @@ class AndroidTvPlayerBridge {
             }
             try {
               final url = await stremioResolver(sourceIndex);
-              debugPrint('AndroidTvPlayerBridge: stremio source resolver returned: ${url != null ? "success" : "null"}');
+              debugPrint(
+                'AndroidTvPlayerBridge: stremio source resolver returned: ${url != null ? "success" : "null"}',
+              );
               return url != null ? {'url': url} : null;
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: stremio source resolver error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: stremio source resolver error $e\n$stack',
+              );
               throw PlatformException(
                 code: 'stremio_source_resolve_failed',
                 message: e.toString(),
@@ -196,10 +218,14 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'requestStremioTvGuideData':
-          debugPrint('AndroidTvPlayerBridge: requestStremioTvGuideData received');
+          debugPrint(
+            'AndroidTvPlayerBridge: requestStremioTvGuideData received',
+          );
           final guideProvider = _stremioTvGuideDataProvider;
           if (guideProvider == null) {
-            debugPrint('AndroidTvPlayerBridge: no guide data provider registered');
+            debugPrint(
+              'AndroidTvPlayerBridge: no guide data provider registered',
+            );
             return null;
           }
           final guideArgs = call.arguments;
@@ -212,7 +238,9 @@ class AndroidTvPlayerBridge {
               final data = await guideProvider(channelIds);
               return data;
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: guide data provider error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: guide data provider error $e\n$stack',
+              );
               throw PlatformException(
                 code: 'stremio_tv_guide_data_failed',
                 message: e.toString(),
@@ -221,10 +249,14 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'requestStremioTvChannelSwitch':
-          debugPrint('AndroidTvPlayerBridge: requestStremioTvChannelSwitch received');
+          debugPrint(
+            'AndroidTvPlayerBridge: requestStremioTvChannelSwitch received',
+          );
           final switchProvider = _stremioTvChannelSwitchProvider;
           if (switchProvider == null) {
-            debugPrint('AndroidTvPlayerBridge: no channel switch provider registered');
+            debugPrint(
+              'AndroidTvPlayerBridge: no channel switch provider registered',
+            );
             return null;
           }
           final switchArgs = call.arguments;
@@ -233,10 +265,14 @@ class AndroidTvPlayerBridge {
             if (channelId == null || channelId.isEmpty) return null;
             try {
               final result = await switchProvider(channelId);
-              debugPrint('AndroidTvPlayerBridge: channel switch returned: ${result != null ? "success" : "null"}');
+              debugPrint(
+                'AndroidTvPlayerBridge: channel switch returned: ${result != null ? "success" : "null"}',
+              );
               return result;
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: channel switch error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: channel switch error $e\n$stack',
+              );
               throw PlatformException(
                 code: 'stremio_tv_channel_switch_failed',
                 message: e.toString(),
@@ -244,29 +280,69 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'requestStremioTvNext':
+          debugPrint('AndroidTvPlayerBridge: requestStremioTvNext received');
+          final nextProvider = _stremioTvNextProvider;
+          if (nextProvider == null) {
+            debugPrint(
+              'AndroidTvPlayerBridge: no Stremio TV next provider registered',
+            );
+            return null;
+          }
+          final nextArgs = call.arguments;
+          if (nextArgs is Map) {
+            final channelId = nextArgs['channelId'] as String?;
+            if (channelId == null || channelId.isEmpty) return null;
+            try {
+              final result = await nextProvider(channelId);
+              debugPrint(
+                'AndroidTvPlayerBridge: Stremio TV next returned: ${result != null ? "success" : "null"}',
+              );
+              return result;
+            } catch (e, stack) {
+              debugPrint(
+                'AndroidTvPlayerBridge: Stremio TV next error $e\n$stack',
+              );
+              throw PlatformException(
+                code: 'stremio_tv_next_failed',
+                message: e.toString(),
+              );
+            }
+          }
+          return null;
         case 'requestSourcePlaylistResolve':
-          debugPrint('AndroidTvPlayerBridge: requestSourcePlaylistResolve received - args: ${call.arguments}');
+          debugPrint(
+            'AndroidTvPlayerBridge: requestSourcePlaylistResolve received - args: ${call.arguments}',
+          );
           final playlistResolver = _sourcePlaylistResolver;
           if (playlistResolver == null) {
-            debugPrint('AndroidTvPlayerBridge: ERROR - no source playlist resolver registered!');
+            debugPrint(
+              'AndroidTvPlayerBridge: ERROR - no source playlist resolver registered!',
+            );
             return null;
           }
           final playlistArgs = call.arguments;
           if (playlistArgs is Map) {
             final sourceIndex = playlistArgs['sourceIndex'] as int?;
             if (sourceIndex == null) {
-              debugPrint('AndroidTvPlayerBridge: missing sourceIndex for playlist resolve');
+              debugPrint(
+                'AndroidTvPlayerBridge: missing sourceIndex for playlist resolve',
+              );
               return null;
             }
             try {
               final items = await playlistResolver(sourceIndex);
-              debugPrint('AndroidTvPlayerBridge: source playlist resolver returned: ${items != null ? "${items.length} items" : "null"}');
+              debugPrint(
+                'AndroidTvPlayerBridge: source playlist resolver returned: ${items != null ? "${items.length} items" : "null"}',
+              );
               if (items != null && items.isNotEmpty) {
                 return {'items': items};
               }
               return null;
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: source playlist resolver error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: source playlist resolver error $e\n$stack',
+              );
               throw PlatformException(
                 code: 'source_playlist_resolve_failed',
                 message: e.toString(),
@@ -284,31 +360,42 @@ class AndroidTvPlayerBridge {
           _sourcePlaylistResolver = null;
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
+          _stremioTvNextProvider = null;
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: torrent finished callback threw: $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: torrent finished callback threw: $e\n$stack',
+              );
             }
           }
           // Clear any unconsumed quick play next result to prevent stale state
           _quickPlayNextEpisodeResult = null;
           return null;
         case 'requestTorrentStream':
-          debugPrint('AndroidTvPlayerBridge: requestTorrentStream received - args: ${call.arguments}');
+          debugPrint(
+            'AndroidTvPlayerBridge: requestTorrentStream received - args: ${call.arguments}',
+          );
           final resolver = _torrentStreamProvider;
           if (resolver == null) {
-            debugPrint('AndroidTvPlayerBridge: ERROR - no torrent stream provider registered!');
+            debugPrint(
+              'AndroidTvPlayerBridge: ERROR - no torrent stream provider registered!',
+            );
             return null;
           }
           final args = call.arguments;
           if (args is Map) {
             try {
               final result = await resolver(Map<String, dynamic>.from(args));
-              debugPrint('AndroidTvPlayerBridge: stream provider returned: ${result != null ? "success (url length: ${result['url']?.toString().length ?? 0})" : "null"}');
+              debugPrint(
+                'AndroidTvPlayerBridge: stream provider returned: ${result != null ? "success (url length: ${result['url']?.toString().length ?? 0})" : "null"}',
+              );
               return result;
             } catch (e, stack) {
-              debugPrint('AndroidTvPlayerBridge: stream provider error $e\n$stack');
+              debugPrint(
+                'AndroidTvPlayerBridge: stream provider error $e\n$stack',
+              );
               throw PlatformException(
                 code: 'torrent_stream_failed',
                 message: e.toString(),
@@ -317,16 +404,17 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'requestEpisodeMetadata':
-          debugPrint('TVMazeUpdate: requestEpisodeMetadata received from native');
+          debugPrint(
+            'TVMazeUpdate: requestEpisodeMetadata received from native',
+          );
           final pending = _pendingMetadataUpdates;
           final pendingImdb = _pendingImdbId;
           if ((pending != null && pending.isNotEmpty) || pendingImdb != null) {
-            debugPrint('TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb');
-            // Send the pending updates via broadcast (including IMDB ID for subtitles)
-            await updateEpisodeMetadata(
-              pending ?? [],
-              imdbId: pendingImdb,
+            debugPrint(
+              'TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb',
             );
+            // Send the pending updates via broadcast (including IMDB ID for subtitles)
+            await updateEpisodeMetadata(pending ?? [], imdbId: pendingImdb);
             // Clear pending updates after sending
             _pendingMetadataUpdates = null;
             _pendingImdbId = null;
@@ -335,7 +423,9 @@ class AndroidTvPlayerBridge {
           }
           return null;
         case 'requestMovieMetadata':
-          debugPrint('MovieMetadata: requestMovieMetadata received from native');
+          debugPrint(
+            'MovieMetadata: requestMovieMetadata received from native',
+          );
           final provider = _movieMetadataProvider;
           if (provider == null) {
             debugPrint('MovieMetadata: No provider registered');
@@ -353,7 +443,9 @@ class AndroidTvPlayerBridge {
             return null;
           }
           try {
-            debugPrint('MovieMetadata: Fetching IMDB ID for index $index, filename: $filename');
+            debugPrint(
+              'MovieMetadata: Fetching IMDB ID for index $index, filename: $filename',
+            );
             final imdbId = await provider(index, filename);
             debugPrint('MovieMetadata: Provider returned IMDB ID: $imdbId');
             return imdbId != null ? {'imdbId': imdbId} : null;
@@ -378,18 +470,27 @@ class AndroidTvPlayerBridge {
           try {
             // Parse the filename to extract title and year
             final parsed = MovieParser.parseFilename(filename);
-            debugPrint('MovieMetadata: Parsed filename "$filename" -> title="${parsed.title}", year=${parsed.year}');
+            debugPrint(
+              'MovieMetadata: Parsed filename "$filename" -> title="${parsed.title}", year=${parsed.year}',
+            );
 
             // Need a valid title to lookup
             if (parsed.title == null || parsed.title!.isEmpty) {
-              debugPrint('MovieMetadata: Could not extract title from "$filename"');
+              debugPrint(
+                'MovieMetadata: Could not extract title from "$filename"',
+              );
               return null;
             }
 
             // Lookup the movie using MovieMetadataService
-            final metadata = await MovieMetadataService.lookupMovie(parsed.title!, parsed.year);
+            final metadata = await MovieMetadataService.lookupMovie(
+              parsed.title!,
+              parsed.year,
+            );
             if (metadata != null) {
-              debugPrint('MovieMetadata: Found IMDB ID ${metadata.imdbId} for "$filename"');
+              debugPrint(
+                'MovieMetadata: Found IMDB ID ${metadata.imdbId} for "$filename"',
+              );
               return {'imdbId': metadata.imdbId};
             } else {
               debugPrint('MovieMetadata: No IMDB ID found for "$filename"');
@@ -406,7 +507,9 @@ class AndroidTvPlayerBridge {
             final season = args['season'] as int?;
             final episode = args['episode'] as int?;
             if (imdbId != null && season != null && episode != null) {
-              debugPrint('AndroidTvPlayerBridge: Quick Play next episode requested after S${season}E$episode');
+              debugPrint(
+                'AndroidTvPlayerBridge: Quick Play next episode requested after S${season}E$episode',
+              );
               // Store the raw request only — the async NextEpisode lookup
               // happens in the onFinished callback to avoid racing with the
               // native Activity's finish() call (which was consuming a null
@@ -528,10 +631,14 @@ class AndroidTvPlayerBridge {
     int? currentChannelNumber,
   }) async {
     debugPrint('AndroidTvPlayerBridge: launchRealDebridPlayback() called');
-    debugPrint('AndroidTvPlayerBridge: Platform.isAndroid=${Platform.isAndroid}');
-    
+    debugPrint(
+      'AndroidTvPlayerBridge: Platform.isAndroid=${Platform.isAndroid}',
+    );
+
     if (!Platform.isAndroid) {
-      debugPrint('AndroidTvPlayerBridge: Not Android platform, returning false');
+      debugPrint(
+        'AndroidTvPlayerBridge: Not Android platform, returning false',
+      );
       return false;
     }
     if (initialUrl.isEmpty) {
@@ -547,8 +654,12 @@ class AndroidTvPlayerBridge {
     _playbackFinishedCallback = onFinished;
 
     try {
-      debugPrint('AndroidTvPlayerBridge: Invoking method channel "launchRealDebridPlayback"');
-      debugPrint('AndroidTvPlayerBridge: URL=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...');
+      debugPrint(
+        'AndroidTvPlayerBridge: Invoking method channel "launchRealDebridPlayback"',
+      );
+      debugPrint(
+        'AndroidTvPlayerBridge: URL=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...',
+      );
       debugPrint('AndroidTvPlayerBridge: title="$title"');
       debugPrint('AndroidTvPlayerBridge: provider=real_debrid');
 
@@ -582,7 +693,7 @@ class AndroidTvPlayerBridge {
       );
 
       debugPrint('AndroidTvPlayerBridge: Method channel returned: $launched');
-      
+
       if (launched == true) {
         debugPrint('AndroidTvPlayerBridge: ✅ Launch successful');
         return true;
@@ -590,7 +701,9 @@ class AndroidTvPlayerBridge {
         debugPrint('AndroidTvPlayerBridge: ❌ Launch returned false or null');
       }
     } on PlatformException catch (e) {
-      debugPrint('AndroidTvPlayerBridge: ❌ PlatformException: ${e.code} - ${e.message}');
+      debugPrint(
+        'AndroidTvPlayerBridge: ❌ PlatformException: ${e.code} - ${e.message}',
+      );
       debugPrint('AndroidTvPlayerBridge: Details: ${e.details}');
     } catch (e) {
       debugPrint('AndroidTvPlayerBridge: ❌ Unexpected exception: $e');
@@ -617,6 +730,7 @@ class AndroidTvPlayerBridge {
     _channelSwitchProvider = null;
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
+    _stremioTvNextProvider = null;
   }
 
   static void clearStreamProvider() {
@@ -624,6 +738,7 @@ class AndroidTvPlayerBridge {
     _channelSwitchProvider = null;
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
+    _stremioTvNextProvider = null;
   }
 
   static Future<bool> launchTorrentPlayback({
@@ -634,8 +749,11 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
-    Future<Map<String, dynamic>?> Function(List<String>)? onRequestStremioTvGuideData,
-    Future<Map<String, dynamic>?> Function(String)? onRequestStremioTvChannelSwitch,
+    Future<Map<String, dynamic>?> Function(List<String>)?
+    onRequestStremioTvGuideData,
+    Future<Map<String, dynamic>?> Function(String)?
+    onRequestStremioTvChannelSwitch,
+    StremioTvNextProvider? onRequestStremioTvNext,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -653,6 +771,7 @@ class AndroidTvPlayerBridge {
     _sourcePlaylistResolver = onResolveSourcePlaylist;
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
+    _stremioTvNextProvider = onRequestStremioTvNext;
 
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
@@ -671,15 +790,15 @@ class AndroidTvPlayerBridge {
 
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorrentPlayback',
-        {
-          'payload': payloadWithFont,
-        },
+        {'payload': payloadWithFont},
       );
       if (launched == true) {
         return true;
       }
     } on PlatformException catch (e) {
-      debugPrint('AndroidTvPlayerBridge: torrent launch failed: ${e.code} - ${e.message}');
+      debugPrint(
+        'AndroidTvPlayerBridge: torrent launch failed: ${e.code} - ${e.message}',
+      );
     } catch (e) {
       debugPrint('AndroidTvPlayerBridge: unexpected torrent launch error: $e');
     }
@@ -692,6 +811,7 @@ class AndroidTvPlayerBridge {
     _sourcePlaylistResolver = null;
     _stremioTvGuideDataProvider = null;
     _stremioTvChannelSwitchProvider = null;
+    _stremioTvNextProvider = null;
     return false;
   }
 
@@ -705,10 +825,14 @@ class AndroidTvPlayerBridge {
   }) {
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
-      debugPrint('TVMazeUpdate: Discarding ${updates.length} updates - stale session (got: $sessionId, current: $_currentSessionId)');
+      debugPrint(
+        'TVMazeUpdate: Discarding ${updates.length} updates - stale session (got: $sessionId, current: $_currentSessionId)',
+      );
       return;
     }
-    debugPrint('TVMazeUpdate: Storing ${updates.length} pending metadata updates, imdbId=$imdbId');
+    debugPrint(
+      'TVMazeUpdate: Storing ${updates.length} pending metadata updates, imdbId=$imdbId',
+    );
     _pendingMetadataUpdates = updates;
     _pendingImdbId = imdbId;
   }
@@ -746,23 +870,26 @@ class AndroidTvPlayerBridge {
 
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
-      debugPrint('AndroidTvPlayerBridge: Discarding ${metadataUpdates.length} metadata updates - stale session (got: $sessionId, current: $_currentSessionId)');
+      debugPrint(
+        'AndroidTvPlayerBridge: Discarding ${metadataUpdates.length} metadata updates - stale session (got: $sessionId, current: $_currentSessionId)',
+      );
       return false;
     }
 
     try {
-      debugPrint('AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native (imdbId=$imdbId)');
+      debugPrint(
+        'AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native (imdbId=$imdbId)',
+      );
       final bool? success = await _channel.invokeMethod<bool>(
         'updateEpisodeMetadata',
-        {
-          'updates': metadataUpdates,
-          if (imdbId != null) 'imdbId': imdbId,
-        },
+        {'updates': metadataUpdates, if (imdbId != null) 'imdbId': imdbId},
       );
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;
     } on PlatformException catch (e) {
-      debugPrint('AndroidTvPlayerBridge: metadata update failed: ${e.code} - ${e.message}');
+      debugPrint(
+        'AndroidTvPlayerBridge: metadata update failed: ${e.code} - ${e.message}',
+      );
       return false;
     } catch (e) {
       debugPrint('AndroidTvPlayerBridge: unexpected metadata update error: $e');

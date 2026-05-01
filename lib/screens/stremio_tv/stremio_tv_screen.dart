@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
+import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
 import '../../services/debrid_service.dart';
 import '../../services/main_page_bridge.dart';
@@ -41,6 +42,8 @@ class StremioTvScreen extends StatefulWidget {
 }
 
 class _StremioTvScreenState extends State<StremioTvScreen> {
+  static const int _stremioTvNextMaxResolveAttempts = 4;
+
   final StremioTvService _service = StremioTvService.instance;
 
   List<StremioTvChannel> _channels = [];
@@ -59,6 +62,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   int _playGeneration = 0;
   int _dialogGeneration = -1;
   String? _currentPlayTitle; // Overrides item.name when playing series episodes
+  final Map<String, _StremioTvPlaybackCursor> _playbackCursors = {};
 
   /// Get the rotation duration for a channel based on its content type.
   int _rotationFor(StremioTvChannel channel) =>
@@ -946,6 +950,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           );
           if (result != null && mounted) {
             _notifyStartupPlayerLaunching();
+            _rememberPlaybackCursor(
+              channel.id,
+              baseSlotStartMs: nowPlaying.slotStart.millisecondsSinceEpoch,
+              slotOffset: 0,
+            );
             await VideoPlayerLauncher.push(
               context,
               VideoPlayerLaunchArgs(
@@ -971,6 +980,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 stremioTvMixSalt: _mixSalt,
                 stremioTvGuideDataProvider: _createGuideDataProvider(),
                 stremioTvChannelSwitchProvider: _createChannelSwitchProvider(),
+                stremioTvNextProvider: _createNextProvider(),
               ),
             );
           }
@@ -984,6 +994,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       Navigator.of(context).pop();
       _dialogGeneration = -1;
       _notifyStartupPlayerLaunching();
+      _rememberPlaybackCursor(
+        channel.id,
+        baseSlotStartMs: nowPlaying.slotStart.millisecondsSinceEpoch,
+        slotOffset: 0,
+      );
 
       // Launch player with all sources for in-player switching
       await VideoPlayerLauncher.push(
@@ -1011,6 +1026,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           stremioTvMixSalt: _mixSalt,
           stremioTvGuideDataProvider: _createGuideDataProvider(),
           stremioTvChannelSwitchProvider: _createChannelSwitchProvider(),
+          stremioTvNextProvider: _createNextProvider(),
         ),
       );
     } catch (e) {
@@ -1029,19 +1045,27 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   /// Resolves a channel to a playable URL without any UI interactions.
   /// Used by the in-player channel guide for background channel switching.
   Future<_ChannelPlaybackResult?> _resolveChannelPlayback(
-    StremioTvChannel channel,
-  ) async {
+    StremioTvChannel channel, {
+    int slotOffset = 0,
+  }) async {
     // Ensure items are loaded
     if (!channel.hasItems) {
       await _ensureChannelItemsLoaded(channel);
     }
 
-    final nowPlaying = _service.getNowPlaying(
+    final schedule = _service.getSchedule(
       channel,
+      count: slotOffset + 2,
       rotationMinutes: _rotationFor(channel),
       salt: _mixSalt,
     );
-    if (nowPlaying == null) return null;
+    if (schedule.length <= slotOffset) return null;
+
+    final basePlaying = schedule.first;
+    final nowPlaying = schedule[slotOffset];
+    final nextPlaying = schedule.length > slotOffset + 1
+        ? schedule[slotOffset + 1]
+        : null;
 
     final item = nowPlaying.item;
     final slotProgress = _computeStartProgress(channel.id, nowPlaying.progress);
@@ -1208,6 +1232,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       title: title,
       contentType: item.type,
       contentImdbId: item.effectiveImdbId,
+      contentSeason: season,
+      contentEpisode: episode,
       startAtPercent: slotProgress,
       playableSources: playableSources,
       sourceIndex: firstPlayableIndex,
@@ -1216,6 +1242,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         season: season,
         episode: episode,
       ),
+      nowPlayingGuideData: _guideDataFor(nowPlaying),
+      nextUpGuideData: nextPlaying != null ? _guideDataFor(nextPlaying) : null,
+      baseSlotStartMs: basePlaying.slotStart.millisecondsSinceEpoch,
+      slotOffset: slotOffset,
     );
   }
 
@@ -1595,6 +1625,67 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return (hash % 1000) / 1000.0 * cap;
   }
 
+  void _rememberPlaybackCursor(
+    String channelId, {
+    required int baseSlotStartMs,
+    required int slotOffset,
+  }) {
+    _playbackCursors[channelId] = _StremioTvPlaybackCursor(
+      baseSlotStartMs: baseSlotStartMs,
+      slotOffset: slotOffset,
+    );
+  }
+
+  int _nextSlotOffsetFor(StremioTvChannel channel) {
+    final current = _service.getNowPlaying(
+      channel,
+      rotationMinutes: _rotationFor(channel),
+      salt: _mixSalt,
+    );
+    if (current == null) return 1;
+
+    final currentBaseMs = current.slotStart.millisecondsSinceEpoch;
+    final cursor = _playbackCursors[channel.id];
+    if (cursor == null || cursor.baseSlotStartMs != currentBaseMs) {
+      return 1;
+    }
+    return cursor.slotOffset + 1;
+  }
+
+  Map<String, dynamic> _guideDataFor(StremioTvNowPlaying playing) {
+    return {
+      'title': playing.item.name,
+      'poster': playing.item.poster,
+      'year': playing.item.year,
+      'rating': playing.item.imdbRating,
+      'type': playing.item.type,
+      'slotEndMs': playing.slotEnd.millisecondsSinceEpoch,
+      'progress': playing.progress,
+    };
+  }
+
+  Map<String, dynamic> _playbackResultToMap(
+    String channelId,
+    _ChannelPlaybackResult result,
+  ) {
+    return {
+      'channelId': channelId,
+      'url': result.url,
+      'title': result.title,
+      'contentType': result.contentType,
+      'contentImdbId': result.contentImdbId,
+      if (result.contentSeason != null) 'contentSeason': result.contentSeason,
+      if (result.contentEpisode != null)
+        'contentEpisode': result.contentEpisode,
+      'startAtPercent': result.startAtPercent,
+      'stremioSources': result.playableSources.map((t) => t.toJson()).toList(),
+      'stremioCurrentSourceIndex': result.sourceIndex,
+      'sourceResolver': result.sourceResolver,
+      'nowPlaying': result.nowPlayingGuideData,
+      if (result.nextUpGuideData != null) 'nextUp': result.nextUpGuideData,
+    };
+  }
+
   // ─── Source Resolution (no dialogs, returns URL) ────────────────────
 
   /// Creates a resolver closure that snapshots current state at creation time.
@@ -1725,18 +1816,70 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (ch == null) return null;
       final result = await _resolveChannelPlayback(ch);
       if (result == null) return null;
-      return {
-        'url': result.url,
-        'title': result.title,
-        'contentType': result.contentType,
-        'contentImdbId': result.contentImdbId,
-        'startAtPercent': result.startAtPercent,
-        'stremioSources': result.playableSources
-            .map((t) => t.toJson())
-            .toList(),
-        'stremioCurrentSourceIndex': result.sourceIndex,
-        'sourceResolver': result.sourceResolver,
-      };
+      _rememberPlaybackCursor(
+        channelId,
+        baseSlotStartMs: result.baseSlotStartMs,
+        slotOffset: result.slotOffset,
+      );
+      return _playbackResultToMap(channelId, result);
+    };
+  }
+
+  /// Creates a provider for the player Next button in Stremio TV mode.
+  ///
+  /// It advances through future guide slots, and keeps a small per-channel
+  /// cursor so repeated Next presses do not keep replaying the same next slot
+  /// before the wall-clock schedule catches up.
+  Future<Map<String, dynamic>?> Function(String) _createNextProvider() {
+    return (String channelId) async {
+      final ch = _channels.firstWhereOrNull((c) => c.id == channelId);
+      if (ch == null) return null;
+
+      final firstSlotOffset = _nextSlotOffsetFor(ch);
+      var lastAttemptedOffset = firstSlotOffset;
+      for (
+        var attempt = 0;
+        attempt < _stremioTvNextMaxResolveAttempts;
+        attempt++
+      ) {
+        final slotOffset = firstSlotOffset + attempt;
+        lastAttemptedOffset = slotOffset;
+        final result = await _resolveChannelPlayback(
+          ch,
+          slotOffset: slotOffset,
+        );
+        if (result == null) {
+          debugPrint(
+            'StremioTV next: slot offset $slotOffset unavailable, trying next guide slot.',
+          );
+          continue;
+        }
+        if (attempt > 0) {
+          debugPrint(
+            'StremioTV next: skipped $attempt unavailable guide slot(s).',
+          );
+        }
+        _rememberPlaybackCursor(
+          channelId,
+          baseSlotStartMs: result.baseSlotStartMs,
+          slotOffset: result.slotOffset,
+        );
+        return _playbackResultToMap(channelId, result);
+      }
+
+      final current = _service.getNowPlaying(
+        ch,
+        rotationMinutes: _rotationFor(ch),
+        salt: _mixSalt,
+      );
+      if (current != null) {
+        _rememberPlaybackCursor(
+          channelId,
+          baseSlotStartMs: current.slotStart.millisecondsSinceEpoch,
+          slotOffset: lastAttemptedOffset,
+        );
+      }
+      return null;
     };
   }
 
@@ -3505,20 +3648,32 @@ class _ChannelPlaybackResult {
   final String title;
   final String contentType;
   final String? contentImdbId;
+  final int? contentSeason;
+  final int? contentEpisode;
   final double? startAtPercent;
   final List<Torrent> playableSources;
   final int sourceIndex;
   final Future<String?> Function(Torrent) sourceResolver;
+  final Map<String, dynamic> nowPlayingGuideData;
+  final Map<String, dynamic>? nextUpGuideData;
+  final int baseSlotStartMs;
+  final int slotOffset;
 
   const _ChannelPlaybackResult({
     required this.url,
     required this.title,
     required this.contentType,
     this.contentImdbId,
+    this.contentSeason,
+    this.contentEpisode,
     this.startAtPercent,
     required this.playableSources,
     required this.sourceIndex,
     required this.sourceResolver,
+    required this.nowPlayingGuideData,
+    this.nextUpGuideData,
+    required this.baseSlotStartMs,
+    required this.slotOffset,
   });
 }
 
@@ -3527,4 +3682,14 @@ class _ResolvedSourceChoice {
   final int sourceIndex;
 
   const _ResolvedSourceChoice({required this.url, required this.sourceIndex});
+}
+
+class _StremioTvPlaybackCursor {
+  final int baseSlotStartMs;
+  final int slotOffset;
+
+  const _StremioTvPlaybackCursor({
+    required this.baseSlotStartMs,
+    required this.slotOffset,
+  });
 }

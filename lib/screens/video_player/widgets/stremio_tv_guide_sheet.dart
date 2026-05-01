@@ -21,11 +21,16 @@ class StremioTvGuideSheet extends StatefulWidget {
     String title, {
     String? contentImdbId,
     String? contentType,
+    int? contentSeason,
+    int? contentEpisode,
+    Map<String, dynamic>? nowPlaying,
+    Map<String, dynamic>? nextUp,
     double? startAtPercent,
     List<Torrent>? newSources,
     int? newSourceIndex,
     Future<String?> Function(Torrent)? sourceResolver,
-  }) onChannelSwitched;
+  })
+  onChannelSwitched;
   final VoidCallback onClose;
 
   const StremioTvGuideSheet({
@@ -85,14 +90,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       duration: const Duration(milliseconds: 350),
       vsync: this,
     );
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-        parent: _animController, curve: Curves.easeOutCubic));
-    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
-    );
+    _slideAnim = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+        );
+    _fadeAnim = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
 
     // Pulsing glow for now-playing
     _pulseController = AnimationController(
@@ -123,7 +128,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
     if (!_scrollController.hasClients) return;
     const h = 104.0;
     final centerIndex =
-        ((_scrollController.offset + _scrollController.position.viewportDimension / 2) / h)
+        ((_scrollController.offset +
+                    _scrollController.position.viewportDimension / 2) /
+                h)
             .floor()
             .clamp(0, _filteredChannels.length - 1);
     _loadGuideDataForRange(centerIndex);
@@ -152,8 +159,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
 
     // Focus on current channel
     if (_currentChannelId != null) {
-      final idx =
-          _filteredChannels.indexWhere((c) => c.id == _currentChannelId);
+      final idx = _filteredChannels.indexWhere(
+        (c) => c.id == _currentChannelId,
+      );
       if (idx >= 0) _focusedIndex = idx;
     }
   }
@@ -177,21 +185,23 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
     _loadingIds.addAll(idsToLoad);
 
     // Fire-and-forget — don't block UI
-    widget.guideDataProvider!(idsToLoad).then((result) {
-      _loadingIds.removeAll(idsToLoad);
-      if (result == null || !mounted) return;
-      setState(() {
-        for (final ch in _allChannels) {
-          if (result.containsKey(ch.id)) {
-            final data = result[ch.id] as Map<String, dynamic>;
-            ch.applyGuideData(data);
-          }
-        }
-      });
-    }).catchError((e) {
-      debugPrint('StremioTvGuide: Failed to load guide data: $e');
-      _loadingIds.removeAll(idsToLoad);
-    });
+    widget.guideDataProvider!(idsToLoad)
+        .then((result) {
+          _loadingIds.removeAll(idsToLoad);
+          if (result == null || !mounted) return;
+          setState(() {
+            for (final ch in _allChannels) {
+              if (result.containsKey(ch.id)) {
+                final data = result[ch.id] as Map<String, dynamic>;
+                ch.applyGuideData(data);
+              }
+            }
+          });
+        })
+        .catchError((e) {
+          debugPrint('StremioTvGuide: Failed to load guide data: $e');
+          _loadingIds.removeAll(idsToLoad);
+        });
   }
 
   // ─── Filtering ────────────────────────────────────────────────────
@@ -207,13 +217,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       }).toList();
 
       if (_currentChannelId != null) {
-        final idx =
-            _filteredChannels.indexWhere((c) => c.id == _currentChannelId);
+        final idx = _filteredChannels.indexWhere(
+          (c) => c.id == _currentChannelId,
+        );
         _focusedIndex = idx >= 0
             ? idx
             : _filteredChannels.isNotEmpty
-                ? _focusedIndex.clamp(0, _filteredChannels.length - 1)
-                : 0;
+            ? _focusedIndex.clamp(0, _filteredChannels.length - 1)
+            : 0;
       } else {
         _focusedIndex = _filteredChannels.isNotEmpty
             ? _focusedIndex.clamp(0, _filteredChannels.length - 1)
@@ -233,8 +244,10 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
     final cur = _scrollController.offset;
     if (target < cur || target > cur + vp - h) {
       _scrollController.animateTo(
-        (target - vp / 2 + h / 2)
-            .clamp(0.0, _scrollController.position.maxScrollExtent),
+        (target - vp / 2 + h / 2).clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        ),
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
       );
@@ -275,7 +288,11 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       final rawSources = result['stremioSources'];
       if (rawSources is List) {
         newSources = rawSources
-            .map((s) => s is Map<String, dynamic> ? Torrent.fromJson(s) : null)
+            .map(
+              (s) => s is Map
+                  ? Torrent.fromJson(Map<String, dynamic>.from(s))
+                  : null,
+            )
             .whereType<Torrent>()
             .toList();
         newSourceIndex = result['stremioCurrentSourceIndex'] as int? ?? 0;
@@ -287,7 +304,8 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       });
 
       // Extract source resolver if provided
-      final sourceResolver = result['sourceResolver'] as Future<String?> Function(Torrent)?;
+      final sourceResolver =
+          result['sourceResolver'] as Future<String?> Function(Torrent)?;
 
       widget.onChannelSwitched(
         channel.id,
@@ -295,6 +313,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
         title,
         contentImdbId: result['contentImdbId'] as String?,
         contentType: result['contentType'] as String?,
+        contentSeason: (result['contentSeason'] as num?)?.toInt(),
+        contentEpisode: (result['contentEpisode'] as num?)?.toInt(),
+        nowPlaying: result['nowPlaying'] is Map
+            ? Map<String, dynamic>.from(result['nowPlaying'] as Map)
+            : null,
+        nextUp: result['nextUp'] is Map
+            ? Map<String, dynamic>.from(result['nextUp'] as Map)
+            : null,
         startAtPercent: (result['startAtPercent'] as num?)?.toDouble(),
         newSources: newSources,
         newSourceIndex: newSourceIndex,
@@ -375,8 +401,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final isLandscape = mq.orientation == Orientation.landscape;
-    final panelWidth =
-        isLandscape ? mq.size.width * 0.42 : mq.size.width * 0.92;
+    final panelWidth = isLandscape
+        ? mq.size.width * 0.42
+        : mq.size.width * 0.92;
 
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
@@ -416,7 +443,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                       ),
                       border: Border(
                         left: BorderSide(
-                            color: Colors.white.withOpacity(0.06), width: 0.5),
+                          color: Colors.white.withOpacity(0.06),
+                          width: 0.5,
+                        ),
                       ),
                     ),
                     child: Column(
@@ -458,17 +487,18 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                    color: _accent.withOpacity(0.25),
-                    blurRadius: 16,
-                    spreadRadius: 2),
+                  color: _accent.withOpacity(0.25),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
                 BoxShadow(
-                    color: _accentAlt.withOpacity(0.15),
-                    blurRadius: 24,
-                    spreadRadius: 4),
+                  color: _accentAlt.withOpacity(0.15),
+                  blurRadius: 24,
+                  spreadRadius: 4,
+                ),
               ],
             ),
-            child: const Icon(Icons.tv_rounded,
-                color: Colors.white, size: 22),
+            child: const Icon(Icons.tv_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -511,8 +541,11 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white.withOpacity(0.06)),
                 ),
-                child: Icon(Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.5), size: 18),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 18,
+                ),
               ),
             ),
           ),
@@ -550,13 +583,17 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
           controller: _searchController,
           focusNode: _searchFocusNode,
           style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400),
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+          ),
           decoration: InputDecoration(
             hintText: 'Search channels...',
             hintStyle: TextStyle(
-                color: Colors.white.withOpacity(0.25),
-                fontSize: 13,
-                fontWeight: FontWeight.w400),
+              color: Colors.white.withOpacity(0.25),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
             prefixIcon: AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: Icon(
@@ -570,8 +607,11 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             ),
             suffixIcon: hasQuery
                 ? IconButton(
-                    icon: Icon(Icons.clear_rounded,
-                        color: Colors.white.withOpacity(0.4), size: 18),
+                    icon: Icon(
+                      Icons.clear_rounded,
+                      color: Colors.white.withOpacity(0.4),
+                      size: 18,
+                    ),
                     onPressed: () {
                       _searchController.clear();
                       _applyFilters();
@@ -579,8 +619,10 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                   )
                 : null,
             filled: false,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 13,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide.none,
@@ -610,8 +652,11 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline_rounded,
-              color: Colors.red.withOpacity(0.7), size: 16),
+          Icon(
+            Icons.error_outline_rounded,
+            color: Colors.red.withOpacity(0.7),
+            size: 16,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -643,8 +688,11 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 color: Colors.white.withOpacity(0.03),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.satellite_alt_rounded,
-                  color: Colors.white.withOpacity(0.1), size: 32),
+              child: Icon(
+                Icons.satellite_alt_rounded,
+                color: Colors.white.withOpacity(0.1),
+                size: 32,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -659,7 +707,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             Text(
               'Try a different search term',
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.2), fontSize: 12),
+                color: Colors.white.withOpacity(0.2),
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -702,7 +752,10 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       child: Text(
         letter,
         style: TextStyle(
-            color: color, fontSize: fontSize, fontWeight: FontWeight.w700),
+          color: color,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -852,35 +905,37 @@ class _ChannelTile extends StatelessWidget {
                   ],
                 )
               : isCurrent
-                  ? LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        _accent.withOpacity(0.10),
-                        _accent.withOpacity(0.03),
-                      ],
-                    )
-                  : null,
+              ? LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    _accent.withOpacity(0.10),
+                    _accent.withOpacity(0.03),
+                  ],
+                )
+              : null,
           color: (!isFocused && !isCurrent) ? Colors.transparent : null,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isFocused
                 ? _accent.withOpacity(0.5)
                 : isCurrent
-                    ? _accent.withOpacity(0.12)
-                    : Colors.transparent,
+                ? _accent.withOpacity(0.12)
+                : Colors.transparent,
             width: isFocused ? 1.5 : 1,
           ),
           boxShadow: isFocused
               ? [
                   BoxShadow(
-                      color: _accent.withOpacity(0.12),
-                      blurRadius: 16,
-                      spreadRadius: 2),
+                    color: _accent.withOpacity(0.12),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
                   BoxShadow(
-                      color: _accent.withOpacity(0.06),
-                      blurRadius: 24,
-                      spreadRadius: 4),
+                    color: _accent.withOpacity(0.06),
+                    blurRadius: 24,
+                    spreadRadius: 4,
+                  ),
                 ]
               : [],
         ),
@@ -915,8 +970,8 @@ class _ChannelTile extends StatelessWidget {
                   color: isCurrent
                       ? _accent.withOpacity(0.8)
                       : isFocused
-                          ? Colors.white.withOpacity(0.5)
-                          : Colors.white.withOpacity(0.18),
+                      ? Colors.white.withOpacity(0.5)
+                      : Colors.white.withOpacity(0.18),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -945,11 +1000,12 @@ class _ChannelTile extends StatelessWidget {
                             color: isCurrent
                                 ? _accent
                                 : isFocused
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.85),
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.85),
                             fontSize: 12,
-                            fontWeight:
-                                isFocused || isCurrent ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight: isFocused || isCurrent
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                             letterSpacing: -0.2,
                           ),
                         ),
@@ -1039,7 +1095,8 @@ class _ChannelTile extends StatelessWidget {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                      _accent.withOpacity(0.7)),
+                    _accent.withOpacity(0.7),
+                  ),
                 ),
               )
             else if (isCurrent)
@@ -1073,10 +1130,12 @@ class _ChannelTile extends StatelessWidget {
   Widget _buildNowPlayingRichText() {
     final parts = <String>[];
     if (channel.nowPlayingTitle != null) parts.add(channel.nowPlayingTitle!);
-    if (channel.nowPlayingYear != null) parts.add('(${channel.nowPlayingYear})');
+    if (channel.nowPlayingYear != null)
+      parts.add('(${channel.nowPlayingYear})');
 
     final baseText = parts.join(' ');
-    final hasRating = channel.nowPlayingRating != null && channel.nowPlayingRating! > 0;
+    final hasRating =
+        channel.nowPlayingRating != null && channel.nowPlayingRating! > 0;
 
     if (!hasRating) {
       return Text(
@@ -1093,7 +1152,8 @@ class _ChannelTile extends StatelessWidget {
       );
     }
 
-    final ratingText = ' \u2605 ${channel.nowPlayingRating!.toStringAsFixed(1)}';
+    final ratingText =
+        ' \u2605 ${channel.nowPlayingRating!.toStringAsFixed(1)}';
     final textColor = isFocused
         ? Colors.white.withOpacity(0.7)
         : Colors.white.withOpacity(0.5);
@@ -1133,7 +1193,8 @@ class _ChannelTile extends StatelessWidget {
 
   Widget _buildPoster() {
     final hasPoster =
-        channel.nowPlayingPoster != null && channel.nowPlayingPoster!.isNotEmpty;
+        channel.nowPlayingPoster != null &&
+        channel.nowPlayingPoster!.isNotEmpty;
 
     return Container(
       width: 48,
@@ -1145,8 +1206,8 @@ class _ChannelTile extends StatelessWidget {
           color: isCurrent
               ? _accent.withOpacity(0.15)
               : isFocused
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.white.withOpacity(0.03),
+              ? Colors.white.withOpacity(0.08)
+              : Colors.white.withOpacity(0.03),
         ),
         boxShadow: [
           if (isCurrent)
@@ -1184,10 +1245,7 @@ class _ChannelTile extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.4),
-                    ],
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
                   ),
                 ),
               ),
@@ -1198,8 +1256,9 @@ class _ChannelTile extends StatelessWidget {
   }
 
   Widget _buildLetterAvatar() {
-    final letter =
-        channel.name.isNotEmpty ? channel.name[0].toUpperCase() : '?';
+    final letter = channel.name.isNotEmpty
+        ? channel.name[0].toUpperCase()
+        : '?';
     final color = _avatarColor(channel.name);
 
     return Container(
@@ -1207,10 +1266,7 @@ class _ChannelTile extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            color.withOpacity(0.25),
-            color.withOpacity(0.1),
-          ],
+          colors: [color.withOpacity(0.25), color.withOpacity(0.1)],
         ),
       ),
       alignment: Alignment.center,
@@ -1241,8 +1297,9 @@ class _ChannelTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             boxShadow: [
               BoxShadow(
-                  color: _accent.withOpacity(0.2 + pulseAnim.value * 0.1),
-                  blurRadius: 10),
+                color: _accent.withOpacity(0.2 + pulseAnim.value * 0.1),
+                blurRadius: 10,
+              ),
             ],
           ),
           child: const Text(
@@ -1259,4 +1316,3 @@ class _ChannelTile extends StatelessWidget {
     );
   }
 }
-

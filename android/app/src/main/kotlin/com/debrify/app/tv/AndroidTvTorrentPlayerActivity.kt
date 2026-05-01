@@ -202,6 +202,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioTvChannelAdapter: StremioTvGuideAdapter? = null
     private var stremioTvGuideVisible = false
     private var stremioTvChannelSwitchInProgress = false
+    private var stremioTvNextInProgress = false
     private var stremioTvSwitchToken = 0
 
     // Subtitle Settings Panel
@@ -370,6 +371,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             playItem(nextIndex)
                         }, 1500)
                     } else {
+                        if (isStremioTvMode && stremioTvChannels.any { it.isCurrent }) {
+                            requestStremioTvNext(finishOnFailure = true)
+                            return
+                        }
+
                         // No next in playlist — request Quick Play next episode for series
                         val currentItem = model.items[currentIndex]
                         if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null && model.imdbId != null) {
@@ -1841,6 +1847,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (nextIndex != null) {
             playItem(nextIndex)
         } else {
+            if (isStremioTvMode && stremioTvChannels.any { it.isCurrent }) {
+                requestStremioTvNext()
+                return
+            }
+
             // No next in playlist — request Quick Play next episode for series
             val model = payload
             val currentItem = model?.items?.getOrNull(currentIndex)
@@ -5727,8 +5738,268 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateStremioTvGuideChannelData(
+        channel: StremioTvGuideChannel,
+        data: Map<*, *>
+    ) {
+        val np = data["nowPlaying"] as? Map<*, *>
+        if (np != null) {
+            channel.nowPlayingTitle = np["title"] as? String
+            channel.nowPlayingPoster = (np["poster"] as? String)?.takeIf { it.isNotEmpty() }
+            channel.nowPlayingYear = (np["year"] as? String)?.takeIf { it.isNotEmpty() }
+            channel.nowPlayingRating = (np["rating"] as? Number)?.toDouble()
+            channel.nowPlayingSlotEndMs = (np["slotEndMs"] as? Number)?.toLong() ?: 0
+            channel.nowPlayingProgress = (np["progress"] as? Number)?.toFloat() ?: 0f
+            channel.hasGuideData = true
+        }
+
+        val next = data["nextUp"] as? Map<*, *>
+        if (next != null) {
+            channel.nextUpTitle = next["title"] as? String
+            channel.nextUpPoster = (next["poster"] as? String)?.takeIf { it.isNotEmpty() }
+            channel.nextUpYear = (next["year"] as? String)?.takeIf { it.isNotEmpty() }
+            channel.nextUpRating = (next["rating"] as? Number)?.toDouble()
+        }
+        channel.isLoadingGuideData = false
+    }
+
+    private fun updateStremioSourcesFromPlaybackMap(map: Map<*, *>) {
+        val newSources = map["stremioSources"] as? List<*>
+        val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0
+        if (newSources != null) {
+            stremioSources.clear()
+            for ((idx, src) in newSources.withIndex()) {
+                val srcMap = src as? Map<*, *> ?: continue
+                stremioSources.add(StremioSource.fromMap(srcMap, idx))
+            }
+            currentStremioSourceIndex = newSourceIndex.coerceIn(
+                0,
+                stremioSources.lastIndex.coerceAtLeast(0)
+            )
+            setupStremioSources()
+        }
+    }
+
+    private fun replacePayloadWithStremioTvItem(
+        channel: StremioTvGuideChannel,
+        map: Map<*, *>,
+        title: String,
+        url: String
+    ) {
+        val contentImdbId = map["contentImdbId"] as? String
+        val contentType = map["contentType"] as? String
+        val contentSeason = (map["contentSeason"] as? Number)?.toInt()
+        val contentEpisode = (map["contentEpisode"] as? Number)?.toInt()
+
+        payload?.let { model ->
+            val previousItem = model.items.getOrNull(currentIndex)
+            val switchedItem = PlaybackItem(
+                id = "stremio_tv:${channel.id}",
+                title = title,
+                url = url,
+                index = 0,
+                season = contentSeason,
+                episode = contentEpisode,
+                artwork = channel.nowPlayingPoster ?: previousItem?.artwork,
+                description = previousItem?.description,
+                resumePositionMs = 0L,
+                durationMs = 0L,
+                updatedAt = System.currentTimeMillis(),
+                resumeId = null,
+                sizeBytes = null,
+                rating = channel.nowPlayingRating ?: previousItem?.rating,
+                provider = previousItem?.provider,
+            )
+            model.items.clear()
+            model.items.add(switchedItem)
+            model.contentType = contentType ?: ""
+            model.imdbId = contentImdbId
+            model.nextEpisodeMap = emptyMap()
+            model.prevEpisodeMap = emptyMap()
+            model.collectionGroups = null
+            model.perItemImdbIds.clear()
+            model.perItemImdbIds[0] = contentImdbId
+            currentIndex = 0
+        }
+    }
+
+    private fun playStremioTvPlaybackMap(
+        channel: StremioTvGuideChannel,
+        map: Map<*, *>,
+        url: String,
+        title: String,
+        hideGuideOnReady: Boolean
+    ) {
+        val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble()
+
+        updateStremioTvGuideChannelData(channel, map)
+        replacePayloadWithStremioTvItem(channel, map, title, url)
+        updateStremioSourcesFromPlaybackMap(map)
+        updateStremioTvGuideHeader()
+        updateStremioQualityBadge()
+        updateStremioNowPlaying()
+        if (stremioSources.isNotEmpty()) {
+            stremioSourceBadge?.visibility = View.VISIBLE
+        } else {
+            stremioSourceBadge?.visibility = View.GONE
+        }
+        if (stremioSourcesVisible) hideStremioSourcesPanel()
+
+        resetSubtitleState()
+        clearStremioLoadingState()
+        cancelPikPakRetry()
+
+        val metadata = MediaMetadata.Builder()
+            .setTitle(title)
+            .build()
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .setMediaMetadata(metadata)
+            .build()
+
+        player?.apply {
+            setMediaItem(mediaItem)
+            prepare()
+            if (startAtPercent != null && startAtPercent > 0) {
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_READY) {
+                            val dur = duration
+                            if (dur > 0) {
+                                seekTo((dur * startAtPercent).toLong())
+                            }
+                            removeListener(this)
+                        }
+                    }
+                })
+            }
+            playWhenReady = true
+            play()
+        }
+
+        val playbackItem = payload?.items?.getOrNull(currentIndex) ?: PlaybackItem(
+            id = "stremio_tv:${channel.id}",
+            title = title,
+            url = url,
+            index = 0,
+            season = (map["contentSeason"] as? Number)?.toInt(),
+            episode = (map["contentEpisode"] as? Number)?.toInt(),
+            artwork = null,
+            description = null,
+            resumePositionMs = 0L,
+            durationMs = 0L,
+            updatedAt = System.currentTimeMillis(),
+            resumeId = null,
+            sizeBytes = null,
+            rating = null,
+            provider = null,
+        )
+
+        updateTitle(playbackItem)
+        fetchStremioSubtitles(playbackItem)
+
+        channel.isSwitchingChannel = false
+        stremioTvChannelAdapter?.notifyDataSetChanged()
+        if (hideGuideOnReady) {
+            hideGuideWhenReady()
+        }
+    }
+
+    private fun requestStremioTvNext(finishOnFailure: Boolean = false) {
+        if (stremioTvNextInProgress || stremioTvChannelSwitchInProgress) return
+
+        val channel = stremioTvChannels.firstOrNull { it.isCurrent }
+        if (channel == null) {
+            Toast.makeText(this, "Channel unavailable", Toast.LENGTH_SHORT).show()
+            if (finishOnFailure) finish()
+            return
+        }
+
+        val methodChannel = MainActivity.getAndroidTvPlayerChannel()
+        if (methodChannel == null) {
+            Toast.makeText(this, "Playback bridge unavailable", Toast.LENGTH_SHORT).show()
+            if (finishOnFailure) finish()
+            return
+        }
+
+        stremioTvNextInProgress = true
+        stremioTvSwitchToken++
+        val token = stremioTvSwitchToken
+
+        nextText.text = "📺 LOADING NEXT..."
+        nextSubtext.text = channel.nextUpTitle ?: channel.name
+        nextSubtext.visibility = View.VISIBLE
+        nextOverlay.visibility = View.VISIBLE
+
+        try {
+            val args = hashMapOf<String, Any?>("channelId" to channel.id)
+            methodChannel.invokeMethod(
+                "requestStremioTvNext",
+                args,
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        if (token != stremioTvSwitchToken) return
+                        runOnUiThread {
+                            stremioTvNextInProgress = false
+                            val map = result as? Map<*, *>
+                            val url = map?.get("url") as? String
+                            if (url.isNullOrEmpty()) {
+                                hideNextOverlay()
+                                Toast.makeText(this@AndroidTvTorrentPlayerActivity, "Next item unavailable", Toast.LENGTH_SHORT).show()
+                                if (finishOnFailure) finish()
+                                return@runOnUiThread
+                            }
+
+                            val title = map["title"] as? String ?: channel.name
+                            nextText.text = "📺 SIGNAL ACQUIRED"
+                            nextSubtext.text = "▶ ${title.uppercase(Locale.US)}"
+                            nextSubtext.visibility = View.VISIBLE
+
+                            playStremioTvPlaybackMap(
+                                channel = channel,
+                                map = map,
+                                url = url,
+                                title = title,
+                                hideGuideOnReady = false
+                            )
+                            progressHandler.postDelayed({ hideNextOverlay() }, 1500)
+                        }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        if (token != stremioTvSwitchToken) return
+                        runOnUiThread {
+                            stremioTvNextInProgress = false
+                            hideNextOverlay()
+                            Toast.makeText(
+                                this@AndroidTvTorrentPlayerActivity,
+                                errorMessage ?: "Failed to load next item",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            if (finishOnFailure) finish()
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        if (token != stremioTvSwitchToken) return
+                        runOnUiThread {
+                            stremioTvNextInProgress = false
+                            hideNextOverlay()
+                            if (finishOnFailure) finish()
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "requestStremioTvNext exception", e)
+            stremioTvNextInProgress = false
+            hideNextOverlay()
+            if (finishOnFailure) finish()
+        }
+    }
+
     private fun switchToStremioTvChannel(channel: StremioTvGuideChannel) {
-        if (stremioTvChannelSwitchInProgress) return
+        if (stremioTvChannelSwitchInProgress || stremioTvNextInProgress) return
         stremioTvChannelSwitchInProgress = true
         stremioTvSwitchToken++
         val token = stremioTvSwitchToken
@@ -5769,124 +6040,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             }
 
                             val title = map["title"] as? String ?: channel.name
-                            val contentImdbId = map["contentImdbId"] as? String
-                            val contentType = map["contentType"] as? String
-                            val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble()
-
-                            // Keep the underlying playback model in sync with the switched
-                            // Stremio TV channel so later title refreshes don't revert to the
-                            // previously selected source or episode payload.
-                            payload?.let { model ->
-                                val previousItem = model.items.getOrNull(currentIndex)
-                                val switchedItem = PlaybackItem(
-                                    id = "stremio_tv:${channel.id}",
-                                    title = title,
-                                    url = url,
-                                    index = 0,
-                                    season = null,
-                                    episode = null,
-                                    artwork = previousItem?.artwork,
-                                    description = previousItem?.description,
-                                    resumePositionMs = 0L,
-                                    durationMs = 0L,
-                                    updatedAt = System.currentTimeMillis(),
-                                    resumeId = null,
-                                    sizeBytes = null,
-                                    rating = previousItem?.rating,
-                                    provider = previousItem?.provider,
-                                )
-                                model.items.clear()
-                                model.items.add(switchedItem)
-                                model.contentType = contentType ?: ""
-                                model.imdbId = contentImdbId
-                                model.nextEpisodeMap = emptyMap()
-                                model.prevEpisodeMap = emptyMap()
-                                model.collectionGroups = null
-                                model.perItemImdbIds.clear()
-                                model.perItemImdbIds[0] = contentImdbId
-                                currentIndex = 0
-                            }
-
-                            // Update ExoPlayer
-                            val metadata = MediaMetadata.Builder()
-                                .setTitle(title)
-                                .build()
-                            val mediaItem = MediaItem.Builder()
-                                .setUri(url)
-                                .setMediaMetadata(metadata)
-                                .build()
-
-                            player?.apply {
-                                setMediaItem(mediaItem)
-                                prepare()
-                                if (startAtPercent != null && startAtPercent > 0) {
-                                    // Apply start position after duration is known
-                                    addListener(object : Player.Listener {
-                                        override fun onPlaybackStateChanged(state: Int) {
-                                            if (state == Player.STATE_READY) {
-                                                val dur = duration
-                                                if (dur > 0) {
-                                                    val seekMs = (dur * startAtPercent).toLong()
-                                                    seekTo(seekMs)
-                                                }
-                                                removeListener(this)
-                                            }
-                                        }
-                                    })
-                                }
-                                playWhenReady = true
-                                play()
-                            }
-
-                            // Update title
-                            updateTitle(payload?.items?.getOrNull(currentIndex) ?: PlaybackItem(
-                                id = "stremio_tv:${channel.id}",
-                                title = title,
+                            playStremioTvPlaybackMap(
+                                channel = channel,
+                                map = map,
                                 url = url,
-                                index = 0,
-                                season = null,
-                                episode = null,
-                                artwork = null,
-                                description = null,
-                                resumePositionMs = 0L,
-                                durationMs = 0L,
-                                updatedAt = System.currentTimeMillis(),
-                                resumeId = null,
-                                sizeBytes = null,
-                                rating = null,
-                                provider = null,
-                            ))
-
-                            // Update stremio sources for in-player source switching
-                            val newSources = map["stremioSources"] as? List<*>
-                            val newSourceIndex = (map["stremioCurrentSourceIndex"] as? Number)?.toInt() ?: 0
-                            if (newSources != null) {
-                                stremioSources.clear()
-                                for ((idx, src) in newSources.withIndex()) {
-                                    val srcMap = src as? Map<*, *> ?: continue
-                                    stremioSources.add(StremioSource.fromMap(srcMap, idx))
-                                }
-                                currentStremioSourceIndex = newSourceIndex
-                                // Re-setup sources panel (tabs, counts, filter, adapter)
-                                setupStremioSources()
-                            }
-
-                            // Update guide header
-                            updateStremioTvGuideHeader()
-
-                            // Update quality badge for stremio sources
-                            if (stremioSources.isNotEmpty()) {
-                                stremioSourceBadge?.visibility = View.VISIBLE
-                            }
-
-                            // Clear subtitle state for new channel
-                            stremioSubtitles.clear()
-                            currentStremioSubtitleIndex = -1
-
-                            // Clear switching state and hide guide when playback is ready
-                            channel.isSwitchingChannel = false
-                            stremioTvChannelAdapter?.notifyDataSetChanged()
-                            hideGuideWhenReady()
+                                title = title,
+                                hideGuideOnReady = true
+                            )
                         }
                     }
 
