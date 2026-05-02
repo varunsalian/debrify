@@ -27,6 +27,7 @@ class WebDavFilesScreen extends StatefulWidget {
 class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  final _backButtonFocusNode = FocusNode(debugLabel: 'webdav-back');
   final _firstItemFocusNode = FocusNode(debugLabel: 'webdav-first-item');
   final _refreshFocusNode = FocusNode(debugLabel: 'webdav-refresh');
   final _settingsFocusNode = FocusNode(debugLabel: 'webdav-settings');
@@ -77,6 +78,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     }
     _scrollController.dispose();
     _searchController.dispose();
+    _backButtonFocusNode.dispose();
     _firstItemFocusNode.dispose();
     _refreshFocusNode.dispose();
     _settingsFocusNode.dispose();
@@ -636,6 +638,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                 return KeyEventResult.ignored;
               },
               child: IconButton(
+                focusNode: _backButtonFocusNode,
                 onPressed: _handleBackNavigation,
                 icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                 tooltip: 'Back',
@@ -732,7 +735,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               if (event is! KeyDownEvent) return KeyEventResult.ignored;
               final key = event.logicalKey;
               if (key == LogicalKeyboardKey.arrowLeft) {
-                MainPageBridge.focusTvSidebar?.call();
+                _focusToolbarLeading();
                 return KeyEventResult.handled;
               }
               if (key == LogicalKeyboardKey.arrowRight) {
@@ -803,7 +806,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
             selection.extentOffset == textLength);
 
     if (key == LogicalKeyboardKey.arrowLeft && (isTextEmpty || isAtStart)) {
-      MainPageBridge.focusTvSidebar?.call();
+      _focusToolbarLeading();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight && (isTextEmpty || isAtEnd)) {
@@ -820,6 +823,14 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     }
 
     return KeyEventResult.ignored;
+  }
+
+  void _focusToolbarLeading() {
+    if (_stack.isNotEmpty) {
+      _backButtonFocusNode.requestFocus();
+      return;
+    }
+    MainPageBridge.focusTvSidebar?.call();
   }
 
   KeyEventResult _handleSearchToggleKey(FocusNode node, KeyEvent event) {
