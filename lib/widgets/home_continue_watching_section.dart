@@ -335,6 +335,15 @@ class _HomeContinueWatchingSectionState
                       onTap: () => Navigator.pop(context, 'search_packs'),
                       isTelevision: widget.isTelevision,
                     ),
+                  _MenuItem(
+                    icon: Icons.launch_rounded,
+                    label: 'Launch on Startup',
+                    subtitle: 'Auto-play this item when Debrify opens',
+                    color: const Color(0xFFEF4444),
+                    subtitleColor: const Color(0xFFFCA5A5),
+                    onTap: () => Navigator.pop(context, 'launch_on_startup'),
+                    isTelevision: widget.isTelevision,
+                  ),
                   Divider(
                     height: 1,
                     color: Colors.white.withValues(alpha: 0.06),
@@ -460,6 +469,8 @@ class _HomeContinueWatchingSectionState
       } else {
         widget.onItemSelected?.call(selection);
       }
+    } else if (choice == 'launch_on_startup') {
+      await _setLaunchOnStartup(selection);
     } else if (choice == 'select_source') {
       if (hasBoundSource) {
         await _showEditSourceDialog(selection);
@@ -476,6 +487,24 @@ class _HomeContinueWatchingSectionState
         if (mounted) _loadItems();
       }
     }
+  }
+
+  Future<void> _setLaunchOnStartup(AdvancedSearchSelection selection) async {
+    await Future.wait([
+      StorageService.setStartupAutoLaunchEnabled(true),
+      StorageService.setStartupMode('continue_watching'),
+      StorageService.setStartupContinueWatchingItemId(selection.imdbId),
+    ]);
+
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '"${selection.title}" will launch automatically on startup',
+        ),
+      ),
+    );
   }
 
   AdvancedSearchSelection? _selectionFromItem(Map<String, dynamic> item) {
@@ -1484,6 +1513,7 @@ class _MenuItem extends StatefulWidget {
   final String label;
   final String subtitle;
   final Color color;
+  final Color? subtitleColor;
   final VoidCallback onTap;
   final bool autofocus;
   final bool isTelevision;
@@ -1493,6 +1523,7 @@ class _MenuItem extends StatefulWidget {
     required this.label,
     required this.subtitle,
     required this.color,
+    this.subtitleColor,
     required this.onTap,
     this.autofocus = false,
     this.isTelevision = false,
@@ -1567,7 +1598,9 @@ class _MenuItemState extends State<_MenuItem> {
                 widget.subtitle,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.4),
+                  color:
+                      widget.subtitleColor ??
+                      Colors.white.withValues(alpha: 0.4),
                 ),
               ),
             ],

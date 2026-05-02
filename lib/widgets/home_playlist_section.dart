@@ -206,6 +206,15 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
                     onTap: () => Navigator.pop(context, 'clear_progress'),
                     isTelevision: widget.isTelevision,
                   ),
+                _PlaylistMenuItem(
+                  icon: Icons.launch_rounded,
+                  label: 'Launch on Startup',
+                  subtitle: 'Auto-play this item when Debrify opens',
+                  color: const Color(0xFFEF4444),
+                  subtitleColor: const Color(0xFFFCA5A5),
+                  onTap: () => Navigator.pop(context, 'launch_on_startup'),
+                  isTelevision: widget.isTelevision,
+                ),
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
                 _PlaylistMenuItem(
                   icon: Icons.delete_outline_rounded,
@@ -250,10 +259,31 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
         HapticFeedback.mediumImpact();
         _loadItems();
         break;
+      case 'launch_on_startup':
+        await _setLaunchOnStartup(item, dedupeKey);
+        break;
       case 'delete':
         _confirmDelete(item);
         break;
     }
+  }
+
+  Future<void> _setLaunchOnStartup(
+    Map<String, dynamic> item,
+    String dedupeKey,
+  ) async {
+    await Future.wait([
+      StorageService.setStartupAutoLaunchEnabled(true),
+      StorageService.setStartupMode('playlist'),
+      StorageService.setStartupPlaylistItemId(dedupeKey),
+    ]);
+
+    if (!mounted) return;
+    final title = (item['title'] as String?) ?? 'Playlist item';
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('"$title" will launch automatically on startup')),
+    );
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> item) async {
@@ -1028,6 +1058,7 @@ class _PlaylistMenuItem extends StatefulWidget {
   final String label;
   final String subtitle;
   final Color color;
+  final Color? subtitleColor;
   final VoidCallback onTap;
   final bool autofocus;
   final bool isTelevision;
@@ -1037,6 +1068,7 @@ class _PlaylistMenuItem extends StatefulWidget {
     required this.label,
     required this.subtitle,
     required this.color,
+    this.subtitleColor,
     required this.onTap,
     this.autofocus = false,
     this.isTelevision = false,
@@ -1075,7 +1107,15 @@ class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
               children: [
                 Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
-                Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                Text(
+                  widget.subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color:
+                        widget.subtitleColor ??
+                        Colors.white.withValues(alpha: 0.4),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1114,7 +1154,15 @@ class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
                 children: [
                   Text(widget.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
-                  Text(widget.subtitle, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+                  Text(
+                    widget.subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color:
+                          widget.subtitleColor ??
+                          Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
                 ],
               ),
             ),

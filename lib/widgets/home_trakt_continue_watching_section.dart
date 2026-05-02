@@ -273,12 +273,14 @@ class _HomeTraktContinueWatchingSectionState
     required Color color,
     required VoidCallback onTap,
     bool autofocus = false,
+    Color? subtitleColor,
   }) {
     return _MenuItem(
       icon: icon,
       label: label,
       subtitle: subtitle,
       color: color,
+      subtitleColor: subtitleColor,
       onTap: onTap,
       autofocus: autofocus,
       isTelevision: widget.isTelevision,
@@ -788,6 +790,14 @@ class _HomeTraktContinueWatchingSectionState
                     color: const Color(0xFFFBBF24),
                     onTap: () => Navigator.pop(context, 'search_packs'),
                   ),
+                _buildMenuItem(
+                  icon: Icons.launch_rounded,
+                  label: 'Launch on Startup',
+                  subtitle: 'Auto-play this item when Debrify opens',
+                  color: const Color(0xFFEF4444),
+                  subtitleColor: const Color(0xFFFCA5A5),
+                  onTap: () => Navigator.pop(context, 'launch_on_startup'),
+                ),
                 Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
                 _buildMenuItem(
                   icon: Icons.remove_circle_outline_rounded,
@@ -819,9 +829,40 @@ class _HomeTraktContinueWatchingSectionState
       }
     } else if (choice == 'search_packs') {
       widget.onSearchPacks?.call(item);
+    } else if (choice == 'launch_on_startup') {
+      await _setLaunchOnStartup(item);
     } else if (choice == 'remove') {
       _removePlayback(item);
     }
+  }
+
+  Future<void> _setLaunchOnStartup(StremioMeta item) async {
+    final itemId = item.effectiveImdbId ?? item.id;
+    final isMovie = widget.contentType == 'movies';
+    final writes = <Future<void>>[
+      StorageService.setStartupAutoLaunchEnabled(true),
+      StorageService.setStartupMode(
+        isMovie
+            ? 'trakt_continue_watching_movies'
+            : 'trakt_continue_watching_shows',
+      ),
+    ];
+
+    if (isMovie) {
+      writes.add(StorageService.setStartupTraktContinueWatchingMovieId(itemId));
+    } else {
+      writes.add(StorageService.setStartupTraktContinueWatchingShowId(itemId));
+    }
+
+    await Future.wait(writes);
+
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${item.name}" will launch automatically on startup'),
+      ),
+    );
   }
 
   void _browseItem(StremioMeta item) {
@@ -2007,6 +2048,7 @@ class _MenuItem extends StatefulWidget {
   final String label;
   final String subtitle;
   final Color color;
+  final Color? subtitleColor;
   final VoidCallback onTap;
   final bool autofocus;
   final bool isTelevision;
@@ -2016,6 +2058,7 @@ class _MenuItem extends StatefulWidget {
     required this.label,
     required this.subtitle,
     required this.color,
+    this.subtitleColor,
     required this.onTap,
     this.autofocus = false,
     this.isTelevision = false,
@@ -2075,7 +2118,9 @@ class _MenuItemState extends State<_MenuItem> {
                           widget.subtitle,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color:
+                                widget.subtitleColor ??
+                                Colors.white.withValues(alpha: 0.4),
                           ),
                         ),
                       ],
@@ -2123,7 +2168,9 @@ class _MenuItemState extends State<_MenuItem> {
                           widget.subtitle,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color:
+                                widget.subtitleColor ??
+                                Colors.white.withValues(alpha: 0.4),
                           ),
                         ),
                       ],
