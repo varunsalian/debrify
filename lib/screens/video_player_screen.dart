@@ -61,7 +61,9 @@ import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import '../models/stremio_subtitle.dart';
+import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
+import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
 import '../services/trakt/trakt_service.dart';
 import 'package:http/http.dart' as http;
@@ -69,6 +71,13 @@ import 'package:http/http.dart' as http;
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
+
+class _SeasonEpisodeSelection {
+  final int season;
+  final int episode;
+
+  const _SeasonEpisodeSelection({required this.season, required this.episode});
+}
 
 /// A full-featured video player screen with playlist support and navigation controls.
 ///
@@ -218,6 +227,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Cached IMDB ID for single-file movie playback (when no playlist exists)
   String? _singleFileImdbId;
   bool _singleFileImdbFetched = false;
+
+  // User-selected identity override for addon subtitle lookups in this item.
+  String? _manualContentImdbId;
+  String? _manualContentType;
+  int? _manualContentSeason;
+  int? _manualContentEpisode;
 
   // PikPak cold storage retry logic
   bool _isPikPakRetrying = false;
@@ -5139,17 +5154,621 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
+  String _currentPlaybackTitleForIdentity() {
+    if (_activePlaylist != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      return _activePlaylist![_currentIndex].title;
+    }
+    if (_dynamicTitle.isNotEmpty) return _dynamicTitle;
+    final stremioTitle = _currentStremioTvContentTitle;
+    if (stremioTitle != null && stremioTitle.trim().isNotEmpty) {
+      return stremioTitle;
+    }
+    final contentTitle = widget.contentTitle;
+    if (contentTitle != null && contentTitle.trim().isNotEmpty) {
+      return contentTitle;
+    }
+    return widget.title;
+  }
+
+  String _identitySearchInitialQuery() {
+    final rawTitle = _currentPlaybackTitleForIdentity();
+    final seriesInfo = SeriesParser.parseFilename(rawTitle);
+    final seriesTitle = seriesInfo.title?.trim();
+    if (seriesInfo.isSeries && seriesTitle != null && seriesTitle.isNotEmpty) {
+      return seriesTitle;
+    }
+
+    final movieInfo = MovieParser.parseFilename(rawTitle);
+    final movieTitle = movieInfo.title?.trim();
+    if (movieTitle != null && movieTitle.isNotEmpty) {
+      return movieTitle;
+    }
+
+    return rawTitle
+        .replaceAll(
+          RegExp(
+            r'\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|ts|mpg|mpeg)$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'[._]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String _normalisedContentType(String type) =>
+      type.toLowerCase() == 'series' ? 'series' : 'movie';
+
+  List<StremioMeta> _filterIdentitySearchResults(List<StremioMeta> metas) {
+    final bestByKey = <String, StremioMeta>{};
+
+    for (final meta in metas) {
+      final imdbId = meta.effectiveImdbId;
+      if (imdbId == null || !imdbId.startsWith('tt')) continue;
+
+      final type = meta.type.toLowerCase();
+      if (type != 'movie' && type != 'series') continue;
+
+      final key = '$type:$imdbId';
+      final existing = bestByKey[key];
+      if (existing == null) {
+        bestByKey[key] = meta;
+        continue;
+      }
+
+      final existingScore =
+          (existing.poster != null ? 2 : 0) + (existing.year != null ? 1 : 0);
+      final newScore =
+          (meta.poster != null ? 2 : 0) + (meta.year != null ? 1 : 0);
+      if (newScore > existingScore) {
+        bestByKey[key] = meta;
+      }
+    }
+
+    return bestByKey.values.toList(growable: false);
+  }
+
+  String? _normalisePosterUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    if (url.startsWith('//')) return 'https:$url';
+    return url;
+  }
+
+  String _identityMetaSubtitle(StremioMeta meta) {
+    final parts = <String>[
+      meta.type.toLowerCase() == 'series' ? 'Series' : 'Movie',
+      if (meta.year != null && meta.year!.trim().isNotEmpty) meta.year!,
+      if (meta.sourceAddon?.name.trim().isNotEmpty == true)
+        meta.sourceAddon!.name,
+    ];
+    return parts.join(' | ');
+  }
+
+  Widget _buildIdentifyTitleResultTile(StremioMeta meta) {
+    final posterUrl = _normalisePosterUrl(meta.poster);
+
+    return InkWell(
+      onTap: () => Navigator.of(context).pop(meta),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                width: 46,
+                height: 68,
+                color: Colors.white.withValues(alpha: 0.08),
+                child: posterUrl == null
+                    ? Icon(
+                        Icons.movie_creation_outlined,
+                        color: Colors.white.withValues(alpha: 0.45),
+                      )
+                    : Image.network(
+                        posterUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.movie_creation_outlined,
+                          color: Colors.white.withValues(alpha: 0.45),
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    meta.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _identityMetaSubtitle(meta),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white.withValues(alpha: 0.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<StremioMeta?> _showIdentifyTitleSearchSheet({
+    required String initialQuery,
+  }) async {
+    if (!mounted) return null;
+
+    final controller = TextEditingController(text: initialQuery);
+    var results = <StremioMeta>[];
+    var isSearching = false;
+    var hasSearched = false;
+    String? errorMessage;
+    var searchToken = 0;
+    var sheetActive = true;
+
+    Future<void> runSearch(String rawQuery, StateSetter setSheetState) async {
+      final query = rawQuery.trim();
+      final token = ++searchToken;
+
+      if (query.isEmpty) {
+        setSheetState(() {
+          results = [];
+          errorMessage = null;
+          isSearching = false;
+          hasSearched = false;
+        });
+        return;
+      }
+
+      setSheetState(() {
+        isSearching = true;
+        errorMessage = null;
+        hasSearched = true;
+      });
+
+      try {
+        final metas = await StremioService.instance.searchCatalogs(query);
+        if (!sheetActive || !mounted || token != searchToken) return;
+        setSheetState(() {
+          results = _filterIdentitySearchResults(metas);
+          isSearching = false;
+        });
+      } catch (e) {
+        if (!sheetActive || !mounted || token != searchToken) return;
+        setSheetState(() {
+          results = [];
+          errorMessage = 'Search failed. Try again.';
+          isSearching = false;
+        });
+      }
+    }
+
+    final selected =
+        await showModalBottomSheet<StremioMeta>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          backgroundColor: Colors.transparent,
+          builder: (sheetContext) {
+            var initialSearchStarted = false;
+            return StatefulBuilder(
+              builder: (sheetContext, setSheetState) {
+                if (!initialSearchStarted && initialQuery.trim().isNotEmpty) {
+                  initialSearchStarted = true;
+                  Future(() => runSearch(initialQuery, setSheetState));
+                }
+
+                final screenSize = MediaQuery.of(sheetContext).size;
+                final sheetHeight = screenSize.height * 0.82;
+
+                return Container(
+                  height: sheetHeight,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF141414),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.search_rounded,
+                              color: VideoPlayerColors.netflixRed,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Search Subtitle',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              color: Colors.white70,
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                        child: TextField(
+                          controller: controller,
+                          autofocus: initialQuery.trim().isEmpty,
+                          onSubmitted: (value) =>
+                              runSearch(value, setSheetState),
+                          style: const TextStyle(color: Colors.white),
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Search movie or show',
+                            hintStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.42),
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.arrow_forward_rounded),
+                              color: VideoPlayerColors.netflixRed,
+                              onPressed: () =>
+                                  runSearch(controller.text, setSheetState),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.08),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Builder(
+                          builder: (_) {
+                            if (isSearching) {
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: VideoPlayerColors.netflixRed,
+                                ),
+                              );
+                            }
+
+                            if (errorMessage != null) {
+                              return Center(
+                                child: Text(
+                                  errorMessage!,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            if (hasSearched && results.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No IMDb-backed results found',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ListView.separated(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              itemCount: results.length,
+                              separatorBuilder: (_, __) => Divider(
+                                height: 1,
+                                color: Colors.white.withValues(alpha: 0.06),
+                              ),
+                              itemBuilder: (_, index) =>
+                                  _buildIdentifyTitleResultTile(results[index]),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ).whenComplete(() {
+          sheetActive = false;
+        });
+
+    controller.dispose();
+    return selected;
+  }
+
+  _SeasonEpisodeSelection? _currentSeasonEpisodeForIdentity() {
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      final currentEp = _findSeriesEpisodeForCurrentIndex(seriesPlaylist);
+      final season = currentEp?.seriesInfo.season;
+      final episode = currentEp?.seriesInfo.episode;
+      if (season != null && episode != null) {
+        return _SeasonEpisodeSelection(season: season, episode: episode);
+      }
+    }
+
+    final seriesInfo = SeriesParser.parseFilename(
+      _currentPlaybackTitleForIdentity(),
+    );
+    final season =
+        seriesInfo.season ??
+        _manualContentSeason ??
+        _currentStremioTvContentSeason ??
+        widget.contentSeason;
+    final episode =
+        seriesInfo.episode ??
+        _manualContentEpisode ??
+        _currentStremioTvContentEpisode ??
+        widget.contentEpisode;
+
+    if (season == null || episode == null) return null;
+    return _SeasonEpisodeSelection(season: season, episode: episode);
+  }
+
+  Future<_SeasonEpisodeSelection?> _requestSeasonEpisodeForIdentity(
+    String title,
+  ) async {
+    if (!mounted) return null;
+
+    final seasonController = TextEditingController();
+    final episodeController = TextEditingController();
+    String? errorText;
+
+    final result = await showDialog<_SeasonEpisodeSelection>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              title: const Text(
+                'Episode',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: seasonController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Season',
+                            labelStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.62),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: episodeController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Episode',
+                            labelStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.62),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(
+                        color: VideoPlayerColors.netflixRed,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final season = int.tryParse(seasonController.text.trim());
+                    final episode = int.tryParse(episodeController.text.trim());
+                    if (season == null ||
+                        season <= 0 ||
+                        episode == null ||
+                        episode <= 0) {
+                      setDialogState(() {
+                        errorText = 'Enter a valid season and episode.';
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(
+                      _SeasonEpisodeSelection(season: season, episode: episode),
+                    );
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    seasonController.dispose();
+    episodeController.dispose();
+    return result;
+  }
+
+  Future<TracksSheetSubtitleSearchResult?>
+  _identifyTitleAndFetchSubtitles() async {
+    final identifyToken = _addonSubtitleFetchToken;
+    final selected = await _showIdentifyTitleSearchSheet(
+      initialQuery: _identitySearchInitialQuery(),
+    );
+    if (!mounted ||
+        selected == null ||
+        identifyToken != _addonSubtitleFetchToken) {
+      return null;
+    }
+
+    final imdbId = selected.effectiveImdbId;
+    if (imdbId == null || !imdbId.startsWith('tt')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selected title has no IMDb ID')),
+      );
+      return null;
+    }
+
+    final contentType = _normalisedContentType(selected.type);
+    int? season;
+    int? episode;
+
+    if (contentType == 'series') {
+      final currentEpisode = _currentSeasonEpisodeForIdentity();
+      season = currentEpisode?.season;
+      episode = currentEpisode?.episode;
+
+      if (season == null || episode == null) {
+        final entered = await _requestSeasonEpisodeForIdentity(selected.name);
+        if (!mounted ||
+            entered == null ||
+            identifyToken != _addonSubtitleFetchToken) {
+          return null;
+        }
+        season = entered.season;
+        episode = entered.episode;
+      }
+    }
+
+    final fetchToken = _addonSubtitleFetchToken + 1;
+    setState(() {
+      _addonSubtitleFetchToken = fetchToken;
+      _manualContentImdbId = imdbId;
+      _manualContentType = contentType;
+      _manualContentSeason = contentType == 'series' ? season : null;
+      _manualContentEpisode = contentType == 'series' ? episode : null;
+      _selectedStremioSubtitleId = null;
+      _cachedStremioSubtitles = null;
+      _cachedSubtitleKey = null;
+    });
+
+    try {
+      final result = await StremioSubtitleService.instance.fetchSubtitles(
+        type: contentType,
+        imdbId: imdbId,
+        season: contentType == 'series' ? season : null,
+        episode: contentType == 'series' ? episode : null,
+      );
+
+      if (!mounted || fetchToken != _addonSubtitleFetchToken) return null;
+
+      final cacheKey =
+          contentType == 'series' && season != null && episode != null
+          ? '$imdbId:$season:$episode'
+          : imdbId;
+
+      _cachedStremioSubtitles = result.subtitles;
+      _cachedSubtitleKey = cacheKey;
+
+      await _fetchAndMaybeAutoSelectAddonSubtitle();
+
+      if (result.subtitles.isEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No addon subtitles found')),
+        );
+      }
+
+      return TracksSheetSubtitleSearchResult(
+        subtitles: result.subtitles,
+        selectedSubtitleId: _selectedStremioSubtitleId,
+      );
+    } catch (e) {
+      debugPrint('VideoPlayer: Search subtitle fetch failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Subtitle search failed')));
+      }
+      return null;
+    }
+  }
+
   Future<void> _showTracksSheet(BuildContext context) async {
     // Dynamically parse season/episode from current video's filename
-    final currentTitle =
-        _activePlaylist != null &&
-            _currentIndex >= 0 &&
-            _currentIndex < _activePlaylist!.length
-        ? _activePlaylist![_currentIndex].title
-        : _currentStremioTvContentTitle ?? widget.title;
+    final currentTitle = _currentPlaybackTitleForIdentity();
     final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season = seriesInfo.season ?? _effectiveContentSeason;
-    final episode = seriesInfo.episode ?? _effectiveContentEpisode;
+    final season =
+        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
+    final episode =
+        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
 
     // Get IMDB ID for current item
     // For series: uses shared IMDB ID (all episodes share same show ID)
@@ -5157,7 +5776,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     String? effectiveImdbId;
     final seriesPlaylist = _seriesPlaylist;
 
-    if (seriesPlaylist != null) {
+    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
+      effectiveImdbId = _manualContentImdbId;
+    } else if (seriesPlaylist != null) {
       if (seriesPlaylist.isSeries) {
         // Series: use shared IMDB ID
         effectiveImdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId;
@@ -5194,8 +5815,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Determine content type
-    // Priority: widget.contentType > series detection > movie detection
-    String? effectiveContentType = _effectiveContentType;
+    // Priority: manual override > widget/channel metadata > playlist detection
+    String? effectiveContentType = _manualContentType ?? _effectiveContentType;
     if (effectiveContentType == null) {
       if (seriesPlaylist?.isSeries == true) {
         effectiveContentType = 'series';
@@ -5212,10 +5833,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'season=$season, episode=$episode (parsed from: $currentTitle)',
     );
 
+    final subtitleSeason = effectiveContentType == 'series' ? season : null;
+    final subtitleEpisode = effectiveContentType == 'series' ? episode : null;
+
     // Build cache key for subtitle caching (per-item like Android TV)
     final String? cacheKey = effectiveImdbId != null
-        ? (season != null && episode != null
-              ? '$effectiveImdbId:$season:$episode'
+        ? (subtitleSeason != null && subtitleEpisode != null
+              ? '$effectiveImdbId:$subtitleSeason:$subtitleEpisode'
               : effectiveImdbId)
         : null;
 
@@ -5231,6 +5855,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
     }
 
+    if (!context.mounted) return;
     await TracksSheet.show(
       context,
       _player,
@@ -5241,8 +5866,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
       contentImdbId: effectiveImdbId,
       contentType: effectiveContentType,
-      contentSeason: season,
-      contentEpisode: episode,
+      contentSeason: subtitleSeason,
+      contentEpisode: subtitleEpisode,
       cachedSubtitles: cachedSubs,
       onSubtitlesFetched: (subtitles) {
         // Cache the fetched subtitles for this content
@@ -5260,6 +5885,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _userManuallySelectedSubtitle = true;
       },
       onDownloadStremioSubtitleToFile: _downloadStremioSubtitleToTempFile,
+      onIdentifyTitle: _identifyTitleAndFetchSubtitles,
     );
   }
 
@@ -5268,6 +5894,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cachedStremioSubtitles = null;
     _cachedSubtitleKey = null;
     _selectedStremioSubtitleId = null;
+    _manualContentImdbId = null;
+    _manualContentType = null;
+    _manualContentSeason = null;
+    _manualContentEpisode = null;
     _embeddedSubtitleApplied = false;
     _userManuallySelectedSubtitle = false;
     _trackPreferencesReadyForAddonSubtitles = false;
@@ -5530,8 +6160,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       int? season;
       int? episode;
 
-      if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-        imdbId = seriesPlaylist.imdbId;
+      if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
+        imdbId = _manualContentImdbId;
+        contentType = _manualContentType == 'series' ? 'series' : 'movie';
+        if (contentType == 'series') {
+          season = _manualContentSeason;
+          episode = _manualContentEpisode;
+          if ((season == null || episode == null) &&
+              seriesPlaylist != null &&
+              seriesPlaylist.isSeries) {
+            final currentEp = _findSeriesEpisodeForCurrentIndex(seriesPlaylist);
+            season ??= currentEp?.seriesInfo.season;
+            episode ??= currentEp?.seriesInfo.episode;
+          }
+          season ??= _currentStremioTvContentSeason ?? widget.contentSeason;
+          episode ??= _currentStremioTvContentEpisode ?? widget.contentEpisode;
+        }
+      } else if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+        imdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId;
         contentType = 'series';
         // Get current episode info from playlist using current index
         final currentEp = _findSeriesEpisodeForCurrentIndex(seriesPlaylist);
@@ -5541,14 +6187,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       } else {
         // Use widget's content IMDB ID or single file IMDB ID
-        imdbId = widget.contentImdbId ?? _singleFileImdbId;
+        imdbId = _effectiveContentImdbId ?? _singleFileImdbId;
         // Single-file series playback: use widget params for S/E
-        if (widget.contentType == 'series' &&
-            widget.contentSeason != null &&
-            widget.contentEpisode != null) {
+        if (_effectiveContentType == 'series' &&
+            _effectiveContentSeason != null &&
+            _effectiveContentEpisode != null) {
           contentType = 'series';
-          season = widget.contentSeason;
-          episode = widget.contentEpisode;
+          season = _effectiveContentSeason;
+          episode = _effectiveContentEpisode;
         } else {
           contentType = 'movie';
         }

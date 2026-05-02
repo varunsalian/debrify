@@ -7,6 +7,16 @@ import '../constants/color_constants.dart';
 import '../utils/language_mapping.dart';
 import '../services/subtitle_settings_service.dart';
 
+class TracksSheetSubtitleSearchResult {
+  final List<StremioSubtitle> subtitles;
+  final String? selectedSubtitleId;
+
+  const TracksSheetSubtitleSearchResult({
+    required this.subtitles,
+    this.selectedSubtitleId,
+  });
+}
+
 /// Modal bottom sheet for selecting audio and subtitle tracks
 ///
 /// Provides a Netflix-style UI for switching between available
@@ -18,7 +28,7 @@ class TracksSheet {
     BuildContext context,
     mk.Player player, {
     required Future<void> Function(String audioId, String subtitleId)
-        onTrackChanged,
+    onTrackChanged,
     void Function(SubtitleSettingsData settings)? onSubtitleStyleChanged,
     String? contentImdbId,
     String? contentType,
@@ -29,7 +39,8 @@ class TracksSheet {
     String? selectedStremioSubtitleId,
     void Function(String? id)? onStremioSubtitleSelected,
     Future<String?> Function(StremioSubtitle subtitle)?
-        onDownloadStremioSubtitleToFile,
+    onDownloadStremioSubtitleToFile,
+    Future<TracksSheetSubtitleSearchResult?> Function()? onIdentifyTitle,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -45,11 +56,14 @@ class TracksSheet {
         ? 'stremio:$selectedStremioSubtitleId'
         : player.state.track.subtitle.id;
 
-    SubtitleSettingsData subtitleStyle =
-        await SubtitleSettingsService.instance.loadAll();
+    SubtitleSettingsData subtitleStyle = await SubtitleSettingsService.instance
+        .loadAll();
+    if (!context.mounted) return;
 
     List<StremioSubtitle>? stremioSubtitles = cachedSubtitles;
     bool isLoadingStremioSubtitles = false;
+    bool isIdentifyingTitle = false;
+    int subtitleFetchGeneration = 0;
     int selectedTabIndex = 0;
 
     await showModalBottomSheet(
@@ -65,15 +79,20 @@ class TracksSheet {
                 contentImdbId != null &&
                 contentType != null) {
               isLoadingStremioSubtitles = true;
+              final generation = ++subtitleFetchGeneration;
               Future(() async {
                 try {
-                  final result =
-                      await StremioSubtitleService.instance.fetchSubtitles(
-                    type: contentType,
-                    imdbId: contentImdbId,
-                    season: contentSeason,
-                    episode: contentEpisode,
-                  );
+                  final result = await StremioSubtitleService.instance
+                      .fetchSubtitles(
+                        type: contentType,
+                        imdbId: contentImdbId,
+                        season: contentSeason,
+                        episode: contentEpisode,
+                      );
+                  if (!context.mounted ||
+                      generation != subtitleFetchGeneration) {
+                    return;
+                  }
                   setModalState(() {
                     stremioSubtitles = result.subtitles;
                     isLoadingStremioSubtitles = false;
@@ -81,7 +100,10 @@ class TracksSheet {
                   onSubtitlesFetched?.call(result.subtitles);
                 } catch (e) {
                   debugPrint('TracksSheet: Fetch error: $e');
-                  setModalState(() => isLoadingStremioSubtitles = false);
+                  if (context.mounted &&
+                      generation == subtitleFetchGeneration) {
+                    setModalState(() => isLoadingStremioSubtitles = false);
+                  }
                 }
               });
             }
@@ -93,8 +115,9 @@ class TracksSheet {
 
             // Use more height on mobile landscape to show more options
             final sheetHeight = isLandscape
-                ? screenHeight * 0.85  // 85% in landscape
-                : screenHeight * 0.7;  // 70% in portrait
+                ? screenHeight *
+                      0.85 // 85% in landscape
+                : screenHeight * 0.7; // 70% in portrait
 
             return Container(
               height: sheetHeight,
@@ -161,24 +184,32 @@ class TracksSheet {
                           _buildTab(
                             icon: Icons.audiotrack_rounded,
                             label: 'Audio',
-                            badge: audios.isNotEmpty ? '${audios.length}' : null,
+                            badge: audios.isNotEmpty
+                                ? '${audios.length}'
+                                : null,
                             isSelected: selectedTabIndex == 0,
-                            onTap: () => setModalState(() => selectedTabIndex = 0),
+                            onTap: () =>
+                                setModalState(() => selectedTabIndex = 0),
                           ),
                           _buildTab(
                             icon: Icons.subtitles_rounded,
                             label: 'Subtitles',
                             badge: isLoadingStremioSubtitles
                                 ? '...'
-                                : _getSubtitleCount(embeddedSubs, stremioSubtitles),
+                                : _getSubtitleCount(
+                                    embeddedSubs,
+                                    stremioSubtitles,
+                                  ),
                             isSelected: selectedTabIndex == 1,
-                            onTap: () => setModalState(() => selectedTabIndex = 1),
+                            onTap: () =>
+                                setModalState(() => selectedTabIndex = 1),
                           ),
                           _buildTab(
                             icon: Icons.text_format_rounded,
                             label: 'Style',
                             isSelected: selectedTabIndex == 2,
-                            onTap: () => setModalState(() => selectedTabIndex = 2),
+                            onTap: () =>
+                                setModalState(() => selectedTabIndex = 2),
                           ),
                         ],
                       ),
@@ -200,7 +231,8 @@ class TracksSheet {
                         selectedSub: selectedSub,
                         onTrackChanged: onTrackChanged,
                         setModalState: setModalState,
-                        onAudioChanged: (v) => setModalState(() => selectedAudio = v),
+                        onAudioChanged: (v) =>
+                            setModalState(() => selectedAudio = v),
                         embeddedSubs: embeddedSubs,
                         stremioSubtitles: stremioSubtitles,
                         isLoadingStremioSubtitles: isLoadingStremioSubtitles,
@@ -213,6 +245,47 @@ class TracksSheet {
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
                         onDownloadStremioSubtitleToFile:
                             onDownloadStremioSubtitleToFile,
+                        isIdentifyingTitle: isIdentifyingTitle,
+                        onIdentifyTitle: onIdentifyTitle == null
+                            ? null
+                            : () async {
+                                if (isIdentifyingTitle) return;
+                                final generation = ++subtitleFetchGeneration;
+                                setModalState(() {
+                                  isIdentifyingTitle = true;
+                                  isLoadingStremioSubtitles = true;
+                                });
+                                try {
+                                  final result = await onIdentifyTitle();
+                                  if (!context.mounted ||
+                                      generation != subtitleFetchGeneration) {
+                                    return;
+                                  }
+                                  setModalState(() {
+                                    if (result != null) {
+                                      stremioSubtitles = result.subtitles;
+                                      final selectedId =
+                                          result.selectedSubtitleId;
+                                      if (selectedId != null) {
+                                        selectedSub = 'stremio:$selectedId';
+                                      }
+                                    }
+                                    isIdentifyingTitle = false;
+                                    isLoadingStremioSubtitles = false;
+                                  });
+                                } catch (e) {
+                                  debugPrint(
+                                    'TracksSheet: Search subtitle error: $e',
+                                  );
+                                  if (context.mounted &&
+                                      generation == subtitleFetchGeneration) {
+                                    setModalState(() {
+                                      isIdentifyingTitle = false;
+                                      isLoadingStremioSubtitles = false;
+                                    });
+                                  }
+                                }
+                              },
                         subtitleStyle: subtitleStyle,
                         onStyleChanged: (newStyle) {
                           setModalState(() => subtitleStyle = newStyle);
@@ -278,7 +351,10 @@ class TracksSheet {
               if (badge != null) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Colors.white.withValues(alpha: 0.2)
@@ -318,7 +394,9 @@ class TracksSheet {
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
     required Future<String?> Function(StremioSubtitle subtitle)?
-        onDownloadStremioSubtitleToFile,
+    onDownloadStremioSubtitleToFile,
+    required bool isIdentifyingTitle,
+    required Future<void> Function()? onIdentifyTitle,
     required SubtitleSettingsData subtitleStyle,
     required void Function(SubtitleSettingsData) onStyleChanged,
     required bool isWide,
@@ -347,6 +425,8 @@ class TracksSheet {
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
           onDownloadStremioSubtitleToFile: onDownloadStremioSubtitleToFile,
+          isIdentifyingTitle: isIdentifyingTitle,
+          onIdentifyTitle: onIdentifyTitle,
         );
       case 2:
         return _StyleTab(
@@ -446,7 +526,9 @@ class _SubtitlesTab extends StatelessWidget {
   final void Function(String) onSubChanged;
   final void Function(String? id)? onStremioSubtitleSelected;
   final Future<String?> Function(StremioSubtitle subtitle)?
-      onDownloadStremioSubtitleToFile;
+  onDownloadStremioSubtitleToFile;
+  final bool isIdentifyingTitle;
+  final Future<void> Function()? onIdentifyTitle;
 
   const _SubtitlesTab({
     super.key,
@@ -460,6 +542,8 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
     required this.onDownloadStremioSubtitleToFile,
+    required this.isIdentifyingTitle,
+    required this.onIdentifyTitle,
   });
 
   @override
@@ -478,6 +562,19 @@ class _SubtitlesTab extends StatelessWidget {
             await onTrackChanged(selectedAudio, 'no');
           },
         ),
+
+        if (onIdentifyTitle != null) ...[
+          const SizedBox(height: 8),
+          _TrackTile(
+            title: 'Search subtitle',
+            subtitle: isIdentifyingTitle
+                ? 'Searching catalogs...'
+                : 'Search catalogs by title',
+            isSelected: false,
+            icon: Icons.search_rounded,
+            onTap: isIdentifyingTitle ? () {} : () => onIdentifyTitle!(),
+          ),
+        ],
 
         // Embedded subtitles
         if (embeddedSubs.isNotEmpty) ...[
@@ -504,7 +601,8 @@ class _SubtitlesTab extends StatelessWidget {
         ],
 
         // Addon subtitles
-        if (isLoading || (stremioSubtitles != null && stremioSubtitles!.isNotEmpty)) ...[
+        if (isLoading ||
+            (stremioSubtitles != null && stremioSubtitles!.isNotEmpty)) ...[
           const SizedBox(height: 16),
           _SectionLabel(
             label: 'From Addons',
@@ -512,7 +610,8 @@ class _SubtitlesTab extends StatelessWidget {
             isLoading: isLoading,
           ),
           const SizedBox(height: 8),
-          if (isLoading && (stremioSubtitles == null || stremioSubtitles!.isEmpty))
+          if (isLoading &&
+              (stremioSubtitles == null || stremioSubtitles!.isEmpty))
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
@@ -551,8 +650,8 @@ class _SubtitlesTab extends StatelessWidget {
                   onTap: () async {
                     onSubChanged(subId);
                     try {
-                      final filePath =
-                          await onDownloadStremioSubtitleToFile?.call(sub);
+                      final filePath = await onDownloadStremioSubtitleToFile
+                          ?.call(sub);
                       if (filePath == null) return;
 
                       final track = mk.SubtitleTrack.uri(
@@ -609,13 +708,14 @@ class _StyleTab extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: subtitleStyle.background.color,
                   borderRadius: BorderRadius.circular(4),
@@ -638,14 +738,18 @@ class _StyleTab extends StatelessWidget {
             label: 'Size',
             value: subtitleStyle.size.label,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.sizeIndex - 1)
-                  .clamp(0, SubtitleSize.options.length - 1);
+              final newIndex = (subtitleStyle.sizeIndex - 1).clamp(
+                0,
+                SubtitleSize.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setSizeIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(sizeIndex: newIndex));
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.sizeIndex + 1)
-                  .clamp(0, SubtitleSize.options.length - 1);
+              final newIndex = (subtitleStyle.sizeIndex + 1).clamp(
+                0,
+                SubtitleSize.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setSizeIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(sizeIndex: newIndex));
             },
@@ -655,14 +759,18 @@ class _StyleTab extends StatelessWidget {
             label: 'Style',
             value: subtitleStyle.style.label,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.styleIndex - 1)
-                  .clamp(0, SubtitleStyle.options.length - 1);
+              final newIndex = (subtitleStyle.styleIndex - 1).clamp(
+                0,
+                SubtitleStyle.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setStyleIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(styleIndex: newIndex));
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.styleIndex + 1)
-                  .clamp(0, SubtitleStyle.options.length - 1);
+              final newIndex = (subtitleStyle.styleIndex + 1).clamp(
+                0,
+                SubtitleStyle.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setStyleIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(styleIndex: newIndex));
             },
@@ -673,14 +781,18 @@ class _StyleTab extends StatelessWidget {
             value: subtitleStyle.color.label,
             valueColor: subtitleStyle.color.color,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.colorIndex - 1)
-                  .clamp(0, SubtitleColor.options.length - 1);
+              final newIndex = (subtitleStyle.colorIndex - 1).clamp(
+                0,
+                SubtitleColor.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setColorIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(colorIndex: newIndex));
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.colorIndex + 1)
-                  .clamp(0, SubtitleColor.options.length - 1);
+              final newIndex = (subtitleStyle.colorIndex + 1).clamp(
+                0,
+                SubtitleColor.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setColorIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(colorIndex: newIndex));
             },
@@ -691,20 +803,28 @@ class _StyleTab extends StatelessWidget {
             value: subtitleStyle.outlineColor.label,
             valueColor: subtitleStyle.outlineColor.color,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.outlineColorIndex - 1)
-                  .clamp(0, SubtitleOutlineColor.options.length - 1);
-              await SubtitleSettingsService.instance
-                  .setOutlineColorIndex(newIndex);
+              final newIndex = (subtitleStyle.outlineColorIndex - 1).clamp(
+                0,
+                SubtitleOutlineColor.options.length - 1,
+              );
+              await SubtitleSettingsService.instance.setOutlineColorIndex(
+                newIndex,
+              );
               onStyleChanged(
-                  subtitleStyle.copyWith(outlineColorIndex: newIndex));
+                subtitleStyle.copyWith(outlineColorIndex: newIndex),
+              );
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.outlineColorIndex + 1)
-                  .clamp(0, SubtitleOutlineColor.options.length - 1);
-              await SubtitleSettingsService.instance
-                  .setOutlineColorIndex(newIndex);
+              final newIndex = (subtitleStyle.outlineColorIndex + 1).clamp(
+                0,
+                SubtitleOutlineColor.options.length - 1,
+              );
+              await SubtitleSettingsService.instance.setOutlineColorIndex(
+                newIndex,
+              );
               onStyleChanged(
-                  subtitleStyle.copyWith(outlineColorIndex: newIndex));
+                subtitleStyle.copyWith(outlineColorIndex: newIndex),
+              );
             },
           ),
 
@@ -712,14 +832,18 @@ class _StyleTab extends StatelessWidget {
             label: 'Background',
             value: subtitleStyle.background.label,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.bgIndex - 1)
-                  .clamp(0, SubtitleBackground.options.length - 1);
+              final newIndex = (subtitleStyle.bgIndex - 1).clamp(
+                0,
+                SubtitleBackground.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setBgIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(bgIndex: newIndex));
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.bgIndex + 1)
-                  .clamp(0, SubtitleBackground.options.length - 1);
+              final newIndex = (subtitleStyle.bgIndex + 1).clamp(
+                0,
+                SubtitleBackground.options.length - 1,
+              );
               await SubtitleSettingsService.instance.setBgIndex(newIndex);
               onStyleChanged(subtitleStyle.copyWith(bgIndex: newIndex));
             },
@@ -729,22 +853,27 @@ class _StyleTab extends StatelessWidget {
             label: 'Font',
             value: subtitleStyle.font.label,
             onDecrease: () async {
-              final newIndex = await SubtitleFontService.instance.cycleFontDown();
+              final newIndex = await SubtitleFontService.instance
+                  .cycleFontDown();
               final font = await SubtitleFontService.instance.getSelectedFont();
-              onStyleChanged(subtitleStyle.copyWith(
-                fontIndex: newIndex,
-                fontFamily: font.fontFamily,
-                fontLabel: font.label,
-              ));
+              onStyleChanged(
+                subtitleStyle.copyWith(
+                  fontIndex: newIndex,
+                  fontFamily: font.fontFamily,
+                  fontLabel: font.label,
+                ),
+              );
             },
             onIncrease: () async {
               final newIndex = await SubtitleFontService.instance.cycleFontUp();
               final font = await SubtitleFontService.instance.getSelectedFont();
-              onStyleChanged(subtitleStyle.copyWith(
-                fontIndex: newIndex,
-                fontFamily: font.fontFamily,
-                fontLabel: font.label,
-              ));
+              onStyleChanged(
+                subtitleStyle.copyWith(
+                  fontIndex: newIndex,
+                  fontFamily: font.fontFamily,
+                  fontLabel: font.label,
+                ),
+              );
             },
           ),
 
@@ -752,20 +881,24 @@ class _StyleTab extends StatelessWidget {
             label: 'Elevation',
             value: subtitleStyle.elevation.label,
             onDecrease: () async {
-              final newIndex = (subtitleStyle.elevationIndex - 1)
-                  .clamp(0, SubtitleElevation.options.length - 1);
-              await SubtitleSettingsService.instance
-                  .setElevationIndex(newIndex);
-              onStyleChanged(
-                  subtitleStyle.copyWith(elevationIndex: newIndex));
+              final newIndex = (subtitleStyle.elevationIndex - 1).clamp(
+                0,
+                SubtitleElevation.options.length - 1,
+              );
+              await SubtitleSettingsService.instance.setElevationIndex(
+                newIndex,
+              );
+              onStyleChanged(subtitleStyle.copyWith(elevationIndex: newIndex));
             },
             onIncrease: () async {
-              final newIndex = (subtitleStyle.elevationIndex + 1)
-                  .clamp(0, SubtitleElevation.options.length - 1);
-              await SubtitleSettingsService.instance
-                  .setElevationIndex(newIndex);
-              onStyleChanged(
-                  subtitleStyle.copyWith(elevationIndex: newIndex));
+              final newIndex = (subtitleStyle.elevationIndex + 1).clamp(
+                0,
+                SubtitleElevation.options.length - 1,
+              );
+              await SubtitleSettingsService.instance.setElevationIndex(
+                newIndex,
+              );
+              onStyleChanged(subtitleStyle.copyWith(elevationIndex: newIndex));
             },
           ),
 
@@ -775,8 +908,8 @@ class _StyleTab extends StatelessWidget {
           TextButton.icon(
             onPressed: () async {
               await SubtitleSettingsService.instance.resetToDefaults();
-              final newSettings =
-                  await SubtitleSettingsService.instance.loadAll();
+              final newSettings = await SubtitleSettingsService.instance
+                  .loadAll();
               onStyleChanged(newSettings);
             },
             icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -802,12 +935,14 @@ class _TrackTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool isSelected;
+  final IconData? icon;
   final VoidCallback onTap;
 
   const _TrackTile({
     required this.title,
     this.subtitle,
     required this.isSelected,
+    this.icon,
     required this.onTap,
   });
 
@@ -832,31 +967,46 @@ class _TrackTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Selection indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected
-                    ? VideoPlayerColors.netflixRed
-                    : Colors.transparent,
-                border: Border.all(
+            if (icon != null)
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: VideoPlayerColors.netflixRed.withValues(alpha: 0.18),
+                ),
+                child: Icon(
+                  icon,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+              )
+            else
+              // Selection indicator
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: isSelected
                       ? VideoPlayerColors.netflixRed
-                      : Colors.white.withValues(alpha: 0.3),
-                  width: 2,
+                      : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected
+                        ? VideoPlayerColors.netflixRed
+                        : Colors.white.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
                 ),
+                child: isSelected
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      )
+                    : null,
               ),
-              child: isSelected
-                  ? const Icon(
-                      Icons.check_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
             const SizedBox(width: 14),
             // Title & subtitle
             Expanded(
@@ -866,9 +1016,13 @@ class _TrackTile extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.9),
                       fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                     ),
                   ),
                   if (subtitle != null) ...[
