@@ -25,6 +25,7 @@ import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/debrify_tv_repository.dart';
+import 'services/trakt/trakt_continue_watching_service.dart';
 import 'screens/stremio_tv/stremio_tv_service.dart';
 import 'models/debrify_tv_channel_record.dart';
 import 'widgets/app_initializer.dart';
@@ -1594,6 +1595,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         case 'continue_watching':
           await _launchContinueWatchingItem();
           break;
+        case 'trakt_continue_watching_movies':
+          await _launchTraktContinueWatchingItem(
+            TraktContinueWatchingService.moviesContentType,
+          );
+          break;
+        case 'trakt_continue_watching_shows':
+          await _launchTraktContinueWatchingItem(
+            TraktContinueWatchingService.showsContentType,
+          );
+          break;
         case 'stremio_tv':
           await _launchStremioTvChannel();
           break;
@@ -1812,6 +1823,43 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     _isAutoLaunchShowingOverlay = true;
     MainPageBridge.notifyContinueWatchingItemToAutoPlay(itemToLaunch);
+
+    if (!mounted) {
+      return;
+    }
+
+    _onItemTapped(0); // Home / Torrent Search tab
+  }
+
+  /// Launch a selected Trakt Continue Watching movie/show on startup.
+  Future<void> _launchTraktContinueWatchingItem(String traktContentType) async {
+    final selectedItemId =
+        traktContentType == TraktContinueWatchingService.moviesContentType
+        ? await StorageService.getStartupTraktContinueWatchingMovieId()
+        : await StorageService.getStartupTraktContinueWatchingShowId();
+
+    final selection = await TraktContinueWatchingService.instance
+        .resolveSelection(
+          traktContentType: traktContentType,
+          itemId: selectedItemId,
+        );
+    if (selection == null) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchTitle = 'Launching Trakt Continue Watching';
+      _autoLaunchChannelName = selection.formattedLabel;
+      _autoLaunchChannelNumber = null;
+    });
+
+    _isAutoLaunchShowingOverlay = true;
+    MainPageBridge.notifyAdvancedSearchSelectionToAutoPlay(selection);
 
     if (!mounted) {
       return;

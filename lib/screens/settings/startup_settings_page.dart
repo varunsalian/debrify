@@ -3,6 +3,7 @@ import '../../models/debrify_tv_channel_record.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/storage_service.dart';
+import '../../services/trakt/trakt_continue_watching_service.dart';
 import '../stremio_tv/stremio_tv_service.dart';
 
 class StartupSettingsPage extends StatefulWidget {
@@ -16,15 +17,19 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
   bool _loading = true;
   bool _autoLaunchEnabled = false;
   String _startupMode =
-      'channel'; // 'channel', 'stremio_tv', 'playlist', or 'continue_watching'
+      'channel'; // 'channel', 'stremio_tv', 'playlist', 'continue_watching', 'trakt_continue_watching_movies', or 'trakt_continue_watching_shows'
   String? _selectedChannelId; // "random" or actual channelId
   String? _selectedStremioTvChannelId; // "random" or actual channelId
   String? _selectedPlaylistItemId; // playlist item dedupe key
   String? _selectedContinueWatchingItemId; // continue watching imdbId
+  String? _selectedTraktContinueWatchingMovieId; // Trakt movie imdbId
+  String? _selectedTraktContinueWatchingShowId; // Trakt show imdbId
   List<DebrifyTvChannelRecord> _channels = [];
   List<StremioTvChannel> _stremioTvChannels = [];
   List<Map<String, dynamic>> _playlistItems = [];
   List<Map<String, dynamic>> _continueWatchingItems = [];
+  List<TraktContinueWatchingItem> _traktContinueWatchingMovies = [];
+  List<TraktContinueWatchingItem> _traktContinueWatchingShows = [];
 
   @override
   void initState() {
@@ -46,6 +51,12 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       final continueWatchingItems = _validContinueWatchingItems(
         await StorageService.getContinueWatchingItems(),
       );
+      final traktContinueWatchingResults = await Future.wait([
+        TraktContinueWatchingService.instance.fetchMovies(),
+        TraktContinueWatchingService.instance.fetchShows(),
+      ]);
+      final traktContinueWatchingMovies = traktContinueWatchingResults[0];
+      final traktContinueWatchingShows = traktContinueWatchingResults[1];
 
       // Load settings
       final autoLaunchEnabled =
@@ -58,11 +69,17 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
           await StorageService.getStartupPlaylistItemId();
       final selectedContinueWatchingItemId =
           await StorageService.getStartupContinueWatchingItemId();
+      final selectedTraktContinueWatchingMovieId =
+          await StorageService.getStartupTraktContinueWatchingMovieId();
+      final selectedTraktContinueWatchingShowId =
+          await StorageService.getStartupTraktContinueWatchingShowId();
       final availableModes = _availableModes(
         hasDebrifyChannels: channels.isNotEmpty,
         hasStremioTvChannels: stremioTvChannels.isNotEmpty,
         hasPlaylistItems: playlistItems.isNotEmpty,
         hasContinueWatchingItems: continueWatchingItems.isNotEmpty,
+        hasTraktContinueWatchingMovies: traktContinueWatchingMovies.isNotEmpty,
+        hasTraktContinueWatchingShows: traktContinueWatchingShows.isNotEmpty,
       );
       final resolvedMode = _resolveStartupMode(startupMode, availableModes);
       final resolvedChannelId = _resolveDebrifyChannelId(
@@ -81,6 +98,16 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         selectedContinueWatchingItemId,
         continueWatchingItems,
       );
+      final resolvedTraktContinueWatchingMovieId =
+          _resolveTraktContinueWatchingItemId(
+            selectedTraktContinueWatchingMovieId,
+            traktContinueWatchingMovies,
+          );
+      final resolvedTraktContinueWatchingShowId =
+          _resolveTraktContinueWatchingItemId(
+            selectedTraktContinueWatchingShowId,
+            traktContinueWatchingShows,
+          );
       await _persistResolvedStartupSettings(
         savedMode: startupMode,
         resolvedMode: resolvedMode,
@@ -88,12 +115,20 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         hasStremioTvChannels: stremioTvChannels.isNotEmpty,
         hasPlaylistItems: playlistItems.isNotEmpty,
         hasContinueWatchingItems: continueWatchingItems.isNotEmpty,
+        hasTraktContinueWatchingMovies: traktContinueWatchingMovies.isNotEmpty,
+        hasTraktContinueWatchingShows: traktContinueWatchingShows.isNotEmpty,
         savedChannelId: selectedChannelId,
         resolvedChannelId: resolvedChannelId,
         savedPlaylistItemId: selectedPlaylistItemId,
         resolvedPlaylistItemId: resolvedPlaylistItemId,
         savedContinueWatchingItemId: selectedContinueWatchingItemId,
         resolvedContinueWatchingItemId: resolvedContinueWatchingItemId,
+        savedTraktContinueWatchingMovieId: selectedTraktContinueWatchingMovieId,
+        resolvedTraktContinueWatchingMovieId:
+            resolvedTraktContinueWatchingMovieId,
+        savedTraktContinueWatchingShowId: selectedTraktContinueWatchingShowId,
+        resolvedTraktContinueWatchingShowId:
+            resolvedTraktContinueWatchingShowId,
       );
 
       setState(() {
@@ -101,12 +136,18 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         _stremioTvChannels = stremioTvChannels;
         _playlistItems = playlistItems;
         _continueWatchingItems = continueWatchingItems;
+        _traktContinueWatchingMovies = traktContinueWatchingMovies;
+        _traktContinueWatchingShows = traktContinueWatchingShows;
         _autoLaunchEnabled = autoLaunchEnabled;
         _startupMode = resolvedMode;
         _selectedChannelId = resolvedChannelId;
         _selectedStremioTvChannelId = resolvedStremioTvChannelId;
         _selectedPlaylistItemId = resolvedPlaylistItemId;
         _selectedContinueWatchingItemId = resolvedContinueWatchingItemId;
+        _selectedTraktContinueWatchingMovieId =
+            resolvedTraktContinueWatchingMovieId;
+        _selectedTraktContinueWatchingShowId =
+            resolvedTraktContinueWatchingShowId;
         _loading = false;
       });
     } catch (e) {
@@ -177,6 +218,24 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
           _selectedContinueWatchingItemId,
         );
       }
+      if (mode == 'trakt_continue_watching_movies' &&
+          _selectedTraktContinueWatchingMovieId == null &&
+          _traktContinueWatchingMovies.isNotEmpty) {
+        _selectedTraktContinueWatchingMovieId =
+            _traktContinueWatchingMovies.first.id;
+        await StorageService.setStartupTraktContinueWatchingMovieId(
+          _selectedTraktContinueWatchingMovieId,
+        );
+      }
+      if (mode == 'trakt_continue_watching_shows' &&
+          _selectedTraktContinueWatchingShowId == null &&
+          _traktContinueWatchingShows.isNotEmpty) {
+        _selectedTraktContinueWatchingShowId =
+            _traktContinueWatchingShows.first.id;
+        await StorageService.setStartupTraktContinueWatchingShowId(
+          _selectedTraktContinueWatchingShowId,
+        );
+      }
       await StorageService.setStartupMode(mode);
       setState(() {
         _startupMode = mode;
@@ -222,17 +281,55 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     }
   }
 
+  Future<void> _selectTraktContinueWatchingMovie(String? itemId) async {
+    try {
+      await StorageService.setStartupTraktContinueWatchingMovieId(itemId);
+      setState(() {
+        _selectedTraktContinueWatchingMovieId = itemId;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save Trakt movie selection: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectTraktContinueWatchingShow(String? itemId) async {
+    try {
+      await StorageService.setStartupTraktContinueWatchingShowId(itemId);
+      setState(() {
+        _selectedTraktContinueWatchingShowId = itemId;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save Trakt show selection: $e')),
+        );
+      }
+    }
+  }
+
   List<String> _availableModes({
     required bool hasDebrifyChannels,
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
     required bool hasContinueWatchingItems,
+    required bool hasTraktContinueWatchingMovies,
+    required bool hasTraktContinueWatchingShows,
   }) {
     final modes = <String>[];
     if (hasDebrifyChannels) modes.add('channel');
     if (hasStremioTvChannels) modes.add('stremio_tv');
     if (hasPlaylistItems) modes.add('playlist');
     if (hasContinueWatchingItems) modes.add('continue_watching');
+    if (hasTraktContinueWatchingMovies) {
+      modes.add('trakt_continue_watching_movies');
+    }
+    if (hasTraktContinueWatchingShows) {
+      modes.add('trakt_continue_watching_shows');
+    }
     return modes;
   }
 
@@ -297,6 +394,18 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     return exists ? itemId : continueWatchingItems.first['imdbId'] as String?;
   }
 
+  String? _resolveTraktContinueWatchingItemId(
+    String? itemId,
+    List<TraktContinueWatchingItem> items,
+  ) {
+    if (items.isEmpty) return itemId;
+    if (itemId == null || itemId.isEmpty) {
+      return items.first.id;
+    }
+    final exists = items.any((item) => item.id == itemId);
+    return exists ? itemId : items.first.id;
+  }
+
   Future<void> _persistResolvedStartupSettings({
     required String savedMode,
     required String resolvedMode,
@@ -304,12 +413,18 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
     required bool hasContinueWatchingItems,
+    required bool hasTraktContinueWatchingMovies,
+    required bool hasTraktContinueWatchingShows,
     required String? savedChannelId,
     required String resolvedChannelId,
     required String? savedPlaylistItemId,
     required String? resolvedPlaylistItemId,
     required String? savedContinueWatchingItemId,
     required String? resolvedContinueWatchingItemId,
+    required String? savedTraktContinueWatchingMovieId,
+    required String? resolvedTraktContinueWatchingMovieId,
+    required String? savedTraktContinueWatchingShowId,
+    required String? resolvedTraktContinueWatchingShowId,
   }) async {
     final writes = <Future<void>>[];
 
@@ -320,6 +435,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       hasStremioTvChannels: hasStremioTvChannels,
       hasPlaylistItems: hasPlaylistItems,
       hasContinueWatchingItems: hasContinueWatchingItems,
+      hasTraktContinueWatchingMovies: hasTraktContinueWatchingMovies,
+      hasTraktContinueWatchingShows: hasTraktContinueWatchingShows,
     )) {
       writes.add(StorageService.setStartupMode(resolvedMode));
     }
@@ -342,6 +459,26 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       );
     }
 
+    if (savedTraktContinueWatchingMovieId !=
+            resolvedTraktContinueWatchingMovieId &&
+        hasTraktContinueWatchingMovies) {
+      writes.add(
+        StorageService.setStartupTraktContinueWatchingMovieId(
+          resolvedTraktContinueWatchingMovieId,
+        ),
+      );
+    }
+
+    if (savedTraktContinueWatchingShowId !=
+            resolvedTraktContinueWatchingShowId &&
+        hasTraktContinueWatchingShows) {
+      writes.add(
+        StorageService.setStartupTraktContinueWatchingShowId(
+          resolvedTraktContinueWatchingShowId,
+        ),
+      );
+    }
+
     if (writes.isNotEmpty) {
       await Future.wait(writes);
     }
@@ -354,6 +491,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
     required bool hasContinueWatchingItems,
+    required bool hasTraktContinueWatchingMovies,
+    required bool hasTraktContinueWatchingShows,
   }) {
     if (savedMode == resolvedMode) return false;
 
@@ -364,6 +503,10 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         return !hasPlaylistItems;
       case 'continue_watching':
         return !hasContinueWatchingItems;
+      case 'trakt_continue_watching_movies':
+        return !hasTraktContinueWatchingMovies;
+      case 'trakt_continue_watching_shows':
+        return !hasTraktContinueWatchingShows;
       case 'stremio_tv':
         return !hasStremioTvChannels &&
             _modeHasAvailableContent(
@@ -372,6 +515,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
               hasStremioTvChannels: hasStremioTvChannels,
               hasPlaylistItems: hasPlaylistItems,
               hasContinueWatchingItems: hasContinueWatchingItems,
+              hasTraktContinueWatchingMovies: hasTraktContinueWatchingMovies,
+              hasTraktContinueWatchingShows: hasTraktContinueWatchingShows,
             );
       default:
         return true;
@@ -384,6 +529,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
     required bool hasContinueWatchingItems,
+    required bool hasTraktContinueWatchingMovies,
+    required bool hasTraktContinueWatchingShows,
   }) {
     switch (mode) {
       case 'channel':
@@ -394,6 +541,10 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         return hasPlaylistItems;
       case 'continue_watching':
         return hasContinueWatchingItems;
+      case 'trakt_continue_watching_movies':
+        return hasTraktContinueWatchingMovies;
+      case 'trakt_continue_watching_shows':
+        return hasTraktContinueWatchingShows;
       default:
         return false;
     }
@@ -413,11 +564,17 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     final hasStremioTvChannels = _stremioTvChannels.isNotEmpty;
     final hasPlaylistItems = _playlistItems.isNotEmpty;
     final hasContinueWatchingItems = _continueWatchingItems.isNotEmpty;
+    final hasTraktContinueWatchingMovies =
+        _traktContinueWatchingMovies.isNotEmpty;
+    final hasTraktContinueWatchingShows =
+        _traktContinueWatchingShows.isNotEmpty;
     final hasAnyContent =
         hasChannels ||
         hasStremioTvChannels ||
         hasPlaylistItems ||
-        hasContinueWatchingItems;
+        hasContinueWatchingItems ||
+        hasTraktContinueWatchingMovies ||
+        hasTraktContinueWatchingShows;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Startup Settings')),
@@ -479,7 +636,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                     subtitle: Text(
                       hasAnyContent
                           ? 'Auto-play when app launches'
-                          : 'Create channels, add playlist items, or watch something to enable',
+                          : 'Create channels, add playlist items, connect Trakt, or watch something to enable',
                       style: TextStyle(
                         color: hasAnyContent
                             ? theme.colorScheme.onSurfaceVariant
@@ -511,6 +668,10 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                                 ? Icons.live_tv_rounded
                                 : _startupMode == 'continue_watching'
                                 ? Icons.play_circle_fill_rounded
+                                : _startupMode.startsWith(
+                                    'trakt_continue_watching',
+                                  )
+                                ? Icons.history_rounded
                                 : Icons.playlist_play_rounded,
                             color: theme.colorScheme.primary,
                           ),
@@ -541,6 +702,16 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                             const DropdownMenuItem<String>(
                               value: 'continue_watching',
                               child: Text('Continue Watching Item'),
+                            ),
+                          if (hasTraktContinueWatchingMovies)
+                            const DropdownMenuItem<String>(
+                              value: 'trakt_continue_watching_movies',
+                              child: Text('Trakt Continue Watching Movie'),
+                            ),
+                          if (hasTraktContinueWatchingShows)
+                            const DropdownMenuItem<String>(
+                              value: 'trakt_continue_watching_shows',
+                              child: Text('Trakt Continue Watching Show'),
                             ),
                         ],
                         onChanged: (value) {
@@ -705,6 +876,74 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                               _selectContinueWatchingItem(value),
                         ),
                       ),
+
+                    if (_startupMode == 'trakt_continue_watching_movies' &&
+                        _traktContinueWatchingMovies.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedTraktContinueWatchingMovieId,
+                          decoration: InputDecoration(
+                            labelText: 'Select Trakt movie',
+                            prefixIcon: Icon(
+                              Icons.movie_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
+                          ),
+                          items: _traktContinueWatchingMovies.map((item) {
+                            return DropdownMenuItem<String>(
+                              value: item.id,
+                              child: Text(
+                                item.title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) =>
+                              _selectTraktContinueWatchingMovie(value),
+                        ),
+                      ),
+
+                    if (_startupMode == 'trakt_continue_watching_shows' &&
+                        _traktContinueWatchingShows.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedTraktContinueWatchingShowId,
+                          decoration: InputDecoration(
+                            labelText: 'Select Trakt show',
+                            prefixIcon: Icon(
+                              Icons.tv_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
+                          ),
+                          items: _traktContinueWatchingShows.map((item) {
+                            return DropdownMenuItem<String>(
+                              value: item.id,
+                              child: Text(
+                                item.title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) =>
+                              _selectTraktContinueWatchingShow(value),
+                        ),
+                      ),
                   ],
                 ],
               ),
@@ -733,6 +972,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                             ? 'When enabled, the app will automatically navigate to Stremio TV and start playing your selected channel on startup. This skips the normal home screen.'
                             : _startupMode == 'continue_watching'
                             ? 'When enabled, the app will automatically quick play your selected Continue Watching item on startup. This skips the normal home screen.'
+                            : _startupMode.startsWith('trakt_continue_watching')
+                            ? 'When enabled, the app will automatically quick play your selected Trakt Continue Watching item on startup. This skips the normal home screen.'
                             : 'When enabled, the app will automatically start playing your selected playlist item on startup. This skips the normal home screen.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,

@@ -1123,6 +1123,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!mounted) return;
       await _handleStartupContinueWatchingItem(item);
     };
+    MainPageBridge.watchAdvancedSearchSelection = (selection) async {
+      if (!mounted) return;
+      await _handleStartupAdvancedSearchSelection(selection);
+    };
 
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -1184,6 +1188,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       final item = MainPageBridge.getAndClearContinueWatchingItemToAutoPlay();
       if (item != null) {
         unawaited(_handleStartupContinueWatchingItem(item));
+      }
+      final selection =
+          MainPageBridge.getAndClearAdvancedSearchSelectionToAutoPlay();
+      if (selection != null) {
+        unawaited(_handleStartupAdvancedSearchSelection(selection));
       }
     });
   }
@@ -2469,6 +2478,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.handleTorboxResult = null;
     MainPageBridge.handlePikPakResult = null;
     MainPageBridge.watchContinueWatchingItem = null;
+    MainPageBridge.watchAdvancedSearchSelection = null;
     _listAnimationController.dispose();
     super.dispose();
   }
@@ -4002,6 +4012,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _handleStartupContinueWatchingItem(
     Map<String, dynamic> item,
   ) async {
+    await _handleStartupQuickPlaySelection(
+      () => _selectionFromStartupContinueWatchingItem(item),
+      unavailableReason: 'Continue Watching item unavailable',
+    );
+  }
+
+  Future<void> _handleStartupAdvancedSearchSelection(
+    AdvancedSearchSelection selection,
+  ) async {
+    await _handleStartupQuickPlaySelection(() async => selection);
+  }
+
+  Future<void> _handleStartupQuickPlaySelection(
+    Future<AdvancedSearchSelection?> Function() resolveSelection, {
+    String unavailableReason = 'Continue Watching item unavailable',
+  }) async {
     if (_startupContinueWatchingInProgress) return;
     _startupContinueWatchingInProgress = true;
     _startupContinueWatchingAutoLaunchActive = true;
@@ -4013,11 +4039,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return;
       }
 
-      final selection = await _selectionFromStartupContinueWatchingItem(item);
+      final selection = await resolveSelection();
       if (selection == null) {
-        _failStartupContinueWatchingAutoLaunch(
-          'Continue Watching item unavailable',
-        );
+        _failStartupContinueWatchingAutoLaunch(unavailableReason);
         return;
       }
 

@@ -82,10 +82,14 @@ class StorageService {
   static const String _startupStremioTvChannelIdKey =
       'startup_stremio_tv_channel_id';
   static const String _startupModeKey =
-      'startup_mode'; // 'channel', 'stremio_tv', 'playlist', or 'continue_watching'
+      'startup_mode'; // 'channel', 'stremio_tv', 'playlist', 'continue_watching', 'trakt_continue_watching_movies', or 'trakt_continue_watching_shows'
   static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
   static const String _startupContinueWatchingItemIdKey =
       'startup_continue_watching_item_id';
+  static const String _startupTraktContinueWatchingMovieIdKey =
+      'startup_trakt_continue_watching_movie_id';
+  static const String _startupTraktContinueWatchingShowIdKey =
+      'startup_trakt_continue_watching_show_id';
 
   // Reddit settings
   static const String _redditAccessTokenKey = 'reddit_access_token';
@@ -1985,6 +1989,8 @@ class StorageService {
     await prefs.remove(_startupModeKey);
     await prefs.remove(_startupPlaylistItemIdKey);
     await prefs.remove(_startupContinueWatchingItemIdKey);
+    await prefs.remove(_startupTraktContinueWatchingMovieIdKey);
+    await prefs.remove(_startupTraktContinueWatchingShowIdKey);
   }
 
   /// Clear integration enabled states (RD, TorBox)
@@ -3006,6 +3012,38 @@ class StorageService {
       await prefs.remove(_startupContinueWatchingItemIdKey);
     } else {
       await prefs.setString(_startupContinueWatchingItemIdKey, itemId);
+    }
+  }
+
+  static Future<String?> getStartupTraktContinueWatchingMovieId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupTraktContinueWatchingMovieIdKey);
+  }
+
+  static Future<void> setStartupTraktContinueWatchingMovieId(
+    String? itemId,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (itemId == null) {
+      await prefs.remove(_startupTraktContinueWatchingMovieIdKey);
+    } else {
+      await prefs.setString(_startupTraktContinueWatchingMovieIdKey, itemId);
+    }
+  }
+
+  static Future<String?> getStartupTraktContinueWatchingShowId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupTraktContinueWatchingShowIdKey);
+  }
+
+  static Future<void> setStartupTraktContinueWatchingShowId(
+    String? itemId,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (itemId == null) {
+      await prefs.remove(_startupTraktContinueWatchingShowIdKey);
+    } else {
+      await prefs.setString(_startupTraktContinueWatchingShowIdKey, itemId);
     }
   }
 

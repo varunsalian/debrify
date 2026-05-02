@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/advanced_search_selection.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 
@@ -28,6 +29,8 @@ class MainPageBridge {
   static Future<void> Function(String channelId)? watchStremioTvChannel;
   static Future<void> Function(Map<String, dynamic> item)?
   watchContinueWatchingItem;
+  static Future<void> Function(AdvancedSearchSelection selection)?
+  watchAdvancedSearchSelection;
 
   // ==========================================================================
   // Back Navigation Handling
@@ -191,6 +194,29 @@ class MainPageBridge {
     final item = _continueWatchingItemToAutoPlay;
     _continueWatchingItemToAutoPlay = null;
     return item;
+  }
+
+  // Store a fully resolved Quick Play selection that should be auto-played when
+  // TorrentSearchScreen/Home is ready.
+  static AdvancedSearchSelection? _advancedSearchSelectionToAutoPlay;
+
+  static void notifyAdvancedSearchSelectionToAutoPlay(
+    AdvancedSearchSelection selection,
+  ) {
+    final watcher = watchAdvancedSearchSelection;
+    if (watcher != null) {
+      _advancedSearchSelectionToAutoPlay = null;
+      unawaited(watcher(selection));
+      return;
+    }
+    _advancedSearchSelectionToAutoPlay = selection;
+  }
+
+  static AdvancedSearchSelection?
+  getAndClearAdvancedSearchSelectionToAutoPlay() {
+    final selection = _advancedSearchSelectionToAutoPlay;
+    _advancedSearchSelectionToAutoPlay = null;
+    return selection;
   }
 
   // ==========================================================================
