@@ -331,6 +331,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _allowResumeForManualSelection =
       false; // Allow resuming for manual selections with progress
   Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
+  bool _continuousShuffleEnabled = false;
+  final List<int> _shuffleBag = [];
 
   // Channel metadata for Debrify TV flows
   String? _currentChannelName;
@@ -1161,6 +1163,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _markCurrentEpisodeAsFinished();
 
     // Playlist auto-advance keeps priority over guide-based Stremio TV next.
+    if (_continuousShuffleEnabled) {
+      final shuffleIndex = _pickShuffleIndex();
+      if (shuffleIndex != null) {
+        _isAutoAdvancing = true;
+        await _loadPlaylistIndex(shuffleIndex, autoplay: true);
+        return;
+      }
+    }
+
     final nextIndex = _findNextEpisodeIndex();
     if (nextIndex != -1) {
       _isAutoAdvancing = true;
@@ -1443,13 +1454,147 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return main;
   }
 
-  Future<void> _playRandom() async {
+  Future<void> _showRandomPlaybackMenu() async {
     final entries = _activePlaylist ?? const [];
-    if (entries.isEmpty) return;
-    final rnd = math.Random();
-    final nextIndex = rnd.nextInt(entries.length);
+    if (entries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No playlist items available')),
+      );
+      return;
+    }
+
+    _hideTimer?.cancel();
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final shuffleLabel = _continuousShuffleEnabled
+            ? 'Turn Off Continuous Shuffle'
+            : 'Shuffle Continuously';
+        final shuffleSubtitle = _continuousShuffleEnabled
+            ? 'Return to normal ordered playback'
+            : 'Keep picking random items after each episode ends';
+
+        return AlertDialog(
+          backgroundColor: const Color(0xFF141824),
+          title: const Text(
+            'Shuffle Playback',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _RandomChoiceTile(
+                icon: Icons.shuffle_rounded,
+                title: 'Play Random Once',
+                subtitle: 'Pick one random item, then resume normal order',
+                onTap: () => Navigator.of(context).pop('once'),
+              ),
+              const SizedBox(height: 8),
+              _RandomChoiceTile(
+                icon: _continuousShuffleEnabled
+                    ? Icons.check_circle_rounded
+                    : Icons.all_inclusive_rounded,
+                title: shuffleLabel,
+                subtitle: shuffleSubtitle,
+                onTap: () => Navigator.of(context).pop('continuous'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+    _scheduleAutoHide();
+
+    if (choice == 'once') {
+      await _playRandomOnce(disableContinuousShuffle: true);
+    } else if (choice == 'continuous') {
+      if (_continuousShuffleEnabled) {
+        setState(() {
+          _continuousShuffleEnabled = false;
+          _shuffleBag.clear();
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
+      } else {
+        setState(() {
+          _continuousShuffleEnabled = true;
+          _shuffleBag.clear();
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
+        await _playRandomOnce(disableContinuousShuffle: false);
+      }
+    }
+  }
+
+  Future<void> _playRandomOnce({required bool disableContinuousShuffle}) async {
+    if (disableContinuousShuffle) {
+      if (_continuousShuffleEnabled) {
+        setState(() {
+          _continuousShuffleEnabled = false;
+          _shuffleBag.clear();
+        });
+      } else {
+        _shuffleBag.clear();
+      }
+    }
+
+    final nextIndex = _pickShuffleIndex();
+    if (nextIndex == null) return;
     _setManualSelectionMode();
     await _loadPlaylistIndex(nextIndex, autoplay: true);
+  }
+
+  List<int> _shuffleEligibleIndices() {
+    final entries = _activePlaylist;
+    if (entries == null || entries.isEmpty) return const [];
+
+    final seriesPlaylist = _seriesPlaylist;
+    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      final indices = seriesPlaylist.allEpisodes
+          .map((episode) => episode.originalIndex)
+          .where((index) => index >= 0 && index < entries.length)
+          .toSet()
+          .toList();
+      if (indices.isNotEmpty) return indices;
+    }
+
+    if (widget.viewMode == PlaylistViewMode.raw ||
+        widget.viewMode == PlaylistViewMode.sorted) {
+      return List<int>.generate(entries.length, (index) => index);
+    }
+
+    final mainIndices = _getMainGroupIndices(
+      entries,
+    ).where((index) => index >= 0 && index < entries.length).toList();
+    if (mainIndices.isNotEmpty) return mainIndices;
+
+    return List<int>.generate(entries.length, (index) => index);
+  }
+
+  int? _pickShuffleIndex() {
+    final eligible = _shuffleEligibleIndices();
+    if (eligible.isEmpty) return null;
+    if (eligible.length == 1) return eligible.first;
+
+    final eligibleSet = eligible.toSet();
+    _shuffleBag.removeWhere(
+      (index) => !eligibleSet.contains(index) || index == _currentIndex,
+    );
+
+    if (_shuffleBag.isEmpty) {
+      _shuffleBag.addAll(
+        eligible.where((index) => index != _currentIndex).toList()
+          ..shuffle(_random),
+      );
+    }
+
+    if (_shuffleBag.isEmpty) return null;
+    return _shuffleBag.removeLast();
   }
 
   /// Find the previous logical episode index
@@ -1559,6 +1704,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       await _player.pause();
     } catch (_) {}
+    if (_continuousShuffleEnabled) {
+      final shuffleIndex = _pickShuffleIndex();
+      if (shuffleIndex != null) {
+        _setManualSelectionMode();
+        await _loadPlaylistIndex(shuffleIndex, autoplay: true);
+        return;
+      }
+    }
+
     final nextIndex = _findNextEpisodeIndex();
     if (nextIndex != -1) {
       // Mark this as a manual episode selection
@@ -4824,7 +4978,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           hideSeekbar: widget.hideSeekbar,
                           hideOptions: widget.hideOptions,
                           hideBackButton: widget.hideBackButton,
-                          onRandom: _playRandom,
+                          onRandom: () => unawaited(_showRandomPlaybackMenu()),
                           hasIptvChannels:
                               widget.iptvChannels != null &&
                               widget.iptvChannels!.isNotEmpty,
@@ -5522,5 +5676,67 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Create a simple hash (we could use a proper hash function, but this is sufficient for our needs)
     final hash = nameWithoutExt.hashCode.toString();
     return hash;
+  }
+}
+
+class _RandomChoiceTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RandomChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: const Color(0xFFFCA5A5), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

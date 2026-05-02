@@ -148,6 +148,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var seriesPlaylistAdapter: PlaylistAdapter? = null
     private var moviePlaylistAdapter: MoviePlaylistAdapter? = null
     private var movieGroups: MovieGroups? = null
+    private var continuousShuffleEnabled = false
+    private val shuffleBag = mutableListOf<Int>()
     private var lastBackPressTime: Long = 0
 
     // IPTV mode state
@@ -363,6 +365,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     hideBufferingIndicator()
                     sendProgress(completed = true)
                     val model = payload ?: return
+                    if (continuousShuffleEnabled) {
+                        val shuffleIndex = pickShuffleIndex()
+                        if (shuffleIndex != null) {
+                            showNextOverlay(model.items[shuffleIndex])
+                            progressHandler.postDelayed({
+                                hideNextOverlay()
+                                playItem(shuffleIndex)
+                            }, 1500)
+                            return
+                        }
+                    }
+
                     val nextIndex = getNextPlayableIndex(currentIndex)
                     if (nextIndex != null) {
                         showNextOverlay(model.items[nextIndex])
@@ -1574,7 +1588,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         randomButton?.setOnClickListener {
             hideControlsMenu()
-            playRandom()
+            showRandomPlaybackDialog()
         }
         randomButton?.onFocusChangeListener = extendTimerOnFocus
     }
@@ -1843,6 +1857,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun playNext() {
+        if (continuousShuffleEnabled) {
+            val shuffleIndex = pickShuffleIndex()
+            if (shuffleIndex != null) {
+                playItem(shuffleIndex)
+                return
+            }
+        }
+
         val nextIndex = getNextPlayableIndex(currentIndex)
         if (nextIndex != null) {
             playItem(nextIndex)
@@ -1873,8 +1895,88 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        val randomIndex = (0 until model.items.size).random()
+        val randomIndex = pickShuffleIndex() ?: return
         playItem(randomIndex)
+    }
+
+    private fun showRandomPlaybackDialog() {
+        val model = payload
+        if (model == null || model.items.isEmpty()) {
+            Toast.makeText(this, "No items in playlist", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val shuffleLabel = if (continuousShuffleEnabled) {
+            "Turn Off Continuous Shuffle"
+        } else {
+            "Shuffle Continuously"
+        }
+        val choices = arrayOf("Play Random Once", shuffleLabel)
+
+        AlertDialog.Builder(this)
+            .setTitle("Shuffle Playback")
+            .setItems(choices) { _, which ->
+                when (which) {
+                    0 -> {
+                        continuousShuffleEnabled = false
+                        shuffleBag.clear()
+                        playRandom()
+                    }
+                    1 -> {
+                        if (continuousShuffleEnabled) {
+                            continuousShuffleEnabled = false
+                            shuffleBag.clear()
+                            Toast.makeText(this, "Continuous shuffle off", Toast.LENGTH_SHORT).show()
+                        } else {
+                            continuousShuffleEnabled = true
+                            shuffleBag.clear()
+                            Toast.makeText(this, "Continuous shuffle on", Toast.LENGTH_SHORT).show()
+                            playRandom()
+                        }
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun getShuffleEligibleIndices(): List<Int> {
+        val model = payload ?: return emptyList()
+        if (model.items.isEmpty()) return emptyList()
+
+        if (playlistMode == PlaylistMode.SERIES) {
+            val episodeIndices = model.items.mapIndexedNotNull { index, item ->
+                if (item.season != null && item.episode != null) index else null
+            }
+            if (episodeIndices.isNotEmpty()) return episodeIndices
+        }
+
+        if (playlistMode == PlaylistMode.COLLECTION) {
+            val preferredGroup = movieGroups?.groups?.firstOrNull {
+                it.name.equals("Main", ignoreCase = true)
+            } ?: movieGroups?.groups?.firstOrNull()
+            val indices = preferredGroup?.fileIndices
+                ?.filter { it in model.items.indices }
+                ?: emptyList()
+            if (indices.isNotEmpty()) return indices
+        }
+
+        return model.items.indices.toList()
+    }
+
+    private fun pickShuffleIndex(): Int? {
+        val eligible = getShuffleEligibleIndices().distinct()
+        if (eligible.isEmpty()) return null
+        if (eligible.size == 1) return eligible.first()
+
+        val eligibleSet = eligible.toSet()
+        shuffleBag.removeAll { it !in eligibleSet || it == currentIndex }
+
+        if (shuffleBag.isEmpty()) {
+            shuffleBag.addAll(eligible.filter { it != currentIndex }.shuffled())
+        }
+
+        if (shuffleBag.isEmpty()) return null
+        return shuffleBag.removeAt(shuffleBag.lastIndex)
     }
 
     private fun updateTitle(item: PlaybackItem) {
@@ -4993,6 +5095,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Replace payload items and content type
         model.items.clear()
         model.items.addAll(newItems)
+        shuffleBag.clear()
 
         // Rebuild navigation maps for new items
         rebuildNavigationMaps(model, contentType)
