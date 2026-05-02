@@ -210,6 +210,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
   List<PlaylistEntry>? _activePlaylist;
+  int _playlistIdentityToken = 0;
   final ValueNotifier<bool> _controlsVisible = ValueNotifier<bool>(true);
   String?
   _currentStreamUrl; // Last resolved stream URL for the active playlist entry
@@ -400,6 +401,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       false; // Track if embedded subtitle was auto-selected
   bool _userManuallySelectedSubtitle =
       false; // Track if user manually selected a subtitle
+  bool _trackPreferencesReadyForAddonSubtitles = false;
   int _addonSubtitleFetchToken =
       0; // Guard against stale async fetches on content switch
   // Paths of temp SRT/VTT files we've written for addon subtitles. We hand
@@ -2086,6 +2088,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _activePlaylist = newPlaylist;
       _cachedSeriesPlaylist = null;
+      _playlistIdentityToken++;
     });
 
     // Load first entry of new playlist
@@ -3401,6 +3404,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final seriesPlaylist = _seriesPlaylist;
 
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
+      final playlistIdentityToken = _playlistIdentityToken;
       // Preload episode information in the background
       // Pass IMDB ID from catalog for faster, more accurate lookup
       seriesPlaylist
@@ -3409,16 +3413,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             imdbId: widget.contentImdbId,
           )
           .then((_) async {
+            if (!mounted ||
+                playlistIdentityToken != _playlistIdentityToken ||
+                !identical(seriesPlaylist, _seriesPlaylist)) {
+              return;
+            }
+
+            // TVMaze can discover the series IMDB ID after the initial subtitle
+            // restore has already run. Retry the existing addon subtitle path so
+            // RD/Torbox season packs do not require reopening the player.
+            _retryAddonSubtitleFetchAfterSeriesMetadata(
+              seriesPlaylist,
+              playlistIdentityToken,
+            );
+
+            // Trigger UI update to show the episode info
+            setState(() {});
+
             // Save discovered IMDB ID back to playlist item for future direct plays
             await _saveImdbIdToPlaylist(seriesPlaylist);
 
             // Extract poster URL from series data and save to playlist
             await _saveSeriesPosterToPlaylist(seriesPlaylist);
-
-            // Trigger UI update to show the episode info
-            if (mounted) {
-              setState(() {});
-            }
           })
           .catchError((error) {
             // Silently handle errors - this is just preloading
@@ -3441,6 +3457,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Single-file playback (no playlist) - try to fetch movie metadata from title
       _fetchSingleFileMovieMetadata();
     }
+  }
+
+  void _retryAddonSubtitleFetchAfterSeriesMetadata(
+    SeriesPlaylist seriesPlaylist,
+    int playlistIdentityToken,
+  ) {
+    final imdbId = seriesPlaylist.imdbId;
+    if (imdbId == null || !imdbId.startsWith('tt')) return;
+    if (playlistIdentityToken != _playlistIdentityToken) return;
+    if (!identical(seriesPlaylist, _seriesPlaylist)) return;
+
+    // If track preferences have not completed yet, the normal restore path will
+    // see the newly discovered IMDB ID and fetch subtitles at the right time.
+    if (!_trackPreferencesReadyForAddonSubtitles) {
+      debugPrint(
+        'VideoPlayer: Series IMDB resolved before track restore; subtitle fetch will run during restore',
+      );
+      return;
+    }
+
+    debugPrint(
+      'VideoPlayer: Series IMDB resolved after initial subtitle fetch, retrying addon subtitles (IMDB: $imdbId)',
+    );
+    unawaited(_fetchAndMaybeAutoSelectAddonSubtitle());
   }
 
   /// Fetch movie metadata for single-file playback (when no playlist exists)
@@ -5230,6 +5270,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _selectedStremioSubtitleId = null;
     _embeddedSubtitleApplied = false;
     _userManuallySelectedSubtitle = false;
+    _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
     _cleanupTempSubtitleFilesSync();
   }
@@ -5323,6 +5364,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // Track if embedded subtitle was applied for addon fallback
       _embeddedSubtitleApplied = subtitleApplied;
+      _trackPreferencesReadyForAddonSubtitles = true;
 
       // Always fetch Stremio addon subtitles proactively (like Android TV)
       // Auto-selection will only happen if no embedded subtitle was applied
@@ -5492,9 +5534,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         imdbId = seriesPlaylist.imdbId;
         contentType = 'series';
         // Get current episode info from playlist using current index
-        if (_currentIndex >= 0 &&
-            _currentIndex < seriesPlaylist.allEpisodes.length) {
-          final currentEp = seriesPlaylist.allEpisodes[_currentIndex];
+        final currentEp = _findSeriesEpisodeForCurrentIndex(seriesPlaylist);
+        if (currentEp != null) {
           season = currentEp.seriesInfo.season;
           episode = currentEp.seriesInfo.episode;
         }
@@ -5643,6 +5684,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {
       debugPrint('VideoPlayer: Addon subtitle fetch/auto-selection failed: $e');
     }
+  }
+
+  SeriesEpisode? _findSeriesEpisodeForCurrentIndex(
+    SeriesPlaylist seriesPlaylist,
+  ) {
+    for (final episode in seriesPlaylist.allEpisodes) {
+      if (episode.originalIndex == _currentIndex) {
+        return episode;
+      }
+    }
+    if (_currentIndex >= 0 &&
+        _currentIndex < seriesPlaylist.allEpisodes.length) {
+      return seriesPlaylist.allEpisodes[_currentIndex];
+    }
+    return null;
   }
 
   Future<void> _persistTrackChoice(String audio, String subtitle) async {
