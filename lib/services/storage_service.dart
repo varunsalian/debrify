@@ -82,8 +82,10 @@ class StorageService {
   static const String _startupStremioTvChannelIdKey =
       'startup_stremio_tv_channel_id';
   static const String _startupModeKey =
-      'startup_mode'; // 'channel', 'stremio_tv', or 'playlist'
+      'startup_mode'; // 'channel', 'stremio_tv', 'playlist', or 'continue_watching'
   static const String _startupPlaylistItemIdKey = 'startup_playlist_item_id';
+  static const String _startupContinueWatchingItemIdKey =
+      'startup_continue_watching_item_id';
 
   // Reddit settings
   static const String _redditAccessTokenKey = 'reddit_access_token';
@@ -1982,6 +1984,7 @@ class StorageService {
     await prefs.remove(_startupStremioTvChannelIdKey);
     await prefs.remove(_startupModeKey);
     await prefs.remove(_startupPlaylistItemIdKey);
+    await prefs.remove(_startupContinueWatchingItemIdKey);
   }
 
   /// Clear integration enabled states (RD, TorBox)
@@ -2989,6 +2992,20 @@ class StorageService {
       await prefs.remove(_startupPlaylistItemIdKey);
     } else {
       await prefs.setString(_startupPlaylistItemIdKey, itemId);
+    }
+  }
+
+  static Future<String?> getStartupContinueWatchingItemId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_startupContinueWatchingItemIdKey);
+  }
+
+  static Future<void> setStartupContinueWatchingItemId(String? itemId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (itemId == null) {
+      await prefs.remove(_startupContinueWatchingItemIdKey);
+    } else {
+      await prefs.setString(_startupContinueWatchingItemIdKey, itemId);
     }
   }
 

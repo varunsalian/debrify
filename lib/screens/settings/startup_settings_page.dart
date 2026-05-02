@@ -15,13 +15,16 @@ class StartupSettingsPage extends StatefulWidget {
 class _StartupSettingsPageState extends State<StartupSettingsPage> {
   bool _loading = true;
   bool _autoLaunchEnabled = false;
-  String _startupMode = 'channel'; // 'channel', 'stremio_tv', or 'playlist'
+  String _startupMode =
+      'channel'; // 'channel', 'stremio_tv', 'playlist', or 'continue_watching'
   String? _selectedChannelId; // "random" or actual channelId
   String? _selectedStremioTvChannelId; // "random" or actual channelId
   String? _selectedPlaylistItemId; // playlist item dedupe key
+  String? _selectedContinueWatchingItemId; // continue watching imdbId
   List<DebrifyTvChannelRecord> _channels = [];
   List<StremioTvChannel> _stremioTvChannels = [];
   List<Map<String, dynamic>> _playlistItems = [];
+  List<Map<String, dynamic>> _continueWatchingItems = [];
 
   @override
   void initState() {
@@ -40,6 +43,9 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       final stremioTvChannels = await StremioTvService.instance
           .discoverChannels();
       final playlistItems = await StorageService.getPlaylistItemsRaw();
+      final continueWatchingItems = _validContinueWatchingItems(
+        await StorageService.getContinueWatchingItems(),
+      );
 
       // Load settings
       final autoLaunchEnabled =
@@ -50,10 +56,13 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
           await StorageService.getStartupStremioTvChannelId();
       final selectedPlaylistItemId =
           await StorageService.getStartupPlaylistItemId();
+      final selectedContinueWatchingItemId =
+          await StorageService.getStartupContinueWatchingItemId();
       final availableModes = _availableModes(
         hasDebrifyChannels: channels.isNotEmpty,
         hasStremioTvChannels: stremioTvChannels.isNotEmpty,
         hasPlaylistItems: playlistItems.isNotEmpty,
+        hasContinueWatchingItems: continueWatchingItems.isNotEmpty,
       );
       final resolvedMode = _resolveStartupMode(startupMode, availableModes);
       final resolvedChannelId = _resolveDebrifyChannelId(
@@ -68,27 +77,36 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         selectedPlaylistItemId,
         playlistItems,
       );
+      final resolvedContinueWatchingItemId = _resolveContinueWatchingItemId(
+        selectedContinueWatchingItemId,
+        continueWatchingItems,
+      );
       await _persistResolvedStartupSettings(
         savedMode: startupMode,
         resolvedMode: resolvedMode,
         hasDebrifyChannels: channels.isNotEmpty,
         hasStremioTvChannels: stremioTvChannels.isNotEmpty,
         hasPlaylistItems: playlistItems.isNotEmpty,
+        hasContinueWatchingItems: continueWatchingItems.isNotEmpty,
         savedChannelId: selectedChannelId,
         resolvedChannelId: resolvedChannelId,
         savedPlaylistItemId: selectedPlaylistItemId,
         resolvedPlaylistItemId: resolvedPlaylistItemId,
+        savedContinueWatchingItemId: selectedContinueWatchingItemId,
+        resolvedContinueWatchingItemId: resolvedContinueWatchingItemId,
       );
 
       setState(() {
         _channels = channels;
         _stremioTvChannels = stremioTvChannels;
         _playlistItems = playlistItems;
+        _continueWatchingItems = continueWatchingItems;
         _autoLaunchEnabled = autoLaunchEnabled;
         _startupMode = resolvedMode;
         _selectedChannelId = resolvedChannelId;
         _selectedStremioTvChannelId = resolvedStremioTvChannelId;
         _selectedPlaylistItemId = resolvedPlaylistItemId;
+        _selectedContinueWatchingItemId = resolvedContinueWatchingItemId;
         _loading = false;
       });
     } catch (e) {
@@ -150,6 +168,15 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
 
   Future<void> _selectMode(String mode) async {
     try {
+      if (mode == 'continue_watching' &&
+          _selectedContinueWatchingItemId == null &&
+          _continueWatchingItems.isNotEmpty) {
+        _selectedContinueWatchingItemId =
+            _continueWatchingItems.first['imdbId'] as String?;
+        await StorageService.setStartupContinueWatchingItemId(
+          _selectedContinueWatchingItemId,
+        );
+      }
       await StorageService.setStartupMode(mode);
       setState(() {
         _startupMode = mode;
@@ -178,15 +205,34 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     }
   }
 
+  Future<void> _selectContinueWatchingItem(String? itemId) async {
+    try {
+      await StorageService.setStartupContinueWatchingItemId(itemId);
+      setState(() {
+        _selectedContinueWatchingItemId = itemId;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save Continue Watching selection: $e'),
+          ),
+        );
+      }
+    }
+  }
+
   List<String> _availableModes({
     required bool hasDebrifyChannels,
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
+    required bool hasContinueWatchingItems,
   }) {
     final modes = <String>[];
     if (hasDebrifyChannels) modes.add('channel');
     if (hasStremioTvChannels) modes.add('stremio_tv');
     if (hasPlaylistItems) modes.add('playlist');
+    if (hasContinueWatchingItems) modes.add('continue_watching');
     return modes;
   }
 
@@ -229,16 +275,41 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     return exists ? itemId : null;
   }
 
+  List<Map<String, dynamic>> _validContinueWatchingItems(
+    List<Map<String, dynamic>> items,
+  ) {
+    return items
+        .where((item) => (item['imdbId'] as String?)?.isNotEmpty == true)
+        .toList();
+  }
+
+  String? _resolveContinueWatchingItemId(
+    String? itemId,
+    List<Map<String, dynamic>> continueWatchingItems,
+  ) {
+    if (continueWatchingItems.isEmpty) return null;
+    if (itemId == null || itemId.isEmpty) {
+      return continueWatchingItems.first['imdbId'] as String?;
+    }
+    final exists = continueWatchingItems.any(
+      (item) => item['imdbId'] == itemId,
+    );
+    return exists ? itemId : continueWatchingItems.first['imdbId'] as String?;
+  }
+
   Future<void> _persistResolvedStartupSettings({
     required String savedMode,
     required String resolvedMode,
     required bool hasDebrifyChannels,
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
+    required bool hasContinueWatchingItems,
     required String? savedChannelId,
     required String resolvedChannelId,
     required String? savedPlaylistItemId,
     required String? resolvedPlaylistItemId,
+    required String? savedContinueWatchingItemId,
+    required String? resolvedContinueWatchingItemId,
   }) async {
     final writes = <Future<void>>[];
 
@@ -248,6 +319,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       hasDebrifyChannels: hasDebrifyChannels,
       hasStremioTvChannels: hasStremioTvChannels,
       hasPlaylistItems: hasPlaylistItems,
+      hasContinueWatchingItems: hasContinueWatchingItems,
     )) {
       writes.add(StorageService.setStartupMode(resolvedMode));
     }
@@ -262,6 +334,14 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
       writes.add(StorageService.setStartupPlaylistItemId(null));
     }
 
+    if (savedContinueWatchingItemId != resolvedContinueWatchingItemId) {
+      writes.add(
+        StorageService.setStartupContinueWatchingItemId(
+          resolvedContinueWatchingItemId,
+        ),
+      );
+    }
+
     if (writes.isNotEmpty) {
       await Future.wait(writes);
     }
@@ -273,6 +353,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     required bool hasDebrifyChannels,
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
+    required bool hasContinueWatchingItems,
   }) {
     if (savedMode == resolvedMode) return false;
 
@@ -281,6 +362,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         return !hasDebrifyChannels;
       case 'playlist':
         return !hasPlaylistItems;
+      case 'continue_watching':
+        return !hasContinueWatchingItems;
       case 'stremio_tv':
         return !hasStremioTvChannels &&
             _modeHasAvailableContent(
@@ -288,6 +371,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
               hasDebrifyChannels: hasDebrifyChannels,
               hasStremioTvChannels: hasStremioTvChannels,
               hasPlaylistItems: hasPlaylistItems,
+              hasContinueWatchingItems: hasContinueWatchingItems,
             );
       default:
         return true;
@@ -299,6 +383,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     required bool hasDebrifyChannels,
     required bool hasStremioTvChannels,
     required bool hasPlaylistItems,
+    required bool hasContinueWatchingItems,
   }) {
     switch (mode) {
       case 'channel':
@@ -307,6 +392,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
         return hasStremioTvChannels;
       case 'playlist':
         return hasPlaylistItems;
+      case 'continue_watching':
+        return hasContinueWatchingItems;
       default:
         return false;
     }
@@ -325,8 +412,12 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
     final hasChannels = _channels.isNotEmpty;
     final hasStremioTvChannels = _stremioTvChannels.isNotEmpty;
     final hasPlaylistItems = _playlistItems.isNotEmpty;
+    final hasContinueWatchingItems = _continueWatchingItems.isNotEmpty;
     final hasAnyContent =
-        hasChannels || hasStremioTvChannels || hasPlaylistItems;
+        hasChannels ||
+        hasStremioTvChannels ||
+        hasPlaylistItems ||
+        hasContinueWatchingItems;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Startup Settings')),
@@ -359,7 +450,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Automatically start playing a channel or playlist item when the app launches',
+                            'Automatically start playing selected content when the app launches',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -388,7 +479,7 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                     subtitle: Text(
                       hasAnyContent
                           ? 'Auto-play when app launches'
-                          : 'Create channels or add playlist items to enable',
+                          : 'Create channels, add playlist items, or watch something to enable',
                       style: TextStyle(
                         color: hasAnyContent
                             ? theme.colorScheme.onSurfaceVariant
@@ -418,6 +509,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                                 ? Icons.tv_rounded
                                 : _startupMode == 'stremio_tv'
                                 ? Icons.live_tv_rounded
+                                : _startupMode == 'continue_watching'
+                                ? Icons.play_circle_fill_rounded
                                 : Icons.playlist_play_rounded,
                             color: theme.colorScheme.primary,
                           ),
@@ -443,6 +536,11 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                             const DropdownMenuItem<String>(
                               value: 'playlist',
                               child: Text('Playlist Item'),
+                            ),
+                          if (hasContinueWatchingItems)
+                            const DropdownMenuItem<String>(
+                              value: 'continue_watching',
+                              child: Text('Continue Watching Item'),
                             ),
                         ],
                         onChanged: (value) {
@@ -570,6 +668,43 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                           onChanged: (value) => _selectPlaylistItem(value),
                         ),
                       ),
+
+                    if (_startupMode == 'continue_watching' &&
+                        hasContinueWatchingItems)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedContinueWatchingItemId,
+                          decoration: InputDecoration(
+                            labelText: 'Select Continue Watching item',
+                            prefixIcon: Icon(
+                              Icons.play_circle_fill_rounded,
+                              color: theme.colorScheme.primary,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: theme.colorScheme.surfaceVariant
+                                .withOpacity(0.3),
+                          ),
+                          items: _continueWatchingItems.map((item) {
+                            final imdbId = item['imdbId'] as String;
+                            final title =
+                                (item['title'] as String?) ?? 'Unknown';
+                            return DropdownMenuItem<String>(
+                              value: imdbId,
+                              child: Text(
+                                title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) =>
+                              _selectContinueWatchingItem(value),
+                        ),
+                      ),
                   ],
                 ],
               ),
@@ -596,6 +731,8 @@ class _StartupSettingsPageState extends State<StartupSettingsPage> {
                             ? 'When enabled, the app will automatically navigate to Debrify TV and start playing your selected channel on startup. This skips the normal home screen.'
                             : _startupMode == 'stremio_tv'
                             ? 'When enabled, the app will automatically navigate to Stremio TV and start playing your selected channel on startup. This skips the normal home screen.'
+                            : _startupMode == 'continue_watching'
+                            ? 'When enabled, the app will automatically quick play your selected Continue Watching item on startup. This skips the normal home screen.'
                             : 'When enabled, the app will automatically start playing your selected playlist item on startup. This skips the normal home screen.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,

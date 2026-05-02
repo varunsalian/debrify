@@ -77,6 +77,7 @@ import '../widgets/home_focus_controller.dart';
 import '../models/iptv_playlist.dart';
 import '../services/imdb_lookup_service.dart';
 import '../services/local_bound_source_service.dart';
+import '../services/next_episode_service.dart';
 import '../services/stremio_service.dart';
 import '../services/aptabase_service.dart';
 import '../models/stremio_addon.dart';
@@ -323,6 +324,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String? _defaultCatalogId;
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
+  bool _apiKeysLoaded = false;
+  bool _startupContinueWatchingInProgress = false;
+  bool _startupContinueWatchingAutoLaunchActive = false;
   int _homeTraktRefreshNonce = 0;
   Set<HomeSection> _homeInitialLoadingSections = <HomeSection>{
     HomeSection.todayCalendar,
@@ -1115,6 +1119,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       await _showPikPakPostAddOptionsFromExternal(fileId, fileName);
     };
 
+    MainPageBridge.watchContinueWatchingItem = (item) async {
+      if (!mounted) return;
+      await _handleStartupContinueWatchingItem(item);
+    };
+
     _listAnimationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -1169,6 +1178,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Restore preserved state if available (returning from debrid folder view)
     _restorePreservedState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final item = MainPageBridge.getAndClearContinueWatchingItemToAutoPlay();
+      if (item != null) {
+        unawaited(_handleStartupContinueWatchingItem(item));
+      }
+    });
   }
 
   /// Restores search state if navigating back from debrid folder view
@@ -2083,6 +2100,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _torboxIntegrationEnabled = torboxEnabled;
       _pikpakEnabled = pikpakEnabled;
       _defaultTorrentProvider = defaultProvider;
+      _apiKeysLoaded = true;
     });
   }
 
@@ -2450,6 +2468,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.handleRealDebridResult = null;
     MainPageBridge.handleTorboxResult = null;
     MainPageBridge.handlePikPakResult = null;
+    MainPageBridge.watchContinueWatchingItem = null;
     _listAnimationController.dispose();
     super.dispose();
   }
@@ -3962,7 +3981,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (dialogOpen && mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-      if (played) return;
+      if (played) {
+        _completeStartupContinueWatchingAutoLaunch();
+        return;
+      }
     }
 
     // Set quick play pending state
@@ -3975,6 +3997,128 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     await _handleCatalogItemSelected(selection);
 
     // The search completion handler will check _quickPlayPending and auto-play
+  }
+
+  Future<void> _handleStartupContinueWatchingItem(
+    Map<String, dynamic> item,
+  ) async {
+    if (_startupContinueWatchingInProgress) return;
+    _startupContinueWatchingInProgress = true;
+    _startupContinueWatchingAutoLaunchActive = true;
+
+    try {
+      await _waitForStartupContinueWatchingReadiness();
+      if (!mounted) {
+        _failStartupContinueWatchingAutoLaunch('Continue Watching unavailable');
+        return;
+      }
+
+      final selection = await _selectionFromStartupContinueWatchingItem(item);
+      if (selection == null) {
+        _failStartupContinueWatchingAutoLaunch(
+          'Continue Watching item unavailable',
+        );
+        return;
+      }
+
+      await _handleQuickPlay(selection);
+      if (_startupContinueWatchingAutoLaunchActive && !_quickPlayPending) {
+        _failStartupContinueWatchingAutoLaunch('Quick Play could not start');
+      }
+    } catch (e) {
+      debugPrint('TorrentSearchScreen: Startup Continue Watching failed: $e');
+      _failStartupContinueWatchingAutoLaunch('Continue Watching failed: $e');
+    } finally {
+      _startupContinueWatchingInProgress = false;
+    }
+  }
+
+  void _completeStartupContinueWatchingAutoLaunch() {
+    if (!_startupContinueWatchingAutoLaunchActive) return;
+    _startupContinueWatchingAutoLaunchActive = false;
+    MainPageBridge.notifyPlayerLaunching();
+  }
+
+  void _failStartupContinueWatchingAutoLaunch(String reason) {
+    if (!_startupContinueWatchingAutoLaunchActive) return;
+    _startupContinueWatchingAutoLaunchActive = false;
+    MainPageBridge.notifyAutoLaunchFailed(reason);
+  }
+
+  Future<void> _waitForStartupContinueWatchingReadiness() async {
+    var attempts = 0;
+    while (mounted && attempts < 50) {
+      if (_apiKeysLoaded &&
+          !_isLoadingSourceOptions &&
+          _availableSourceOptions.isNotEmpty) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+      attempts++;
+    }
+  }
+
+  Future<AdvancedSearchSelection?> _selectionFromStartupContinueWatchingItem(
+    Map<String, dynamic> item,
+  ) async {
+    final imdbId = item['imdbId'] as String?;
+    if (imdbId == null || imdbId.isEmpty) return null;
+
+    final contentType = item['contentType'] as String? ?? 'movie';
+    final title = item['title'] as String? ?? '';
+    final isSeries = contentType == 'series';
+    int? season;
+    int? episode;
+    var progress = 0.0;
+
+    if (isSeries) {
+      final lastEpisode = await StorageService.getLastPlayedEpisodeByImdbId(
+        imdbId,
+      );
+      if (lastEpisode != null) {
+        season = lastEpisode['season'] as int?;
+        episode = lastEpisode['episode'] as int?;
+        final finished = lastEpisode['finished'] == true;
+        final positionMs = lastEpisode['positionMs'] as int? ?? 0;
+        final durationMs = lastEpisode['durationMs'] as int? ?? 1;
+        if (durationMs > 0) {
+          progress = finished
+              ? 100.0
+              : (positionMs / durationMs * 100).clamp(0.0, 100.0).toDouble();
+        }
+      }
+
+      if (season == null || episode == null) {
+        final titleEpisode = await StorageService.getLastPlayedEpisode(
+          seriesTitle: title,
+        );
+        season = titleEpisode?['season'] as int? ?? 1;
+        episode = titleEpisode?['episode'] as int? ?? 1;
+      }
+
+      if (progress >= 90) {
+        final nextEpisode = await NextEpisodeService.findNextEpisode(
+          imdbId,
+          season,
+          episode,
+        );
+        if (nextEpisode != null) {
+          season = nextEpisode.season;
+          episode = nextEpisode.episode;
+        }
+      }
+    }
+
+    return AdvancedSearchSelection(
+      imdbId: imdbId,
+      isSeries: isSeries,
+      title: title,
+      year: item['year'] as String?,
+      contentType: contentType,
+      posterUrl: item['posterUrl'] as String?,
+      season: season,
+      episode: episode,
+    );
   }
 
   /// Handle Quick Play next episode result from video player.
@@ -5291,6 +5435,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _quickPlayPending = false;
       });
+      _failStartupContinueWatchingAutoLaunch('No sources found for Quick Play');
       // Show a snackbar to inform user
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5336,6 +5481,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _quickPlayPending = false;
       });
+      _failStartupContinueWatchingAutoLaunch(reason);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -5357,7 +5503,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'TorrentSearchScreen: Quick Play - using direct stream${!hasDebridProvider ? " (no debrid configured)" : ""}',
       );
       selectedTorrent = directStreams.first;
-      final index = _torrents.indexOf(selectedTorrent!);
+      final index = _torrents.indexOf(selectedTorrent);
       debugPrint(
         'TorrentSearchScreen: Quick Play - playing direct stream: ${selectedTorrent.displayTitle}',
       );
@@ -5367,7 +5513,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _quickPlayPending = false;
       });
 
-      _handleTorrentCardActivated(selectedTorrent, index >= 0 ? index : 0);
+      _completeStartupContinueWatchingAutoLaunch();
+      _restoreFocusToCard(index >= 0 ? index : 0);
+      if (selectedTorrent.isExternalStream) {
+        await _openExternalStream(selectedTorrent);
+      } else {
+        await _playDirectStream(selectedTorrent);
+      }
       return;
     }
 
@@ -5462,6 +5614,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       debugPrint(
         'TorrentSearchScreen: Quick Play - activating torrent at index $index',
       );
+      _completeStartupContinueWatchingAutoLaunch();
       _handleTorrentCardActivated(selectedTorrent, index >= 0 ? index : 0);
     }
   }
@@ -11812,6 +11965,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         'TorrentSearchScreen: Quick Play - exhausted retries ($_quickPlayCurrentIndex/$_quickPlayMaxRetries)',
       );
       _resetQuickPlayState();
+      _failStartupContinueWatchingAutoLaunch('Quick Play retries exhausted');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

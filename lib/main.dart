@@ -546,6 +546,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   // Auto-launch overlay state
   bool _showAutoLaunchOverlay = false;
+  String _autoLaunchTitle = 'Launching Debrify TV';
   String? _autoLaunchChannelName;
   int? _autoLaunchChannelNumber;
   bool _autoLaunchInProgress = false;
@@ -1590,6 +1591,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         case 'playlist':
           await _launchPlaylistItem();
           break;
+        case 'continue_watching':
+          await _launchContinueWatchingItem();
+          break;
         case 'stremio_tv':
           await _launchStremioTvChannel();
           break;
@@ -1604,6 +1608,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _showAutoLaunchOverlay = false;
+          _autoLaunchTitle = 'Launching Debrify TV';
           _autoLaunchChannelName = null;
           _autoLaunchChannelNumber = null;
         });
@@ -1655,6 +1660,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     setState(() {
       _showAutoLaunchOverlay = true;
+      _autoLaunchTitle = 'Launching Debrify TV';
       _autoLaunchChannelName = channelToLaunch.name;
       _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
           ? channelToLaunch.channelNumber
@@ -1702,6 +1708,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     setState(() {
       _showAutoLaunchOverlay = true;
+      _autoLaunchTitle = 'Launching Stremio TV';
       _autoLaunchChannelName = channelToLaunch.displayName;
       _autoLaunchChannelNumber = channelToLaunch.channelNumber > 0
           ? channelToLaunch.channelNumber
@@ -1750,6 +1757,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final itemTitle = (playlistItem['title'] as String?) ?? 'Playlist Item';
     setState(() {
       _showAutoLaunchOverlay = true;
+      _autoLaunchTitle = 'Launching Playlist';
       _autoLaunchChannelName = itemTitle;
       _autoLaunchChannelNumber = null;
     });
@@ -1770,11 +1778,54 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (mounted) _hideAutoLaunchOverlay();
   }
 
+  /// Launch a selected local Continue Watching item on startup.
+  Future<void> _launchContinueWatchingItem() async {
+    final items = await StorageService.getContinueWatchingItems();
+    if (items.isEmpty) {
+      return;
+    }
+
+    final selectedItemId =
+        await StorageService.getStartupContinueWatchingItemId();
+    if (selectedItemId == null || selectedItemId.isEmpty) {
+      return;
+    }
+
+    final itemToLaunch = items.firstWhereOrNull(
+      (item) => item['imdbId'] == selectedItemId,
+    );
+    if (itemToLaunch == null) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final itemTitle = (itemToLaunch['title'] as String?) ?? 'Continue Watching';
+    setState(() {
+      _showAutoLaunchOverlay = true;
+      _autoLaunchTitle = 'Launching Continue Watching';
+      _autoLaunchChannelName = itemTitle;
+      _autoLaunchChannelNumber = null;
+    });
+
+    _isAutoLaunchShowingOverlay = true;
+    MainPageBridge.notifyContinueWatchingItemToAutoPlay(itemToLaunch);
+
+    if (!mounted) {
+      return;
+    }
+
+    _onItemTapped(0); // Home / Torrent Search tab
+  }
+
   void _hideAutoLaunchOverlay() {
     if (!_showAutoLaunchOverlay) return;
     if (!mounted) return;
     setState(() {
       _showAutoLaunchOverlay = false;
+      _autoLaunchTitle = 'Launching Debrify TV';
       _autoLaunchChannelName = null;
       _autoLaunchChannelNumber = null;
     });
@@ -2211,6 +2262,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         // Auto-launch overlay (covers everything when shown)
         if (_showAutoLaunchOverlay)
           AutoLaunchOverlay(
+            launchTitle: _autoLaunchTitle,
             channelName: _autoLaunchChannelName ?? 'Loading...',
             channelNumber: _autoLaunchChannelNumber,
             onTimeout: _hideAutoLaunchOverlay,

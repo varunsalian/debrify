@@ -470,6 +470,8 @@ class VideoPlayerLauncher {
       'platform': AptabaseService.currentPlatformLabel(),
     });
 
+    MainPageBridge.notifyPlayerLaunching();
+
     // Log playlist entries to trace relativePath
     if (args.playlist != null && args.playlist!.isNotEmpty) {
       debugPrint(

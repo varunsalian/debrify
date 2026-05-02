@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 /// navigation and loading states, creating a seamless transition from
 /// app launch directly to video playback.
 class AutoLaunchOverlay extends StatefulWidget {
+  /// Main launch message displayed above the item name.
+  final String launchTitle;
+
   /// Name of the channel being launched
   final String channelName;
 
@@ -18,6 +21,7 @@ class AutoLaunchOverlay extends StatefulWidget {
 
   const AutoLaunchOverlay({
     super.key,
+    this.launchTitle = 'Launching Debrify TV',
     required this.channelName,
     this.channelNumber,
     this.onTimeout,
@@ -53,18 +57,11 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
     _logoFadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _logoController,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _logoController, curve: Curves.easeOut));
 
-    _logoScaleAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _logoController,
-      curve: Curves.elasticOut,
-    ));
+    _logoScaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+    );
 
     // Continuous pulse animation (2s, repeat with reverse)
     _pulseController = AnimationController(
@@ -72,13 +69,9 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
       vsync: this,
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(
-      begin: 0.6,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
+    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
 
     // Shimmer animation for text (1.5s, repeat)
     _shimmerController = AnimationController(
@@ -162,16 +155,13 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                               gradient: const LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF6366F1),
-                                  Color(0xFF8B5CF6),
-                                ],
+                                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF6366F1).withOpacity(
-                                    0.3 * _pulseAnimation.value,
-                                  ),
+                                  color: const Color(
+                                    0xFF6366F1,
+                                  ).withOpacity(0.3 * _pulseAnimation.value),
                                   blurRadius: 40 * _pulseAnimation.value,
                                   spreadRadius: 10 * _pulseAnimation.value,
                                 ),
@@ -190,7 +180,7 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
 
                   const SizedBox(height: 40),
 
-                  // "Launching Debrify TV" text with shimmer
+                  // Launch title text with shimmer
                   AnimatedBuilder(
                     animation: _shimmerAnimation,
                     builder: (context, child) {
@@ -211,9 +201,9 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                             ].map((stop) => stop.clamp(0.0, 1.0)).toList(),
                           ).createShader(bounds);
                         },
-                        child: const Text(
-                          'Launching Debrify TV',
-                          style: TextStyle(
+                        child: Text(
+                          widget.launchTitle,
+                          style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,

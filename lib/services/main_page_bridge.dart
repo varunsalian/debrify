@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/rd_torrent.dart';
@@ -24,6 +26,8 @@ class MainPageBridge {
   static VoidCallback? hideAutoLaunchOverlay;
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
   static Future<void> Function(String channelId)? watchStremioTvChannel;
+  static Future<void> Function(Map<String, dynamic> item)?
+  watchContinueWatchingItem;
 
   // ==========================================================================
   // Back Navigation Handling
@@ -166,6 +170,27 @@ class MainPageBridge {
     final channelId = _stremioTvChannelToAutoPlay;
     _stremioTvChannelToAutoPlay = null;
     return channelId;
+  }
+
+  // Store a local Continue Watching item that should be quick-played when
+  // TorrentSearchScreen/Home is ready.
+  static Map<String, dynamic>? _continueWatchingItemToAutoPlay;
+
+  static void notifyContinueWatchingItemToAutoPlay(Map<String, dynamic> item) {
+    final copiedItem = Map<String, dynamic>.from(item);
+    final watcher = watchContinueWatchingItem;
+    if (watcher != null) {
+      _continueWatchingItemToAutoPlay = null;
+      unawaited(watcher(copiedItem));
+      return;
+    }
+    _continueWatchingItemToAutoPlay = copiedItem;
+  }
+
+  static Map<String, dynamic>? getAndClearContinueWatchingItemToAutoPlay() {
+    final item = _continueWatchingItemToAutoPlay;
+    _continueWatchingItemToAutoPlay = null;
+    return item;
   }
 
   // ==========================================================================
