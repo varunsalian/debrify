@@ -20,6 +20,7 @@ import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
+import '../services/debrify_tv_channel_add_service.dart';
 import '../widgets/file_selection_dialog.dart';
 import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
@@ -3981,6 +3982,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                           _handleDownloadTorrent(torrent);
                         } else if (value == 'add_to_playlist') {
                           _handleAddTorrentToPlaylist(torrent);
+                        } else if (value == 'add_to_debrify_tv') {
+                          _handleAddTorrentToDebrifyTv(torrent);
                         } else if (value == 'delete') {
                           _handleDeleteTorrent(torrent);
                         }
@@ -4007,6 +4010,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               ),
                               SizedBox(width: 12),
                               Text('Add to Playlist'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'add_to_debrify_tv',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.live_tv_rounded,
+                                size: 18,
+                                color: Color(0xFF10B981),
+                              ),
+                              SizedBox(width: 12),
+                              Text('Add to Debrify TV'),
                             ],
                           ),
                         ),
@@ -4326,6 +4343,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
+  Future<void> _handleAddTorrentToDebrifyTv(RDTorrent torrent) async {
+    try {
+      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+        context,
+        torrents: [
+          DebrifyTvChannelAddService.fromRealDebridTorrent(torrent),
+        ],
+        searchKeyword: _torrentSearchQuery,
+      );
+
+      if (result == null || !mounted) return;
+      _showSuccess(result.successMessage);
+    } on DebrifyTvChannelAddException catch (e) {
+      if (!mounted) return;
+      _showError(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Failed to add torrent to Debrify TV: $e');
+    }
+  }
+
   void _showTorrentMoreOptions(RDTorrent torrent) {
     final isMultiFile = torrent.links.length > 1;
     final options = <_ActionSheetOption>[
@@ -4333,6 +4371,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         icon: Icons.playlist_add,
         label: 'Add to Playlist',
         onTap: () => _handleAddTorrentToPlaylist(torrent),
+      ),
+      _ActionSheetOption(
+        icon: Icons.live_tv_rounded,
+        label: 'Add to Debrify TV',
+        onTap: () => _handleAddTorrentToDebrifyTv(torrent),
       ),
       _ActionSheetOption(
         icon: Icons.copy,

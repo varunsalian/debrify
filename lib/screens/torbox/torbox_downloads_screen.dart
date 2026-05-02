@@ -15,6 +15,7 @@ import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/download_service.dart';
+import '../../services/debrify_tv_channel_add_service.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
@@ -387,6 +388,27 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     );
   }
 
+  Future<void> _handleAddToDebrifyTv(TorboxTorrent torrent) async {
+    try {
+      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+        context,
+        torrents: [
+          DebrifyTvChannelAddService.fromTorboxTorrent(torrent),
+        ],
+        searchKeyword: _torrentSearchQuery,
+      );
+
+      if (result == null || !mounted) return;
+      _showSnackBar(result.successMessage, isError: false);
+    } on DebrifyTvChannelAddException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to add torrent to Debrify TV: $e');
+    }
+  }
+
   Future<void> _copyTorrentLink(TorboxTorrent torrent) async {
     if (torrent.files.isEmpty) {
       _showComingSoon('No files available');
@@ -465,6 +487,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         icon: Icons.playlist_add,
         label: 'Add to Playlist',
         onTap: () => _handleAddToPlaylist(torrent),
+      ),
+      _TorboxMoreOption(
+        icon: Icons.live_tv_rounded,
+        label: 'Add to Debrify TV',
+        onTap: () => _handleAddToDebrifyTv(torrent),
       ),
       _TorboxMoreOption(
         icon: Icons.copy,
@@ -6524,6 +6551,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         _copyTorboxZipLink(torrent);
                       } else if (value == 'add_to_playlist') {
                         _handleAddToPlaylist(torrent);
+                      } else if (value == 'add_to_debrify_tv') {
+                        _handleAddToDebrifyTv(torrent);
                       } else if (value == 'delete') {
                         _confirmDeleteTorrent(torrent);
                       }
@@ -6570,6 +6599,20 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                             ],
                           ),
                         ),
+                      const PopupMenuItem(
+                        value: 'add_to_debrify_tv',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.live_tv_rounded,
+                              size: 18,
+                              color: Color(0xFF10B981),
+                            ),
+                            SizedBox(width: 12),
+                            Text('Add to Debrify TV'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(

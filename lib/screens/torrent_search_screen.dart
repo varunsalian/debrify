@@ -35,18 +35,16 @@ import '../models/rd_torrent.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_file_service.dart';
+import '../services/debrify_tv_channel_add_service.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/search_loading_animation.dart';
-import '../widgets/channel_picker_dialog.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/debrify_tv_channel_record.dart';
 import '../services/community/channel_yaml_builder.dart';
 import '../services/community/magnet_yaml_service.dart';
-import '../services/debrify_tv_cache_service.dart';
-import '../models/debrify_tv_cache.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/catalog_browser.dart';
 import '../widgets/search_source_dropdown.dart';
@@ -10923,137 +10921,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String searchKeyword, {
     bool showShareDialogOnCreate = false,
   }) async {
-    if (!mounted) return;
-
-    final trimmedKeyword = searchKeyword.trim();
-
-    final filteredTorrents = torrents
-        .where((t) => !t.isDirectStream && !t.isExternalStream)
-        .toList();
-    if (filteredTorrents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No supported torrents to add to channel'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
     try {
-      final result = await showDialog<ChannelPickerResult>(
-        context: context,
-        builder: (ctx) => ChannelPickerDialog(searchKeyword: trimmedKeyword),
+      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+        context,
+        torrents: torrents,
+        searchKeyword: searchKeyword,
       );
 
       if (result == null || !mounted) return;
 
-      final repo = DebrifyTvRepository.instance;
-      final channel = (await repo.fetchAllChannels()).firstWhere(
-        (ch) => ch.channelId == result.channelId,
-        orElse: () => throw Exception('Channel no longer exists'),
-      );
-
-      final sanitizedChannelKeywords = channel.keywords
-          .map((k) => k.trim())
-          .where((k) => k.isNotEmpty)
-          .toList();
-
-      var cacheEntry = await DebrifyTvCacheService.getEntry(result.channelId);
-      cacheEntry ??= DebrifyTvChannelCacheEntry.empty(
-        channelId: result.channelId,
-        normalizedKeywords: sanitizedChannelKeywords
-            .map((k) => k.toLowerCase())
-            .toList(),
-        status: DebrifyTvCacheStatus.warming,
-      );
-
-      final channelKeywords = List<String>.from(sanitizedChannelKeywords);
-      final String effectiveKeyword;
-      if (trimmedKeyword.isNotEmpty) {
-        effectiveKeyword = trimmedKeyword;
-      } else if (channelKeywords.isNotEmpty) {
-        effectiveKeyword = channelKeywords.first;
-      } else {
-        effectiveKeyword = result.channelName.trim();
-      }
-      final normalizedKeyword = effectiveKeyword.toLowerCase();
-      final hasKeyword = normalizedKeyword.isNotEmpty;
-      final keywordPayload = hasKeyword
-          ? [normalizedKeyword]
-          : const <String>[];
-
-      final updatedTorrents = List<CachedTorrent>.from(cacheEntry.torrents);
-      final infohashIndex = <String, int>{
-        for (var i = 0; i < updatedTorrents.length; i++)
-          updatedTorrents[i].infohash: i,
-      };
-      final newTorrents = <CachedTorrent>[];
-      int addedCount = 0;
-      int updatedCount = 0;
-
-      for (final torrent in filteredTorrents) {
-        final cachedTorrent = CachedTorrent.fromTorrent(
-          torrent,
-          keywords: keywordPayload,
-          sources: torrent.source.isNotEmpty ? [torrent.source] : [],
-        );
-
-        final existingIndex = infohashIndex[cachedTorrent.infohash];
-        if (existingIndex == null) {
-          newTorrents.add(cachedTorrent);
-          infohashIndex[cachedTorrent.infohash] = -1;
-          addedCount++;
-        } else if (existingIndex >= 0) {
-          updatedTorrents[existingIndex] = updatedTorrents[existingIndex].merge(
-            keywords: keywordPayload,
-          );
-          infohashIndex[cachedTorrent.infohash] = -1;
-          updatedCount++;
-        }
-      }
-
-      if (newTorrents.isNotEmpty) {
-        updatedTorrents.insertAll(0, newTorrents);
-      }
-
-      if (hasKeyword) {
-        final keywordExists = channelKeywords.any(
-          (kw) => kw.toLowerCase() == normalizedKeyword,
-        );
-        if (!keywordExists) {
-          channelKeywords.add(effectiveKeyword);
-          final updatedChannel = channel.copyWith(
-            keywords: channelKeywords,
-            updatedAt: DateTime.now(),
-          );
-          await repo.upsertChannel(updatedChannel);
-        }
-      }
-
-      final normalizedChannelKeywords = channelKeywords
-          .map((k) => k.toLowerCase())
-          .toList();
-      final updatedEntry = cacheEntry.copyWith(
-        torrents: updatedTorrents,
-        normalizedKeywords: normalizedChannelKeywords,
-        status: DebrifyTvCacheStatus.ready,
-      );
-      await DebrifyTvCacheService.saveEntry(updatedEntry);
-
-      if (!mounted) return;
-
-      final totalCount = filteredTorrents.length;
-      final noun = totalCount == 1 ? '1 torrent' : '$totalCount torrents';
-      final successMessage = result.isNewChannel
-          ? 'Channel "${result.channelName}" created with $noun'
-          : addedCount == 0
-          ? '${updatedCount == 1 ? 'Torrent' : '$updatedCount torrents'} updated in "${result.channelName}"'
-          : '$noun added to "${result.channelName}"';
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(successMessage),
+          content: Text(result.successMessage),
           backgroundColor: const Color(0xFF10B981),
           duration: const Duration(seconds: 2),
         ),
@@ -11066,6 +10945,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           debugPrint('[AddToChannel] Share dialog error (non-fatal): $e');
         }
       }
+    } on DebrifyTvChannelAddException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.orange,
+        ),
+      );
     } catch (e) {
       debugPrint('[AddToChannel] ERROR: $e\n${StackTrace.current}');
       if (!mounted) return;
