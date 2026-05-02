@@ -8,6 +8,7 @@ import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/movie_parser.dart';
 import 'movie_metadata_service.dart';
+import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
@@ -452,6 +453,55 @@ class AndroidTvPlayerBridge {
           } catch (e) {
             debugPrint('MovieMetadata: Provider error: $e');
             return null;
+          }
+        case 'searchSubtitleCatalogs':
+          debugPrint('AndroidTvPlayerBridge: searchSubtitleCatalogs received');
+          final args = call.arguments;
+          if (args is! Map) {
+            debugPrint('AndroidTvPlayerBridge: Invalid subtitle search args');
+            return <Map<String, dynamic>>[];
+          }
+          final query = args['query'] as String?;
+          if (query == null || query.trim().isEmpty) {
+            return <Map<String, dynamic>>[];
+          }
+          try {
+            final metas = await StremioService.instance.searchCatalogs(query);
+            final seen = <String>{};
+            final results = <Map<String, dynamic>>[];
+
+            for (final meta in metas) {
+              final imdbId = meta.effectiveImdbId;
+              final type = meta.type.toLowerCase();
+              if (imdbId == null || !imdbId.startsWith('tt')) continue;
+              if (type != 'movie' && type != 'series') continue;
+
+              final key = '$type:$imdbId';
+              if (!seen.add(key)) continue;
+
+              results.add({
+                'imdbId': imdbId,
+                'type': type,
+                'name': meta.name,
+                if (meta.year != null && meta.year!.trim().isNotEmpty)
+                  'year': meta.year,
+                if (meta.sourceAddon?.name.trim().isNotEmpty == true)
+                  'source': meta.sourceAddon!.name,
+              });
+            }
+
+            debugPrint(
+              'AndroidTvPlayerBridge: subtitle catalog search returned ${results.length} results',
+            );
+            return results;
+          } catch (e, stack) {
+            debugPrint(
+              'AndroidTvPlayerBridge: subtitle catalog search failed: $e\n$stack',
+            );
+            throw PlatformException(
+              code: 'subtitle_catalog_search_failed',
+              message: e.toString(),
+            );
           }
         case 'lookupMovieImdb':
           // Simple IMDB lookup for TorboxTvPlayerActivity (DebrifyTV)

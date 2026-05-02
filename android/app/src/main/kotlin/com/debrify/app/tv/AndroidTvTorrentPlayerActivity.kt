@@ -7,11 +7,18 @@ import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -241,6 +248,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
     private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
     private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
+    private var manualSubtitleImdbId: String? = null  // Subtitle-only identity override from Search Subtitle
+    private var manualSubtitleType: String? = null
+    private var manualSubtitleSeason: Int? = null
+    private var manualSubtitleEpisode: Int? = null
     private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -1666,8 +1677,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun resetSubtitleState() {
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
+        isLoadingStremioSubtitles = false
         embeddedSubtitleSelected = false
         userManuallySelectedSubtitle = false
+        manualSubtitleImdbId = null
+        manualSubtitleType = null
+        manualSubtitleSeason = null
+        manualSubtitleEpisode = null
         addonSubtitleFetchToken++
     }
 
@@ -1733,6 +1749,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             refreshSubtitlePanelForLoading()
         }
 
+        val manualImdbId = manualSubtitleImdbId
+        if (!manualImdbId.isNullOrEmpty()) {
+            val manualType = if (manualSubtitleType == "series") "series" else "movie"
+            val subtitleItem = if (manualType == "series") {
+                item.copy(
+                    season = manualSubtitleSeason ?: item.season,
+                    episode = manualSubtitleEpisode ?: item.episode
+                )
+            } else {
+                item.copy(season = null, episode = null)
+            }
+            android.util.Log.d(
+                "StremioSubs",
+                "Using manual subtitle identity $manualImdbId type=$manualType S${subtitleItem.season}E${subtitleItem.episode}"
+            )
+            fetchStremioSubtitlesWithImdb(manualImdbId, manualType, subtitleItem)
+            return
+        }
+
         // For series, use the shared IMDB ID directly
         if (isSeries) {
             val imdbId = model.imdbId
@@ -1776,7 +1811,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Request IMDB ID from Flutter for this item
         android.util.Log.d("StremioSubs", "Requesting IMDB ID from Flutter for item $itemIndex")
+        val metadataFetchToken = addonSubtitleFetchToken
         requestMovieMetadataFromFlutter(item, itemIndex) { imdbId ->
+            if (metadataFetchToken != addonSubtitleFetchToken) {
+                android.util.Log.d("StremioSubs", "Content changed during metadata lookup, discarding IMDB result for item $itemIndex")
+                return@requestMovieMetadataFromFlutter
+            }
+
             // Cache the result (even if null to prevent repeated requests)
             model.perItemImdbIds[itemIndex] = imdbId
             android.util.Log.d("StremioSubs", "Received IMDB ID from Flutter: $imdbId for item $itemIndex")
@@ -1804,8 +1845,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val subtitles = stremioSubtitleService?.fetchSubtitles(
                     type = type,
                     imdbId = imdbId,
-                    season = item.season,
-                    episode = item.episode
+                    season = if (type == "series") item.season else null,
+                    episode = if (type == "series") item.episode else null
                 ) ?: emptyList()
 
                 // Check if content changed during fetch
@@ -2101,6 +2142,564 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("MovieMetadata", "requestMovieMetadataFromFlutter - exception: ${e.message}", e)
             callback(null)
         }
+    }
+
+    private fun showSearchSubtitleDialog() {
+        val currentItem = getCurrentSubtitleSearchItem()
+        if (currentItem == null) {
+            Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val results = mutableListOf<SubtitleCatalogResult>()
+        val adapter = createSubtitleCatalogResultAdapter(results)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+
+        val queryInput = EditText(this).apply {
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setText(buildSubtitleSearchInitialQuery(currentItem))
+            setSelectAllOnFocus(true)
+        }
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(8))
+        }
+
+        val searchButton = AppCompatButton(this).apply {
+            text = "Search"
+            isFocusable = true
+        }
+
+        val progressBar = ProgressBar(this).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+        }
+
+        actionRow.addView(
+            searchButton,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        actionRow.addView(
+            progressBar,
+            LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                leftMargin = dp(16)
+            }
+        )
+
+        val statusText = TextView(this).apply {
+            text = "Search Stremio catalogs for a movie or series."
+            setPadding(0, 0, 0, dp(8))
+        }
+
+        val resultList = ListView(this).apply {
+            this.adapter = adapter
+            isFocusable = true
+            isFocusableInTouchMode = true
+            dividerHeight = 1
+            emptyView = null
+        }
+
+        container.addView(
+            queryInput,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            actionRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            statusText,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            resultList,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(360)
+            )
+        )
+
+        lateinit var dialog: AlertDialog
+
+        fun setLoading(loading: Boolean) {
+            progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+            searchButton.isEnabled = !loading
+            queryInput.isEnabled = !loading
+            if (loading) {
+                statusText.text = "Searching..."
+            }
+        }
+
+        fun updateResults(newResults: List<SubtitleCatalogResult>) {
+            results.clear()
+            results.addAll(newResults)
+            adapter.notifyDataSetChanged()
+            statusText.text = when {
+                newResults.isEmpty() -> "No matching IMDb-backed catalog results found."
+                newResults.size == 1 -> "1 result"
+                else -> "${newResults.size} results"
+            }
+            if (newResults.isNotEmpty()) {
+                resultList.requestFocus()
+                resultList.setSelection(0)
+            } else {
+                searchButton.requestFocus()
+            }
+        }
+
+        fun performSearch() {
+            val query = queryInput.text?.toString()?.trim().orEmpty()
+            if (query.isEmpty()) {
+                results.clear()
+                adapter.notifyDataSetChanged()
+                statusText.text = "Enter a title to search."
+                queryInput.requestFocus()
+                return
+            }
+
+            setLoading(true)
+            requestSubtitleCatalogSearchFromFlutter(
+                query,
+                onSuccess = { searchResults ->
+                    if (!dialog.isShowing) return@requestSubtitleCatalogSearchFromFlutter
+                    setLoading(false)
+                    updateResults(searchResults)
+                },
+                onError = { message ->
+                    if (!dialog.isShowing) return@requestSubtitleCatalogSearchFromFlutter
+                    setLoading(false)
+                    results.clear()
+                    adapter.notifyDataSetChanged()
+                    statusText.text = message
+                    searchButton.requestFocus()
+                }
+            )
+        }
+
+        resultList.setOnItemClickListener { _, _, position, _ ->
+            val selected = adapter.getItem(position) ?: return@setOnItemClickListener
+            val item = getCurrentSubtitleSearchItem()
+            if (item == null) {
+                Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
+                return@setOnItemClickListener
+            }
+
+            dialog.dismiss()
+            if (selected.type == "series") {
+                val resolvedEpisode = resolveSeasonEpisodeForSubtitle(item)
+                if (resolvedEpisode != null) {
+                    applyManualSubtitleIdentity(
+                        selected,
+                        resolvedEpisode.season,
+                        resolvedEpisode.episode
+                    )
+                } else {
+                    showSeasonEpisodePrompt(selected)
+                }
+            } else {
+                applyManualSubtitleIdentity(selected, null, null)
+            }
+        }
+
+        searchButton.setOnClickListener { performSearch() }
+        queryInput.setOnEditorActionListener { _, actionId, event ->
+            val isSearchAction = actionId == EditorInfo.IME_ACTION_SEARCH
+            val isEnterKey = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
+            if (isSearchAction || isEnterKey) {
+                performSearch()
+                true
+            } else {
+                false
+            }
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setTitle("Search Subtitle")
+            .setView(container)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            searchButton.requestFocus()
+        }
+        dialog.show()
+    }
+
+    private fun getCurrentSubtitleSearchItem(): PlaybackItem? {
+        payload?.items?.getOrNull(currentIndex)?.let { return it }
+
+        if (isIptvMode && currentIptvIndex in iptvChannels.indices) {
+            val entry = iptvChannels[currentIptvIndex]
+            return PlaybackItem(
+                id = "iptv:${entry.index}",
+                title = entry.name,
+                url = entry.url,
+                index = 0,
+                season = null,
+                episode = null,
+                artwork = entry.logoUrl,
+                description = entry.group,
+                resumePositionMs = 0L,
+                durationMs = 0L,
+                updatedAt = System.currentTimeMillis(),
+                resumeId = null,
+                sizeBytes = null,
+                rating = null,
+                provider = "iptv",
+            )
+        }
+
+        val mediaItem = player?.currentMediaItem ?: return null
+        val mediaTitle = mediaItem.mediaMetadata.title?.toString()?.trim()
+        val mediaUrl = mediaItem.localConfiguration?.uri?.toString().orEmpty()
+        val fallbackTitle = mediaTitle
+            ?.takeIf { it.isNotEmpty() }
+            ?: mediaUrl.substringAfterLast('/').substringBefore('?').takeIf { it.isNotEmpty() }
+            ?: return null
+
+        return PlaybackItem(
+            id = "current:${fallbackTitle.hashCode()}",
+            title = fallbackTitle,
+            url = mediaUrl,
+            index = currentIndex,
+            season = null,
+            episode = null,
+            artwork = null,
+            description = null,
+            resumePositionMs = 0L,
+            durationMs = 0L,
+            updatedAt = System.currentTimeMillis(),
+            resumeId = null,
+            sizeBytes = null,
+            rating = null,
+            provider = null,
+        )
+    }
+
+    private fun requestSubtitleCatalogSearchFromFlutter(
+        query: String,
+        onSuccess: (List<SubtitleCatalogResult>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        try {
+            val channel = MainActivity.getAndroidTvPlayerChannel()
+            if (channel == null) {
+                onError("Subtitle search is unavailable.")
+                return
+            }
+
+            channel.invokeMethod(
+                "searchSubtitleCatalogs",
+                hashMapOf<String, Any?>("query" to query),
+                object : io.flutter.plugin.common.MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        val parsedResults = parseSubtitleCatalogResults(result)
+                        runOnUiThread { onSuccess(parsedResults) }
+                    }
+
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        android.util.Log.e("StremioSubs", "Subtitle catalog search failed: $errorCode - $errorMessage")
+                        runOnUiThread {
+                            onError(errorMessage ?: "Subtitle search failed.")
+                        }
+                    }
+
+                    override fun notImplemented() {
+                        android.util.Log.e("StremioSubs", "Subtitle catalog search is not implemented")
+                        runOnUiThread { onError("Subtitle search is unavailable.") }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("StremioSubs", "Subtitle catalog search exception", e)
+            onError("Subtitle search failed.")
+        }
+    }
+
+    private fun parseSubtitleCatalogResults(result: Any?): List<SubtitleCatalogResult> {
+        val items = result as? List<*> ?: return emptyList()
+        return items.mapNotNull { rawItem ->
+            val map = rawItem as? Map<*, *> ?: return@mapNotNull null
+            val imdbId = map["imdbId"]?.toString()?.takeIf { it.startsWith("tt") }
+                ?: return@mapNotNull null
+            val type = map["type"]?.toString()?.lowercase(Locale.US)
+                ?.takeIf { it == "movie" || it == "series" }
+                ?: return@mapNotNull null
+            val name = map["name"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: imdbId
+            val year = map["year"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            val source = map["source"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+
+            SubtitleCatalogResult(
+                imdbId = imdbId,
+                type = type,
+                name = name,
+                year = year,
+                source = source
+            )
+        }
+    }
+
+    private fun createSubtitleCatalogResultAdapter(
+        results: MutableList<SubtitleCatalogResult>
+    ): ArrayAdapter<SubtitleCatalogResult> {
+        return object : ArrayAdapter<SubtitleCatalogResult>(this, 0, results) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val row = (convertView as? LinearLayout) ?: LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(20), dp(12), dp(20), dp(12))
+                    minimumHeight = dp(72)
+                }
+                row.removeAllViews()
+
+                val item = getItem(position)
+                val title = TextView(context).apply {
+                    text = item?.titleLine().orEmpty()
+                    textSize = 18f
+                    setTextColor(Color.WHITE)
+                    typeface = Typeface.DEFAULT_BOLD
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
+                val detail = TextView(context).apply {
+                    text = item?.detailLine().orEmpty()
+                    textSize = 14f
+                    setTextColor(Color.LTGRAY)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
+
+                row.addView(
+                    title,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                row.addView(
+                    detail,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                return row
+            }
+        }
+    }
+
+    private fun showSeasonEpisodePrompt(result: SubtitleCatalogResult) {
+        val currentItem = getCurrentSubtitleSearchItem()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+
+        val title = TextView(this).apply {
+            text = result.titleLine()
+            textSize = 18f
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        val seasonInput = EditText(this).apply {
+            hint = "Season"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            imeOptions = EditorInfo.IME_ACTION_NEXT
+            setText((currentItem?.season ?: manualSubtitleSeason ?: 1).toString())
+            setSelectAllOnFocus(true)
+        }
+
+        val episodeInput = EditText(this).apply {
+            hint = "Episode"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            setText((currentItem?.episode ?: manualSubtitleEpisode ?: 1).toString())
+            setSelectAllOnFocus(true)
+        }
+
+        row.addView(
+            seasonInput,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = dp(12)
+            }
+        )
+        row.addView(
+            episodeInput,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        )
+        container.addView(
+            title,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        container.addView(
+            row,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Series Episode")
+            .setView(container)
+            .setPositiveButton("Search", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        fun submit() {
+            val season = seasonInput.text?.toString()?.toIntOrNull()
+            val episode = episodeInput.text?.toString()?.toIntOrNull()
+            if (season == null || episode == null || season <= 0 || episode <= 0) {
+                Toast.makeText(this, "Enter a valid season and episode", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            dialog.dismiss()
+            applyManualSubtitleIdentity(result, season, episode)
+        }
+
+        episodeInput.setOnEditorActionListener { _, actionId, event ->
+            val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
+            val isEnterKey = event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_UP
+            if (isDoneAction || isEnterKey) {
+                submit()
+                true
+            } else {
+                false
+            }
+        }
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit() }
+            seasonInput.requestFocus()
+        }
+        dialog.show()
+    }
+
+    private fun applyManualSubtitleIdentity(
+        result: SubtitleCatalogResult,
+        season: Int?,
+        episode: Int?
+    ) {
+        val currentItem = getCurrentSubtitleSearchItem()
+        if (currentItem == null) {
+            Toast.makeText(this, "No current video to search", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val type = if (result.type == "series") "series" else "movie"
+        if (type == "series" && (season == null || episode == null || season <= 0 || episode <= 0)) {
+            showSeasonEpisodePrompt(result)
+            return
+        }
+
+        addonSubtitleFetchToken++
+        manualSubtitleImdbId = result.imdbId
+        manualSubtitleType = type
+        manualSubtitleSeason = if (type == "series") season else null
+        manualSubtitleEpisode = if (type == "series") episode else null
+
+        stremioSubtitles.clear()
+        currentStremioSubtitleIndex = -1
+        embeddedSubtitleSelected = false
+        userManuallySelectedSubtitle = false
+        isLoadingStremioSubtitles = true
+
+        trackSelector?.let { selector ->
+            selector.parameters = selector.parameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+        }
+
+        if (subtitleSettingsVisible) {
+            refreshSubtitlePanelForLoading()
+        }
+
+        val subtitleItem = if (type == "series") {
+            currentItem.copy(season = season, episode = episode)
+        } else {
+            currentItem.copy(season = null, episode = null)
+        }
+
+        Toast.makeText(this, "Searching subtitles for ${result.name}", Toast.LENGTH_SHORT).show()
+        fetchStremioSubtitlesWithImdb(result.imdbId, type, subtitleItem)
+    }
+
+    private fun resolveSeasonEpisodeForSubtitle(item: PlaybackItem): SeasonEpisode? {
+        val existingSeason = item.season
+        val existingEpisode = item.episode
+        if (existingSeason != null && existingEpisode != null && existingSeason > 0 && existingEpisode > 0) {
+            return SeasonEpisode(existingSeason, existingEpisode)
+        }
+
+        return parseSeasonEpisodeFromTitle(item.title)
+    }
+
+    private fun parseSeasonEpisodeFromTitle(title: String): SeasonEpisode? {
+        val patterns = listOf(
+            Regex("""(?i)\bS(\d{1,2})\s*E(\d{1,3})\b"""),
+            Regex("""(?i)\b(\d{1,2})x(\d{1,3})\b"""),
+            Regex("""(?i)\bSeason\s*(\d{1,2})\s*(?:Episode|Ep|E)\s*(\d{1,3})\b""")
+        )
+
+        for (pattern in patterns) {
+            val match = pattern.find(title) ?: continue
+            val season = match.groupValues.getOrNull(1)?.toIntOrNull()
+            val episode = match.groupValues.getOrNull(2)?.toIntOrNull()
+            if (season != null && episode != null && season > 0 && episode > 0) {
+                return SeasonEpisode(season, episode)
+            }
+        }
+
+        return null
+    }
+
+    private fun buildSubtitleSearchInitialQuery(item: PlaybackItem): String {
+        val filename = item.title.substringAfterLast('/').substringBefore('?')
+        val withoutExtension = filename.replace(Regex("""\.[A-Za-z0-9]{2,5}$"""), "")
+        val cleaned = withoutExtension
+            .replace(Regex("""[._]+"""), " ")
+            .replace(Regex("""(?i)\bS\d{1,2}\s*E\d{1,3}\b"""), " ")
+            .replace(Regex("""(?i)\b\d{1,2}x\d{1,3}\b"""), " ")
+            .replace(
+                Regex(
+                    """(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|web[- ]?dl|webrip|bluray|brrip|hdtv|dvdrip|x264|x265|h264|h265|hevc|aac|dts|yify)\b"""
+                ),
+                " "
+            )
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+        return cleaned.ifEmpty { item.title }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     // PikPak Cold Storage Retry Logic
@@ -3782,6 +4381,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nextSubtext.visibility = View.VISIBLE
         nextOverlay.visibility = View.VISIBLE
 
+        // Clear subtitle identity/results when changing channels from the guide.
+        resetSubtitleState()
+
         // Swap ExoPlayer media item
         val metadata = MediaMetadata.Builder()
             .setTitle(entry.name)
@@ -3817,9 +4419,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "playIptvChannel: ${entry.name} url=${entry.url.take(60)}")
 
-        // Clear subtitle state
-        stremioSubtitles.clear()
-        currentStremioSubtitleIndex = -1
+        // Clear subtitle identity/results when changing channels.
+        resetSubtitleState()
 
         val metadata = MediaMetadata.Builder()
             .setTitle(entry.name)
@@ -3955,10 +4556,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // SUBTITLE SETTINGS PANEL
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private fun showSubtitleSettingsPanel() {
-        // Collect available subtitle tracks
+    private fun rebuildSubtitleTrackList() {
         subtitleTracks.clear()
         subtitleTracks.add(Pair("Off", null))
+        subtitleTracks.add(Pair(SEARCH_SUBTITLE_LABEL, null))
         currentSubtitleTrackIndex = 0
 
         val tracks = player?.currentTracks
@@ -3982,22 +4583,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Add Stremio external subtitles to the track list
         // These are marked with "⬇" prefix to indicate they're external/downloadable
-        val embeddedTrackCount = subtitleTracks.size
-
         for ((index, sub) in stremioSubtitles.withIndex()) {
-            val label = "⬇ ${sub.displayName} (${sub.source})"
+            val label = "$EXTERNAL_SUBTITLE_PREFIX ${sub.displayName} (${sub.source})"
             // Use null override to indicate this is an external subtitle
             subtitleTracks.add(Pair(label, null))
 
             // Check if this Stremio subtitle is currently selected
             if (currentStremioSubtitleIndex == index) {
-                currentSubtitleTrackIndex = embeddedTrackCount + index
+                currentSubtitleTrackIndex = subtitleTracks.lastIndex
             }
         }
 
         // Add loading indicator if still fetching Stremio subtitles
         if (isLoadingStremioSubtitles) {
-            subtitleTracks.add(Pair("⏳ Loading external subtitles...", null))
+            subtitleTracks.add(Pair(SUBTITLE_LOADING_LABEL, null))
         }
 
         // Check if no subtitle is currently selected (means "Off")
@@ -4007,7 +4606,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
             currentSubtitleTrackIndex = 0
         }
+    }
 
+    private fun showSubtitleSettingsPanel() {
+        rebuildSubtitleTrackList()
         // Update UI values
         updateSubtitlePanelValues()
 
@@ -4032,52 +4634,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * Re-collects tracks and updates UI without changing visibility or focus.
      */
     private fun refreshSubtitlePanelForLoading() {
-        // Re-collect available subtitle tracks
-        subtitleTracks.clear()
-        subtitleTracks.add(Pair("Off", null))
-
-        val tracks = player?.currentTracks
-        if (tracks != null) {
-            for (group in tracks.groups) {
-                if (group.type == C.TRACK_TYPE_TEXT) {
-                    for (i in 0 until group.length) {
-                        val format = group.getTrackFormat(i)
-                        val label = buildSubtitleTrackLabel(format)
-                        val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(i))
-                        subtitleTracks.add(Pair(label, override))
-
-                        if (group.isTrackSelected(i)) {
-                            currentSubtitleTrackIndex = subtitleTracks.size - 1
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add Stremio external subtitles
-        val embeddedTrackCount = subtitleTracks.size
-        for ((index, sub) in stremioSubtitles.withIndex()) {
-            val label = "⬇ ${sub.displayName} (${sub.source})"
-            subtitleTracks.add(Pair(label, null))
-
-            if (currentStremioSubtitleIndex == index) {
-                currentSubtitleTrackIndex = embeddedTrackCount + index
-            }
-        }
-
-        // Add loading indicator if still fetching
-        if (isLoadingStremioSubtitles) {
-            subtitleTracks.add(Pair("⏳ Loading external subtitles...", null))
-        }
-
-        // Check if no subtitle is currently selected (means "Off")
-        val hasSelectedSubtitle = tracks?.groups?.any { group ->
-            group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-        } ?: false
-        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
-            currentSubtitleTrackIndex = 0
-        }
-
+        rebuildSubtitleTrackList()
         // Update UI values only (don't change visibility or focus)
         updateSubtitlePanelValues()
 
@@ -4267,6 +4824,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun isSearchSubtitleOption(label: String): Boolean {
+        return label == SEARCH_SUBTITLE_LABEL
+    }
+
+    private fun isLoadingSubtitleOption(label: String): Boolean {
+        return label.startsWith("⏳")
+    }
+
+    private fun isExternalSubtitleOption(label: String): Boolean {
+        return label.startsWith(EXTERNAL_SUBTITLE_PREFIX)
+    }
+
     private fun showSubtitleTrackSelectionDialog() {
         if (subtitleTracks.isEmpty()) {
             Toast.makeText(this, "No subtitle tracks available", Toast.LENGTH_SHORT).show()
@@ -4279,8 +4848,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setSingleChoiceItems(labels, currentSubtitleTrackIndex) { dialog, which ->
                 // Ignore clicks on loading indicator
                 val selectedLabel = subtitleTracks.getOrNull(which)?.first ?: ""
-                if (selectedLabel.startsWith("⏳")) {
+                if (isLoadingSubtitleOption(selectedLabel)) {
                     // Loading indicator - ignore click
+                    return@setSingleChoiceItems
+                }
+
+                if (isSearchSubtitleOption(selectedLabel)) {
+                    dialog.dismiss()
+                    showSearchSubtitleDialog()
                     return@setSingleChoiceItems
                 }
 
@@ -4310,11 +4885,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val override = selectedTrack?.second
 
         // Check if this is a Stremio external subtitle (marked with ⬇ prefix)
-        if (label.startsWith("⬇")) {
-            // Calculate the Stremio subtitle index
-            // Count embedded tracks (including "Off" at index 0)
-            val embeddedTrackCount = subtitleTracks.count { !it.first.startsWith("⬇") }
-            val stremioIndex = currentSubtitleTrackIndex - embeddedTrackCount
+        if (isSearchSubtitleOption(label)) {
+            showSearchSubtitleDialog()
+            return
+        }
+
+        if (isExternalSubtitleOption(label)) {
+            // Calculate the Stremio subtitle index without assuming where utility rows live.
+            val stremioIndex = subtitleTracks
+                .take(currentSubtitleTrackIndex)
+                .count { isExternalSubtitleOption(it.first) }
 
             if (stremioIndex >= 0 && stremioIndex < stremioSubtitles.size) {
                 // Disable embedded subtitles first
@@ -6200,6 +6780,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
+        private const val SEARCH_SUBTITLE_LABEL = "🔎 Search Subtitle"
+        private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
+        private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
 
         // PikPak cold storage retry constants
         private const val PROVIDER_PIKPAK = "pikpak"
@@ -6509,6 +7092,30 @@ private data class PlaybackItem(
         }
     }
 }
+
+private data class SubtitleCatalogResult(
+    val imdbId: String,
+    val type: String,
+    val name: String,
+    val year: String?,
+    val source: String?,
+) {
+    fun titleLine(): String {
+        return if (!year.isNullOrEmpty()) "$name ($year)" else name
+    }
+
+    fun detailLine(): String {
+        val parts = mutableListOf(if (type == "series") "Series" else "Movie")
+        if (!source.isNullOrEmpty()) parts.add(source)
+        parts.add(imdbId)
+        return parts.joinToString(" · ")
+    }
+}
+
+private data class SeasonEpisode(
+    val season: Int,
+    val episode: Int,
+)
 
 // Sealed class for playlist items (header or episode)
 private sealed class PlaylistListItem {
