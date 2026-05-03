@@ -456,6 +456,47 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
     font-size: 0.9375rem;
 }
 
+/* ===== Responsible Use Section ===== */
+.responsible-use {
+    padding: 72px 0;
+    background: var(--background-light);
+    border-bottom: 1px solid var(--border);
+}
+
+.responsible-use-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 20px;
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+.responsible-use-icon {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gradient-primary);
+    border-radius: 14px;
+    color: white;
+}
+
+.responsible-use-card h2 {
+    margin-bottom: 12px;
+}
+
+.responsible-use-card p {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    margin-bottom: 10px;
+}
+
+.responsible-use-card p:last-child {
+    margin-bottom: 0;
+}
+
 /* ===== Section Header ===== */
 .section-header {
     text-align: center;
@@ -847,6 +888,10 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
     .providers-grid {
         grid-template-columns: 1fr;
         gap: 16px;
+    }
+
+    .responsible-use-card {
+        grid-template-columns: 1fr;
     }
 
     .features-grid {

@@ -63,6 +63,12 @@
 
 Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, and **Stremio Addons support** for discovering content.
 
+## Responsible Use
+
+Debrify does not host, sell, provide, or bundle media content. Search engines, Stremio addons, Jackett/Prowlarr servers, WebDAV servers, IPTV playlists, and debrid accounts are user-configured integrations. Only use Debrify with content, services, and sources that you own, created, licensed, or are otherwise authorized to access.
+
+Third-party plugins, addons, indexers, playlists, and services are controlled by their respective providers or users. Debrify does not endorse using any integration to infringe copyright or violate a provider's terms. Do not submit or distribute configurations that are intended to facilitate unauthorized access to copyrighted content.
+
 Need help using a feature? Browse the user guides on GitHub Pages: [Debrify Guides](https://varunsalian.github.io/debrify/guides/index.html)
 
 If Debrify has been useful to you, you can support development here:
