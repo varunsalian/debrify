@@ -261,6 +261,23 @@ body.guide-page {
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
+.guide-step-wide {
+    grid-template-columns: minmax(0, 0.62fr) minmax(380px, 1fr);
+}
+
+.guide-step-wide:nth-child(even) {
+    grid-template-columns: minmax(380px, 1fr) minmax(0, 0.62fr);
+}
+
+.guide-shot-wide .guide-shot-frame {
+    padding: 10px;
+}
+
+.guide-shot-wide img {
+    max-width: 720px;
+    border-radius: 14px;
+}
+
 .guide-shot-note {
     margin-top: 12px;
     color: var(--guide-muted);
@@ -475,5 +492,9 @@ body.guide-page {
 
     .guide-shot img {
         max-width: 280px;
+    }
+
+    .guide-shot-wide img {
+        max-width: 100%;
     }
 }

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debrify Stremio Addon JSON Import Guide</title>
+    <meta name="description" content="A visual guide to exporting installed Stremio Web addons with the Stremio Addon Importer Chrome extension and importing the JSON file into Debrify.">
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="guide.css">
+</head>
+<body class="guide-page">
+    <div class="guide-shell">
+        <nav class="guide-nav">
+            <div class="container">
+                <a href="index.html" class="guide-brand">
+                    <span class="guide-brand-mark"></span>
+                    <span>Debrify Guides</span>
+                </a>
+                <div class="guide-nav-links">
+                    <a href="#overview">Overview</a>
+                    <a href="#export">Export</a>
+                    <a href="#import">Import</a>
+                </div>
+            </div>
+        </nav>
+
+        <header class="guide-hero" id="overview">
+            <div class="container">
+                <div>
+                    <div class="guide-kicker">Stremio Addon Import Guide</div>
+                    <h1>Move addons into Debrify.</h1>
+                    <p class="guide-lead">
+                        Use the Stremio Addon Importer Chrome extension to export your installed Stremio Web addons as a JSON file, then import that file from Debrify's Addons screen.
+                    </p>
+
+                    <div class="guide-flow" aria-label="Stremio addon import flow">
+                        <span class="guide-flow-step">Install Extension</span>
+                        <span class="guide-flow-arrow">&rarr;</span>
+                        <span class="guide-flow-step">Export JSON</span>
+                        <span class="guide-flow-arrow">&rarr;</span>
+                        <span class="guide-flow-step">Import in Debrify</span>
+                        <span class="guide-flow-arrow">&rarr;</span>
+                        <span class="guide-flow-step">Review Addons</span>
+                    </div>
+
+                    <div class="guide-meta">
+                        <div class="guide-meta-card">
+                            <strong>Chrome</strong>
+                            <span>Extension workflow</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>JSON</strong>
+                            <span>Export file format</span>
+                        </div>
+                        <div class="guide-meta-card">
+                            <strong>Addons</strong>
+                            <span>Imported into Debrify</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="guide-section" id="export">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Export from Stremio Web</h2>
+                    <p>Install the browser extension, open Stremio Web, then download the addon export JSON.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">1</div>
+                            <h3>Open the extension page</h3>
+                            <p>Open the Stremio Addon Importer listing in the Chrome Web Store. This extension creates the JSON file that Debrify can import.</p>
+                            <p><a class="guide-link-cta" href="https://chromewebstore.google.com/detail/stremio-addon-importer/jcgikobbddpgkdjajhahmelhnefnbogm" target="_blank" rel="noopener noreferrer">Open Chrome Web Store</a></p>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/chrome-web-store.png" alt="Stremio Addon Importer listing in the Chrome Web Store">
+                            </div>
+                            <div class="guide-shot-note">Open the Stremio Addon Importer extension listing</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">2</div>
+                            <h3>Install the extension</h3>
+                            <p>Click <code>Add to Chrome</code>, then confirm with <code>Add extension</code>. Chrome shows the Stremio domains the extension can access.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Add to Chrome</span>
+                                <span class="guide-chip">Add extension</span>
+                                <span class="guide-chip">Stremio Web access</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/add-extension.png" alt="Chrome confirmation dialog for adding Stremio Addon Importer">
+                            </div>
+                            <div class="guide-shot-note">Confirm the extension install in Chrome</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">3</div>
+                            <h3>Open Stremio Web and sign in</h3>
+                            <p>Open Stremio Web, sign in, then open the extension from the browser toolbar. Click <code>Import from this tab</code>.</p>
+                            <p><a class="guide-link-cta" href="https://web.stremio.com/" target="_blank" rel="noopener noreferrer">Click here to open Stremio Web</a></p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Sign in first</span>
+                                <span class="guide-chip guide-chip-success">Import from this tab</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/import-from-tab.png" alt="Stremio Addon Importer popup with Import from this tab button">
+                            </div>
+                            <div class="guide-shot-note">Use the extension while Stremio Web is open and signed in</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">4</div>
+                            <h3>Download the JSON export</h3>
+                            <p>After the extension reads your addon list, it shows a preview. Click <code>Download JSON</code> and keep that file ready for Debrify.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Preview addons</span>
+                                <span class="guide-chip guide-chip-success">Download JSON</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/download-json.png" alt="Stremio Addon Importer preview with Download JSON button">
+                            </div>
+                            <div class="guide-shot-note">Download the exported addon JSON file</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <main class="guide-section" id="import">
+            <div class="container">
+                <div class="guide-section-heading">
+                    <h2>Import into Debrify</h2>
+                    <p>Use the JSON file from the extension to populate Debrify's Stremio addon list.</p>
+                </div>
+
+                <div class="guide-grid">
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">5</div>
+                            <h3>Open Addons in Debrify</h3>
+                            <p>In Debrify, open <code>Addons</code> and stay on the <code>Stremio Addons</code> tab. Click <code>Import JSON</code>, then select the file you downloaded from the extension.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip">Addons</span>
+                                <span class="guide-chip">Stremio Addons</span>
+                                <span class="guide-chip guide-chip-success">Import JSON</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/debrify-import-json.png" alt="Debrify Addons screen with Import JSON button">
+                            </div>
+                            <div class="guide-shot-note">Import the JSON export from Debrify's Addons screen</div>
+                        </div>
+                    </section>
+
+                    <section class="guide-step guide-step-wide">
+                        <div class="guide-step-copy">
+                            <div class="guide-step-label">6</div>
+                            <h3>Review the import result</h3>
+                            <p>Debrify shows how many addons were found, imported, already installed, or unsupported. Click <code>Done</code>, then review the addon list.</p>
+                            <div class="guide-chip-row">
+                                <span class="guide-chip guide-chip-success">Imported</span>
+                                <span class="guide-chip">Already installed</span>
+                                <span class="guide-chip">Unsupported skipped</span>
+                            </div>
+                        </div>
+                        <div class="guide-shot guide-shot-wide">
+                            <div class="guide-shot-frame">
+                                <img src="../assets/screenshots/stremio-addon-import/import-complete.png" alt="Debrify Stremio import complete dialog">
+                            </div>
+                            <div class="guide-shot-note">Debrify summarizes the imported addons</div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="guide-callout">
+                    <strong>In short</strong>
+                    <p>Install the Chrome extension, sign in to Stremio Web, use <code>Import from this tab</code>, download the JSON file, then import that file from Debrify's <code>Addons</code> screen.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="guide-footer">
+            <div class="container">
+                <div class="guide-summary">
+                    <h2>Best path for existing Stremio users</h2>
+                    <p>This import flow is the quickest way to bring your existing Stremio addon setup into Debrify without manually pasting each manifest URL.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
