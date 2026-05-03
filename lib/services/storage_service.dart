@@ -32,16 +32,6 @@ class StorageService {
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
   static const String _continueWatchingKey = 'continue_watching_v1';
-  static const String _defaultTorrentsCsvEnabledKey =
-      'default_torrents_csv_enabled';
-  static const String _defaultPirateBayEnabledKey =
-      'default_pirate_bay_enabled';
-  static const String _defaultYtsEnabledKey = 'default_yts_enabled';
-  static const String _defaultSolidTorrentsEnabledKey =
-      'default_solid_torrents_enabled';
-  static const String _maxTorrentsCsvResultsKey = 'max_torrents_csv_results';
-  static const String _maxSolidTorrentsResultsKey =
-      'max_solid_torrents_results';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowChannelNameKey =
@@ -181,47 +171,6 @@ class StorageService {
   static const String _playlistPosterOverridesKey =
       'playlist_poster_overrides_v1';
 
-  // Debrify TV search engine settings
-  static const String _debrifyTvUseTorrentsCsvKey =
-      'debrify_tv_use_torrents_csv';
-  static const String _debrifyTvUsePirateBayKey = 'debrify_tv_use_pirate_bay';
-  static const String _debrifyTvUseYtsKey = 'debrify_tv_use_yts';
-  static const String _debrifyTvUseSolidTorrentsKey =
-      'debrify_tv_use_solid_torrents';
-
-  // Channel limits - Small (< threshold keywords)
-  static const String _debrifyTvChannelSmallTorrentsCsvMaxKey =
-      'debrify_tv_channel_small_torrents_csv_max';
-  static const String _debrifyTvChannelSmallSolidTorrentsMaxKey =
-      'debrify_tv_channel_small_solid_torrents_max';
-  static const String _debrifyTvChannelSmallYtsMaxKey =
-      'debrify_tv_channel_small_yts_max';
-
-  // Channel limits - Large (>= threshold keywords)
-  static const String _debrifyTvChannelLargeTorrentsCsvMaxKey =
-      'debrify_tv_channel_large_torrents_csv_max';
-  static const String _debrifyTvChannelLargeSolidTorrentsMaxKey =
-      'debrify_tv_channel_large_solid_torrents_max';
-  static const String _debrifyTvChannelLargeYtsMaxKey =
-      'debrify_tv_channel_large_yts_max';
-
-  // Quick Play limits
-  static const String _debrifyTvQuickPlayTorrentsCsvMaxKey =
-      'debrify_tv_quick_play_torrents_csv_max';
-  static const String _debrifyTvQuickPlaySolidTorrentsMaxKey =
-      'debrify_tv_quick_play_solid_torrents_max';
-  static const String _debrifyTvQuickPlayYtsMaxKey =
-      'debrify_tv_quick_play_yts_max';
-  static const String _debrifyTvQuickPlayMaxKeywordsKey =
-      'debrify_tv_quick_play_max_keywords';
-
-  // General settings
-  static const String _debrifyTvChannelBatchSizeKey =
-      'debrify_tv_channel_batch_size';
-  static const String _debrifyTvKeywordThresholdKey =
-      'debrify_tv_keyword_threshold';
-  static const String _debrifyTvMinTorrentsPerKeywordKey =
-      'debrify_tv_min_torrents_per_keyword';
   static const String _debrifyTvFavoriteChannelsKey =
       'debrify_tv_favorite_channels_v1';
   static const String _iptvFavoriteChannelsKey = 'iptv_favorite_channels_v1';
@@ -490,74 +439,6 @@ class StorageService {
 
   static Future<void> setMaxParallelDownloads(int value) async {
     // No-op: parallel downloads are fixed to 1
-  }
-
-  // Default search engine settings
-  static Future<bool> getDefaultTorrentsCsvEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultTorrentsCsvEnabledKey) ??
-        true; // Default to enabled
-  }
-
-  static Future<void> setDefaultTorrentsCsvEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_defaultTorrentsCsvEnabledKey, enabled);
-  }
-
-  static Future<bool> getDefaultPirateBayEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultPirateBayEnabledKey) ??
-        true; // Default to enabled
-  }
-
-  static Future<void> setDefaultPirateBayEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_defaultPirateBayEnabledKey, enabled);
-  }
-
-  static Future<bool> getDefaultYtsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultYtsEnabledKey) ?? true;
-  }
-
-  static Future<void> setDefaultYtsEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_defaultYtsEnabledKey, enabled);
-  }
-
-  static Future<bool> getDefaultSolidTorrentsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_defaultSolidTorrentsEnabledKey) ?? true;
-  }
-
-  static Future<void> setDefaultSolidTorrentsEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_defaultSolidTorrentsEnabledKey, enabled);
-  }
-
-  // Max results settings
-  static Future<int> getMaxTorrentsCsvResults() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_maxTorrentsCsvResultsKey) ?? 50; // Default to 50
-  }
-
-  static Future<void> setMaxTorrentsCsvResults(int maxResults) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Clamp between 25 and 500
-    final clampedValue = maxResults.clamp(25, 500);
-    await prefs.setInt(_maxTorrentsCsvResultsKey, clampedValue);
-  }
-
-  static Future<int> getMaxSolidTorrentsResults() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_maxSolidTorrentsResultsKey) ?? 100; // Default to 100
-  }
-
-  static Future<void> setMaxSolidTorrentsResults(int maxResults) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Clamp between 25 and 500
-    final clampedValue = maxResults.clamp(25, 500);
-    await prefs.setInt(_maxSolidTorrentsResultsKey, clampedValue);
   }
 
   // ── Continue Watching (recently watched items for home screen) ──────────
@@ -2023,12 +1904,15 @@ class StorageService {
   /// Clear torrent engine toggles and limits
   static Future<void> clearAllTorrentEngineSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_defaultTorrentsCsvEnabledKey);
-    await prefs.remove(_defaultPirateBayEnabledKey);
-    await prefs.remove(_defaultYtsEnabledKey);
-    await prefs.remove(_defaultSolidTorrentsEnabledKey);
-    await prefs.remove(_maxTorrentsCsvResultsKey);
-    await prefs.remove(_maxSolidTorrentsResultsKey);
+    final keys = prefs.getKeys().where(
+      (key) =>
+          (key.startsWith('engine_') && !key.startsWith('engine_tv_')) ||
+          (key.startsWith('default_') && key.endsWith('_enabled')) ||
+          (key.startsWith('max_') && key.endsWith('_results')),
+    );
+    for (final key in keys.toList()) {
+      await prefs.remove(key);
+    }
   }
 
   /// Clear post-torrent action preferences
@@ -2051,27 +1935,22 @@ class StorageService {
     await prefs.remove(_debrifyTvHideBackButtonKey);
     await prefs.remove(_debrifyTvAvoidNsfwKey);
     await prefs.remove(_debrifyTvRandomStartPercentKey);
-    // Engine toggles
-    await prefs.remove(_debrifyTvUseTorrentsCsvKey);
-    await prefs.remove(_debrifyTvUsePirateBayKey);
-    await prefs.remove(_debrifyTvUseYtsKey);
-    await prefs.remove(_debrifyTvUseSolidTorrentsKey);
-    // Channel limits
-    await prefs.remove(_debrifyTvChannelSmallTorrentsCsvMaxKey);
-    await prefs.remove(_debrifyTvChannelSmallSolidTorrentsMaxKey);
-    await prefs.remove(_debrifyTvChannelSmallYtsMaxKey);
-    await prefs.remove(_debrifyTvChannelLargeTorrentsCsvMaxKey);
-    await prefs.remove(_debrifyTvChannelLargeSolidTorrentsMaxKey);
-    await prefs.remove(_debrifyTvChannelLargeYtsMaxKey);
-    // QuickPlay limits
-    await prefs.remove(_debrifyTvQuickPlayTorrentsCsvMaxKey);
-    await prefs.remove(_debrifyTvQuickPlaySolidTorrentsMaxKey);
-    await prefs.remove(_debrifyTvQuickPlayYtsMaxKey);
-    await prefs.remove(_debrifyTvQuickPlayMaxKeywordsKey);
-    // Advanced settings
-    await prefs.remove(_debrifyTvChannelBatchSizeKey);
-    await prefs.remove(_debrifyTvKeywordThresholdKey);
-    await prefs.remove(_debrifyTvMinTorrentsPerKeywordKey);
+    for (final key
+        in prefs
+            .getKeys()
+            .where(
+              (key) =>
+                  key.startsWith('engine_tv_') ||
+                  key.startsWith('debrify_tv_use_') ||
+                  key.startsWith('debrify_tv_channel_small_') ||
+                  key.startsWith('debrify_tv_channel_large_') ||
+                  key.startsWith('debrify_tv_quick_play_') ||
+                  key == 'debrify_tv_keyword_threshold' ||
+                  key == 'debrify_tv_min_torrents_per_keyword',
+            )
+            .toList()) {
+      await prefs.remove(key);
+    }
   }
 
   /// Update an existing playlist item with poster URL
@@ -2738,203 +2617,6 @@ class StorageService {
       'StorageService: Built progress map with ${progressMap.length} entries',
     );
     return progressMap;
-  }
-
-  // Debrify TV Search Engine Settings
-  static Future<bool> getDebrifyTvUseTorrentsCsv() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvUseTorrentsCsvKey) ?? true;
-  }
-
-  static Future<void> setDebrifyTvUseTorrentsCsv(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvUseTorrentsCsvKey, value);
-  }
-
-  static Future<bool> getDebrifyTvUsePirateBay() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvUsePirateBayKey) ?? true;
-  }
-
-  static Future<void> setDebrifyTvUsePirateBay(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvUsePirateBayKey, value);
-  }
-
-  static Future<bool> getDebrifyTvUseYts() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvUseYtsKey) ?? false;
-  }
-
-  static Future<void> setDebrifyTvUseYts(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvUseYtsKey, value);
-  }
-
-  static Future<bool> getDebrifyTvUseSolidTorrents() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_debrifyTvUseSolidTorrentsKey) ?? false;
-  }
-
-  static Future<void> setDebrifyTvUseSolidTorrents(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvUseSolidTorrentsKey, value);
-  }
-
-  // Channel limits - Small
-  static Future<int> getDebrifyTvChannelSmallTorrentsCsvMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelSmallTorrentsCsvMaxKey) ?? 100;
-  }
-
-  static Future<void> setDebrifyTvChannelSmallTorrentsCsvMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvChannelSmallTorrentsCsvMaxKey,
-      value.clamp(25, 500),
-    );
-  }
-
-  static Future<int> getDebrifyTvChannelSmallSolidTorrentsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelSmallSolidTorrentsMaxKey) ?? 100;
-  }
-
-  static Future<void> setDebrifyTvChannelSmallSolidTorrentsMax(
-    int value,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvChannelSmallSolidTorrentsMaxKey,
-      value.clamp(100, 500),
-    );
-  }
-
-  static Future<int> getDebrifyTvChannelSmallYtsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelSmallYtsMaxKey) ?? 50;
-  }
-
-  static Future<void> setDebrifyTvChannelSmallYtsMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelSmallYtsMaxKey, value);
-  }
-
-  // Channel limits - Large
-  static Future<int> getDebrifyTvChannelLargeTorrentsCsvMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelLargeTorrentsCsvMaxKey) ?? 25;
-  }
-
-  static Future<void> setDebrifyTvChannelLargeTorrentsCsvMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvChannelLargeTorrentsCsvMaxKey,
-      value.clamp(25, 100),
-    );
-  }
-
-  static Future<int> getDebrifyTvChannelLargeSolidTorrentsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelLargeSolidTorrentsMaxKey) ?? 100;
-  }
-
-  static Future<void> setDebrifyTvChannelLargeSolidTorrentsMax(
-    int value,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvChannelLargeSolidTorrentsMaxKey,
-      value.clamp(100, 200),
-    );
-  }
-
-  static Future<int> getDebrifyTvChannelLargeYtsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelLargeYtsMaxKey) ?? 50;
-  }
-
-  static Future<void> setDebrifyTvChannelLargeYtsMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelLargeYtsMaxKey, value);
-  }
-
-  // Quick Play limits
-  static Future<int> getDebrifyTvQuickPlayTorrentsCsvMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvQuickPlayTorrentsCsvMaxKey) ?? 500;
-  }
-
-  static Future<void> setDebrifyTvQuickPlayTorrentsCsvMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvQuickPlayTorrentsCsvMaxKey,
-      value.clamp(100, 500),
-    );
-  }
-
-  static Future<int> getDebrifyTvQuickPlaySolidTorrentsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvQuickPlaySolidTorrentsMaxKey) ?? 200;
-  }
-
-  static Future<void> setDebrifyTvQuickPlaySolidTorrentsMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _debrifyTvQuickPlaySolidTorrentsMaxKey,
-      value.clamp(100, 500),
-    );
-  }
-
-  static Future<int> getDebrifyTvQuickPlayYtsMax() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvQuickPlayYtsMaxKey) ?? 50;
-  }
-
-  static Future<void> setDebrifyTvQuickPlayYtsMax(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlayYtsMaxKey, value);
-  }
-
-  static Future<int> getDebrifyTvQuickPlayMaxKeywords() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvQuickPlayMaxKeywordsKey) ?? 5;
-  }
-
-  static Future<void> setDebrifyTvQuickPlayMaxKeywords(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvQuickPlayMaxKeywordsKey, value.clamp(1, 20));
-  }
-
-  // General settings
-  static Future<int> getDebrifyTvChannelBatchSize() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvChannelBatchSizeKey) ?? 4;
-  }
-
-  static Future<void> setDebrifyTvChannelBatchSize(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvChannelBatchSizeKey, value.clamp(1, 10));
-  }
-
-  static Future<int> getDebrifyTvKeywordThreshold() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvKeywordThresholdKey) ?? 10;
-  }
-
-  static Future<void> setDebrifyTvKeywordThreshold(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvKeywordThresholdKey, value.clamp(1, 50));
-  }
-
-  static Future<int> getDebrifyTvMinTorrentsPerKeyword() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_debrifyTvMinTorrentsPerKeywordKey) ?? 5;
-  }
-
-  static Future<void> setDebrifyTvMinTorrentsPerKeyword(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_debrifyTvMinTorrentsPerKeywordKey, value.clamp(1, 50));
   }
 
   // Startup Settings
