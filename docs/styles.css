@@ -400,7 +400,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 .providers-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 24px;
 }
 
@@ -441,6 +441,10 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 .provider-logo.pp {
     background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+}
+
+.provider-logo.wd {
+    background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
 }
 
 .provider-card h3 {
@@ -820,6 +824,10 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
     .platforms-grid {
         grid-template-columns: repeat(3, 1fr);
+    }
+
+    .providers-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 

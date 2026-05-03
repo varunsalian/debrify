@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Debrify - Stream & Download from Your Debrid Accounts</title>
-    <meta name="description" content="Debrify is a cross-platform debrid manager for Real-Debrid, Torbox, and PikPak. Stream and download content on Android, iOS, Windows, macOS, Linux, and Android TV.">
-    <meta name="keywords" content="debrid manager, Real-Debrid app, Torbox app, PikPak, streaming app, torrent streaming, Android TV debrid, debrid media manager">
+    <title>Debrify - Stream & Download from Your Media Sources</title>
+    <meta name="description" content="Debrify is a cross-platform media manager for Real-Debrid, Torbox, PikPak, WebDAV, Jackett, and Prowlarr. Stream and download content on Android, iOS, Windows, macOS, Linux, and Android TV.">
+    <meta name="keywords" content="debrid manager, Real-Debrid app, Torbox app, PikPak, WebDAV player, Jackett app, Prowlarr app, streaming app, torrent streaming, Android TV debrid, debrid media manager">
     <meta name="author" content="Debrify">
     <link rel="canonical" href="https://varunsalian.github.io/debrify/">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="Debrify - Stream & Download from Your Debrid Accounts">
-    <meta property="og:description" content="The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak. Stream and download on Android, Android TV, Windows, macOS, Linux, and iOS.">
+    <meta property="og:title" content="Debrify - Stream & Download from Your Media Sources">
+    <meta property="og:description" content="The all-in-one media manager for Real-Debrid, Torbox, PikPak, WebDAV, Jackett, and Prowlarr. Stream and download on Android, Android TV, Windows, macOS, Linux, and iOS.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://varunsalian.github.io/debrify/">
     <meta property="og:image" content="https://varunsalian.github.io/debrify/assets/screenshots/search-desktop.png">
@@ -20,7 +20,7 @@
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Debrify - Stream & Download Effortlessly">
-    <meta name="twitter:description" content="The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak. Works on all your devices.">
+    <meta name="twitter:description" content="The all-in-one media manager for debrid accounts, WebDAV libraries, and indexer managers. Works on all your devices.">
     <meta name="twitter:image" content="https://varunsalian.github.io/debrify/assets/screenshots/search-desktop.png">
 
     <!-- Structured Data (JSON-LD) -->
@@ -29,7 +29,7 @@
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "Debrify",
-      "description": "The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak. Stream and download content across all your devices.",
+      "description": "The all-in-one media manager for Real-Debrid, Torbox, PikPak, WebDAV, Jackett, and Prowlarr. Stream and download content across all your devices.",
       "url": "https://varunsalian.github.io/debrify/",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "Android, Android TV, Windows, macOS, Linux, iOS",
@@ -87,9 +87,9 @@
         <div class="hero-bg"></div>
         <div class="container">
             <div class="hero-content">
-                <div class="hero-badge">Works with Real-Debrid, Torbox & PikPak</div>
+                <div class="hero-badge">Works with Real-Debrid, Torbox, PikPak & WebDAV</div>
                 <h1>Stream & Download<br><span class="gradient-text">Effortlessly</span></h1>
-                <p class="hero-subtitle">Debrify connects to your debrid accounts and lets you browse, stream, and download content across all your devices. No seedbox needed.</p>
+                <p class="hero-subtitle">Debrify connects to your debrid accounts, WebDAV servers, and search sources so you can browse, stream, and download across all your devices. No seedbox needed.</p>
                 <div class="hero-buttons">
                     <a href="#download" class="btn btn-primary btn-lg">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -155,6 +155,11 @@
                     <h3>PikPak</h3>
                     <p>Cloud storage integration with streaming</p>
                 </div>
+                <div class="provider-card">
+                    <div class="provider-logo wd">WD</div>
+                    <h3>WebDAV</h3>
+                    <p>Browse, stream, playlist, and download from your own server</p>
+                </div>
             </div>
         </div>
     </section>
@@ -164,7 +169,7 @@
         <div class="container">
             <div class="section-header">
                 <h2>Everything You Need</h2>
-                <p>One app to manage all your debrid content</p>
+                <p>One app to manage your debrid content, WebDAV libraries, and search sources</p>
             </div>
             <div class="features-grid">
                 <div class="feature-card">
@@ -176,6 +181,20 @@
                     </div>
                     <h3>Torrent Search</h3>
                     <p>Search multiple sources with IMDB integration. Filter by quality, size, and seeders. One-click add to any provider.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 7h16"></path>
+                            <path d="M4 12h16"></path>
+                            <path d="M4 17h16"></path>
+                            <circle cx="7" cy="7" r="1"></circle>
+                            <circle cx="7" cy="12" r="1"></circle>
+                            <circle cx="7" cy="17" r="1"></circle>
+                        </svg>
+                    </div>
+                    <h3>Jackett & Prowlarr</h3>
+                    <p>Connect your own indexer managers and search those sources from the same torrent search picker.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">
@@ -196,6 +215,18 @@
                     </div>
                     <h3>Download Manager</h3>
                     <p>Background downloads with pause and resume. Queue multiple files and track progress in real-time.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z"></path>
+                            <path d="M8 9h8"></path>
+                            <path d="M8 13h5"></path>
+                            <path d="M8 17h8"></path>
+                        </svg>
+                    </div>
+                    <h3>WebDAV Libraries</h3>
+                    <p>Browse your own WebDAV servers, stream authenticated files, add folders to playlists, and download locally.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">

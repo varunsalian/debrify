@@ -49,9 +49,9 @@
                     <h3>1. No Debrify Account Required</h3>
                     <p>
                         Debrify does not require you to register a separate Debrify account to use the app.
-                        You may choose to connect third-party services such as Torbox, Real-Debrid, PikPak, Trakt,
-                        Reddit, IPTV providers, or Stremio addons. Those integrations are optional and are only used
-                        when you enable them.
+                        You may choose to connect third-party services such as Torbox, Real-Debrid, PikPak, WebDAV servers,
+                        Jackett or Prowlarr indexer managers, Trakt, Reddit, IPTV providers, or Stremio addons.
+                        Those integrations are optional and are only used when you enable them.
                     </p>
                 </div>
 
@@ -65,6 +65,8 @@
                         <li>Torbox API keys</li>
                         <li>Real-Debrid API keys and endpoint preference</li>
                         <li>PikPak email, password, access token, refresh token, device ID, captcha token, and user ID</li>
+                        <li>WebDAV server URLs, usernames, and passwords</li>
+                        <li>Jackett and Prowlarr server URLs, API keys, and indexer settings</li>
                         <li>Trakt access token, refresh token, username, and token expiry</li>
                         <li>Reddit access token, refresh token, and username</li>
                         <li>Playback progress, continue-watching state, playlists, favorites, downloaded file metadata, and app preferences</li>
@@ -84,6 +86,8 @@
                     </p>
                     <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
                         <li>Provider account requests to Torbox, Real-Debrid, or PikPak</li>
+                        <li>WebDAV file listing and file streaming requests to your configured WebDAV servers</li>
+                        <li>Indexer search requests to your configured Jackett or Prowlarr servers</li>
                         <li>Progress sync and list requests to Trakt</li>
                         <li>Video or subreddit requests to Reddit when Reddit integration is enabled</li>
                         <li>Catalog, metadata, and source requests to installed Stremio addons</li>
@@ -136,7 +140,7 @@
                     <p>You can control your data by:</p>
                     <ul style="margin-top: 1rem; padding-left: 1.25rem; color: var(--text-secondary); line-height: 1.8;">
                         <li>Not connecting optional integrations you do not want to use</li>
-                        <li>Logging out of provider, Trakt, Reddit, or PikPak integrations</li>
+                        <li>Logging out of provider, WebDAV, indexer manager, Trakt, Reddit, or PikPak integrations</li>
                         <li>Removing stored keys or tokens inside the app settings</li>
                         <li>Clearing local app data from your device</li>
                     </ul>

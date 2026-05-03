@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Stream & Download — Effortlessly</strong><br>
-  The all-in-one debrid manager for Real-Debrid, Torbox, and PikPak
+  The all-in-one media manager for debrid accounts, WebDAV libraries, and search sources
 </p>
 
 <p align="center">
@@ -47,7 +47,9 @@
   <img src="https://img.shields.io/badge/Real--Debrid-Supported-4ade80?style=for-the-badge" alt="Real-Debrid">
   <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
   <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
+  <img src="https://img.shields.io/badge/WebDAV-Supported-14b8a6?style=for-the-badge" alt="WebDAV">
   <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
+  <img src="https://img.shields.io/badge/Jackett_%26_Prowlarr-Supported-f43f5e?style=for-the-badge" alt="Jackett and Prowlarr">
 </p>
 
 <p align="center">
@@ -59,7 +61,7 @@
 
 ## What is Debrify?
 
-Debrify is a **debrid manager** that lets you browse, stream, and download content from your debrid accounts—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Trakt integration** for sync and discovery, and **Stremio Addons support** for discovering content.
+Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, and **Stremio Addons support** for discovering content.
 
 Need help using a feature? Browse the user guides on GitHub Pages: [Debrify Guides](https://varunsalian.github.io/debrify/guides/index.html)
 
@@ -107,6 +109,7 @@ If Debrify has been useful to you, you can support development here:
 ### Search Plugins *(Optional)*
 - **Engine marketplace** — Import community-built torrent search engines
 - **Multi-engine search** — Query multiple sources simultaneously
+- **Jackett & Prowlarr** — Connect your own indexer managers and use them from the same source picker
 - **Smart filtering** — Filter by quality, size, seeders, and more
 - **One-click add** — Send results directly to your debrid provider
 - **Build your own** — Follow the [custom engine guide](docs/engines/creating-custom-engines.md)
@@ -178,6 +181,25 @@ If Debrify has been useful to you, you can support development here:
 ### Reddit Videos
 - **Audio merged** — Plays videos with audio properly combined
 - **Download support** — Save Reddit videos locally
+
+</td>
+<td width="50%">
+
+### WebDAV support
+- **Connect your server** — Browse personal WebDAV storage directly inside Debrify
+- **Stream with auth** — Play WebDAV files through the built-in player with credentials handled by the app
+- **Playlist support** — Add individual files or folders to playlists and resume them later
+- **Download support** — Save WebDAV files locally through the download manager
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Indexer Managers
+- **Jackett support** — Search Jackett Torznab endpoints directly from torrent search
+- **Prowlarr support** — Search Prowlarr indexers with API-key based configuration
+- **Per-source controls** — Enable, disable, and limit each connected manager like other search sources
 
 </td>
 <td width="50%">
