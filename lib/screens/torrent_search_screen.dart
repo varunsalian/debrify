@@ -3093,6 +3093,72 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  String _directStreamSourceLabel(String rawSource) {
+    var source = rawSource.trim();
+    if (source.isEmpty) return 'Unknown Source';
+    if (source.toLowerCase().startsWith('stremio:')) {
+      source = source.substring(8).trim();
+    }
+    if (source.isEmpty) return 'Unknown Source';
+
+    final normalized = source
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    const acronyms = {'rd', 'tb', 'pm', 'ad', 'api', 'url', 'id', 'tv', 'hd'};
+
+    return normalized
+        .split(' ')
+        .map((part) {
+          if (part.isEmpty) return '';
+          final lower = part.toLowerCase();
+          if (acronyms.contains(lower)) return lower.toUpperCase();
+          if (RegExp(r'^\d+k$', caseSensitive: false).hasMatch(part)) {
+            return part.toUpperCase();
+          }
+          return lower[0].toUpperCase() + lower.substring(1);
+        })
+        .join(' ');
+  }
+
+  Widget _buildDirectStreamSourceChip(String rawSource, double maxWidth) {
+    final source = rawSource.trim().toLowerCase();
+    final label = _directStreamSourceLabel(rawSource);
+    final color = _getEngineColor(source);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.extension_rounded, size: 12, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Build stream type chip for non-torrent streams (direct/external)
   Widget? _buildStreamTypeChip(Torrent torrent) {
     if (torrent.streamType == StreamType.torrent) {
@@ -19104,6 +19170,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final accentColor = torrent.isDirectStream
         ? const Color(0xFF10B981) // Green for direct
         : const Color(0xFF6366F1); // Purple for external
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final showTrailingSourceChip = screenWidth >= 900;
 
     // Get focus node for DPAD navigation
     final focusNode = index < _cardFocusNodes.length
@@ -19298,12 +19366,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       ],
                                     ),
                                   ),
+                                  if (!showTrailingSourceChip)
+                                    _buildDirectStreamSourceChip(
+                                      torrent.source,
+                                      screenWidth < 420 ? 112.0 : 160.0,
+                                    ),
                                 ],
                               ),
                             ],
                           ),
                         ),
                       ),
+                      if (showTrailingSourceChip)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: _buildDirectStreamSourceChip(
+                            torrent.source,
+                            180.0,
+                          ),
+                        ),
                       // Chevron indicator
                       const Padding(
                         padding: EdgeInsets.only(right: 12),
