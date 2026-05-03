@@ -43,15 +43,14 @@ class NsfwFilter {
   ];
 
   /// Check if category indicates NSFW content
-  /// PirateBay uses 5xx categories for adult content
+  /// Some indexers use 5xx categories for adult content
   /// Returns false if category is null
   static bool isNsfwByCategory(String? category) {
     if (category == null || category.isEmpty) {
       return false;
     }
     
-    // PirateBay adult categories start with "5"
-    // 500-599 are all adult/NSFW categories
+    // 500-599 are treated as adult/NSFW categories by supported indexers
     return category.startsWith('5');
   }
 
@@ -78,12 +77,12 @@ class NsfwFilter {
   /// Main filter method that checks both category and name
   /// Returns true if content should be filtered out
   static bool shouldFilter(String? category, String name) {
-    // Category-based filtering (most reliable for PirateBay)
+    // Category-based filtering when an indexer provides category metadata
     if (isNsfwByCategory(category)) {
       return true;
     }
     
-    // Name-based filtering (for TorrentsCsv and extra safety)
+    // Name-based filtering as a fallback and extra safety
     if (isNsfwByName(name)) {
       return true;
     }
@@ -91,4 +90,3 @@ class NsfwFilter {
     return false;
   }
 }
-

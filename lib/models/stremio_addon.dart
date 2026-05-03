@@ -765,7 +765,7 @@ class StremioStream {
     final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
 
     // Try to extract infoHash from behaviorHints.bingeGroup
-    // Formats: "addon|hash" or "addon|debrid|hash" (e.g., "comet|realdebrid|58b0e410...")
+    // Formats: "addon|hash" or "addon|debrid|hash" (e.g., "addon|realdebrid|58b0e410...")
     if (infoHash == null && behaviorHints != null) {
       final bingeGroup = behaviorHints['bingeGroup'] as String?;
       if (bingeGroup != null && bingeGroup.contains('|')) {
@@ -780,8 +780,8 @@ class StremioStream {
       }
     }
 
-    // Get title - try description first (Comet uses this), then title (detailed info
-    // with torrent name/size/seeders), then name (short addon label like "Torrentio")
+    // Get title - try description first, then title (detailed info
+    // with torrent name/size/seeders), then name (short addon label).
     String? title =
         json['description'] as String? ??
         json['title'] as String? ??

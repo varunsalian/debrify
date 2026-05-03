@@ -184,7 +184,7 @@ class RemoteEngineManager {
       }
 
       // Extract ID and fileName from path
-      // Example: "torrents/pirate_bay.yaml" -> fileName="pirate_bay.yaml", id="pirate_bay"
+      // Example: "torrents/example_indexer.yaml" -> fileName="example_indexer.yaml", id="example_indexer"
       final fileName = path.split('/').last;
       final id = fileName.replaceAll('.yaml', '');
 
@@ -326,7 +326,7 @@ class RemoteEngineManager {
     }
   }
 
-  /// Format an ID into a display name (e.g., "pirate_bay" -> "Pirate Bay")
+  /// Format an ID into a display name (e.g., "example_indexer" -> "Example Indexer")
   String _formatDisplayName(String id) {
     return id
         .split('_')

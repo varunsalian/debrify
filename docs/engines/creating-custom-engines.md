@@ -28,8 +28,8 @@ Want Debrify to speak to your favorite torrent indexer? All you need is a single
 ### 1. Metadata & capabilities
 
 ```yaml
-id: pirate_bay
-display_name: "The Pirate Bay"
+id: example_indexer
+display_name: "Example Indexer"
 icon: sailing
 categories: [general, movies]
 capabilities:
@@ -39,7 +39,7 @@ capabilities:
 ```
 
 Tips:
-- `id` must be unique and usually matches the filename (`pirate_bay.yaml`).
+- `id` must be unique and usually matches the filename (`example_indexer.yaml`).
 - Toggle capabilities to control when the UI sends traffic to you. If you only support IMDB IDs, set `keyword_search: false`.
 
 ### 2. Requests & URL builders
@@ -77,7 +77,7 @@ What to remember:
 - `api.urls` can include placeholders `{imdb_id}`, `{season}`, `{episode}`. Debrify swaps them automatically.
 - Use `api.params` for constants (limit, sort, auth headers). Set `location: query`, `body`, or `header`.
 - `query_params.param_name` accepts a single string (`q`) or a map keyed by search type.
-- `path_params` switches the URL builder into template mode—needed for engines like Torrentio.
+- `path_params` switches the URL builder into template mode for APIs that put search values directly in the URL path.
 - Add a top-level `request` block only when you need to override generic settings (e.g., a longer timeout).
 
 ### 3. Pagination
@@ -169,7 +169,7 @@ Helpful reminders:
 settings:
   - id: enabled
     type: toggle
-    label: "Enable SolidTorrents"
+    label: "Enable Example Indexer"
     default: true
   - id: max_results
     type: dropdown

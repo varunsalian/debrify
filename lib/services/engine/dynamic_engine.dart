@@ -200,7 +200,7 @@ class DynamicEngine extends SearchEngine {
 
   /// Probe multiple seasons to find all available content.
   ///
-  /// This is useful for engines like Torrentio where season must be specified.
+  /// This is useful for engines where season must be specified.
   ///
   /// If [availableSeasons] is provided (from IMDbbot API), uses those seasons
   /// (capped at 10). Otherwise falls back to probing 1 to maxSeasonProbes.
@@ -381,7 +381,7 @@ class DynamicEngine extends SearchEngine {
     if (season != null) {
       params['season'] = season;
     }
-    // For series searches with season, ensure episode is set (required by some APIs like torrentio)
+    // For series searches with season, ensure episode is set when required.
     if (episode != null) {
       params['episode'] = episode;
     } else if (isSeries == true && season != null) {

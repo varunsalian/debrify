@@ -254,8 +254,8 @@ void main() {
     });
 
     test('should return original if result would be empty', () {
-      final result = SeriesParser.cleanCollectionTitle('[YIFY] [1080p]');
-      expect(result, '[YIFY] [1080p]');
+      final result = SeriesParser.cleanCollectionTitle('[RG01] [1080p]');
+      expect(result, '[RG01] [1080p]');
     });
 
     test('should preserve special characters in show titles', () {
@@ -265,7 +265,7 @@ void main() {
     });
 
     test('should clean multiple quality tags', () {
-      final result = SeriesParser.cleanCollectionTitle('The Office - Complete Series [1080p] [BluRay] [x265] [YIFY]');
+      final result = SeriesParser.cleanCollectionTitle('The Office - Complete Series [1080p] [BluRay] [x265] [RG01]');
       expect(result, 'The Office');
     });
 
@@ -275,7 +275,7 @@ void main() {
     });
 
     test('should clean multiple bracket types', () {
-      final result = SeriesParser.cleanCollectionTitle('The Office [1080p] {RARBG} (US)');
+      final result = SeriesParser.cleanCollectionTitle('The Office [1080p] {RG02} (US)');
       expect(result, 'The Office US');
     });
 
@@ -345,7 +345,7 @@ void main() {
     });
 
     test('should clean multiple release groups', () {
-      final result = SeriesParser.cleanCollectionTitle('The Office [RARBG] [PublicHD] [1080p]');
+      final result = SeriesParser.cleanCollectionTitle('The Office [RG02] [GROUPHD] [1080p]');
       expect(result, 'The Office');
     });
 
@@ -385,7 +385,7 @@ void main() {
     });
 
     test('should clean curly brace release groups', () {
-      final result = SeriesParser.cleanCollectionTitle('The Office {YIFY} - Complete Series');
+      final result = SeriesParser.cleanCollectionTitle('The Office {RG01} - Complete Series');
       expect(result, 'The Office');
     });
 
@@ -669,7 +669,7 @@ void main() {
 
     test('MULTILINE: should extract only first line from multi-line title', () {
       final result = SeriesParser.cleanCollectionTitle(
-        'Breaking Bad (2008) Season 1-5 S01-S05 (1080p BluRay x265 HEVC 1\nSeason 1/Breaking Bad (2008) - S01E01 - Pilot.mkv\n👤 382 💾 2.56 GB ⚙️ ThePirateBay'
+        'Breaking Bad (2008) Season 1-5 S01-S05 (1080p BluRay x265 HEVC 1\nSeason 1/Breaking Bad (2008) - S01E01 - Pilot.mkv\n👤 382 💾 2.56 GB ⚙️ ExampleSource'
       );
       expect(result, 'Breaking Bad');
     });
@@ -683,7 +683,7 @@ void main() {
 
     test('MULTILINE: should remove emoji metadata', () {
       final result = SeriesParser.cleanCollectionTitle(
-        'Breaking Bad S01-S05 👤 382 💾 2.56 GB ⚙️ ThePirateBay'
+        'Breaking Bad S01-S05 👤 382 💾 2.56 GB ⚙️ ExampleSource'
       );
       expect(result, 'Breaking Bad');
     });
@@ -777,4 +777,4 @@ void main() {
       expect(info.title, null);
     });
   });
-} 
+}

@@ -632,9 +632,8 @@ class EngineExecutor {
 
   /// Check if an infohash is valid.
   ///
-  /// Rejects empty infohashes and all-zero placeholder infohashes
-  /// (e.g., PirateBay returns "0000000000000000000000000000000000000000"
-  /// when no results are found).
+  /// Rejects empty infohashes and all-zero placeholder infohashes that some
+  /// APIs return when no results are found.
   bool _isValidInfohash(String infohash) {
     if (infohash.isEmpty) return false;
 

@@ -465,15 +465,15 @@ class SeriesParser {
     return cleaned;
   }
 
-  /// Remove release group tags like [YIFY], {RARBG}, etc.
+  /// Remove release group tags like [RG01], {GROUP2}, etc.
   static String _removeReleaseGroupTags(String text) {
     // Remove square brackets with uppercase/alphanumeric content
-    // Examples: [F4S7], [YIFY], [RARBG], [PublicHD]
+    // Examples: [F4S7], [RG01], [GROUPHD]
     // Note: Collection part indicators like [Part 2] are now handled by _removeCollectionPartIndicators
     text = text.replaceAll(RegExp(r'\[[A-Z0-9]+\]', caseSensitive: false), ' ');
 
     // Remove curly braces with uppercase/alphanumeric content
-    // Examples: {RARBG}, {YIFY}
+    // Examples: {RG01}, {GROUP2}
     text = text.replaceAll(RegExp(r'\{[A-Z0-9]+\}', caseSensitive: false), ' ');
 
     // Remove parentheses with only uppercase letters/numbers (but be careful not to remove years)

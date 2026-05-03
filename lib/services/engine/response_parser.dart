@@ -330,7 +330,7 @@ class ResponseParser {
     }
   }
 
-  /// Handle nested results (e.g., YTS movies containing torrents)
+  /// Handle nested results (e.g., movie objects containing torrent lists)
   List<Map<String, dynamic>> flattenNestedResults(
     List<dynamic> items,
     NestedResultsConfig config,

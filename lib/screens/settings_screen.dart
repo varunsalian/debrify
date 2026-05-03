@@ -1482,7 +1482,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
             // Grid layout (wide):
             // [RD]      [Torbox]
             // [PikPak]  [WebDAV]
-            // [Jackett] [Reddit]
+            // [Indexers] [Reddit]
             // [IPTV]    [Trakt]
             return Wrap(
               spacing: 12,
@@ -1509,7 +1509,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     downNeighbor: wide ? _webDavFocusNode : _pikpakFocusNode,
                   ),
                 ),
-                // Row 2: PikPak (left), Jackett & Prowlarr (right)
+                // Row 2: PikPak (left), WebDAV (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
@@ -1536,7 +1536,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                         : _indexerManagersFocusNode,
                   ),
                 ),
-                // Row 3: Jackett & Prowlarr (left), Reddit (right)
+                // Row 3: indexer managers (left), Reddit (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(

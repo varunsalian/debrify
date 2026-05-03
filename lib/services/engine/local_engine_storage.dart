@@ -135,7 +135,7 @@ class LocalEngineStorage {
   /// Save an engine YAML file to local storage
   ///
   /// [engineId] - Unique identifier for the engine
-  /// [fileName] - Original filename (e.g., "pirate_bay.yaml")
+  /// [fileName] - Original filename (e.g., "example_indexer.yaml")
   /// [yamlContent] - The YAML content to save
   /// [displayName] - Display name for the engine
   /// [icon] - Optional icon name

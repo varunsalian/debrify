@@ -15,7 +15,7 @@ class Torrent {
   final int leechers;
   final int completed;
   final int scrapedDate;
-  final String? category; // Optional: PirateBay category (5xx = NSFW)
+  final String? category; // Optional indexer category (5xx = NSFW)
   final String source;
 
   // Stream type for Stremio streams (torrent, directUrl, externalUrl)
@@ -25,7 +25,7 @@ class Torrent {
   final String? directUrl;
 
   // Full torrent acquisition URLs from indexers. Prefer magnetUrl when present;
-  // torrentUrl is usually a protected .torrent download URL from Jackett/Prowlarr.
+  // torrentUrl is usually a protected .torrent download URL.
   final String? magnetUrl;
   final String? torrentUrl;
   final bool hasRealInfoHash;

@@ -4,8 +4,8 @@ import 'package:debrify/models/engine_config/engine_config.dart';
 ///
 /// Supports four pagination types:
 /// - **none**: Single request, no pagination
-/// - **cursor**: Cursor-based pagination (e.g., Torrents CSV)
-/// - **page**: Page number based pagination (e.g., SolidTorrents)
+/// - **cursor**: Cursor-based pagination
+/// - **page**: Page number based pagination
 /// - **offset**: Offset based pagination
 class PaginationHandler {
   final PaginationConfig config;
