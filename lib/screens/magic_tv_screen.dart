@@ -131,6 +131,20 @@ DebrifyTvZipImportedChannel _parseYamlCompute(Map<String, String> payload) {
   );
 }
 
+class _TvEngineWarmResult {
+  final DynamicEngine engine;
+  final List<Torrent> torrents;
+  final int pagesPulled;
+  final String? failureMessage;
+
+  const _TvEngineWarmResult({
+    required this.engine,
+    required this.torrents,
+    required this.pagesPulled,
+    this.failureMessage,
+  });
+}
+
 class DebrifyTVScreen extends StatefulWidget {
   const DebrifyTVScreen({super.key});
 
@@ -155,30 +169,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   List<DebrifyTvChannel> _channels = <DebrifyTvChannel>[];
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
   List<Torrent>? _pikpakCandidatePool;
-  // These are now loaded from settings dynamically
-  int _channelTorrentsCsvMaxResultsSmall = 100;
-  int _channelTorrentsCsvMaxResultsLarge = 25;
-  int _channelSolidTorrentsMaxResultsSmall = 100;
-  int _channelSolidTorrentsMaxResultsLarge = 100;
-  int _channelPirateBayMaxResultsSmall = 100;
-  int _channelPirateBayMaxResultsLarge = 100;
-  int _channelYtsMaxResultsSmall = 50;
-  int _channelYtsMaxResultsLarge = 50;
-  int _channelCsvParallelism = 4;
+  final Map<String, bool> _tvEngineStates = <String, bool>{};
+  final Map<String, int> _tvSmallChannelMaxByEngine = <String, int>{};
+  final Map<String, int> _tvLargeChannelMaxByEngine = <String, int>{};
+  final Map<String, int> _tvQuickPlayMaxByEngine = <String, int>{};
+  int _channelBatchSize = 4;
   int _keywordThreshold = 10;
   int _minTorrentsPerKeyword = 5;
 
-  // Engine toggles
-  bool _useTorrentsCsv = true;
-  bool _usePirateBay = true;
-  bool _useYts = false;
-  bool _useSolidTorrents = false;
-
   // Quick Play limits
-  int _quickPlayTorrentsCsvMax = 500;
-  int _quickPlaySolidTorrentsMax = 200;
-  int _quickPlayPirateBayMax = 100;
-  int _quickPlayYtsMax = 50;
   int _quickPlayMaxKeywords = 5;
 
   static const int _playbackTorrentThreshold = 1000;
@@ -610,60 +609,46 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await StorageService.getTorboxIntegrationEnabled();
     final torboxKey = await StorageService.getTorboxApiKey();
 
-    // Load Debrify TV search settings via SettingsManager
-    // Engine enabled states (TV mode)
-    final useTorrentsCsv = await _settingsManager.getTvEnabled(
-      'torrents_csv',
-      true,
-    );
-    final usePirateBay = await _settingsManager.getTvEnabled(
-      'pirate_bay',
-      true,
-    );
-    final useYts = await _settingsManager.getTvEnabled('yts', false);
-    final useSolidTorrents = await _settingsManager.getTvEnabled(
-      'solid_torrents',
-      false,
-    );
+    final registry = EngineRegistry.instance;
+    await registry.initialize();
+    final keywordEngines = registry.getKeywordSearchEngines();
+    final tvEngines = registry
+        .getTvModeEngines()
+        .where((engine) => engine.supportsKeywordSearch)
+        .toList();
+    final tvEngineStates = <String, bool>{
+      for (final engine in keywordEngines) engine.name: false,
+    };
+    final tvSmallChannelMaxByEngine = <String, int>{};
+    final tvLargeChannelMaxByEngine = <String, int>{};
+    final tvQuickPlayMaxByEngine = <String, int>{};
 
-    // Small channel limits per engine
-    final channelSmallTorrentsCsvMax = await _settingsManager
-        .getTvSmallChannelMax('torrents_csv', 100);
-    final channelSmallSolidTorrentsMax = await _settingsManager
-        .getTvSmallChannelMax('solid_torrents', 100);
-    final channelSmallPirateBayMax = await _settingsManager
-        .getTvSmallChannelMax('pirate_bay', 100);
-    final channelSmallYtsMax = await _settingsManager.getTvSmallChannelMax(
-      'yts',
-      50,
-    );
-
-    // Large channel limits per engine
-    final channelLargeTorrentsCsvMax = await _settingsManager
-        .getTvLargeChannelMax('torrents_csv', 25);
-    final channelLargeSolidTorrentsMax = await _settingsManager
-        .getTvLargeChannelMax('solid_torrents', 100);
-    final channelLargePirateBayMax = await _settingsManager
-        .getTvLargeChannelMax('pirate_bay', 100);
-    final channelLargeYtsMax = await _settingsManager.getTvLargeChannelMax(
-      'yts',
-      50,
-    );
-
-    // Quick play limits per engine
-    final quickPlayTorrentsCsvMax = await _settingsManager.getTvQuickPlayMax(
-      'torrents_csv',
-      500,
-    );
-    final quickPlaySolidTorrentsMax = await _settingsManager.getTvQuickPlayMax(
-      'solid_torrents',
-      200,
-    );
-    final quickPlayPirateBayMax = await _settingsManager.getTvQuickPlayMax(
-      'pirate_bay',
-      100,
-    );
-    final quickPlayYtsMax = await _settingsManager.getTvQuickPlayMax('yts', 50);
+    for (final engine in tvEngines) {
+      final tvMode = engine.tvModeConfig;
+      if (tvMode == null) {
+        continue;
+      }
+      final engineId = engine.name;
+      tvEngineStates[engineId] = await _settingsManager.getTvEnabled(
+        engineId,
+        tvMode.enabledDefault,
+      );
+      tvSmallChannelMaxByEngine[engineId] =
+          await _settingsManager.getTvSmallChannelMax(
+        engineId,
+        tvMode.smallChannel.maxResults,
+      );
+      tvLargeChannelMaxByEngine[engineId] =
+          await _settingsManager.getTvLargeChannelMax(
+        engineId,
+        tvMode.largeChannel.maxResults,
+      );
+      tvQuickPlayMaxByEngine[engineId] =
+          await _settingsManager.getTvQuickPlayMax(
+        engineId,
+        tvMode.quickPlay.maxResults,
+      );
+    }
 
     // Global TV settings
     final channelBatchSize = await _settingsManager.getGlobalBatchSize(4);
@@ -713,25 +698,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickProvider = defaultProvider;
 
         // Update search settings
-        _useTorrentsCsv = useTorrentsCsv;
-        _usePirateBay = usePirateBay;
-        _useYts = useYts;
-        _useSolidTorrents = useSolidTorrents;
-        _channelTorrentsCsvMaxResultsSmall = channelSmallTorrentsCsvMax;
-        _channelTorrentsCsvMaxResultsLarge = channelLargeTorrentsCsvMax;
-        _channelSolidTorrentsMaxResultsSmall = channelSmallSolidTorrentsMax;
-        _channelSolidTorrentsMaxResultsLarge = channelLargeSolidTorrentsMax;
-        _channelPirateBayMaxResultsSmall = channelSmallPirateBayMax;
-        _channelPirateBayMaxResultsLarge = channelLargePirateBayMax;
-        _channelYtsMaxResultsSmall = channelSmallYtsMax;
-        _channelYtsMaxResultsLarge = channelLargeYtsMax;
-        _channelCsvParallelism = channelBatchSize;
+        _tvEngineStates
+          ..clear()
+          ..addAll(tvEngineStates);
+        _tvSmallChannelMaxByEngine
+          ..clear()
+          ..addAll(tvSmallChannelMaxByEngine);
+        _tvLargeChannelMaxByEngine
+          ..clear()
+          ..addAll(tvLargeChannelMaxByEngine);
+        _tvQuickPlayMaxByEngine
+          ..clear()
+          ..addAll(tvQuickPlayMaxByEngine);
+        _channelBatchSize = channelBatchSize;
         _keywordThreshold = keywordThreshold;
         _minTorrentsPerKeyword = minTorrentsPerKeyword;
-        _quickPlayTorrentsCsvMax = quickPlayTorrentsCsvMax;
-        _quickPlaySolidTorrentsMax = quickPlaySolidTorrentsMax;
-        _quickPlayPirateBayMax = quickPlayPirateBayMax;
-        _quickPlayYtsMax = quickPlayYtsMax;
         _quickPlayMaxKeywords = quickPlayMaxKeywords;
       });
     }
@@ -773,6 +754,102 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       sources: [normalizedSource],
       override: shouldOverride ? torrent : null,
     );
+  }
+
+  List<DynamicEngine> _enabledTvKeywordEngines(EngineRegistry registry) {
+    final engines = registry
+        .getTvModeEngines()
+        .where(
+          (engine) =>
+              engine.supportsKeywordSearch &&
+              (_tvEngineStates[engine.name] ??
+                  engine.tvModeConfig?.enabledDefault ??
+                  false),
+        )
+        .toList();
+    engines.sort((a, b) => a.name.compareTo(b.name));
+    return engines;
+  }
+
+  int _tvChannelMaxResultsForEngine(
+    DynamicEngine engine,
+    int totalKeywords,
+  ) {
+    final useSmallChannelLimit = totalKeywords < _keywordThreshold;
+    final storedLimit = useSmallChannelLimit
+        ? _tvSmallChannelMaxByEngine[engine.name]
+        : _tvLargeChannelMaxByEngine[engine.name];
+    if (storedLimit != null) {
+      return storedLimit;
+    }
+
+    final tvMode = engine.tvModeConfig;
+    if (tvMode == null) {
+      return 50;
+    }
+    return useSmallChannelLimit
+        ? tvMode.smallChannel.maxResults
+        : tvMode.largeChannel.maxResults;
+  }
+
+  int _estimatePagesPulledForEngine(DynamicEngine engine, int resultCount) {
+    if (resultCount <= 0) {
+      return 0;
+    }
+
+    final pagination = engine.config.pagination;
+    final resultsPerPage = pagination.resultsPerPage;
+    if (pagination.type == 'none' ||
+        resultsPerPage == null ||
+        resultsPerPage <= 0) {
+      return 1;
+    }
+
+    final estimatedPages = (resultCount + resultsPerPage - 1) ~/ resultsPerPage;
+    final maxPages = pagination.maxPages;
+    if (maxPages != null && maxPages > 0) {
+      return min(estimatedPages, maxPages);
+    }
+    return estimatedPages;
+  }
+
+  int _estimatePageRequestsForEngine(
+    DynamicEngine engine,
+    int totalKeywords,
+  ) {
+    final maxResults = _tvChannelMaxResultsForEngine(engine, totalKeywords);
+    final pagination = engine.config.pagination;
+    final resultsPerPage = pagination.resultsPerPage;
+    if (pagination.type == 'none' ||
+        resultsPerPage == null ||
+        resultsPerPage <= 0) {
+      return 1;
+    }
+
+    final estimatedPages = max(
+      1,
+      (maxResults + resultsPerPage - 1) ~/ resultsPerPage,
+    );
+    final maxPages = pagination.maxPages;
+    if (maxPages != null && maxPages > 0) {
+      return min(estimatedPages, maxPages);
+    }
+    return estimatedPages;
+  }
+
+  Map<String, int> _quickPlayMaxResultsOverrides() {
+    return Map<String, int>.from(_tvQuickPlayMaxByEngine);
+  }
+
+  Future<Map<String, bool>> _tvEngineSearchStates() async {
+    final registry = EngineRegistry.instance;
+    await registry.initialize();
+    return <String, bool>{
+      for (final engine in registry.getKeywordSearchEngines())
+        engine.name: _tvEngineStates[engine.name] ??
+            engine.tvModeConfig?.enabledDefault ??
+            false,
+    };
   }
 
   List<CachedTorrent> _sortedCachedTorrents(
@@ -865,11 +942,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final channelAvoidNsfw = channel.avoidNsfw;
     final registry = EngineRegistry.instance;
     await registry.initialize();
-
-    // Get dynamic engines from registry
-    final csvEngine = registry.getEngine('torrents_csv');
-    final pirateEngine = registry.getEngine('pirate_bay');
-    final solidEngine = registry.getEngine('solid_torrents');
+    final enabledTvEngines = _enabledTvKeywordEngines(registry);
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final accumulator = <String, CachedTorrent>{};
@@ -901,26 +974,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (keywordsToWarm.isEmpty) {
       debugPrint('DebrifyTV: No keywords to warm for "${channel.name}".');
     }
-
-    final pirateFutures = <String, Future<List<Torrent>>>{};
-    final solidFutures = <String, Future<List<Torrent>>>{};
-
-    final bool usePirate = _usePirateBay && pirateEngine != null;
-    final bool useSolid = _useSolidTorrents && solidEngine != null;
-    final int solidMaxResults = normalizedKeywords.length < _keywordThreshold
-        ? _channelSolidTorrentsMaxResultsSmall
-        : _channelSolidTorrentsMaxResultsLarge;
-
-    for (final keyword in keywordsToWarm) {
-      if (usePirate) {
-        pirateFutures[keyword] = pirateEngine!.search(keyword);
-      }
-      if (useSolid) {
-        solidFutures[keyword] = solidEngine!.executeSearch(
-          query: keyword,
-          maxResults: solidMaxResults,
-        );
-      }
+    if (enabledTvEngines.isEmpty && keywordsToWarm.isNotEmpty) {
+      debugPrint(
+        'DebrifyTV: No enabled TV search engines for "${channel.name}".',
+      );
     }
 
     bool anySuccess = accumulator.isNotEmpty;
@@ -928,16 +985,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     List<String> pendingKeywords = List<String>.from(keywordsToWarm);
     while (pendingKeywords.isNotEmpty) {
-      final batch = pendingKeywords.take(_channelCsvParallelism).toList();
+      final batch = pendingKeywords.take(_channelBatchSize).toList();
       pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
       final futures = batch.map((keyword) async {
         return await _warmKeyword(
           keyword: keyword,
-          useTorrentsCsv: _useTorrentsCsv && csvEngine != null,
-          csvEngine: csvEngine,
-          pirateFuture: pirateFutures[keyword],
-          solidFuture: solidFutures[keyword],
+          enabledEngines: enabledTvEngines,
           accumulator: accumulator,
           stats: stats,
           now: now,
@@ -995,10 +1049,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<KeywordWarmResult?> _warmKeyword({
     required String keyword,
-    required bool useTorrentsCsv,
-    required DynamicEngine? csvEngine,
-    required Future<List<Torrent>>? pirateFuture,
-    required Future<List<Torrent>>? solidFuture,
+    required List<DynamicEngine> enabledEngines,
     required Map<String, CachedTorrent> accumulator,
     required Map<String, KeywordStat> stats,
     required int now,
@@ -1006,99 +1057,81 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     required bool avoidNsfw, // Use channel's NSFW setting
     required int minTorrentsPerKeyword,
   }) async {
-    String? csvFailure;
-    List<Torrent> csvTorrentsResult = const <Torrent>[];
-    int pagesPulled = 0;
-    if (useTorrentsCsv && csvEngine != null) {
-      try {
-        final maxResults = totalKeywords < _keywordThreshold
-            ? _channelTorrentsCsvMaxResultsSmall
-            : _channelTorrentsCsvMaxResultsLarge;
-        csvTorrentsResult = await csvEngine.executeSearch(
-          query: keyword,
-          maxResults: maxResults,
+    final searchResults = await Future.wait(
+      enabledEngines.map((engine) async {
+        final maxResults = _tvChannelMaxResultsForEngine(
+          engine,
+          totalKeywords,
         );
-        // Estimate pages pulled based on results and page size (25 per page for torrents_csv)
-        pagesPulled = (csvTorrentsResult.length + 24) ~/ 25;
-      } catch (e) {
-        debugPrint(
-          'DebrifyTV: Cache warm Torrents CSV failed for "$keyword": $e',
-        );
-        csvTorrentsResult = const <Torrent>[];
-        csvFailure =
-            'Torrents CSV is unavailable right now. Please try again later.';
-      }
-    }
-
-    List<Torrent> pirateResult = const <Torrent>[];
-    String? pirateFailure;
-    try {
-      if (pirateFuture != null) {
-        pirateResult = await pirateFuture;
-      }
-    } catch (e) {
-      debugPrint('DebrifyTV: Cache warm Pirate Bay failed for "$keyword": $e');
-      pirateFailure =
-          'The Pirate Bay search failed. Some torrents may be missing.';
-    }
-
-    List<Torrent> solidResult = const <Torrent>[];
-    String? solidFailure;
-    try {
-      if (solidFuture != null) {
-        solidResult = await solidFuture;
-      }
-    } catch (e) {
-      debugPrint(
-        'DebrifyTV: Cache warm SolidTorrents failed for "$keyword": $e',
-      );
-      solidFailure =
-          'SolidTorrents search failed. Some torrents may be missing.';
-    }
+        try {
+          final torrents = await engine.executeSearch(
+            query: keyword,
+            maxResults: maxResults,
+          );
+          return _TvEngineWarmResult(
+            engine: engine,
+            torrents: torrents,
+            pagesPulled: _estimatePagesPulledForEngine(
+              engine,
+              torrents.length,
+            ),
+          );
+        } catch (e) {
+          debugPrint(
+            'DebrifyTV: Cache warm ${engine.displayName} failed for "$keyword": $e',
+          );
+          return _TvEngineWarmResult(
+            engine: engine,
+            torrents: const <Torrent>[],
+            pagesPulled: 0,
+            failureMessage:
+                '${engine.displayName} search failed. Some torrents may be missing.',
+          );
+        }
+      }),
+    );
 
     // Apply NSFW filter to search results before caching
-    List<Torrent> csvTorrents = List<Torrent>.from(csvTorrentsResult);
-    List<Torrent> pirateTorrents = pirateResult;
-    List<Torrent> solidTorrents = solidResult;
+    final filteredByEngine = <DynamicEngine, List<Torrent>>{};
+    int totalBefore = 0;
+    int totalAfter = 0;
+    int pagesPulled = 0;
+    final failureMessages = <String>[];
 
-    if (avoidNsfw) {
-      final csvBefore = csvTorrents.length;
-      csvTorrents = csvTorrents.where((torrent) {
-        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
-          return false;
-        }
-        return true;
-      }).toList();
-
-      final pirateBefore = pirateTorrents.length;
-      pirateTorrents = pirateTorrents.where((torrent) {
-        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
-          return false;
-        }
-        return true;
-      }).toList();
-
-      final solidBefore = solidTorrents.length;
-      solidTorrents = solidTorrents.where((torrent) {
-        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
-          return false;
-        }
-        return true;
-      }).toList();
-
-      final totalBefore = csvBefore + pirateBefore + solidBefore;
-      final totalAfter =
-          csvTorrents.length + pirateTorrents.length + solidTorrents.length;
-      if (totalBefore != totalAfter) {
-        debugPrint(
-          'DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents',
-        );
+    for (final result in searchResults) {
+      pagesPulled += result.pagesPulled;
+      if (result.failureMessage != null) {
+        failureMessages.add(result.failureMessage!);
       }
+
+      final before = result.torrents.length;
+      totalBefore += before;
+      if (avoidNsfw) {
+        final filtered = result.torrents.where((torrent) {
+          if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+            return false;
+          }
+          return true;
+        }).toList();
+        totalAfter += filtered.length;
+        filteredByEngine[result.engine] = filtered;
+      } else {
+        totalAfter += before;
+        filteredByEngine[result.engine] = result.torrents;
+      }
+    }
+
+    if (avoidNsfw && totalBefore != totalAfter) {
+      debugPrint(
+        'DebrifyTV: Cache NSFW filter for "$keyword": $totalBefore → $totalAfter torrents',
+      );
     }
 
     // Check minimum torrents per keyword threshold
-    final totalTorrents =
-        csvTorrents.length + pirateTorrents.length + solidTorrents.length;
+    final totalTorrents = filteredByEngine.values.fold<int>(
+      0,
+      (total, torrents) => total + torrents.length,
+    );
     if (totalTorrents < minTorrentsPerKeyword) {
       debugPrint(
         'DebrifyTV: Skipping keyword "$keyword" – only $totalTorrents torrent(s), minimum is $minTorrentsPerKeyword',
@@ -1107,62 +1140,35 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         totalFetched: 0,
         lastSearchedAt: now,
         pagesPulled: pagesPulled,
-        pirateBayHits: pirateResult.length,
-      );
+      ).clearLegacySourceHits();
       return KeywordWarmResult(
         keyword: keyword,
         addedHashes: const <String>{},
         stat: stat,
-        failureMessage:
-            'Too few torrents for "$keyword" (found $totalTorrents, need $minTorrentsPerKeyword)',
+        failureMessage: enabledEngines.isEmpty
+            ? 'No enabled TV search engines.'
+            : 'Too few torrents for "$keyword" (found $totalTorrents, need $minTorrentsPerKeyword)',
       );
     }
 
     final keywordHashes = <String>{};
 
-    for (final torrent in csvTorrents) {
-      final hash = _normalizeInfohash(torrent.infohash);
-      if (hash.isEmpty) {
-        continue;
+    for (final entry in filteredByEngine.entries) {
+      final source = entry.key.name;
+      for (final torrent in entry.value) {
+        final hash = _normalizeInfohash(torrent.infohash);
+        if (hash.isEmpty) {
+          continue;
+        }
+        keywordHashes.add(hash);
+        _accumulateCachedTorrent(
+          accumulator: accumulator,
+          infohash: hash,
+          torrent: torrent,
+          keyword: keyword,
+          source: source,
+        );
       }
-      keywordHashes.add(hash);
-      _accumulateCachedTorrent(
-        accumulator: accumulator,
-        infohash: hash,
-        torrent: torrent,
-        keyword: keyword,
-        source: 'torrents_csv',
-      );
-    }
-
-    for (final torrent in pirateTorrents) {
-      final hash = _normalizeInfohash(torrent.infohash);
-      if (hash.isEmpty) {
-        continue;
-      }
-      keywordHashes.add(hash);
-      _accumulateCachedTorrent(
-        accumulator: accumulator,
-        infohash: hash,
-        torrent: torrent,
-        keyword: keyword,
-        source: 'pirate_bay',
-      );
-    }
-
-    for (final torrent in solidTorrents) {
-      final hash = _normalizeInfohash(torrent.infohash);
-      if (hash.isEmpty) {
-        continue;
-      }
-      keywordHashes.add(hash);
-      _accumulateCachedTorrent(
-        accumulator: accumulator,
-        infohash: hash,
-        torrent: torrent,
-        keyword: keyword,
-        source: 'solid_torrents',
-      );
     }
 
     final updatedStats = stats[keyword] ?? KeywordStat.initial();
@@ -1170,19 +1176,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       totalFetched: keywordHashes.length,
       lastSearchedAt: now,
       pagesPulled: pagesPulled,
-      pirateBayHits: pirateResult.length,
-    );
+    ).clearLegacySourceHits();
 
     String? failureMessage;
-    if (csvFailure != null) {
-      failureMessage = csvFailure;
-    } else if (pirateFailure != null) {
-      failureMessage = pirateFailure;
-    } else if (solidFailure != null) {
-      failureMessage = solidFailure;
-    } else if (csvTorrentsResult.isEmpty &&
-        pirateResult.isEmpty &&
-        solidResult.isEmpty) {
+    if (failureMessages.isNotEmpty) {
+      failureMessage = failureMessages.first;
+    } else if (filteredByEngine.values.every((torrents) => torrents.isEmpty)) {
       failureMessage = 'No torrents found for "$keyword" yet.';
     }
 
@@ -1373,28 +1372,25 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final int effectiveUniverse = max(1, totalKeywordUniverse ?? keywordCount);
-    final bool useExpandedCsvFetch = effectiveUniverse < _keywordThreshold;
-    final int maxResultsConfig = useExpandedCsvFetch
-        ? _channelTorrentsCsvMaxResultsSmall
-        : _channelTorrentsCsvMaxResultsLarge;
-
-    final int csvRequestsPerKeyword = max(
-      1,
-      min(20, ((maxResultsConfig + 24) ~/ 25)),
-    );
+    final enabledEngines = _enabledTvKeywordEngines(EngineRegistry.instance);
+    if (enabledEngines.isEmpty) {
+      return 0;
+    }
 
     final int batches = max(
       1,
-      ((keywordCount + _channelCsvParallelism - 1) ~/ _channelCsvParallelism),
+      ((keywordCount + _channelBatchSize - 1) ~/ _channelBatchSize),
     );
 
-    final int csvRequests = batches * csvRequestsPerKeyword;
-    final int csvDurationMs = csvRequests * _keywordWarmEstimateMs;
-
-    // Pirate Bay requests run concurrently ahead of the warm loop. Keep a single
-    // request's cost so we don't under-estimate tiny workloads.
-    final int pirateDurationMs = _keywordWarmEstimateMs;
-    final int estimatedMs = max(csvDurationMs, pirateDurationMs);
+    final int requestWavesPerKeyword = enabledEngines.fold<int>(
+      1,
+      (current, engine) => max(
+        current,
+        _estimatePageRequestsForEngine(engine, effectiveUniverse),
+      ),
+    );
+    final int estimatedMs =
+        batches * requestWavesPerKeyword * _keywordWarmEstimateMs;
 
     return (estimatedMs + 999) ~/ 1000;
   }
@@ -4180,29 +4176,21 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       final Map<String, Torrent> dedupByInfohash = {};
+      final engineStates = await _tvEngineSearchStates();
+      final maxResultsOverrides = _quickPlayMaxResultsOverrides();
 
       // Launch limited batches of per-keyword searches so we don't overwhelm
       List<String> pendingKeywords = List<String>.from(keywords);
       while (pendingKeywords.isNotEmpty && !_watchCancelled) {
-        final batch = pendingKeywords.take(_channelCsvParallelism).toList();
+        final batch = pendingKeywords.take(_channelBatchSize).toList();
         pendingKeywords = pendingKeywords.skip(batch.length).toList();
 
         final futures = batch.map((kw) {
           debugPrint('DebrifyTV: Searching engines for "$kw"...');
           return TorrentService.searchAllEngines(
             kw,
-            engineStates: {
-              'torrents_csv': _useTorrentsCsv,
-              'pirate_bay': _usePirateBay,
-              'yts': _useYts,
-              'solid_torrents': _useSolidTorrents,
-            },
-            maxResultsOverrides: {
-              'torrents_csv': _quickPlayTorrentsCsvMax,
-              'pirate_bay': _quickPlayPirateBayMax,
-              'yts': _quickPlayYtsMax,
-              'solid_torrents': _quickPlaySolidTorrentsMax,
-            },
+            engineStates: engineStates,
+            maxResultsOverrides: maxResultsOverrides,
           );
         }).toList();
 
@@ -4752,24 +4740,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 Torbox: searching for cached torrents...');
     final Map<String, Torrent> dedup = <String, Torrent>{};
+    final engineStates = await _tvEngineSearchStates();
+    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
           .map(
             (kw) => TorrentService.searchAllEngines(
               kw,
-              engineStates: {
-                'torrents_csv': _useTorrentsCsv,
-                'pirate_bay': _usePirateBay,
-                'yts': _useYts,
-                'solid_torrents': _useSolidTorrents,
-              },
-              maxResultsOverrides: {
-                'torrents_csv': _quickPlayTorrentsCsvMax,
-                'pirate_bay': _quickPlayPirateBayMax,
-                'yts': _quickPlayYtsMax,
-                'solid_torrents': _quickPlaySolidTorrentsMax,
-              },
+              engineStates: engineStates,
+              maxResultsOverrides: maxResultsOverrides,
             ),
           )
           .toList();
@@ -5123,24 +5103,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     log('🌐 PikPak: searching for torrents...');
     final Map<String, Torrent> dedup = <String, Torrent>{};
+    final engineStates = await _tvEngineSearchStates();
+    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
 
     try {
       final futures = keywords
           .map(
             (kw) => TorrentService.searchAllEngines(
               kw,
-              engineStates: {
-                'torrents_csv': _useTorrentsCsv,
-                'pirate_bay': _usePirateBay,
-                'yts': _useYts,
-                'solid_torrents': _useSolidTorrents,
-              },
-              maxResultsOverrides: {
-                'torrents_csv': _quickPlayTorrentsCsvMax,
-                'pirate_bay': _quickPlayPirateBayMax,
-                'yts': _quickPlayYtsMax,
-                'solid_torrents': _quickPlaySolidTorrentsMax,
-              },
+              engineStates: engineStates,
+              maxResultsOverrides: maxResultsOverrides,
             ),
           )
           .toList();

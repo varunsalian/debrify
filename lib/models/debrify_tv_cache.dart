@@ -227,6 +227,10 @@ class KeywordStat {
       pirateBayHits: pirateBayHits ?? this.pirateBayHits,
     );
   }
+
+  KeywordStat clearLegacySourceHits() {
+    return copyWith(pirateBayHits: 0);
+  }
 }
 
 class DebrifyTvChannelCacheEntry {
