@@ -13,6 +13,12 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://varunsalian.github.io/debrify/content-responsibility.html</loc>
+    <lastmod>2026-05-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://varunsalian.github.io/debrify/guides/index.html</loc>
     <lastmod>2026-05-03</lastmod>
     <changefreq>weekly</changefreq>
