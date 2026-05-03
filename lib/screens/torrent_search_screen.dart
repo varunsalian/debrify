@@ -2965,8 +2965,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Derives a friendly display name from an engine ID.
-  ///
-  /// E.g., 'pirate_bay' → 'Pirate Bay', 'torrents_csv' → 'Torrents CSV'
   String _friendlyEngineName(String name) {
     if (name.isEmpty) return name;
     if (IndexerManagerConfig.isIndexerManagerEngine(name)) {
@@ -16469,11 +16467,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Derives a short name (2-4 chars) from an engine ID.
   ///
   /// Logic:
-  /// - Stremio addons: strip 'stremio:' prefix first (e.g., 'stremio:comet' → 'CMT')
+  /// - Stremio addons: strip 'stremio:' prefix first.
   /// - Multi-word (has underscore): for each part, use whole part if ≤3 chars,
-  ///   else just first letter. E.g., 'torrents_csv' → 'TCSV', 'solid_torrents' → 'ST'
-  /// - Single word ≤ 4 chars: use whole word (e.g., 'yts' → 'YTS')
-  /// - Single word > 4 chars: first letter + last 2 letters (e.g., 'torrentio' → 'TIO')
+  ///   else just first letter.
+  /// - Single word ≤ 4 chars: use whole word.
+  /// - Single word > 4 chars: first letter + last 2 letters.
   String _deriveEngineShortName(String engineId) {
     // Strip 'stremio:' prefix for Stremio addons
     String name = engineId;
