@@ -233,6 +233,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _manualContentType;
   int? _manualContentSeason;
   int? _manualContentEpisode;
+  String? _manualSubtitleDisplayLabel;
 
   // PikPak cold storage retry logic
   bool _isPikPakRetrying = false;
@@ -5202,6 +5203,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _normalisedContentType(String type) =>
       type.toLowerCase() == 'series' ? 'series' : 'movie';
 
+  String? _subtitleIdentityLabelForSheet() {
+    final manualLabel = _manualSubtitleDisplayLabel?.trim();
+    if (manualLabel != null && manualLabel.isNotEmpty) {
+      return 'Subtitles for $manualLabel';
+    }
+
+    final detectedTitle = _identitySearchInitialQuery();
+    if (detectedTitle.isEmpty) return null;
+    return 'Detected: $detectedTitle';
+  }
+
+  String _subtitleSearchDisplayLabel(
+    StremioMeta meta, {
+    required String contentType,
+    int? season,
+    int? episode,
+  }) {
+    final year = meta.year?.trim();
+    final title = year != null && year.isNotEmpty
+        ? '${meta.name} ($year)'
+        : meta.name;
+    if (contentType == 'series' && season != null && episode != null) {
+      return '$title S${season}E$episode';
+    }
+    return title;
+  }
+
   List<StremioMeta> _filterIdentitySearchResults(List<StremioMeta> metas) {
     final bestByKey = <String, StremioMeta>{};
 
@@ -5708,6 +5736,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
 
+    final subtitleDisplayLabel = _subtitleSearchDisplayLabel(
+      selected,
+      contentType: contentType,
+      season: season,
+      episode: episode,
+    );
+
     final fetchToken = _addonSubtitleFetchToken + 1;
     setState(() {
       _addonSubtitleFetchToken = fetchToken;
@@ -5715,7 +5750,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _manualContentType = contentType;
       _manualContentSeason = contentType == 'series' ? season : null;
       _manualContentEpisode = contentType == 'series' ? episode : null;
+      _manualSubtitleDisplayLabel = subtitleDisplayLabel;
       _selectedStremioSubtitleId = null;
+      _embeddedSubtitleApplied = false;
+      _userManuallySelectedSubtitle = false;
       _cachedStremioSubtitles = null;
       _cachedSubtitleKey = null;
     });
@@ -5742,13 +5780,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (result.subtitles.isEmpty && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No addon subtitles found')),
+          const SnackBar(
+            content: Text('No online subtitles found for this title'),
+          ),
         );
       }
 
       return TracksSheetSubtitleSearchResult(
         subtitles: result.subtitles,
         selectedSubtitleId: _selectedStremioSubtitleId,
+        identityLabel: 'Subtitles for $subtitleDisplayLabel',
       );
     } catch (e) {
       debugPrint('VideoPlayer: Search subtitle fetch failed: $e');
@@ -5886,6 +5927,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       },
       onDownloadStremioSubtitleToFile: _downloadStremioSubtitleToTempFile,
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
+      subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
     );
   }
 
@@ -5898,6 +5940,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _manualContentType = null;
     _manualContentSeason = null;
     _manualContentEpisode = null;
+    _manualSubtitleDisplayLabel = null;
     _embeddedSubtitleApplied = false;
     _userManuallySelectedSubtitle = false;
     _trackPreferencesReadyForAddonSubtitles = false;

@@ -10,10 +10,12 @@ import '../services/subtitle_settings_service.dart';
 class TracksSheetSubtitleSearchResult {
   final List<StremioSubtitle> subtitles;
   final String? selectedSubtitleId;
+  final String? identityLabel;
 
   const TracksSheetSubtitleSearchResult({
     required this.subtitles,
     this.selectedSubtitleId,
+    this.identityLabel,
   });
 }
 
@@ -41,6 +43,7 @@ class TracksSheet {
     Future<String?> Function(StremioSubtitle subtitle)?
     onDownloadStremioSubtitleToFile,
     Future<TracksSheetSubtitleSearchResult?> Function()? onIdentifyTitle,
+    String? subtitleIdentityLabel,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -61,6 +64,7 @@ class TracksSheet {
     if (!context.mounted) return;
 
     List<StremioSubtitle>? stremioSubtitles = cachedSubtitles;
+    String? activeSubtitleIdentityLabel = subtitleIdentityLabel;
     bool isLoadingStremioSubtitles = false;
     bool isIdentifyingTitle = false;
     int subtitleFetchGeneration = 0;
@@ -246,6 +250,7 @@ class TracksSheet {
                         onDownloadStremioSubtitleToFile:
                             onDownloadStremioSubtitleToFile,
                         isIdentifyingTitle: isIdentifyingTitle,
+                        subtitleIdentityLabel: activeSubtitleIdentityLabel,
                         onIdentifyTitle: onIdentifyTitle == null
                             ? null
                             : () async {
@@ -264,6 +269,9 @@ class TracksSheet {
                                   setModalState(() {
                                     if (result != null) {
                                       stremioSubtitles = result.subtitles;
+                                      activeSubtitleIdentityLabel =
+                                          result.identityLabel ??
+                                          activeSubtitleIdentityLabel;
                                       final selectedId =
                                           result.selectedSubtitleId;
                                       if (selectedId != null) {
@@ -396,6 +404,7 @@ class TracksSheet {
     required Future<String?> Function(StremioSubtitle subtitle)?
     onDownloadStremioSubtitleToFile,
     required bool isIdentifyingTitle,
+    required String? subtitleIdentityLabel,
     required Future<void> Function()? onIdentifyTitle,
     required SubtitleSettingsData subtitleStyle,
     required void Function(SubtitleSettingsData) onStyleChanged,
@@ -426,6 +435,7 @@ class TracksSheet {
           onStremioSubtitleSelected: onStremioSubtitleSelected,
           onDownloadStremioSubtitleToFile: onDownloadStremioSubtitleToFile,
           isIdentifyingTitle: isIdentifyingTitle,
+          subtitleIdentityLabel: subtitleIdentityLabel,
           onIdentifyTitle: onIdentifyTitle,
         );
       case 2:
@@ -528,6 +538,7 @@ class _SubtitlesTab extends StatelessWidget {
   final Future<String?> Function(StremioSubtitle subtitle)?
   onDownloadStremioSubtitleToFile;
   final bool isIdentifyingTitle;
+  final String? subtitleIdentityLabel;
   final Future<void> Function()? onIdentifyTitle;
 
   const _SubtitlesTab({
@@ -543,15 +554,32 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onStremioSubtitleSelected,
     required this.onDownloadStremioSubtitleToFile,
     required this.isIdentifyingTitle,
+    required this.subtitleIdentityLabel,
     required this.onIdentifyTitle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final canSearchOnline = onIdentifyTitle != null;
+    final hasAddonSubtitles = stremioSubtitles?.isNotEmpty ?? false;
+    final showEmptyOnlineState =
+        canSearchOnline &&
+        !isLoading &&
+        stremioSubtitles != null &&
+        !hasAddonSubtitles;
+
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       children: [
-        // Off option
+        if (canSearchOnline) ...[
+          _OnlineSubtitleSearchPanel(
+            identityLabel: subtitleIdentityLabel,
+            isSearching: isIdentifyingTitle,
+            onSearch: () => onIdentifyTitle!(),
+          ),
+          const SizedBox(height: 16),
+        ],
+
         _TrackTile(
           title: 'Off',
           subtitle: 'Disable subtitles',
@@ -562,19 +590,6 @@ class _SubtitlesTab extends StatelessWidget {
             await onTrackChanged(selectedAudio, 'no');
           },
         ),
-
-        if (onIdentifyTitle != null) ...[
-          const SizedBox(height: 8),
-          _TrackTile(
-            title: 'Search subtitle',
-            subtitle: isIdentifyingTitle
-                ? 'Searching catalogs...'
-                : 'Search catalogs by title',
-            isSelected: false,
-            icon: Icons.search_rounded,
-            onTap: isIdentifyingTitle ? () {} : () => onIdentifyTitle!(),
-          ),
-        ],
 
         // Embedded subtitles
         if (embeddedSubs.isNotEmpty) ...[
@@ -601,8 +616,7 @@ class _SubtitlesTab extends StatelessWidget {
         ],
 
         // Addon subtitles
-        if (isLoading ||
-            (stremioSubtitles != null && stremioSubtitles!.isNotEmpty)) ...[
+        if (isLoading || hasAddonSubtitles || showEmptyOnlineState) ...[
           const SizedBox(height: 16),
           _SectionLabel(
             label: 'From Addons',
@@ -638,7 +652,7 @@ class _SubtitlesTab extends StatelessWidget {
                 ),
               ),
             )
-          else if (stremioSubtitles != null)
+          else if (hasAddonSubtitles)
             ...stremioSubtitles!.map((sub) {
               final subId = 'stremio:${sub.id}';
               return Padding(
@@ -669,7 +683,9 @@ class _SubtitlesTab extends StatelessWidget {
                   },
                 ),
               );
-            }),
+            })
+          else
+            _OnlineSubtitleEmptyState(onSearch: () => onIdentifyTitle!()),
         ],
 
         const SizedBox(height: 20),
@@ -931,18 +947,186 @@ class _StyleTab extends StatelessWidget {
 // Shared Widgets
 // ============================================================================
 
+class _OnlineSubtitleSearchPanel extends StatelessWidget {
+  final String? identityLabel;
+  final bool isSearching;
+  final VoidCallback onSearch;
+
+  const _OnlineSubtitleSearchPanel({
+    required this.identityLabel,
+    required this.isSearching,
+    required this.onSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = identityLabel?.trim();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: VideoPlayerColors.netflixRed.withValues(alpha: 0.18),
+                ),
+                child: const Icon(
+                  Icons.travel_explore_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Online subtitles',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label == null || label.isEmpty
+                          ? 'Detected title unavailable'
+                          : label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.62),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Find subtitles by choosing the correct title.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.48),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isSearching ? null : onSearch,
+              icon: isSearching
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.search_rounded, size: 18),
+              label: Text(
+                isSearching
+                    ? 'Searching Catalogs...'
+                    : 'Search Movie/Show Subtitles',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: VideoPlayerColors.netflixRed,
+                disabledBackgroundColor: VideoPlayerColors.netflixRed
+                    .withValues(alpha: 0.45),
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OnlineSubtitleEmptyState extends StatelessWidget {
+  final VoidCallback onSearch;
+
+  const _OnlineSubtitleEmptyState({required this.onSearch});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.subtitles_off_rounded,
+            size: 28,
+            color: Colors.white.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No online subtitles found for this title',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: onSearch,
+            icon: const Icon(Icons.search_rounded, size: 18),
+            label: const Text('Search Another Movie/Show'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TrackTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool isSelected;
-  final IconData? icon;
   final VoidCallback onTap;
 
   const _TrackTile({
     required this.title,
     this.subtitle,
     required this.isSelected,
-    this.icon,
     required this.onTap,
   });
 
@@ -967,46 +1151,30 @@ class _TrackTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            if (icon != null)
-              Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: VideoPlayerColors.netflixRed.withValues(alpha: 0.18),
-                ),
-                child: Icon(
-                  icon,
-                  size: 14,
-                  color: Colors.white.withValues(alpha: 0.9),
-                ),
-              )
-            else
-              // Selection indicator
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected
+                    ? VideoPlayerColors.netflixRed
+                    : Colors.transparent,
+                border: Border.all(
                   color: isSelected
                       ? VideoPlayerColors.netflixRed
-                      : Colors.transparent,
-                  border: Border.all(
-                    color: isSelected
-                        ? VideoPlayerColors.netflixRed
-                        : Colors.white.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
+                      : Colors.white.withValues(alpha: 0.3),
+                  width: 2,
                 ),
-                child: isSelected
-                    ? const Icon(
-                        Icons.check_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      )
-                    : null,
               ),
+              child: isSelected
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    )
+                  : null,
+            ),
             const SizedBox(width: 14),
             // Title & subtitle
             Expanded(

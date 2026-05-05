@@ -237,6 +237,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleColumnElevation: View? = null
     private var subtitleValueElevation: TextView? = null
     private var subtitlePreviewText: TextView? = null
+    private var subtitleSearchButton: View? = null
+    private var subtitleIdentityLabel: TextView? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
 
@@ -252,6 +254,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleType: String? = null
     private var manualSubtitleSeason: Int? = null
     private var manualSubtitleEpisode: Int? = null
+    private var manualSubtitleDisplayLabel: String? = null
     private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -716,6 +719,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleValueElevation = findViewById(R.id.subtitle_value_elevation)
         subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
         subtitleResetButton = findViewById(R.id.subtitle_reset_button)
+        subtitleSearchButton = findViewById(R.id.subtitle_search_button)
+        subtitleIdentityLabel = findViewById(R.id.subtitle_identity_label)
+        subtitleSearchButton?.setOnClickListener {
+            showSearchSubtitleDialog()
+        }
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
         pikPakReactivationIndicator = findViewById(R.id.android_tv_pikpak_reactivation_indicator)
         pikPakReactivationText = findViewById(R.id.android_tv_pikpak_reactivation_text)
@@ -1684,6 +1692,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSubtitleType = null
         manualSubtitleSeason = null
         manualSubtitleEpisode = null
+        manualSubtitleDisplayLabel = null
         addonSubtitleFetchToken++
     }
 
@@ -1860,6 +1869,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 currentStremioSubtitleIndex = -1
                 isLoadingStremioSubtitles = false
                 android.util.Log.d("StremioSubs", "Fetched ${subtitles.size} subtitles for IMDB $imdbId")
+                if (subtitles.isEmpty() && manualSubtitleImdbId == imdbId) {
+                    Toast.makeText(
+                        this@AndroidTvTorrentPlayerActivity,
+                        "No online subtitles found for this title",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
 
                 // Try to auto-select addon subtitle if no embedded subtitle was selected
                 tryAutoSelectAddonSubtitle()
@@ -2161,6 +2177,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val queryInput = EditText(this).apply {
             setSingleLine(true)
+            hint = "Movie or show title"
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setText(buildSubtitleSearchInitialQuery(currentItem))
@@ -2194,7 +2211,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         val statusText = TextView(this).apply {
-            text = "Search Stremio catalogs for a movie or series."
+            text = "Find subtitles by choosing the correct title."
             setPadding(0, 0, 0, dp(8))
         }
 
@@ -2251,7 +2268,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             results.addAll(newResults)
             adapter.notifyDataSetChanged()
             statusText.text = when {
-                newResults.isEmpty() -> "No matching IMDb-backed catalog results found."
+                newResults.isEmpty() -> "No matching movie/show results found."
                 newResults.size == 1 -> "1 result"
                 else -> "${newResults.size} results"
             }
@@ -2330,7 +2347,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         dialog = AlertDialog.Builder(this)
-            .setTitle("Search Subtitle")
+            .setTitle("Search Movie/Show Subtitles")
             .setView(container)
             .setNegativeButton("Cancel", null)
             .create()
@@ -2622,6 +2639,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSubtitleType = type
         manualSubtitleSeason = if (type == "series") season else null
         manualSubtitleEpisode = if (type == "series") episode else null
+        manualSubtitleDisplayLabel = buildManualSubtitleDisplayLabel(
+            result,
+            type,
+            manualSubtitleSeason,
+            manualSubtitleEpisode
+        )
 
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
@@ -2696,6 +2719,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .trim()
 
         return cleaned.ifEmpty { item.title }
+    }
+
+    private fun buildManualSubtitleDisplayLabel(
+        result: SubtitleCatalogResult,
+        type: String,
+        season: Int?,
+        episode: Int?
+    ): String {
+        val base = result.titleLine()
+        return if (type == "series" && season != null && episode != null) {
+            "$base S${season}E$episode"
+        } else {
+            base
+        }
+    }
+
+    private fun currentSubtitleIdentityLabel(): String {
+        val manualLabel = manualSubtitleDisplayLabel?.trim()
+        if (!manualLabel.isNullOrEmpty()) {
+            return "Subtitles for $manualLabel"
+        }
+
+        val detectedTitle = getCurrentSubtitleSearchItem()
+            ?.let { buildSubtitleSearchInitialQuery(it).trim() }
+            ?.takeIf { it.isNotEmpty() }
+
+        return if (detectedTitle != null) {
+            "Detected: $detectedTitle"
+        } else {
+            "Detected title unavailable"
+        }
     }
 
     private fun dp(value: Int): Int {
@@ -4559,7 +4613,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun rebuildSubtitleTrackList() {
         subtitleTracks.clear()
         subtitleTracks.add(Pair("Off", null))
-        subtitleTracks.add(Pair(SEARCH_SUBTITLE_LABEL, null))
         currentSubtitleTrackIndex = 0
 
         val tracks = player?.currentTracks
@@ -4617,8 +4670,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleSettingsRoot?.visibility = View.VISIBLE
         subtitleSettingsVisible = true
 
-        // Focus first column
-        subtitleColumnTrack?.requestFocus()
+        // Focus the online search action first so it is discoverable.
+        subtitleSearchButton?.requestFocus() ?: subtitleColumnTrack?.requestFocus()
     }
 
     private fun hideSubtitleSettingsPanel() {
@@ -4648,6 +4701,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateSubtitlePanelValues() {
+        subtitleIdentityLabel?.text = currentSubtitleIdentityLabel()
+
         // Track
         subtitleValueTrack?.text = if (subtitleTracks.isNotEmpty() && currentSubtitleTrackIndex < subtitleTracks.size) {
             subtitleTracks[currentSubtitleTrackIndex].first
@@ -4737,8 +4792,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val focusedView = currentFocus ?: return
 
         when (focusedView.id) {
+            R.id.subtitle_search_button -> {
+                return
+            }
             R.id.subtitle_column_track -> {
-                // Track uses dialog, no cycling
+                subtitleSearchButton?.requestFocus()
                 return
             }
             R.id.subtitle_column_size -> {
@@ -4776,6 +4834,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val focusedView = currentFocus ?: return
 
         when (focusedView.id) {
+            R.id.subtitle_search_button -> {
+                subtitleColumnTrack?.requestFocus()
+                return
+            }
             R.id.subtitle_column_track -> {
                 // Track uses dialog, no cycling
                 return
@@ -4815,6 +4877,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val focusedView = currentFocus ?: return
 
         when (focusedView.id) {
+            R.id.subtitle_search_button -> {
+                showSearchSubtitleDialog()
+            }
             R.id.subtitle_column_track -> {
                 showSubtitleTrackSelectionDialog()
             }
@@ -6780,7 +6845,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val SEEK_STEP_MS = 10_000L
         private const val SEEK_LONG_PRESS_THRESHOLD = 3
         private const val BACK_PRESS_INTERVAL_MS = 2000L  // 2 seconds
-        private const val SEARCH_SUBTITLE_LABEL = "🔎 Search Subtitle"
+        private const val SEARCH_SUBTITLE_LABEL = "Search Movie/Show Subtitles"
         private const val SUBTITLE_LOADING_LABEL = "⏳ Loading external subtitles..."
         private const val EXTERNAL_SUBTITLE_PREFIX = "⬇"
 

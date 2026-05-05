@@ -43,6 +43,48 @@
             android:letterSpacing="0.1"
             android:layout_marginBottom="14dp" />
 
+        <!-- Online subtitle search action -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/subtitle_identity_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="12dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="Detected title unavailable"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/subtitle_search_button"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/subtitle_column_bg"
+                android:clickable="true"
+                android:drawableStart="@drawable/ic_search"
+                android:drawablePadding="8dp"
+                android:drawableTint="#FFFFFF"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:nextFocusDown="@id/subtitle_column_track"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="Search Movie/Show Subtitles"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium" />
+
+        </LinearLayout>
+
         <!-- Single Row: All Options -->
         <LinearLayout
             android:layout_width="wrap_content"
@@ -64,6 +106,7 @@
                 android:background="@drawable/subtitle_column_bg"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
+                android:nextFocusUp="@id/subtitle_search_button"
                 android:nextFocusRight="@+id/subtitle_column_size"
                 android:layout_marginEnd="6dp">
 
