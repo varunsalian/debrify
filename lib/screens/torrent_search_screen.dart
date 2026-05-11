@@ -16689,11 +16689,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFF16162A),
-                    Color(0xFF0C0C18),
-                    Color(0xFF050508),
+                    Color(0xFF14101C),
+                    Color(0xFF0A0810),
+                    Color(0xFF030305),
                   ],
-                  stops: [0.0, 0.3, 1.0],
+                  stops: [0.0, 0.35, 1.0],
+                ),
+              ),
+            ),
+          ),
+          // Top-center crimson ambient glow — frames the hero card
+          Positioned(
+            top: -180,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  width: 520,
+                  height: 360,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFFED1C24).withValues(alpha: 0.18),
+                        const Color(0xFFED1C24).withValues(alpha: 0.05),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.45, 1.0],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -16944,25 +16969,25 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       builder: (context) {
                                         final isFocused =
                                             _searchToggleFocusNode.hasFocus;
-                                        return Container(
+                                        return AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 150,
+                                          ),
                                           height: 40,
                                           width: 40,
                                           decoration: BoxDecoration(
-                                            color: isFocused
-                                                ? Colors.white.withValues(
-                                                    alpha: 0.15,
-                                                  )
-                                                : const Color(0xFF141414),
+                                            color: Colors.white.withValues(
+                                              alpha: isFocused ? 0.2 : 0.12,
+                                            ),
                                             borderRadius: BorderRadius.circular(
                                               20,
                                             ),
-                                            border: isFocused
-                                                ? Border.all(
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.6),
-                                                    width: 2,
-                                                  )
-                                                : null,
+                                            border: Border.all(
+                                              color: Colors.white.withValues(
+                                                alpha: isFocused ? 0.4 : 0.2,
+                                              ),
+                                              width: isFocused ? 1.5 : 1,
+                                            ),
                                           ),
                                           child: Icon(
                                             Icons.search_rounded,
@@ -16976,7 +17001,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                                         .isNotEmpty)
                                                 ? Colors.white
                                                 : Colors.white.withValues(
-                                                    alpha: 0.5,
+                                                    alpha: 0.7,
                                                   ),
                                           ),
                                         );
