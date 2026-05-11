@@ -322,13 +322,20 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                 return Container(
                   decoration: BoxDecoration(
                     color: _kCardBg,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: hasFocus
                           ? _kNetflixRed
                           : Colors.white.withValues(alpha: 0.06),
                       width: hasFocus ? 2 : 1,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                     image: fanartUrl != null
                         ? DecorationImage(
                             image: NetworkImage(fanartUrl),
@@ -339,7 +346,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                         : null,
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -375,11 +382,11 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                                 // Poster
                                 Padding(
                                   padding: EdgeInsets.symmetric(
-                                    vertical: wide ? 16 : 14,
+                                    vertical: wide ? 20 : 16,
                                   ),
                                   child: _poster(featured, big: wide),
                                 ),
-                                const SizedBox(width: 14),
+                                const SizedBox(width: 16),
                                 // Featured text column. On wide screens it's
                                 // capped so the rest of the row becomes reveal
                                 // space for the fanart background. On narrow
@@ -508,26 +515,38 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
   }
 
   Widget _poster(TraktCalendarEntry e, {bool big = false}) {
-    final w = big ? 72.0 : 52.0;
-    final h = big ? 108.0 : 78.0;
+    final w = big ? 86.0 : 64.0;
+    final h = big ? 128.0 : 96.0;
     final placeholder = Container(
       width: w,
       height: h,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(Icons.tv_rounded, size: big ? 28 : 20, color: Colors.white30),
+      child: Icon(Icons.tv_rounded, size: big ? 32 : 24, color: Colors.white30),
     );
     if (e.posterUrl == null) return placeholder;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: Image.network(
-        e.posterUrl!,
-        width: w,
-        height: h,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => placeholder,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          e.posterUrl!,
+          width: w,
+          height: h,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => placeholder,
+        ),
       ),
     );
   }
@@ -540,14 +559,17 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
   }) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: dense ? 5 : 6,
-        vertical: dense ? 1 : 2,
+        horizontal: dense ? 6 : 8,
+        vertical: dense ? 2 : 3,
       ),
       decoration: BoxDecoration(
         color: muted
             ? Colors.white.withValues(alpha: 0.08)
-            : accent.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(3),
+            : accent.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(4),
+        border: muted
+            ? null
+            : Border.all(color: accent.withValues(alpha: 0.45), width: 0.6),
       ),
       child: Text(
         text,
@@ -555,9 +577,9 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: muted ? Colors.white.withValues(alpha: 0.7) : accent,
-          fontSize: dense ? 8 : 9,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
+          fontSize: dense ? 9 : 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
         ),
       ),
     );

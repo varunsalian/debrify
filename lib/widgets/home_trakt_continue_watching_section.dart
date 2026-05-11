@@ -1640,27 +1640,20 @@ class _HomeTraktContinueWatchingSectionState
                   left: 0,
                   right: 0,
                   child: SizedBox(
-                    height: 3.5,
+                    height: 3,
                     child: Stack(
                       children: [
                         // Track
-                        Container(color: Colors.white.withValues(alpha: 0.1)),
+                        Container(color: Colors.white.withValues(alpha: 0.12)),
                         // Fill
                         FractionallySizedBox(
                           alignment: Alignment.centerLeft,
                           widthFactor: progressPercent.clamp(0.0, 1.0),
                           child: Container(
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFED1C24), Color(0xFFFF4D4D)],
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Color(0xFFED1C24), Color(0xFFFF6B6B)],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _accentColor.withValues(alpha: 0.6),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, -1),
-                                ),
-                              ],
                             ),
                           ),
                         ),
