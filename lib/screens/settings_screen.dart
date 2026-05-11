@@ -1109,206 +1109,267 @@ class _SettingsLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
+      children: [
+        const _CinematicBackdrop(),
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SettingsHeader(theme: theme),
+              const SizedBox(height: 24),
+              // Connections section with cards
+              connections,
+              const SizedBox(height: 24),
+              // General section
+              _SettingsSection(
+                title: 'General',
+                children: [
+                  _SettingsTile(
+                    icon: Icons.home_rounded,
+                    title: 'Home Page',
+                    subtitle: 'Default view when app opens',
+                    onTap: onOpenHomePageSettings,
+                    iconColor: const Color(0xFF6366F1),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.open_in_new_rounded,
+                    title: 'Player Settings',
+                    subtitle: 'Configure preferred video player',
+                    onTap: onOpenExternalPlayerSettings,
+                    iconColor: const Color(0xFF8B5CF6),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.rocket_launch_rounded,
+                    title: 'Startup',
+                    subtitle: 'Decide what happens on app launch',
+                    onTap: onOpenStartupSettings,
+                    iconColor: const Color(0xFFF59E0B),
+                  ),
+                  // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
+                  // Only show on desktop platforms
+                  if (!kIsWeb &&
+                      (Platform.isWindows ||
+                          Platform.isMacOS ||
+                          Platform.isLinux))
+                    _SettingsTile(
+                      icon: Icons.phonelink_rounded,
+                      title: 'Remote Control',
+                      subtitle: 'Control Debrify TV from your phone',
+                      onTap: () async => onOpenRemoteControl(),
+                      iconColor: const Color(0xFF06B6D4),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Search section
+              _SettingsSection(
+                title: 'Search',
+                children: [
+                  _SettingsTile(
+                    icon: Icons.search_rounded,
+                    title: 'Search Settings',
+                    subtitle: 'Engines, filters, and sorting',
+                    onTap: onOpenTorrentSettings,
+                    iconColor: const Color(0xFF3B82F6),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.filter_list_rounded,
+                    title: 'Filter Settings',
+                    subtitle: 'Default quality, source, and language filters',
+                    onTap: onOpenFilterSettings,
+                    iconColor: const Color(0xFF10B981),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.cloud_sync_rounded,
+                    title: 'Provider Settings',
+                    subtitle: 'Default provider for adding torrents',
+                    onTap: onOpenProviderSettings,
+                    iconColor: const Color(0xFF8B5CF6),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.bolt_rounded,
+                    title: 'Quick Play Settings',
+                    subtitle: 'Configure quick play for torrent search',
+                    onTap: onOpenQuickPlaySettings,
+                    iconColor: const Color(0xFFF59E0B),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // TV Mode section
+              _SettingsSection(
+                title: 'TV Mode',
+                children: [
+                  _SettingsTile(
+                    icon: Icons.live_tv_rounded,
+                    title: 'Debrify TV Settings',
+                    subtitle: 'Limits, channels, and playback configuration',
+                    onTap: onOpenDebrifyTvSettings,
+                    iconColor: const Color(0xFFE11D48),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Maintenance section
+              _SettingsSection(
+                title: 'Maintenance',
+                children: [
+                  _SettingsTile(
+                    icon: Icons.download_rounded,
+                    title: 'Clear Download Data',
+                    subtitle: 'Remove queue history and in-progress entries',
+                    onTap: onClearDownloads,
+                    iconColor: const Color(0xFFF59E0B),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.play_circle_rounded,
+                    title: 'Clear Playback Data',
+                    subtitle: 'Reset resume points and playback sessions',
+                    onTap: onClearPlayback,
+                    iconColor: const Color(0xFF8B5CF6),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Danger Zone section
+              _SettingsSection(
+                title: 'Danger Zone',
+                accentColor: theme.colorScheme.error,
+                children: [
+                  _SettingsTile(
+                    icon: Icons.warning_rounded,
+                    title: 'Reset Debrify',
+                    subtitle: 'Remove connections, preferences, and caches',
+                    onTap: onDangerAction,
+                    iconColor: const Color(0xFFEF4444),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // About section
+              _SettingsSection(
+                title: 'About',
+                children: [
+                  _SettingsToggleTile(
+                    icon: Icons.notifications_active_rounded,
+                    title: 'Auto Check for Updates',
+                    subtitle: 'Notify about new releases on startup',
+                    value: autoUpdateChecksEnabled,
+                    onChanged: onToggleAutoUpdateChecks,
+                    iconColor: const Color(0xFF0EA5E9),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.system_update_rounded,
+                    title: 'Check for Updates',
+                    subtitle: updateSubtitle,
+                    onTap: onCheckForUpdates,
+                    iconColor: const Color(0xFF22C55E),
+                    tag: 'New',
+                    trailing: checkingUpdates
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : null,
+                  ),
+                  if (showSupportDonation)
+                    _SettingsTile(
+                      icon: Icons.favorite_rounded,
+                      title: supportDonationLabel,
+                      subtitle: supportDonationSubtitle,
+                      onTap: onOpenSupportDonation,
+                      iconColor: const Color(0xFFEC4899),
+                    ),
+                  _SettingsTile(
+                    icon: Icons.forum_rounded,
+                    title: 'Reddit Community',
+                    subtitle: 'r/debrify - Questions, tips, and discussion',
+                    onTap: () => launchUrl(
+                      Uri.parse('https://www.reddit.com/r/debrify/'),
+                    ),
+                    iconColor: const Color(0xFFFF4500),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.chat_rounded,
+                    title: 'Discord',
+                    subtitle: 'Join for help, updates, and discussion',
+                    onTap: () =>
+                        launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
+                    iconColor: const Color(0xFF5865F2),
+                  ),
+                  _SettingsTile(
+                    icon: Icons.code_rounded,
+                    title: 'GitHub',
+                    subtitle: 'Source code and contributions',
+                    onTap: () => launchUrl(
+                      Uri.parse('https://github.com/varunsalian/debrify'),
+                    ),
+                    iconColor: const Color(0xFF10B981),
+                  ),
+                  _InfoTile(
+                    icon: Icons.info_outline_rounded,
+                    title: 'Version',
+                    value: appVersion,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Cinematic gradient backdrop with red ambient glow, shared across redesigned screens.
+class _CinematicBackdrop extends StatelessWidget {
+  const _CinematicBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
         children: [
-          _SettingsHeader(theme: theme),
-          const SizedBox(height: 24),
-          // Connections section with cards
-          connections,
-          const SizedBox(height: 24),
-          // General section
-          _SettingsSection(
-            title: 'General',
-            children: [
-              _SettingsTile(
-                icon: Icons.home_rounded,
-                title: 'Home Page',
-                subtitle: 'Default view when app opens',
-                onTap: onOpenHomePageSettings,
-                iconColor: const Color(0xFF6366F1),
-              ),
-              _SettingsTile(
-                icon: Icons.open_in_new_rounded,
-                title: 'Player Settings',
-                subtitle: 'Configure preferred video player',
-                onTap: onOpenExternalPlayerSettings,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-              _SettingsTile(
-                icon: Icons.rocket_launch_rounded,
-                title: 'Startup',
-                subtitle: 'Decide what happens on app launch',
-                onTap: onOpenStartupSettings,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-              // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
-              // Only show on desktop platforms
-              if (!kIsWeb &&
-                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
-                _SettingsTile(
-                  icon: Icons.phonelink_rounded,
-                  title: 'Remote Control',
-                  subtitle: 'Control Debrify TV from your phone',
-                  onTap: () async => onOpenRemoteControl(),
-                  iconColor: const Color(0xFF06B6D4),
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF14101C),
+                    Color(0xFF0A0810),
+                    Color(0xFF030305),
+                  ],
+                  stops: [0.0, 0.35, 1.0],
                 ),
-            ],
+              ),
+            ),
           ),
-          const SizedBox(height: 24),
-          // Search section
-          _SettingsSection(
-            title: 'Search',
-            children: [
-              _SettingsTile(
-                icon: Icons.search_rounded,
-                title: 'Search Settings',
-                subtitle: 'Engines, filters, and sorting',
-                onTap: onOpenTorrentSettings,
-                iconColor: const Color(0xFF3B82F6),
-              ),
-              _SettingsTile(
-                icon: Icons.filter_list_rounded,
-                title: 'Filter Settings',
-                subtitle: 'Default quality, source, and language filters',
-                onTap: onOpenFilterSettings,
-                iconColor: const Color(0xFF10B981),
-              ),
-              _SettingsTile(
-                icon: Icons.cloud_sync_rounded,
-                title: 'Provider Settings',
-                subtitle: 'Default provider for adding torrents',
-                onTap: onOpenProviderSettings,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-              _SettingsTile(
-                icon: Icons.bolt_rounded,
-                title: 'Quick Play Settings',
-                subtitle: 'Configure quick play for torrent search',
-                onTap: onOpenQuickPlaySettings,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // TV Mode section
-          _SettingsSection(
-            title: 'TV Mode',
-            children: [
-              _SettingsTile(
-                icon: Icons.live_tv_rounded,
-                title: 'Debrify TV Settings',
-                subtitle: 'Limits, channels, and playback configuration',
-                onTap: onOpenDebrifyTvSettings,
-                iconColor: const Color(0xFFE11D48),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Maintenance section
-          _SettingsSection(
-            title: 'Maintenance',
-            children: [
-              _SettingsTile(
-                icon: Icons.download_rounded,
-                title: 'Clear Download Data',
-                subtitle: 'Remove queue history and in-progress entries',
-                onTap: onClearDownloads,
-                iconColor: const Color(0xFFF59E0B),
-              ),
-              _SettingsTile(
-                icon: Icons.play_circle_rounded,
-                title: 'Clear Playback Data',
-                subtitle: 'Reset resume points and playback sessions',
-                onTap: onClearPlayback,
-                iconColor: const Color(0xFF8B5CF6),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Danger Zone section
-          _SettingsSection(
-            title: 'Danger Zone',
-            accentColor: theme.colorScheme.error,
-            children: [
-              _SettingsTile(
-                icon: Icons.warning_rounded,
-                title: 'Reset Debrify',
-                subtitle: 'Remove connections, preferences, and caches',
-                onTap: onDangerAction,
-                iconColor: const Color(0xFFEF4444),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // About section
-          _SettingsSection(
-            title: 'About',
-            children: [
-              _SettingsToggleTile(
-                icon: Icons.notifications_active_rounded,
-                title: 'Auto Check for Updates',
-                subtitle: 'Notify about new releases on startup',
-                value: autoUpdateChecksEnabled,
-                onChanged: onToggleAutoUpdateChecks,
-                iconColor: const Color(0xFF0EA5E9),
-              ),
-              _SettingsTile(
-                icon: Icons.system_update_rounded,
-                title: 'Check for Updates',
-                subtitle: updateSubtitle,
-                onTap: onCheckForUpdates,
-                iconColor: const Color(0xFF22C55E),
-                tag: 'New',
-                trailing: checkingUpdates
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )
-                    : null,
-              ),
-              if (showSupportDonation)
-                _SettingsTile(
-                  icon: Icons.favorite_rounded,
-                  title: supportDonationLabel,
-                  subtitle: supportDonationSubtitle,
-                  onTap: onOpenSupportDonation,
-                  iconColor: const Color(0xFFEC4899),
+          Positioned(
+            top: -200,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 560,
+                height: 380,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFED1C24).withValues(alpha: 0.22),
+                      const Color(0xFFED1C24).withValues(alpha: 0.06),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
                 ),
-              _SettingsTile(
-                icon: Icons.forum_rounded,
-                title: 'Reddit Community',
-                subtitle: 'r/debrify - Questions, tips, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://www.reddit.com/r/debrify/')),
-                iconColor: const Color(0xFFFF4500),
               ),
-              _SettingsTile(
-                icon: Icons.chat_rounded,
-                title: 'Discord',
-                subtitle: 'Join for help, updates, and discussion',
-                onTap: () =>
-                    launchUrl(Uri.parse('https://discord.gg/xuAc4Q2c9G')),
-                iconColor: const Color(0xFF5865F2),
-              ),
-              _SettingsTile(
-                icon: Icons.code_rounded,
-                title: 'GitHub',
-                subtitle: 'Source code and contributions',
-                onTap: () => launchUrl(
-                  Uri.parse('https://github.com/varunsalian/debrify'),
-                ),
-                iconColor: const Color(0xFF10B981),
-              ),
-              _InfoTile(
-                icon: Icons.info_outline_rounded,
-                title: 'Version',
-                value: appVersion,
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -1325,20 +1386,24 @@ class _SettingsHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
+          colors: [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.02),
+          ],
         ),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: const Color(0xFFED1C24).withValues(alpha: 0.12),
+            blurRadius: 32,
+            spreadRadius: -8,
           ),
         ],
       ),
@@ -1348,14 +1413,16 @@ class _SettingsHeader extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFED1C24), Color(0xFFB81D24)],
               ),
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: const Color(0xFFED1C24).withValues(alpha: 0.45),
+                  blurRadius: 16,
+                  spreadRadius: -2,
                 ),
               ],
             ),
@@ -1373,15 +1440,15 @@ class _SettingsHeader extends StatelessWidget {
                 Text(
                   'Settings',
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Manage connections and clean up your library.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: Colors.white.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -1611,7 +1678,7 @@ class _ConnectionInfo {
   });
 }
 
-class _ConnectionCard extends StatelessWidget {
+class _ConnectionCard extends StatefulWidget {
   final _ConnectionInfo info;
   final FocusNode? focusNode;
   final bool isLeftColumn;
@@ -1631,13 +1698,47 @@ class _ConnectionCard extends StatelessWidget {
   });
 
   @override
+  State<_ConnectionCard> createState() => _ConnectionCardState();
+}
+
+class _ConnectionCardState extends State<_ConnectionCard> {
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_onFocus);
+  }
+
+  @override
+  void didUpdateWidget(_ConnectionCard old) {
+    super.didUpdateWidget(old);
+    if (old.focusNode != widget.focusNode) {
+      old.focusNode?.removeListener(_onFocus);
+      widget.focusNode?.addListener(_onFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  void _onFocus() {
+    if (!mounted) return;
+    setState(() => _focused = widget.focusNode?.hasFocus ?? false);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final info = widget.info;
     final String statusLower = info.status.toLowerCase();
     final bool active = info.connected && statusLower == 'active';
     final Color indicatorColor = info.connected
-        ? (active ? Colors.green : Colors.red)
-        : theme.colorScheme.outline;
+        ? (active ? const Color(0xFF34D399) : const Color(0xFFED1C24))
+        : Colors.white.withValues(alpha: 0.35);
 
     // Helper to focus and scroll into view
     void focusAndScroll(FocusNode target) {
@@ -1658,52 +1759,75 @@ class _ConnectionCard extends StatelessWidget {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          if (leftNeighbor != null) {
-            focusAndScroll(leftNeighbor!);
+          if (widget.leftNeighbor != null) {
+            focusAndScroll(widget.leftNeighbor!);
             return KeyEventResult.handled;
-          } else if (isLeftColumn && MainPageBridge.focusTvSidebar != null) {
-            // Left column with no left neighbor: open sidebar
+          } else if (widget.isLeftColumn &&
+              MainPageBridge.focusTvSidebar != null) {
             MainPageBridge.focusTvSidebar!();
             return KeyEventResult.handled;
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          if (rightNeighbor != null) {
-            focusAndScroll(rightNeighbor!);
+          if (widget.rightNeighbor != null) {
+            focusAndScroll(widget.rightNeighbor!);
             return KeyEventResult.handled;
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          if (upNeighbor != null) {
-            focusAndScroll(upNeighbor!);
+          if (widget.upNeighbor != null) {
+            focusAndScroll(widget.upNeighbor!);
             return KeyEventResult.handled;
           }
         } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (downNeighbor != null) {
-            focusAndScroll(downNeighbor!);
+          if (widget.downNeighbor != null) {
+            focusAndScroll(widget.downNeighbor!);
             return KeyEventResult.handled;
           }
         }
 
         return KeyEventResult.ignored;
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()..scale(_focused ? 1.015 : 1.0),
+        transformAlignment: Alignment.center,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+            colors: _focused
+                ? [
+                    const Color(0xFFED1C24).withValues(alpha: 0.18),
+                    const Color(0xFFED1C24).withValues(alpha: 0.06),
+                  ]
+                : [
+                    Colors.white.withValues(alpha: 0.05),
+                    Colors.white.withValues(alpha: 0.02),
+                  ],
           ),
-          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1,
+            color: _focused
+                ? const Color(0xFFED1C24).withValues(alpha: 0.9)
+                : Colors.white.withValues(alpha: 0.07),
+            width: _focused ? 2 : 1,
           ),
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFED1C24).withValues(alpha: 0.3),
+                    blurRadius: 22,
+                    spreadRadius: -4,
+                  ),
+                ]
+              : null,
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           child: InkWell(
-            focusNode: focusNode,
-            borderRadius: BorderRadius.circular(18),
+            focusNode: widget.focusNode,
+            borderRadius: BorderRadius.circular(20),
             onTap: () async {
               await info.onTap();
             },
@@ -1716,23 +1840,22 @@ class _ConnectionCard extends StatelessWidget {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: info.connected && active
-                            ? [const Color(0xFF059669), const Color(0xFF10B981)]
-                            : [
-                                const Color(0xFF6366F1),
-                                const Color(0xFF8B5CF6),
-                              ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: active
+                            ? const [Color(0xFF34D399), Color(0xFF10B981)]
+                            : const [Color(0xFFED1C24), Color(0xFFB81D24)],
                       ),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
                           color:
-                              (info.connected && active
+                              (active
                                       ? const Color(0xFF10B981)
-                                      : const Color(0xFF6366F1))
-                                  .withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                                      : const Color(0xFFED1C24))
+                                  .withValues(alpha: 0.35),
+                          blurRadius: 14,
+                          spreadRadius: -3,
                         ),
                       ],
                     ),
@@ -1823,36 +1946,64 @@ class _SettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDanger = accentColor == theme.colorScheme.error;
+    final headerAccent = accentColor ?? const Color(0xFFED1C24);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title.isNotEmpty) ...[
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-              color: accentColor ?? Colors.white.withValues(alpha: 0.85),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: isDanger
+                          ? [headerAccent, headerAccent.withValues(alpha: 0.6)]
+                          : const [Color(0xFFED1C24), Color(0xFFB81D24)],
+                    ),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: isDanger
+                        ? accentColor
+                        : Colors.white.withValues(alpha: 0.92),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
         ],
         Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+              colors: [
+                Colors.white.withValues(alpha: 0.05),
+                Colors.white.withValues(alpha: 0.02),
+              ],
             ),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: Colors.white.withValues(alpha: 0.07),
               width: 1,
             ),
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             child: Column(
               children: [
                 for (int i = 0; i < children.length; i++) ...[
@@ -1860,8 +2011,9 @@ class _SettingsSection extends StatelessWidget {
                     Divider(
                       height: 1,
                       thickness: 1,
-                      indent: 56,
-                      color: Colors.white.withValues(alpha: 0.06),
+                      indent: 60,
+                      endIndent: 8,
+                      color: Colors.white.withValues(alpha: 0.05),
                     ),
                   children[i],
                 ],
@@ -1874,7 +2026,7 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
-class _SettingsTile extends StatelessWidget {
+class _SettingsTile extends StatefulWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -1894,86 +2046,152 @@ class _SettingsTile extends StatelessWidget {
   });
 
   @override
+  State<_SettingsTile> createState() => _SettingsTileState();
+}
+
+class _SettingsTileState extends State<_SettingsTile> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: () async {
-        await onTap();
+    return FocusableActionDetector(
+      onShowFocusHighlight: (v) {
+        if (mounted) setState(() => _focused = v);
       },
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
+      mouseCursor: SystemMouseCursors.click,
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) async {
+            await widget.onTap();
+            return null;
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTap: () async {
+          await widget.onTap();
+        },
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: _focused
+                ? const Color(0xFFED1C24).withValues(alpha: 0.12)
+                : Colors.transparent,
+            border: Border.all(
+              color: _focused
+                  ? const Color(0xFFED1C24).withValues(alpha: 0.9)
+                  : Colors.transparent,
+              width: 2,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (tag != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.tertiary.withValues(
-                              alpha: 0.15,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            tag!,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.tertiary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.45),
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFED1C24).withValues(alpha: 0.3),
+                      blurRadius: 18,
+                      spreadRadius: -4,
                     ),
+                  ]
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: widget.iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: widget.iconColor.withValues(alpha: 0.25),
                   ),
-                ],
-              ),
-            ),
-            trailing ??
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white.withValues(alpha: 0.3),
                 ),
-          ],
+                child: Icon(widget.icon, color: widget.iconColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ),
+                        if (widget.tag != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFED1C24,
+                              ).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFED1C24,
+                                ).withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              widget.tag!,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: const Color(0xFFED1C24),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              widget.trailing ??
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _SettingsToggleTile extends StatelessWidget {
+class _SettingsToggleTile extends StatefulWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -1991,46 +2209,108 @@ class _SettingsToggleTile extends StatelessWidget {
   });
 
   @override
+  State<_SettingsToggleTile> createState() => _SettingsToggleTileState();
+}
+
+class _SettingsToggleTileState extends State<_SettingsToggleTile> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
+    return FocusableActionDetector(
+      onShowFocusHighlight: (v) {
+        if (mounted) setState(() => _focused = v);
+      },
+      mouseCursor: SystemMouseCursors.click,
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+      },
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            widget.onChanged(!widget.value);
+            return null;
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTap: () => widget.onChanged(!widget.value),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: _focused
+                ? const Color(0xFFED1C24).withValues(alpha: 0.12)
+                : Colors.transparent,
+            border: Border.all(
+              color: _focused
+                  ? const Color(0xFFED1C24).withValues(alpha: 0.9)
+                  : Colors.transparent,
+              width: 2,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFED1C24).withValues(alpha: 0.3),
+                      blurRadius: 18,
+                      spreadRadius: -4,
                     ),
+                  ]
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: widget.iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: widget.iconColor.withValues(alpha: 0.25),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ],
+                ),
+                child: Icon(widget.icon, color: widget.iconColor, size: 22),
               ),
-            ),
-            Switch.adaptive(value: value, onChanged: onChanged),
-          ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: widget.value,
+                onChanged: widget.onChanged,
+                activeColor: const Color(0xFFED1C24),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2058,10 +2338,15 @@ class _InfoTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
-            child: Icon(icon, color: const Color(0xFF818CF8), size: 22),
+            child: Icon(
+              icon,
+              color: Colors.white.withValues(alpha: 0.7),
+              size: 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -2069,20 +2354,26 @@ class _InfoTile extends StatelessWidget {
               title,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
               ),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: const Color(0xFFED1C24).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: const Color(0xFFED1C24).withValues(alpha: 0.3),
+              ),
             ),
             child: Text(
               value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontWeight: FontWeight.w500,
+              style: const TextStyle(
+                color: Color(0xFFED1C24),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                letterSpacing: 0.2,
               ),
             ),
           ),
@@ -2097,20 +2388,25 @@ class _SettingsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          _SkeletonHeader(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-          SizedBox(height: 24),
-          _SkeletonSection(),
-        ],
-      ),
+    return Stack(
+      children: [
+        const _CinematicBackdrop(),
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              _SkeletonHeader(),
+              SizedBox(height: 24),
+              _SkeletonSection(),
+              SizedBox(height: 24),
+              _SkeletonSection(),
+              SizedBox(height: 24),
+              _SkeletonSection(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2123,15 +2419,16 @@ class _SkeletonHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF3730A3), Color(0xFF1E1B4B)],
+          colors: [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.02),
+          ],
         ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2153,23 +2450,28 @@ class _SkeletonSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Shimmer(width: 160, height: 16),
-        const SizedBox(height: 12),
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 12),
+          child: Shimmer(width: 160, height: 16),
+        ),
         Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+              colors: [
+                Colors.white.withValues(alpha: 0.05),
+                Colors.white.withValues(alpha: 0.02),
+              ],
             ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
           ),
           child: Column(
-            children: const [
-              _SkeletonTile(),
-              Divider(height: 1),
-              _SkeletonTile(),
+            children: [
+              const _SkeletonTile(),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.05)),
+              const _SkeletonTile(),
             ],
           ),
         ),
