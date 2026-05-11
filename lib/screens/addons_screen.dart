@@ -71,8 +71,19 @@ class _AddonsScreenState extends State<AddonsScreen>
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: const Color(0xFF14101C),
       appBar: AppBar(
-        title: const Text('Addons'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'Addons',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
+        ),
         automaticallyImplyLeading: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
@@ -99,23 +110,42 @@ class _AddonsScreenState extends State<AddonsScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.06),
+          width: 1,
+        ),
       ),
       padding: const EdgeInsets.all(4),
       child: TabBar(
         controller: _tabController,
         indicator: BoxDecoration(
-          color: theme.colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(10),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFFED1C24).withValues(alpha: 0.95),
+              const Color(0xFFB81D24).withValues(alpha: 0.95),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(11),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFED1C24).withValues(alpha: 0.35),
+              blurRadius: 14,
+              spreadRadius: -3,
+            ),
+          ],
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
-        labelColor: theme.colorScheme.onPrimaryContainer,
-        unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+        labelColor: Colors.white,
+        unselectedLabelColor: Colors.white.withValues(alpha: 0.55),
         labelStyle: TextStyle(
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           fontSize: isSmallScreen ? 12 : 14,
+          letterSpacing: -0.1,
         ),
         unselectedLabelStyle: TextStyle(
           fontWeight: FontWeight.w500,
@@ -216,19 +246,25 @@ class _TabItemState extends State<_TabItem> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) => widget.onKeyEvent(event),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
         decoration: _isFocused
             ? BoxDecoration(
                 border: Border.all(
-                  color: theme.colorScheme.primary,
+                  color: const Color(0xFFED1C24),
                   width: 2,
                 ),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFED1C24).withValues(alpha: 0.5),
+                    blurRadius: 14,
+                    spreadRadius: -2,
+                  ),
+                ],
               )
             : null,
         child: Tab(
