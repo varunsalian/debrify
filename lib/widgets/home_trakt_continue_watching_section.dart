@@ -1490,11 +1490,12 @@ class _HomeTraktContinueWatchingSectionState
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withValues(alpha: 0.1),
-                        Colors.black.withValues(alpha: 0.75),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.35),
+                        Colors.black.withValues(alpha: 0.78),
                         Colors.black.withValues(alpha: 0.95),
                       ],
-                      stops: const [0.0, 0.3, 0.65, 1.0],
+                      stops: const [0.0, 0.4, 0.62, 0.85, 1.0],
                     ),
                   ),
                 ),
@@ -1508,11 +1509,11 @@ class _HomeTraktContinueWatchingSectionState
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                         colors: [
-                          Colors.black.withValues(alpha: 0.3),
+                          Colors.black.withValues(alpha: 0.2),
                           Colors.transparent,
                           Colors.transparent,
                         ],
-                        stops: const [0.0, 0.3, 1.0],
+                        stops: const [0.0, 0.35, 1.0],
                       ),
                     ),
                   ),
@@ -1751,17 +1752,17 @@ class _HomeTraktContinueWatchingSectionState
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isActive
-                ? Colors.white.withValues(alpha: 0.25)
-                : Colors.white.withValues(alpha: 0.08),
+                ? Colors.white.withValues(alpha: 0.35)
+                : Colors.white.withValues(alpha: 0.06),
             width: isActive ? 1.5 : 0.5,
           ),
           boxShadow: widget.isTelevision
               ? null
               : [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: isActive ? 0.9 : 0.6),
-                    blurRadius: isActive ? 30 : 16,
-                    offset: const Offset(0, 8),
+                    color: Colors.black.withValues(alpha: isActive ? 0.85 : 0.55),
+                    blurRadius: isActive ? 32 : 18,
+                    offset: const Offset(0, 10),
                   ),
                 ],
         );
