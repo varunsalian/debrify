@@ -932,32 +932,36 @@ class _HomeContinueWatchingSectionState
       children: [
         // Section header
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
           child: Row(
             children: [
               Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
+                width: 3,
+                height: 20,
+                decoration: BoxDecoration(
                   color: _accentColor,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Continue Watching',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Continue Watching',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: Colors.white.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
