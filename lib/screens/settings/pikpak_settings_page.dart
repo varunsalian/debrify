@@ -8,6 +8,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/aptabase_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
+import '../../widgets/cinematic_backdrop.dart';
 
 class PikPakSettingsPage extends StatefulWidget {
   const PikPakSettingsPage({super.key});
@@ -440,336 +441,127 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: const Color(0xFF14101C),
+        body: Stack(
+          children: const [
+            CinematicBackdrop(),
+            Center(child: CircularProgressIndicator(color: Color(0xFFED1C24))),
+          ],
+        ),
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('PikPak Settings')),
-      body: FocusTraversalGroup(
-        policy: OrderedTraversalPolicy(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'PikPak Integration',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Send magnet links directly to your PikPak cloud storage.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-
-            // Enable/Disable Toggle
-            Card(
-              child: SwitchListTile(
-                title: const Text(
-                  'Enable PikPak Integration',
-                  style: TextStyle(fontWeight: FontWeight.w500),
+      backgroundColor: const Color(0xFF14101C),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'PikPak Settings',
+          style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.3),
+        ),
+      ),
+      body: Stack(
+        children: [
+          const CinematicBackdrop(),
+          FocusTraversalGroup(
+            policy: OrderedTraversalPolicy(),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  'PikPak Integration',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(
-                  _pikpakEnabled
-                      ? 'PikPak button and tab are visible'
-                      : 'PikPak button and tab are hidden',
-                  style: const TextStyle(fontSize: 13),
+                const SizedBox(height: 8),
+                const Text(
+                  'Send magnet links directly to your PikPak cloud storage.',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
                 ),
-                value: _pikpakEnabled,
-                onChanged: (value) async {
-                  await StorageService.setPikPakEnabled(value);
-                  setState(() {
-                    _pikpakEnabled = value;
-                  });
+                const SizedBox(height: 24),
 
-                  // Notify main page to update navigation immediately
-                  MainPageBridge.notifyIntegrationChanged();
+                // Enable/Disable Toggle
+                Card(
+                  child: SwitchListTile(
+                    title: const Text(
+                      'Enable PikPak Integration',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      _pikpakEnabled
+                          ? 'PikPak button and tab are visible'
+                          : 'PikPak button and tab are hidden',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    value: _pikpakEnabled,
+                    onChanged: (value) async {
+                      await StorageService.setPikPakEnabled(value);
+                      setState(() {
+                        _pikpakEnabled = value;
+                      });
 
-                  _showSnackBar(
-                    value
-                        ? 'PikPak integration enabled'
-                        : 'PikPak integration disabled',
-                    isError: false,
-                  );
-                },
-              ),
-            ),
+                      // Notify main page to update navigation immediately
+                      MainPageBridge.notifyIntegrationChanged();
 
-            const SizedBox(height: 16),
-            IgnorePointer(
-              ignoring: !_pikpakEnabled,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: _pikpakEnabled ? 1.0 : 0.5,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Hide from Navigation Toggle
-                    Card(
-                      child: Column(
-                        children: [
-                          SwitchListTile(
-                            value: _hiddenFromNav,
-                            onChanged: _isConnected ? _toggleHideFromNav : null,
-                            title: const Text(
-                              'Hide from Navigation',
-                              style: TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            subtitle: Text(
-                              !_isConnected
-                                  ? 'Login to enable this option'
-                                  : _hiddenFromNav
-                                  ? 'PikPak is hidden from navigation'
-                                  : 'Show/hide PikPak tab from navigation bar',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            secondary: Icon(
-                              _hiddenFromNav
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: _hiddenFromNav ? Colors.amber : null,
-                            ),
-                          ),
-                          if (_hiddenFromNav)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.amber.withValues(alpha: 0.3),
+                      _showSnackBar(
+                        value
+                            ? 'PikPak integration enabled'
+                            : 'PikPak integration disabled',
+                        isError: false,
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                IgnorePointer(
+                  ignoring: !_pikpakEnabled,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: _pikpakEnabled ? 1.0 : 0.5,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Hide from Navigation Toggle
+                        Card(
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                value: _hiddenFromNav,
+                                onChanged: _isConnected
+                                    ? _toggleHideFromNav
+                                    : null,
+                                title: const Text(
+                                  'Hide from Navigation',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                subtitle: Text(
+                                  !_isConnected
+                                      ? 'Login to enable this option'
+                                      : _hiddenFromNav
+                                      ? 'PikPak is hidden from navigation'
+                                      : 'Show/hide PikPak tab from navigation bar',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                secondary: Icon(
+                                  _hiddenFromNav
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: _hiddenFromNav ? Colors.amber : null,
+                                ),
+                              ),
+                              if (_hiddenFromNav)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    16,
                                   ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.info_outline,
-                                      size: 16,
-                                      color: Colors.amber.shade700,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'To show PikPak in navigation again, please logout and login',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.amber.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Show Videos Only Toggle
-                    Card(
-                      child: SwitchListTile(
-                        title: const Text(
-                          'Show Only Video Files',
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                          _showVideosOnly
-                              ? 'Only video files are shown in folders'
-                              : 'All file types are shown in folders',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        value: _showVideosOnly,
-                        onChanged: (value) async {
-                          await StorageService.setPikPakShowVideosOnly(value);
-                          setState(() {
-                            _showVideosOnly = value;
-                          });
-                          _showSnackBar(
-                            value
-                                ? 'Now showing only video files'
-                                : 'Now showing all file types',
-                            isError: false,
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Ignore Small Videos Toggle
-                    Card(
-                      child: SwitchListTile(
-                        title: const Text(
-                          'Ignore Videos Under 100MB',
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                          _ignoreSmallVideos
-                              ? 'Videos smaller than 100MB are hidden'
-                              : 'All video sizes are shown',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        value: _ignoreSmallVideos,
-                        onChanged: (value) async {
-                          await StorageService.setPikPakIgnoreSmallVideos(
-                            value,
-                          );
-                          setState(() {
-                            _ignoreSmallVideos = value;
-                          });
-                          _showSnackBar(
-                            value
-                                ? 'Now hiding videos under 100MB'
-                                : 'Now showing all video sizes',
-                            isError: false,
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Post-Torrent Action
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.play_circle_outline,
-                                  color: Theme.of(context).colorScheme.primary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Post-Torrent Action',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Choose what happens after adding a torrent to PikPak',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 12),
-                            RadioListTile<String>(
-                              title: const Text('None'),
-                              subtitle: const Text(
-                                'Do nothing - just add the torrent to PikPak',
-                              ),
-                              value: 'none',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Let me choose'),
-                              subtitle: const Text(
-                                'Show a quick Play/Download picker after adding a torrent',
-                              ),
-                              value: 'choose',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Open in PikPak'),
-                              subtitle: const Text(
-                                'View the torrent in PikPak tab',
-                              ),
-                              value: 'open',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Play video'),
-                              subtitle: const Text(
-                                'Automatically open video player',
-                              ),
-                              value: 'play',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Download to device'),
-                              subtitle: const Text(
-                                'If the torrent contains only video files, all videos will download immediately',
-                              ),
-                              value: 'download',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Add to playlist'),
-                              subtitle: const Text(
-                                'Keep this torrent handy in your Debrify playlist',
-                              ),
-                              value: 'playlist',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            RadioListTile<String>(
-                              title: const Text('Add to channel'),
-                              subtitle: const Text(
-                                'Cache this torrent in a Debrify TV channel',
-                              ),
-                              value: 'channel',
-                              groupValue: _postTorrentAction,
-                              onChanged: (v) =>
-                                  v == null ? null : _savePostAction(v),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Folder Restriction
-                    Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: Icon(
-                              Icons.folder_special,
-                              color: _restrictedFolderId != null
-                                  ? Colors.amber
-                                  : null,
-                            ),
-                            title: const Text(
-                              'Restrict Access to Folder',
-                              style: TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            subtitle: Text(
-                              _restrictedFolderId != null
-                                  ? 'Restricted to: $_restrictedFolderName'
-                                  : 'Full account access (all folders)',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                          if (_restrictedFolderId != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
+                                  child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: Colors.amber.withValues(
@@ -792,7 +584,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'To change or remove this restriction, please logout and login again',
+                                            'To show PikPak in navigation again, please logout and login',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.amber.shade700,
@@ -802,214 +594,490 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: _selectRestrictedFolder,
-                                          icon: const Icon(
-                                            Icons.edit,
-                                            size: 18,
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Show Videos Only Toggle
+                        Card(
+                          child: SwitchListTile(
+                            title: const Text(
+                              'Show Only Video Files',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            subtitle: Text(
+                              _showVideosOnly
+                                  ? 'Only video files are shown in folders'
+                                  : 'All file types are shown in folders',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            value: _showVideosOnly,
+                            onChanged: (value) async {
+                              await StorageService.setPikPakShowVideosOnly(
+                                value,
+                              );
+                              setState(() {
+                                _showVideosOnly = value;
+                              });
+                              _showSnackBar(
+                                value
+                                    ? 'Now showing only video files'
+                                    : 'Now showing all file types',
+                                isError: false,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Ignore Small Videos Toggle
+                        Card(
+                          child: SwitchListTile(
+                            title: const Text(
+                              'Ignore Videos Under 100MB',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            subtitle: Text(
+                              _ignoreSmallVideos
+                                  ? 'Videos smaller than 100MB are hidden'
+                                  : 'All video sizes are shown',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            value: _ignoreSmallVideos,
+                            onChanged: (value) async {
+                              await StorageService.setPikPakIgnoreSmallVideos(
+                                value,
+                              );
+                              setState(() {
+                                _ignoreSmallVideos = value;
+                              });
+                              _showSnackBar(
+                                value
+                                    ? 'Now hiding videos under 100MB'
+                                    : 'Now showing all video sizes',
+                                isError: false,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Post-Torrent Action
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.play_circle_outline,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Post-Torrent Action',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
                                           ),
-                                          label: const Text('Change'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Choose what happens after adding a torrent to PikPak',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: Colors.grey[600]),
+                                ),
+                                const SizedBox(height: 12),
+                                RadioListTile<String>(
+                                  title: const Text('None'),
+                                  subtitle: const Text(
+                                    'Do nothing - just add the torrent to PikPak',
+                                  ),
+                                  value: 'none',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Let me choose'),
+                                  subtitle: const Text(
+                                    'Show a quick Play/Download picker after adding a torrent',
+                                  ),
+                                  value: 'choose',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Open in PikPak'),
+                                  subtitle: const Text(
+                                    'View the torrent in PikPak tab',
+                                  ),
+                                  value: 'open',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Play video'),
+                                  subtitle: const Text(
+                                    'Automatically open video player',
+                                  ),
+                                  value: 'play',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Download to device'),
+                                  subtitle: const Text(
+                                    'If the torrent contains only video files, all videos will download immediately',
+                                  ),
+                                  value: 'download',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Add to playlist'),
+                                  subtitle: const Text(
+                                    'Keep this torrent handy in your Debrify playlist',
+                                  ),
+                                  value: 'playlist',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                RadioListTile<String>(
+                                  title: const Text('Add to channel'),
+                                  subtitle: const Text(
+                                    'Cache this torrent in a Debrify TV channel',
+                                  ),
+                                  value: 'channel',
+                                  groupValue: _postTorrentAction,
+                                  onChanged: (v) =>
+                                      v == null ? null : _savePostAction(v),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Folder Restriction
+                        Card(
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: Icon(
+                                  Icons.folder_special,
+                                  color: _restrictedFolderId != null
+                                      ? Colors.amber
+                                      : null,
+                                ),
+                                title: const Text(
+                                  'Restrict Access to Folder',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                subtitle: Text(
+                                  _restrictedFolderId != null
+                                      ? 'Restricted to: $_restrictedFolderName'
+                                      : 'Full account access (all folders)',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              if (_restrictedFolderId != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    16,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.amber.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.info_outline,
+                                              size: 16,
+                                              color: Colors.amber.shade700,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'To change or remove this restriction, please logout and login again',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.amber.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: _clearRestrictedFolder,
-                                        icon: const Icon(Icons.clear, size: 18),
-                                        label: const Text('Remove'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: Colors.red,
-                                        ),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton.icon(
+                                              onPressed:
+                                                  _selectRestrictedFolder,
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                size: 18,
+                                              ),
+                                              label: const Text('Change'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          OutlinedButton.icon(
+                                            onPressed: _clearRestrictedFolder,
+                                            icon: const Icon(
+                                              Icons.clear,
+                                              size: 18,
+                                            ),
+                                            label: const Text('Remove'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.red,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                            )
-                          else
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed: _selectRestrictedFolder,
-                                  icon: const Icon(Icons.folder_open, size: 18),
-                                  label: const Text(
-                                    'Select Folder to Restrict',
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    16,
+                                  ),
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton.icon(
+                                      onPressed: _selectRestrictedFolder,
+                                      icon: const Icon(
+                                        Icons.folder_open,
+                                        size: 18,
+                                      ),
+                                      label: const Text(
+                                        'Select Folder to Restrict',
+                                      ),
+                                    ),
                                   ),
                                 ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Connection status
+                        Card(
+                          color: _isConnected
+                              ? Colors.green.withValues(alpha: 0.15)
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                          child: ListTile(
+                            leading: Icon(
+                              _isConnected
+                                  ? Icons.check_circle
+                                  : Icons.circle_outlined,
+                              color: _isConnected
+                                  ? Colors.green
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            title: Text(
+                              _isConnected ? 'Connected' : 'Not Connected',
+                              style: TextStyle(
+                                color: _isConnected
+                                    ? Colors.green.shade700
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Connection status
-                    Card(
-                      color: _isConnected
-                          ? Colors.green.withValues(alpha: 0.15)
-                          : Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                      child: ListTile(
-                        leading: Icon(
-                          _isConnected
-                              ? Icons.check_circle
-                              : Icons.circle_outlined,
-                          color: _isConnected
-                              ? Colors.green
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        title: Text(
-                          _isConnected ? 'Connected' : 'Not Connected',
-                          style: TextStyle(
-                            color: _isConnected
-                                ? Colors.green.shade700
-                                : Theme.of(context).colorScheme.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: Text(
-                          _isConnected
-                              ? 'Connected as: ${_emailController.text}'
-                              : 'Login with your PikPak account below',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    if (!_isConnected) ...[
-                      const Text(
-                        'PikPak Account',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _TvFriendlyTextField(
-                        controller: _emailController,
-                        focusNode: _emailFocusNode,
-                        labelText: 'Email',
-                        hintText: 'your@email.com',
-                        prefixIcon: const Icon(Icons.email),
-                        keyboardType: TextInputType.emailAddress,
-                        enabled: !_isConnecting,
-                      ),
-                      const SizedBox(height: 16),
-                      _TvFriendlyTextField(
-                        controller: _passwordController,
-                        focusNode: _passwordFocusNode,
-                        labelText: 'Password',
-                        hintText: 'Your PikPak password',
-                        prefixIcon: const Icon(Icons.lock),
-                        obscureText: true,
-                        enabled: !_isConnecting,
-                        onSubmitted: (_) => _login(),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        focusNode: _loginButtonFocusNode,
-                        onPressed: _isConnecting ? null : _login,
-                        icon: _isConnecting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.login),
-                        label: Text(_isConnecting ? 'Logging in...' : 'Login'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        focusNode: _resetDeviceIdButtonFocusNode,
-                        onPressed: () async {
-                          final prefs = await SharedPreferences.getInstance();
-                          final currentDeviceId = prefs.getString(
-                            'pikpak_device_id',
-                          );
-                          debugPrint(
-                            'PikPak: Current device ID: $currentDeviceId',
-                          );
-                          await prefs.remove('pikpak_device_id');
-                          await prefs.remove('pikpak_captcha_token');
-                          debugPrint('PikPak: Device ID cleared');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Device ID cleared. Try logging in again.',
-                                ),
+                            subtitle: Text(
+                              _isConnected
+                                  ? 'Connected as: ${_emailController.text}'
+                                  : 'Login with your PikPak account below',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text('Reset Device ID'),
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        focusNode: _logoutButtonFocusNode,
-                        onPressed: _logout,
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Logout'),
-                      ),
-                    ],
-                    const SizedBox(height: 32),
-                    const Divider(),
-                    const SizedBox(height: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
 
-                    const Text(
-                      'How It Works',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '1. Login with your PikPak account above\n'
-                      '2. Search for torrents in the app\n'
-                      '3. Click "PikPak" on any torrent\n'
-                      '4. Magnet link is sent to your PikPak cloud\n'
-                      '5. PikPak downloads the torrent to your cloud storage\n'
-                      '6. Access and play files from PikPak tab',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 16),
+                        if (!_isConnected) ...[
+                          const Text(
+                            'PikPak Account',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _TvFriendlyTextField(
+                            controller: _emailController,
+                            focusNode: _emailFocusNode,
+                            labelText: 'Email',
+                            hintText: 'your@email.com',
+                            prefixIcon: const Icon(Icons.email),
+                            keyboardType: TextInputType.emailAddress,
+                            enabled: !_isConnecting,
+                          ),
+                          const SizedBox(height: 16),
+                          _TvFriendlyTextField(
+                            controller: _passwordController,
+                            focusNode: _passwordFocusNode,
+                            labelText: 'Password',
+                            hintText: 'Your PikPak password',
+                            prefixIcon: const Icon(Icons.lock),
+                            obscureText: true,
+                            enabled: !_isConnecting,
+                            onSubmitted: (_) => _login(),
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            focusNode: _loginButtonFocusNode,
+                            onPressed: _isConnecting ? null : _login,
+                            icon: _isConnecting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.login),
+                            label: Text(
+                              _isConnecting ? 'Logging in...' : 'Login',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            focusNode: _resetDeviceIdButtonFocusNode,
+                            onPressed: () async {
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              final currentDeviceId = prefs.getString(
+                                'pikpak_device_id',
+                              );
+                              debugPrint(
+                                'PikPak: Current device ID: $currentDeviceId',
+                              );
+                              await prefs.remove('pikpak_device_id');
+                              await prefs.remove('pikpak_captcha_token');
+                              debugPrint('PikPak: Device ID cleared');
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Device ID cleared. Try logging in again.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Reset Device ID'),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            focusNode: _logoutButtonFocusNode,
+                            onPressed: _logout,
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Logout'),
+                          ),
+                        ],
+                        const SizedBox(height: 32),
+                        const Divider(),
+                        const SizedBox(height: 16),
 
-                    const Text(
-                      'About PikPak',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                        const Text(
+                          'How It Works',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '1. Login with your PikPak account above\n'
+                          '2. Search for torrents in the app\n'
+                          '3. Click "PikPak" on any torrent\n'
+                          '4. Magnet link is sent to your PikPak cloud\n'
+                          '5. PikPak downloads the torrent to your cloud storage\n'
+                          '6. Access and play files from PikPak tab',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 16),
+
+                        const Text(
+                          'About PikPak',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'PikPak is a cloud storage service that supports offline downloads from magnet links and torrents. Files are stored in your PikPak cloud and can be streamed or downloaded.',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'PikPak is a cloud storage service that supports offline downloads from magnet links and torrents. Files are stored in your PikPak cloud and can be streamed or downloaded.',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
