@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'storage_service.dart';
@@ -25,10 +27,13 @@ class PlaylistPlayerService {
   PlaylistPlayerService._();
 
   /// Play a playlist item. Routes to the correct provider handler.
+  /// When [playRandom] is true and the item is a multi-file collection, the
+  /// player starts on a random playable file instead of the first episode.
   static Future<void> play(
     BuildContext context,
-    Map<String, dynamic> item,
-  ) async {
+    Map<String, dynamic> item, {
+    bool playRandom = false,
+  }) async {
     await StorageService.updatePlaylistItemLastPlayed(item);
 
     // Re-read from storage to pick up any fields saved by other screens
@@ -44,18 +49,38 @@ class PlaylistPlayerService {
     final String provider = ((freshItem['provider'] as String?) ?? 'realdebrid')
         .toLowerCase();
     if (provider == 'torbox') {
-      await _playTorboxItem(context, freshItem, fallbackTitle: title);
+      await _playTorboxItem(
+        context,
+        freshItem,
+        fallbackTitle: title,
+        playRandom: playRandom,
+      );
       return;
     }
     if (provider == 'pikpak') {
-      await _playPikPakItem(context, freshItem, fallbackTitle: title);
+      await _playPikPakItem(
+        context,
+        freshItem,
+        fallbackTitle: title,
+        playRandom: playRandom,
+      );
       return;
     }
     if (provider == 'webdav') {
-      await _playWebDavItem(context, freshItem, fallbackTitle: title);
+      await _playWebDavItem(
+        context,
+        freshItem,
+        fallbackTitle: title,
+        playRandom: playRandom,
+      );
       return;
     }
-    await _playRealDebridItem(context, freshItem, title: title);
+    await _playRealDebridItem(
+      context,
+      freshItem,
+      title: title,
+      playRandom: playRandom,
+    );
   }
 
   // ── Real-Debrid ──────────────────────────────────────────────────────────
@@ -64,6 +89,7 @@ class PlaylistPlayerService {
     BuildContext context,
     Map<String, dynamic> item, {
     required String title,
+    bool playRandom = false,
   }) async {
     final String? rdTorrentId = item['rdTorrentId'] as String?;
     final String? torrentHash = item['torrent_hash'] as String?;
@@ -233,6 +259,10 @@ class PlaylistPlayerService {
           }
         }
 
+        if (playRandom && videoFiles.length > 1) {
+          firstIndex = Random().nextInt(videoFiles.length);
+        }
+
         final List<PlaylistEntry> entries = [];
         for (int i = 0; i < videoFiles.length; i++) {
           final file = videoFiles[i];
@@ -316,8 +346,12 @@ class PlaylistPlayerService {
           return;
         }
 
+        final int rdStartIndex =
+            (playRandom && firstIndex < entries.length) ? firstIndex : 0;
         String initialVideoUrl = '';
-        if (entries.first.url.isNotEmpty) initialVideoUrl = entries.first.url;
+        if (entries[rdStartIndex].url.isNotEmpty) {
+          initialVideoUrl = entries[rdStartIndex].url;
+        }
 
         if (!context.mounted) return;
         MainPageBridge.notifyPlayerLaunching();
@@ -331,9 +365,10 @@ class PlaylistPlayerService {
             title: title,
             subtitle: '${entries.length} files',
             playlist: entries,
-            startIndex: 0,
+            startIndex: rdStartIndex,
             rdTorrentId: rdTorrentId,
             viewMode: viewMode,
+            disableAutoResume: playRandom,
             contentImdbId: item['imdbId'] as String?,
             contentType: item['contentType'] as String?,
             suppressTraktAutoSync: true,
@@ -379,6 +414,7 @@ class PlaylistPlayerService {
     BuildContext context,
     Map<String, dynamic> item, {
     required String fallbackTitle,
+    bool playRandom = false,
   }) async {
     final String? apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -566,8 +602,10 @@ class PlaylistPlayerService {
         viewMode: savedViewModeString,
       );
       final playlistEntries = entries.playlistEntries;
-      final startIndex = entries.startIndex;
       final subtitle = entries.subtitle;
+      final startIndex = (playRandom && playlistEntries.length > 1)
+          ? Random().nextInt(playlistEntries.length)
+          : entries.startIndex;
 
       String initialUrl = '';
       try {
@@ -628,6 +666,7 @@ class PlaylistPlayerService {
           startIndex: startIndex,
           torboxTorrentId: torrentId.toString(),
           viewMode: viewMode,
+          disableAutoResume: playRandom,
           contentImdbId: item['imdbId'] as String?,
           contentType: item['contentType'] as String?,
           suppressTraktAutoSync: true,
@@ -655,6 +694,7 @@ class PlaylistPlayerService {
     BuildContext context,
     Map<String, dynamic> item, {
     required String fallbackTitle,
+    bool playRandom = false,
   }) async {
     final pikpak = PikPakApiService.instance;
 
@@ -918,6 +958,9 @@ class PlaylistPlayerService {
         startIndex = _findFirstEpisodeIndex(seriesInfos);
       }
       if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
+      if (playRandom && candidates.length > 1) {
+        startIndex = Random().nextInt(candidates.length);
+      }
 
       // Resolve initial URL
       String initialUrl = '';
@@ -1012,6 +1055,7 @@ class PlaylistPlayerService {
           startIndex: startIndex,
           pikpakCollectionId: firstFileId,
           viewMode: viewMode,
+          disableAutoResume: playRandom,
           contentImdbId: item['imdbId'] as String?,
           contentType: item['contentType'] as String?,
           suppressTraktAutoSync: true,
@@ -1039,6 +1083,7 @@ class PlaylistPlayerService {
     BuildContext context,
     Map<String, dynamic> item, {
     required String fallbackTitle,
+    bool playRandom = false,
   }) async {
     final config = await _resolveWebDavConfig(item);
     if (!context.mounted) return;
@@ -1055,7 +1100,13 @@ class PlaylistPlayerService {
       return;
     }
 
-    await _playWebDavCollection(context, item, config, fallbackTitle);
+    await _playWebDavCollection(
+      context,
+      item,
+      config,
+      fallbackTitle,
+      playRandom: playRandom,
+    );
   }
 
   static Future<void> _playSingleWebDavItem(
@@ -1121,8 +1172,9 @@ class PlaylistPlayerService {
     BuildContext context,
     Map<String, dynamic> item,
     WebDavConfig config,
-    String fallbackTitle,
-  ) async {
+    String fallbackTitle, {
+    bool playRandom = false,
+  }) async {
     final rawFiles = item['webdavFiles'];
     final folderPath = (item['webdavFolderPath'] ?? '').toString().trim();
     if (rawFiles is! List || rawFiles.isEmpty) {
@@ -1205,6 +1257,9 @@ class PlaylistPlayerService {
       );
     }
     if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
+    if (playRandom && candidates.length > 1) {
+      startIndex = Random().nextInt(candidates.length);
+    }
 
     final playlistEntries = <PlaylistEntry>[];
     for (final candidate in candidates) {
@@ -1258,6 +1313,7 @@ class PlaylistPlayerService {
         playlist: playlistEntries,
         startIndex: startIndex,
         viewMode: viewMode,
+        disableAutoResume: playRandom,
         httpHeaders: WebDavService.authHeaders(config),
         disableExternalPlayer: _hasWebDavCredentials(config),
         webDavServerId: (item['webdavServerId'] ?? config.id).toString(),

@@ -139,6 +139,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
     final isFavorited = _favoriteKeys.contains(dedupeKey);
     final hasProgress = _progressMap.containsKey(dedupeKey);
+    final bool isCollection = (item['kind'] as String?) != 'single';
 
     final title = (item['title'] as String?) ?? 'Unknown';
     final choice = await showDialog<String>(
@@ -181,6 +182,15 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
                   autofocus: true,
                   isTelevision: widget.isTelevision,
                 ),
+                if (isCollection)
+                  _PlaylistMenuItem(
+                    icon: Icons.shuffle_rounded,
+                    label: 'Play Random',
+                    subtitle: 'Start a random file from this collection',
+                    color: const Color(0xFFA78BFA),
+                    onTap: () => Navigator.pop(context, 'play_random'),
+                    isTelevision: widget.isTelevision,
+                  ),
                 _PlaylistMenuItem(
                   icon: Icons.folder_open_rounded,
                   label: 'View Files',
@@ -237,6 +247,9 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
     switch (choice) {
       case 'play':
         _playItem(item);
+        break;
+      case 'play_random':
+        _playItem(item, playRandom: true);
         break;
       case 'view_files':
         await Navigator.of(context).push(
@@ -318,12 +331,15 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
     }
   }
 
-  Future<void> _playItem(Map<String, dynamic> item) async {
+  Future<void> _playItem(
+    Map<String, dynamic> item, {
+    bool playRandom = false,
+  }) async {
     final dedupeKey = StorageService.computePlaylistDedupeKey(item);
     setState(() => _playingItemKey = dedupeKey);
 
     try {
-      await PlaylistPlayerService.play(context, item);
+      await PlaylistPlayerService.play(context, item, playRandom: playRandom);
     } catch (e) {
       debugPrint('Error playing item: $e');
       if (mounted) {
