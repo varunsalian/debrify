@@ -3529,6 +3529,42 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _handleCatalogItemSelected(selection, updateSearchText: true);
   }
 
+  /// Keyword-mode select-source. Drops the IMDb advanced selection so the
+  /// search engine layer falls back to free-text scrapers (Nyaa, Knaben,
+  /// Torrents CSV). Pre-fills the query with the title for movies and
+  /// "<title> complete" for series so packs surface first.
+  void _handleKeywordSelectSource(StremioMeta show) {
+    debugPrint(
+      'TorrentSearchScreen: Keyword Select Source triggered for ${show.name}',
+    );
+
+    final bool isSeries = show.type == 'series';
+    final String seedQuery = isSeries
+        ? '${show.name} complete'
+        : (show.year != null && show.year!.isNotEmpty
+              ? '${show.name} ${show.year}'
+              : show.name);
+
+    setState(() {
+      _isSelectSourceMode = true;
+      _selectSourceShow = show;
+      _cameFromCatalogBrowse = true;
+      _previousSearchQuery = _searchController.text;
+      _searchMode = SearchMode.keyword;
+      _activeAdvancedSelection = null;
+      _selectedImdbTitle = null;
+      _isSeries = isSeries;
+      _seriesControlsExpanded = false;
+      _availableSeasons = null;
+      _selectedSeason = null;
+      _seasonController.clear();
+      _episodeController.clear();
+      _searchController.text = seedQuery;
+    });
+
+    _searchTorrents(seedQuery);
+  }
+
   /// Search season packs for a series with full post-torrent actions (not source binding).
   void _handleSearchPacks(StremioMeta show) {
     debugPrint('TorrentSearchScreen: Search Packs triggered for ${show.name}');
@@ -17083,6 +17119,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _focusControlRow();
                               },
                               onSelectSource: _handleSelectSource,
+                              onKeywordSelectSource:
+                                  _handleKeywordSelectSource,
                               onPlayRandomEpisode:
                                   _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
@@ -17121,6 +17159,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _focusControlRow();
                               },
                               onSelectSource: _handleSelectSource,
+                              onKeywordSelectSource:
+                                  _handleKeywordSelectSource,
                               onPlayRandomEpisode:
                                   _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
@@ -17206,6 +17246,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _pendingTraktEpisodeModeExitAction = null;
                                 _pendingCalendarReturnSource = null;
                                 _handleSelectSource(show);
+                              },
+                              onKeywordSelectSource: (show) {
+                                _pendingTraktEpisodeModeExitAction = null;
+                                _pendingCalendarReturnSource = null;
+                                _handleKeywordSelectSource(show);
                               },
                               onSearchPacks: (show) {
                                 _pendingTraktEpisodeModeExitAction = null;
@@ -18753,6 +18798,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 });
                 _handleSelectSource(meta);
               },
+              onKeywordSelectSource: (selection) {
+                final meta = StremioMeta.fromJson({
+                  'id': selection.imdbId,
+                  'name': selection.title,
+                  'type': selection.contentType ?? 'series',
+                  'year': selection.year,
+                  'poster': selection.posterUrl,
+                });
+                _handleKeywordSelectSource(meta);
+              },
               onSearchPacks: (selection) {
                 final meta = StremioMeta.fromJson({
                   'id': selection.imdbId,
@@ -18807,6 +18862,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             },
             onBrowseShow: (show) => _browseTraktShow(show),
             onSelectSource: _handleSelectSource,
+            onKeywordSelectSource: _handleKeywordSelectSource,
             onRequestFocusAbove: () {
               final prev = _homeFocusController.getPreviousSection(
                 HomeSection.traktContinueWatchingMovies,
@@ -18851,6 +18907,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             },
             onBrowseShow: (show) => _browseTraktShow(show),
             onSelectSource: _handleSelectSource,
+            onKeywordSelectSource: _handleKeywordSelectSource,
             onSearchPacks: _handleSearchPacks,
             onRequestFocusAbove: () {
               final prev = _homeFocusController.getPreviousSection(

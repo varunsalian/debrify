@@ -32,6 +32,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
   })?
   onPlayRandomEpisode;
   final void Function(AdvancedSearchSelection selection)? onSelectSource;
+  final void Function(AdvancedSearchSelection selection)? onKeywordSelectSource;
   final void Function(AdvancedSearchSelection selection)? onSearchPacks;
   final void Function(
     AdvancedSearchSelection selection,
@@ -52,6 +53,7 @@ class HomeContinueWatchingSection extends StatefulWidget {
     this.onQuickPlay,
     this.onPlayRandomEpisode,
     this.onSelectSource,
+    this.onKeywordSelectSource,
     this.onSearchPacks,
     this.onBrowseEpisodes,
     this.onInitialLoadStateChanged,
@@ -763,6 +765,9 @@ class _HomeContinueWatchingSectionState
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(selection),
+      onKeywordSearch: widget.onKeywordSelectSource != null
+          ? () => widget.onKeywordSelectSource!.call(selection)
+          : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(selection)
           : null,

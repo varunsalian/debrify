@@ -31,6 +31,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
   final void Function(AdvancedSearchSelection selection)? onQuickPlay;
   final void Function(StremioMeta show)? onBrowseShow;
   final void Function(StremioMeta show)? onSelectSource;
+  final void Function(StremioMeta show)? onKeywordSelectSource;
   final void Function(StremioMeta show)? onSearchPacks;
   final ValueChanged<bool>? onInitialLoadStateChanged;
 
@@ -46,6 +47,7 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
     this.onQuickPlay,
     this.onBrowseShow,
     this.onSelectSource,
+    this.onKeywordSelectSource,
     this.onSearchPacks,
     this.onInitialLoadStateChanged,
   });
@@ -521,6 +523,9 @@ class _HomeTraktContinueWatchingSectionState
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onKeywordSearch: widget.onKeywordSelectSource != null
+          ? () => widget.onKeywordSelectSource!.call(item)
+          : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(item, imdbId)
           : null,

@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 /// Shows a picker dialog for adding a new bound source.
 ///
 /// Options:
-/// - Torrent Search (always shown, in SEARCH section)
+/// - Torrent Search (IMDb) — always shown, in SEARCH section
+/// - Keyword Search — shown if [onKeywordSearch] is non-null
 /// - Local File / Folder (only if [onLocal] is non-null, in LOCAL section)
 /// - Disabled Local File / Folder (only if [localDisabledReason] is non-null)
 /// - Real-Debrid (only if [onRealDebrid] is non-null, in CLOUD section)
@@ -15,6 +16,7 @@ import 'package:flutter/services.dart';
 Future<void> showAddSourcePickerDialog(
   BuildContext context, {
   required VoidCallback onTorrentSearch,
+  VoidCallback? onKeywordSearch,
   VoidCallback? onLocal,
   String? localDisabledReason,
   VoidCallback? onRealDebrid,
@@ -65,13 +67,29 @@ Future<void> showAddSourcePickerDialog(
                 _SourceOption(
                   icon: Icons.search_rounded,
                   iconColor: const Color(0xFFFBBF24),
-                  label: 'Torrent Search',
+                  label: 'Torrent Search (IMDb)',
+                  subtitle:
+                      'Exact match via IMDb · Stremio addons + IMDb-capable scrapers',
                   autofocus: true,
                   onTap: () {
                     Navigator.of(dialogContext).pop();
                     onTorrentSearch();
                   },
                 ),
+                if (onKeywordSearch != null) ...[
+                  const SizedBox(height: 8),
+                  _SourceOption(
+                    icon: Icons.travel_explore_rounded,
+                    iconColor: const Color(0xFFFB923C),
+                    label: 'Keyword Search',
+                    subtitle:
+                        'Free-text title search · uses all keyword scrapers (Nyaa, Knaben, etc.)',
+                    onTap: () {
+                      Navigator.of(dialogContext).pop();
+                      onKeywordSearch();
+                    },
+                  ),
+                ],
 
                 if (onLocal != null || localDisabledReason != null) ...[
                   const SizedBox(height: 16),

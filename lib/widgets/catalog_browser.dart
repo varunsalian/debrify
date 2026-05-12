@@ -58,6 +58,9 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Callback when user selects "Keyword Search" from the add-source picker
+  final void Function(StremioMeta show)? onKeywordSelectSource;
+
   /// Callback when user selects "Play Random Episode" for a series
   final Future<void> Function(StremioMeta show, StremioAddon? addon)?
   onPlayRandomEpisode;
@@ -81,6 +84,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onRequestFocusAbove,
     this.defaultCatalogId,
     this.onSelectSource,
+    this.onKeywordSelectSource,
     this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onEpisodeModeExited,
@@ -1257,6 +1261,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onKeywordSearch: widget.onKeywordSelectSource != null
+          ? () => widget.onKeywordSelectSource!.call(item)
+          : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(item, imdbId)
           : null,

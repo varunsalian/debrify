@@ -156,6 +156,9 @@ class TraktResultsView extends StatefulWidget {
   /// Parent should trigger series probing search in select-source mode.
   final void Function(StremioMeta show)? onSelectSource;
 
+  /// Called when user picks "Keyword Search" from the add-source picker.
+  final void Function(StremioMeta show)? onKeywordSelectSource;
+
   /// Called when user selects "Search Season Packs" for a series.
   final void Function(StremioMeta show)? onSearchPacks;
 
@@ -169,6 +172,7 @@ class TraktResultsView extends StatefulWidget {
     this.onUpArrowFromFilters,
     this.onEpisodeModeExited,
     this.onSelectSource,
+    this.onKeywordSelectSource,
     this.onSearchPacks,
   });
 
@@ -1453,6 +1457,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onKeywordSearch: widget.onKeywordSelectSource != null
+          ? () => widget.onKeywordSelectSource!.call(item)
+          : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(item, imdbId)
           : null,

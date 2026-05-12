@@ -53,6 +53,7 @@ class AggregatedSearchResults extends StatefulWidget {
 
   /// Callback when user selects "Select Source" for a series
   final void Function(StremioMeta)? onSelectSource;
+  final void Function(StremioMeta)? onKeywordSelectSource;
 
   /// Callback when user selects "Play Random Episode" for a series
   final Future<void> Function(StremioMeta show, StremioAddon? addon)?
@@ -77,6 +78,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.onKeywordFocusNodeReady,
     this.onRequestFocusAbove,
     this.onSelectSource,
+    this.onKeywordSelectSource,
     this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onBrowseSeriesEpisodes,
@@ -531,6 +533,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => widget.onSelectSource?.call(item),
+      onKeywordSearch: widget.onKeywordSelectSource != null
+          ? () => widget.onKeywordSelectSource!.call(item)
+          : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(item, imdbId)
           : null,
