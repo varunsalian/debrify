@@ -1,18 +1,22 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show File, Platform;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/main_page_bridge.dart';
 
 import '../services/account_service.dart';
+import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
@@ -397,6 +401,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
+      onCreateBackup: _createBackup,
+      onRestoreBackup: _restoreBackup,
       onDangerAction: _resetAppData,
       appVersion: _appVersion,
       onCheckForUpdates: _checkForAppUpdates,
@@ -571,6 +577,361 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _firstCardFocusNode.requestFocus();
       }
     });
+  }
+
+  Future<void> _createBackup() async {
+    // Build the payload first so we can warn if it's empty.
+    final Map<String, dynamic> payload;
+    try {
+      payload = await BackupRestoreService.buildBackup();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to build backup: $e')),
+      );
+      return;
+    }
+
+    final summary = BackupRestoreService.summarize(payload);
+    if (summary.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nothing to back up — no services are configured.'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create backup'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('The backup will include:'),
+            const SizedBox(height: 8),
+            ..._backupSummaryLines(summary)
+                .map((line) => Text('• $line')),
+            const SizedBox(height: 12),
+            const Text(
+              'Credentials are stored in plain text. Keep this file private '
+              'and treat it like a password.',
+              style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Save backup'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    final jsonContent = const JsonEncoder.withIndent('  ').convert(payload);
+    final bytes = Uint8List.fromList(utf8.encode(jsonContent));
+    final ts = DateTime.now();
+    final fileName =
+        'debrify-backup-${ts.year.toString().padLeft(4, '0')}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}.json';
+
+    try {
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Debrify backup',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        bytes: bytes,
+      );
+
+      if (savedPath == null) {
+        // User cancelled.
+        return;
+      }
+
+      // On some platforms, saveFile returns the chosen path but does not
+      // write the bytes itself — write defensively if the file is missing
+      // or empty.
+      try {
+        final file = File(savedPath);
+        if (!await file.exists() || (await file.length()) == 0) {
+          await file.writeAsBytes(bytes, flush: true);
+        }
+      } catch (_) {
+        // saveFile already handled writing on this platform.
+      }
+
+      if (!mounted) return;
+      // On Android, savedPath may be a content:// URI from the Storage
+      // Access Framework — show it raw so the user has at least a
+      // breadcrumb of where the backup went.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backup saved to $savedPath'),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      // Fallback: write to the app's documents directory so the user is
+      // never left without a copy when saveFile is unavailable (some TV
+      // platforms lack a system save dialog).
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final fallbackPath = '${dir.path}/$fileName';
+        await File(fallbackPath).writeAsBytes(bytes, flush: true);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup saved to $fallbackPath'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } catch (e2) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save backup: $e2')),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    final FilePickerResult? pick;
+    try {
+      pick = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose Debrify backup file',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open file picker: $e')),
+      );
+      return;
+    }
+
+    if (pick == null || pick.files.isEmpty) return;
+    final file = pick.files.first;
+
+    final String content;
+    try {
+      if (file.bytes != null) {
+        content = utf8.decode(file.bytes!);
+      } else if (file.path != null) {
+        content = await File(file.path!).readAsString();
+      } else {
+        throw Exception('Could not read backup file contents');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to read backup file: $e')),
+      );
+      return;
+    }
+
+    final Map<String, dynamic> payload;
+    try {
+      payload = BackupRestoreService.parse(content);
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invalid backup: ${e.message}')),
+      );
+      return;
+    }
+
+    final summary = BackupRestoreService.summarize(payload);
+    if (summary.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup contains no data to restore.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore backup'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (summary.createdAt != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Created: ${summary.createdAt}',
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              ),
+            const Text('This backup contains:'),
+            const SizedBox(height: 8),
+            ..._backupSummaryLines(summary)
+                .map((line) => Text('• $line')),
+            const SizedBox(height: 12),
+            const Text(
+              'Saved credentials (Real-Debrid, Torbox, PikPak, Trakt) will '
+              'be overwritten. Addons and search engines you already have '
+              'are kept as-is.',
+              style: TextStyle(fontSize: 12),
+            ),
+            if (summary.addonCount > 0 || summary.searchEngineCount > 0)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Restoring addons and search engines needs a network '
+                  'connection.',
+                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    // Run the restore. Show a non-dismissible progress dialog while it runs
+    // — search engines and addons require network and can take a while.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 16),
+              Expanded(child: Text('Restoring backup…')),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    RestoreReport report;
+    try {
+      report = await BackupRestoreService.applyBackup(payload);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Restore failed: $e')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    final msg = _formatRestoreReport(report);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor:
+            report.hasAnyFailure ? const Color(0xFFF59E0B) : null,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+
+    // Drop any cached account info from a previous session so the cards
+    // don't briefly show stale identity while Phase 2 of _loadSummaries
+    // re-fetches it for the newly-restored keys.
+    if (report.realDebrid) AccountService.clearUserInfo();
+    if (report.torbox) TorboxAccountService.clearUserInfo();
+
+    // Re-run the summary loader so the connection cards reflect the newly
+    // restored services (and kick off background account refresh).
+    await _loadSummaries();
+
+    // Tell the rest of the app — navbar, home tabs, search surfaces — that
+    // integrations changed so they rebuild against the restored services
+    // (same hook the individual settings pages use after a credential edit).
+    MainPageBridge.notifyIntegrationChanged();
+  }
+
+  List<String> _backupSummaryLines(BackupSummary s) {
+    final lines = <String>[];
+    if (s.hasRealDebrid) lines.add('Real-Debrid');
+    if (s.hasTorbox) lines.add('Torbox');
+    if (s.hasPikpak) lines.add('PikPak');
+    if (s.hasTrakt) lines.add('Trakt');
+    if (s.searchEngineCount > 0) {
+      lines.add('Search engines (${s.searchEngineCount})');
+    }
+    if (s.addonCount > 0) lines.add('Stremio addons (${s.addonCount})');
+    return lines;
+  }
+
+  String _formatRestoreReport(RestoreReport r) {
+    final parts = <String>[];
+    if (r.realDebrid) parts.add('Real-Debrid');
+    if (r.torbox) parts.add('Torbox');
+    if (r.pikpak) parts.add('PikPak');
+    if (r.trakt) parts.add('Trakt');
+    if (r.searchEnginesImported > 0) {
+      parts.add('${r.searchEnginesImported} new engine(s)');
+    }
+    if (r.addonsImported > 0) {
+      parts.add('${r.addonsImported} new addon(s)');
+    }
+
+    if (parts.isEmpty && !r.hasAnyFailure) {
+      return 'Nothing new to restore — everything was already present';
+    }
+    final base = parts.isEmpty ? 'Restore finished' : 'Restored: ${parts.join(', ')}';
+    final notes = <String>[];
+    if (r.searchEnginesAlreadyPresent > 0) {
+      notes.add('${r.searchEnginesAlreadyPresent} engine(s) already present');
+    }
+    if (r.addonsAlreadyPresent > 0) {
+      notes.add('${r.addonsAlreadyPresent} addon(s) already present');
+    }
+    final withNotes = notes.isEmpty ? base : '$base (${notes.join(', ')})';
+
+    if (!r.hasAnyFailure) return withNotes;
+    final failed = <String>[];
+    if (r.pikpakLoginFailed) {
+      failed.add('PikPak login (credentials saved — retry from PikPak settings)');
+    }
+    if (r.searchEnginesFailed > 0) {
+      failed.add('${r.searchEnginesFailed} engine(s)');
+    }
+    if (r.addonsFailed > 0) failed.add('${r.addonsFailed} addon(s)');
+    failed.addAll(r.errors);
+    return '$withNotes — failed: ${failed.join(', ')}';
   }
 
   Future<void> _clearDownloadData() async {
@@ -1066,6 +1427,8 @@ class _SettingsLayout extends StatelessWidget {
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
+  final Future<void> Function() onCreateBackup;
+  final Future<void> Function() onRestoreBackup;
   final Future<void> Function() onDangerAction;
   final String appVersion;
   final Future<void> Function() onCheckForUpdates;
@@ -1093,6 +1456,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.isAndroidTv,
     required this.onClearDownloads,
     required this.onClearPlayback,
+    required this.onCreateBackup,
+    required this.onRestoreBackup,
     required this.onDangerAction,
     required this.appVersion,
     required this.onCheckForUpdates,
@@ -1227,6 +1592,28 @@ class _SettingsLayout extends StatelessWidget {
                 subtitle: 'Reset resume points and playback sessions',
                 onTap: onClearPlayback,
                 iconColor: const Color(0xFF8B5CF6),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Backup & Restore section
+          _SettingsSection(
+            title: 'Backup & Restore',
+            children: [
+              _SettingsTile(
+                icon: Icons.save_alt_rounded,
+                title: 'Create Backup',
+                subtitle:
+                    'Save services, addons, and search engines to a file',
+                onTap: onCreateBackup,
+                iconColor: const Color(0xFF10B981),
+              ),
+              _SettingsTile(
+                icon: Icons.restore_rounded,
+                title: 'Restore from Backup',
+                subtitle: 'Import services and addons from a backup file',
+                onTap: onRestoreBackup,
+                iconColor: const Color(0xFF3B82F6),
               ),
             ],
           ),
