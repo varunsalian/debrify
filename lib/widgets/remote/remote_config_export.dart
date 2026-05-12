@@ -13,10 +13,7 @@ import 'addon_install_dialog.dart';
 class RemoteConfigExport extends StatefulWidget {
   final VoidCallback onBack;
 
-  const RemoteConfigExport({
-    super.key,
-    required this.onBack,
-  });
+  const RemoteConfigExport({super.key, required this.onBack});
 
   @override
   State<RemoteConfigExport> createState() => _RemoteConfigExportState();
@@ -46,12 +43,19 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _realDebrid;
   _ConfigItem? _torbox;
   _ConfigItem? _pikpak;
+  _ConfigItem? _trakt;
   _ConfigItem? _searchEngines;
 
   // API keys (loaded from storage)
   String? _realDebridApiKey;
   String? _torboxApiKey;
   String? _pikpakEmail;
+
+  // Trakt session bundle (loaded from storage)
+  String? _traktAccessToken;
+  String? _traktRefreshToken;
+  int? _traktTokenExpiry;
+  String? _traktUsername;
 
   // PikPak password (entered by user)
   final _pikpakPasswordController = TextEditingController();
@@ -79,17 +83,33 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       // Load Real-Debrid
       _realDebridApiKey = await StorageService.getApiKey();
       final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-      final hasRd = _realDebridApiKey != null && _realDebridApiKey!.isNotEmpty && rdEnabled;
+      final hasRd =
+          _realDebridApiKey != null &&
+          _realDebridApiKey!.isNotEmpty &&
+          rdEnabled;
 
       // Load Torbox
       _torboxApiKey = await StorageService.getTorboxApiKey();
       final tbEnabled = await StorageService.getTorboxIntegrationEnabled();
-      final hasTb = _torboxApiKey != null && _torboxApiKey!.isNotEmpty && tbEnabled;
+      final hasTb =
+          _torboxApiKey != null && _torboxApiKey!.isNotEmpty && tbEnabled;
 
       // Load PikPak
       _pikpakEmail = await StorageService.getPikPakEmail();
       final ppEnabled = await StorageService.getPikPakEnabled();
-      final hasPp = _pikpakEmail != null && _pikpakEmail!.isNotEmpty && ppEnabled;
+      final hasPp =
+          _pikpakEmail != null && _pikpakEmail!.isNotEmpty && ppEnabled;
+
+      // Load Trakt session
+      _traktAccessToken = await StorageService.getTraktAccessToken();
+      _traktRefreshToken = await StorageService.getTraktRefreshToken();
+      _traktTokenExpiry = await StorageService.getTraktTokenExpiry();
+      _traktUsername = await StorageService.getTraktUsername();
+      final hasTrakt =
+          _traktAccessToken != null &&
+          _traktAccessToken!.isNotEmpty &&
+          _traktRefreshToken != null &&
+          _traktRefreshToken!.isNotEmpty;
 
       // Load Search Engines
       await LocalEngineStorage.instance.initialize();
@@ -118,7 +138,16 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           name: 'PikPak',
           icon: 'pp',
           isConfigured: hasPp,
-          selected: false, // Default to false since password needs to be entered
+          selected:
+              false, // Default to false since password needs to be entered
+        );
+
+        _trakt = _ConfigItem(
+          id: ConfigCommand.trakt,
+          name: 'Trakt',
+          icon: 'tk',
+          isConfigured: hasTrakt,
+          selected: hasTrakt,
         );
 
         _searchEngines = _ConfigItem(
@@ -141,6 +170,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     return (_realDebrid?.isConfigured ?? false) ||
         (_torbox?.isConfigured ?? false) ||
         (_pikpak?.isConfigured ?? false) ||
+        (_trakt?.isConfigured ?? false) ||
         (_searchEngines?.isConfigured ?? false);
   }
 
@@ -148,6 +178,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     return (_realDebrid?.selected ?? false) ||
         (_torbox?.selected ?? false) ||
         (_pikpak?.selected ?? false) ||
+        (_trakt?.selected ?? false) ||
         (_searchEngines?.selected ?? false);
   }
 
@@ -167,7 +198,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       subtitle: 'Send configuration to',
       showThisDevice: false,
     );
-    if (choice == null || choice.target != 'tv' || choice.device == null) return;
+    if (choice == null || choice.target != 'tv' || choice.device == null)
+      return;
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
@@ -228,6 +260,29 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         }
       }
 
+      // Send Trakt session
+      if (_trakt?.selected == true &&
+          _traktAccessToken != null &&
+          _traktRefreshToken != null) {
+        final traktData = jsonEncode({
+          'access_token': _traktAccessToken,
+          'refresh_token': _traktRefreshToken,
+          if (_traktTokenExpiry != null) 'expiry_ms': _traktTokenExpiry,
+          if (_traktUsername != null) 'username': _traktUsername,
+        });
+        final success = await state.sendConfigCommandToDevice(
+          ConfigCommand.trakt,
+          targetIp,
+          configData: traktData,
+        );
+        if (success) {
+          successCount++;
+          results.add('Trakt');
+        } else {
+          failCount++;
+        }
+      }
+
       // Send Search Engines
       if (_searchEngines?.selected == true && _engineIds.isNotEmpty) {
         final success = await state.sendConfigCommandToDevice(
@@ -247,10 +302,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       if (successCount > 0) {
         // Small delay to ensure previous commands are processed
         await Future.delayed(const Duration(milliseconds: 500));
-        await state.sendConfigCommandToDevice(
-          ConfigCommand.complete,
-          targetIp,
-        );
+        await state.sendConfigCommandToDevice(ConfigCommand.complete, targetIp);
       }
 
       // Show result
@@ -353,13 +405,13 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           _buildEmptyState()
         else ...[
           // Debrid providers section
-          if (_realDebrid?.isConfigured == true || _torbox?.isConfigured == true) ...[
+          if (_realDebrid?.isConfigured == true ||
+              _torbox?.isConfigured == true) ...[
             _buildSectionHeader('DEBRID PROVIDERS'),
             const SizedBox(height: 8),
             if (_realDebrid?.isConfigured == true)
               _buildConfigTile(_realDebrid!),
-            if (_torbox?.isConfigured == true)
-              _buildConfigTile(_torbox!),
+            if (_torbox?.isConfigured == true) _buildConfigTile(_torbox!),
             const SizedBox(height: 16),
           ],
 
@@ -371,13 +423,22 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             const SizedBox(height: 16),
           ],
 
+          // Trakt section
+          if (_trakt?.isConfigured == true) ...[
+            _buildSectionHeader('TRACKING'),
+            const SizedBox(height: 8),
+            _buildConfigTile(_trakt!, subtitle: _traktUsername ?? 'Signed in'),
+            const SizedBox(height: 16),
+          ],
+
           // Search engines section
           if (_searchEngines?.isConfigured == true) ...[
             _buildSectionHeader('SEARCH'),
             const SizedBox(height: 8),
             _buildConfigTile(
               _searchEngines!,
-              subtitle: '${_engineIds.length} engine${_engineIds.length != 1 ? 's' : ''}',
+              subtitle:
+                  '${_engineIds.length} engine${_engineIds.length != 1 ? 's' : ''}',
             ),
             const SizedBox(height: 16),
           ],
@@ -393,7 +454,9 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6366F1),
-                disabledBackgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                disabledBackgroundColor: const Color(
+                  0xFF6366F1,
+                ).withValues(alpha: 0.3),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -466,9 +529,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF1E293B),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: Icon(
                 Icons.settings_outlined,
@@ -486,7 +547,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Set up Real-Debrid, Torbox, or PikPak first',
+              'Set up Real-Debrid, Torbox, PikPak, or Trakt first',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.5),
                 fontSize: 14,
@@ -573,9 +634,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                     setState(() => item.selected = value ?? false);
                   },
                   activeColor: const Color(0xFF6366F1),
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
                 ),
               ],
             ),
@@ -610,9 +669,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                   HapticFeedback.selectionClick();
                   setState(() => item.selected = !item.selected);
                 },
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   child: Row(
                     children: [
                       // Icon
@@ -676,10 +740,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
 
             // Password field (shown when selected)
             if (item.selected) ...[
-              Divider(
-                height: 1,
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.1)),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: TextField(
@@ -714,7 +775,9 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                         size: 20,
                       ),
                       onPressed: () {
-                        setState(() => _showPikpakPassword = !_showPikpakPassword);
+                        setState(
+                          () => _showPikpakPassword = !_showPikpakPassword,
+                        );
                       },
                     ),
                   ),
@@ -736,6 +799,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.inventory_2;
       case ConfigCommand.pikpak:
         return Icons.cloud;
+      case ConfigCommand.trakt:
+        return Icons.history_rounded;
       case ConfigCommand.searchEngines:
         return Icons.search;
       default:
@@ -751,6 +816,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFFF59E0B); // Amber
       case ConfigCommand.pikpak:
         return const Color(0xFF3B82F6); // Blue
+      case ConfigCommand.trakt:
+        return const Color(0xFFED1C24); // Trakt red
       case ConfigCommand.searchEngines:
         return const Color(0xFF8B5CF6); // Purple
       default:

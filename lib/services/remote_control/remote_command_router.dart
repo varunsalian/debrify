@@ -21,7 +21,8 @@ import '../../models/debrify_tv_cache.dart';
 import '../../models/debrify_tv_channel_record.dart';
 
 /// Callback type for remote command handlers
-typedef RemoteCommandCallback = void Function(String action, String command, String? data);
+typedef RemoteCommandCallback =
+    void Function(String action, String command, String? data);
 
 /// Android KeyEvent key codes
 class AndroidKeyCode {
@@ -122,7 +123,9 @@ class RemoteCommandRouter {
     // Suppress per-chunk logs to avoid flooding
     final isChunk = command == ConfigCommand.debrifyChannelChunk;
     if (!isChunk) {
-      debugPrint('RemoteCommandRouter: Dispatching $action:$command${data != null ? ' with data' : ''} to ${_handlers.length} handlers');
+      debugPrint(
+        'RemoteCommandRouter: Dispatching $action:$command${data != null ? ' with data' : ''} to ${_handlers.length} handlers',
+      );
     }
 
     for (final handler in _handlers.toList()) {
@@ -187,12 +190,17 @@ class RemoteCommandRouter {
           break;
         case TextCommand.backspace:
           // Send backspace key event
-          await _channel.invokeMethod('injectKeyEvent', {'keyCode': 67}); // KEYCODE_DEL
+          await _channel.invokeMethod('injectKeyEvent', {
+            'keyCode': 67,
+          }); // KEYCODE_DEL
           debugPrint('RemoteCommandRouter: Injected backspace');
           break;
         case TextCommand.clear:
           // Select all (Ctrl+A) then delete
-          await _channel.invokeMethod('injectText', {'text': '', 'clear': true});
+          await _channel.invokeMethod('injectText', {
+            'text': '',
+            'clear': true,
+          });
           debugPrint('RemoteCommandRouter: Cleared text field');
           break;
         case TextCommand.enter:
@@ -232,6 +240,9 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.pikpak:
         await _handlePikPakConfig(data);
+        break;
+      case ConfigCommand.trakt:
+        await _handleTraktConfig(data);
         break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
@@ -330,6 +341,43 @@ class RemoteCommandRouter {
     }
   }
 
+  /// Handle Trakt session config - copies access/refresh tokens, expiry, and
+  /// username from the sender so the TV ends up logged in to the same account.
+  Future<void> _handleTraktConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring Trakt session...');
+
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final accessToken = data['access_token'] as String?;
+      final refreshToken = data['refresh_token'] as String?;
+      final expiry = data['expiry_ms'] as int?;
+      final username = data['username'] as String?;
+
+      if (accessToken == null ||
+          accessToken.isEmpty ||
+          refreshToken == null ||
+          refreshToken.isEmpty) {
+        _showSnackBar('Trakt: Invalid session data', isError: true);
+        return;
+      }
+
+      await StorageService.setTraktAccessToken(accessToken);
+      await StorageService.setTraktRefreshToken(refreshToken);
+      if (expiry != null) {
+        await StorageService.setTraktTokenExpiry(expiry);
+      }
+      if (username != null && username.isNotEmpty) {
+        await StorageService.setTraktUsername(username);
+      }
+
+      debugPrint('RemoteCommandRouter: Trakt session configured successfully');
+      _showSnackBar('Trakt connected successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure Trakt: $e');
+      _showSnackBar('Trakt: Configuration failed', isError: true);
+    }
+  }
+
   /// Handle config complete signal - mark onboarding done and restart app flow
   Future<void> _handleConfigComplete() async {
     debugPrint('RemoteCommandRouter: Config complete, restarting app flow...');
@@ -374,7 +422,9 @@ class RemoteCommandRouter {
 
       for (final engineId in engineIds) {
         // Find the engine info
-        final engineInfo = availableEngines.where((e) => e.id == engineId).firstOrNull;
+        final engineInfo = availableEngines
+            .where((e) => e.id == engineId)
+            .firstOrNull;
         if (engineInfo == null) {
           debugPrint('RemoteCommandRouter: Engine $engineId not found');
           failCount++;
@@ -390,9 +440,13 @@ class RemoteCommandRouter {
 
         // Download and save the engine
         try {
-          final yamlContent = await remoteManager.downloadEngineYaml(engineInfo.fileName);
+          final yamlContent = await remoteManager.downloadEngineYaml(
+            engineInfo.fileName,
+          );
           if (yamlContent == null) {
-            debugPrint('RemoteCommandRouter: Failed to download engine $engineId');
+            debugPrint(
+              'RemoteCommandRouter: Failed to download engine $engineId',
+            );
             failCount++;
             continue;
           }
@@ -405,17 +459,24 @@ class RemoteCommandRouter {
           );
           successCount++;
         } catch (e) {
-          debugPrint('RemoteCommandRouter: Failed to import engine $engineId: $e');
+          debugPrint(
+            'RemoteCommandRouter: Failed to import engine $engineId: $e',
+          );
           failCount++;
         }
       }
 
       if (failCount == 0) {
-        _showSnackBar('$successCount search engine${successCount != 1 ? 's' : ''} configured');
+        _showSnackBar(
+          '$successCount search engine${successCount != 1 ? 's' : ''} configured',
+        );
       } else if (successCount == 0) {
         _showSnackBar('Search engines: All failed to import', isError: true);
       } else {
-        _showSnackBar('Search engines: $successCount imported, $failCount failed', isError: true);
+        _showSnackBar(
+          'Search engines: $successCount imported, $failCount failed',
+          isError: true,
+        );
       }
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure search engines: $e');
@@ -438,11 +499,15 @@ class RemoteCommandRouter {
       );
 
       // 3. Reuse existing channelId if a channel with the same name exists
-      final existingChannels = await DebrifyTvRepository.instance.fetchAllChannels();
+      final existingChannels = await DebrifyTvRepository.instance
+          .fetchAllChannels();
       final existingMatch = existingChannels
-          .where((c) => c.name.toLowerCase() == parsed.channelName.toLowerCase())
+          .where(
+            (c) => c.name.toLowerCase() == parsed.channelName.toLowerCase(),
+          )
           .firstOrNull;
-      final channelId = existingMatch?.channelId ??
+      final channelId =
+          existingMatch?.channelId ??
           DateTime.now().microsecondsSinceEpoch.toString();
       final now = DateTime.now();
 
@@ -470,7 +535,9 @@ class RemoteCommandRouter {
       await DebrifyTvRepository.instance.upsertChannel(record);
       await DebrifyTvCacheService.saveEntry(entry);
 
-      debugPrint('RemoteCommandRouter: Channel imported: ${parsed.channelName}');
+      debugPrint(
+        'RemoteCommandRouter: Channel imported: ${parsed.channelName}',
+      );
       _showSnackBar('Channel imported: ${parsed.channelName}');
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to import channel: $e');
@@ -503,7 +570,10 @@ class RemoteCommandRouter {
             'RemoteCommandRouter: Chunk transfer timed out: $transferId',
           );
           _chunkBuffers.remove(transferId);
-          _showSnackBar('Channel transfer timed out: $channelName', isError: true);
+          _showSnackBar(
+            'Channel transfer timed out: $channelName',
+            isError: true,
+          );
         }),
       );
     } catch (e) {
@@ -600,13 +670,17 @@ class RemoteCommandRouter {
   Future<void> _injectKeyEvent(String action, String command) async {
     final keyCode = _commandToAndroidKeyCode(action, command);
     if (keyCode == null) {
-      debugPrint('RemoteCommandRouter: No key code mapping for $action:$command');
+      debugPrint(
+        'RemoteCommandRouter: No key code mapping for $action:$command',
+      );
       return;
     }
 
     try {
       await _channel.invokeMethod('injectKeyEvent', {'keyCode': keyCode});
-      debugPrint('RemoteCommandRouter: Injected key event $keyCode for $action:$command');
+      debugPrint(
+        'RemoteCommandRouter: Injected key event $keyCode for $action:$command',
+      );
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to inject key event: $e');
       // Fallback to focus-based navigation if platform channel fails
@@ -690,13 +764,18 @@ class RemoteCommandRouter {
     }
 
     // Fallback: Try ButtonActivateIntent for buttons specifically
-    final buttonResult = Actions.maybeInvoke<Intent>(context, const ButtonActivateIntent());
+    final buttonResult = Actions.maybeInvoke<Intent>(
+      context,
+      const ButtonActivateIntent(),
+    );
     if (buttonResult != null) {
       debugPrint('RemoteCommandRouter: ButtonActivateIntent handled');
       return;
     }
 
-    debugPrint('RemoteCommandRouter: No activate handler found for focused element');
+    debugPrint(
+      'RemoteCommandRouter: No activate handler found for focused element',
+    );
   }
 
   /// Handle back navigation
