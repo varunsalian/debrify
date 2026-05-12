@@ -60,15 +60,14 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
       String? best;
       for (final ni in interfaces) {
         for (final addr in ni.addresses) {
-          if (!addr.isLoopback && addr.address.startsWith(RegExp(r'\d'))) {
-            best ??= addr.address;
-            // Prefer common LAN ranges.
-            if (addr.address.startsWith('192.168.') ||
-                addr.address.startsWith('10.') ||
-                addr.address.startsWith('172.')) {
-              best = addr.address;
-              break;
-            }
+          if (addr.isLoopback) continue;
+          best ??= addr.address;
+          // Prefer common LAN ranges.
+          if (addr.address.startsWith('192.168.') ||
+              addr.address.startsWith('10.') ||
+              addr.address.startsWith('172.')) {
+            best = addr.address;
+            break;
           }
         }
       }
@@ -101,48 +100,64 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
         children: [
           const _Backdrop(),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  _StatusOrb(connected: connected, pulse: _pulse),
-                  const SizedBox(height: 28),
-                  Text(
-                    connected ? 'Connected' : 'Waiting for sender…',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 48,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const SizedBox(height: 12),
+                        Column(
+                          children: [
+                            _StatusOrb(connected: connected, pulse: _pulse),
+                            const SizedBox(height: 28),
+                            Text(
+                              connected ? 'Connected' : 'Waiting for sender…',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.4,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              connected
+                                  ? 'Ready to receive commands and setup '
+                                        'from the paired device.'
+                                  : 'On another device, open Remote → Send '
+                                        'and pick this one from the list.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 14,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            if (_localIp != null) _IpChip(ip: _localIp!),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 32),
+                          child: _StopButton(
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              Navigator.of(context).maybePop();
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    connected
-                        ? 'Ready to receive commands and setup from the '
-                              'paired device.'
-                        : 'On another device, open Remote → Send and pick this '
-                              'one from the list.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  if (_localIp != null) _IpChip(ip: _localIp!),
-                  const Spacer(),
-                  _StopButton(
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      Navigator.of(context).maybePop();
-                    },
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],

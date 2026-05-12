@@ -25,6 +25,11 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
   final FocusNode _sendFocus = FocusNode(debugLabel: 'remote-pick-send');
   final FocusNode _recvFocus = FocusNode(debugLabel: 'remote-pick-recv');
 
+  /// True once the user actually picks Send or Receive. We only restore the
+  /// boot-default role on dispose if a switch happened, so simply opening
+  /// and closing the picker doesn't churn the network services.
+  bool _didSwitch = false;
+
   @override
   void initState() {
     super.initState();
@@ -37,9 +42,11 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
   void dispose() {
     _sendFocus.dispose();
     _recvFocus.dispose();
-    // Restore the device's default role when the user fully exits the
-    // Remote feature, so the TV keeps listening and the phone keeps scanning.
-    _restoreDefaultRole();
+    if (_didSwitch) {
+      // Restore the device's default role only if we changed it, so the TV
+      // keeps listening and the phone keeps scanning.
+      _restoreDefaultRole();
+    }
     super.dispose();
   }
 
@@ -64,6 +71,7 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
     HapticFeedback.mediumImpact();
     final state = RemoteControlState();
     if (state.isTv) {
+      _didSwitch = true;
       await state.switchToSenderMode();
     }
     if (!mounted) return;
@@ -77,7 +85,11 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
     var name = await StorageService.getRemoteTvDeviceName();
     name ??= await PlatformUtil.getDeviceName();
     name ??= 'This device';
-    await RemoteControlState().switchToReceiverMode(name);
+    final state = RemoteControlState();
+    if (!state.isTv) {
+      _didSwitch = true;
+      await state.switchToReceiverMode(name);
+    }
     if (!mounted) return;
     await Navigator.of(
       context,

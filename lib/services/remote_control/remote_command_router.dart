@@ -378,20 +378,34 @@ class RemoteCommandRouter {
     }
   }
 
-  /// Handle config complete signal - mark onboarding done and restart app flow
+  /// Handle config complete signal.
+  ///
+  /// If this device is still in first-time onboarding, mark it complete and
+  /// restart the app flow so the new credentials/integrations are picked up
+  /// (the original "set up TV from phone" flow).
+  ///
+  /// If onboarding is already done — e.g. a phone or already-configured TV
+  /// is in receive mode mid-session — we just acknowledge with a snackbar
+  /// and let the user keep using the app uninterrupted.
   Future<void> _handleConfigComplete() async {
-    debugPrint('RemoteCommandRouter: Config complete, restarting app flow...');
+    final wasOnboarding = !(await StorageService.isInitialSetupComplete());
 
-    // Mark onboarding as complete
+    if (!wasOnboarding) {
+      debugPrint('RemoteCommandRouter: Config complete (already onboarded)');
+      _showSnackBar('Setup received');
+      return;
+    }
+
+    debugPrint(
+      'RemoteCommandRouter: Config complete during onboarding, restarting app flow...',
+    );
+
     await StorageService.setInitialSetupComplete(true);
-
-    // Show snackbar
     _showSnackBar('Setup received! Restarting...');
 
     // Give snackbar time to show, then restart app
     await Future.delayed(const Duration(milliseconds: 1500));
 
-    // Use the restart callback if available
     if (_onRestartApp != null) {
       _onRestartApp!();
       debugPrint('RemoteCommandRouter: Restart callback invoked');

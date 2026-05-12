@@ -791,17 +791,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (!_remoteControlEnabled) return;
 
     if (isTv) {
-      // TV: Start listening for mobile devices
+      // TV: Start listening for mobile devices.
+      // Command dispatch into the router is wired automatically by
+      // RemoteControlState.startTvListener so phones/desktops that switch
+      // to receive mode mid-session via the Remote picker also work.
       // Priority: 1. User-set custom name, 2. Actual device name, 3. Fallback
       var deviceName = await StorageService.getRemoteTvDeviceName();
       deviceName ??= await PlatformUtil.getDeviceName();
       deviceName ??= 'Debrify TV';
       await RemoteControlState().startTvListener(deviceName);
-
-      // Set up command routing
-      RemoteControlState().onCommandReceived = (action, command, data) {
-        RemoteCommandRouter().dispatchCommand(action, command, data);
-      };
     } else {
       // Non-TV: Start scanning for TVs
       await RemoteControlState().startMobileDiscovery();

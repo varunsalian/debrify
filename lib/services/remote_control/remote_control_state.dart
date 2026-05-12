@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'remote_constants.dart';
+import 'remote_command_router.dart';
 import 'udp_discovery_service.dart';
 import 'udp_command_service.dart';
 
@@ -43,12 +44,22 @@ class RemoteControlState extends ChangeNotifier {
   bool get isTv => _isTv;
   bool get hasDevices => _discoveredDevices.isNotEmpty;
 
-  /// Initialize for TV mode - start listening for mobile devices
+  /// Initialize receiver mode - start listening for incoming commands.
+  /// Any device can call this; it's also the default for Android TV at boot.
   Future<void> startTvListener(String deviceName) async {
     _isTv = true;
     _deviceId = _generateDeviceId();
 
-    debugPrint('RemoteControlState: Starting TV listener as "$deviceName"');
+    // Wire dispatch into the command router by default so callers don't have
+    // to remember to set this up. main.dart used to do this only for TV;
+    // having it here means switchToReceiverMode on phones/desktops also works.
+    onCommandReceived ??= (action, command, data) {
+      RemoteCommandRouter().dispatchCommand(action, command, data);
+    };
+
+    debugPrint(
+      'RemoteControlState: Starting receiver listener as "$deviceName"',
+    );
 
     // Start discovery service (to respond to discovery requests)
     _discoveryService = UdpDiscoveryService(
