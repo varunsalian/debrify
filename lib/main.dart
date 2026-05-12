@@ -52,7 +52,7 @@ import 'services/remote_control/remote_constants.dart';
 import 'services/aptabase_service.dart';
 import 'services/support_remote_config_service.dart';
 import 'widgets/remote/addon_install_dialog.dart';
-import 'widgets/remote/remote_control_screen.dart';
+import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'services/update_service.dart';
@@ -2294,7 +2294,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           onRemoteControlTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const RemoteControlScreen(),
+                                builder: (_) => const RemoteRolePickerScreen(),
                               ),
                             );
                           },

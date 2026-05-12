@@ -40,7 +40,7 @@ import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
-import '../widgets/remote/remote_control_screen.dart';
+import '../widgets/remote/remote_role_picker_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -514,7 +514,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openRemoteControl() async {
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const RemoteControlScreen()));
+    ).push(MaterialPageRoute(builder: (_) => const RemoteRolePickerScreen()));
     if (!mounted) return;
     setState(() {});
   }
@@ -1144,16 +1144,19 @@ class _SettingsLayout extends StatelessWidget {
                 onTap: onOpenStartupSettings,
                 iconColor: const Color(0xFFF59E0B),
               ),
-              // Remote Control: Hide on mobile (in floating menu) and TV (receiver)
-              // Only show on desktop platforms
+              // Remote: shown on TV and desktop. Mobile keeps its
+              // entry in the floating menu, so it's hidden here.
               if (!kIsWeb &&
-                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+                  (isAndroidTv ||
+                      Platform.isWindows ||
+                      Platform.isMacOS ||
+                      Platform.isLinux))
                 _SettingsTile(
                   icon: Icons.phonelink_rounded,
-                  title: 'Remote Control',
-                  subtitle: 'Control Debrify TV from your phone',
+                  title: 'Remote',
+                  subtitle: 'Send setup or receive from another device',
                   onTap: () async => onOpenRemoteControl(),
-                  iconColor: const Color(0xFF06B6D4),
+                  iconColor: const Color(0xFFED1C24),
                 ),
             ],
           ),

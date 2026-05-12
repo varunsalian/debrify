@@ -8,12 +8,7 @@ import 'udp_discovery_service.dart';
 import 'udp_command_service.dart';
 
 /// Connection state enum
-enum RemoteConnectionState {
-  disconnected,
-  scanning,
-  connecting,
-  connected,
-}
+enum RemoteConnectionState { disconnected, scanning, connecting, connected }
 
 /// State manager for remote control functionality
 class RemoteControlState extends ChangeNotifier {
@@ -40,7 +35,8 @@ class RemoteControlState extends ChangeNotifier {
   // Getters
   RemoteConnectionState get connectionState => _connectionState;
   DiscoveredDevice? get connectedDevice => _connectedDevice;
-  List<DiscoveredDevice> get discoveredDevices => List.unmodifiable(_discoveredDevices);
+  List<DiscoveredDevice> get discoveredDevices =>
+      List.unmodifiable(_discoveredDevices);
   String? get lastError => _lastError;
   bool get isConnected => _connectionState == RemoteConnectionState.connected;
   bool get isScanning => _connectionState == RemoteConnectionState.scanning;
@@ -100,10 +96,7 @@ class RemoteControlState extends ChangeNotifier {
     notifyListeners();
 
     // Start discovery service
-    _discoveryService = UdpDiscoveryService(
-      deviceId: _deviceId,
-      isTv: false,
-    );
+    _discoveryService = UdpDiscoveryService(deviceId: _deviceId, isTv: false);
 
     _discoveryService!.onDeviceDiscovered = _handleDeviceDiscovered;
     _discoveryService!.onDevicesUpdated = (devices) {
@@ -150,7 +143,9 @@ class RemoteControlState extends ChangeNotifier {
 
     // If already connected to this device, do nothing
     if (_connectedDevice?.ip == device.ip && isConnected) {
-      debugPrint('RemoteControlState: Already connected to ${device.deviceName}');
+      debugPrint(
+        'RemoteControlState: Already connected to ${device.deviceName}',
+      );
       return;
     }
 
@@ -193,40 +188,64 @@ class RemoteControlState extends ChangeNotifier {
     });
   }
 
-  /// Send a navigation command (for mobile)
+  /// Send a navigation command (sender role)
   void sendNavigateCommand(String direction) {
     if (!isConnected || _isTv) return;
     _commandService?.sendCommand(RemoteCommand.navigate(direction));
   }
 
-  /// Send a media command (for mobile)
+  /// Send a media command (sender role)
   void sendMediaCommand(String command) {
     if (!isConnected || _isTv) return;
     _commandService?.sendCommand(RemoteCommand.media(command));
   }
 
-  /// Send an addon command (for mobile)
+  /// Send an addon command (sender role)
   void sendAddonCommand(String command, {String? manifestUrl}) {
     if (!isConnected || _isTv) return;
-    _commandService?.sendCommand(RemoteCommand.addon(command, manifestUrl: manifestUrl));
+    _commandService?.sendCommand(
+      RemoteCommand.addon(command, manifestUrl: manifestUrl),
+    );
   }
 
   /// Send an addon command to a specific device by IP (doesn't require connection)
-  Future<bool> sendAddonCommandToDevice(String command, String targetIp, {String? manifestUrl}) async {
+  Future<bool> sendAddonCommandToDevice(
+    String command,
+    String targetIp, {
+    String? manifestUrl,
+  }) async {
     final cmd = RemoteCommand.addon(command, manifestUrl: manifestUrl);
     return await UdpCommandService.sendCommandToIp(cmd, targetIp);
   }
 
   /// Send a config command to a specific device by IP (doesn't require connection)
-  Future<bool> sendConfigCommandToDevice(String configType, String targetIp, {String? configData}) async {
+  Future<bool> sendConfigCommandToDevice(
+    String configType,
+    String targetIp, {
+    String? configData,
+  }) async {
     final cmd = RemoteCommand.config(configType, configData: configData);
     return await UdpCommandService.sendCommandToIp(cmd, targetIp);
   }
 
-  /// Send a text input command (for mobile)
+  /// Send a text input command (sender role)
   void sendTextCommand(String command, {String? text}) {
     if (!isConnected || _isTv) return;
     _commandService?.sendCommand(RemoteCommand.text(command, text: text));
+  }
+
+  /// Switch this device into RECEIVER mode (listens for incoming commands).
+  /// Stops any existing sender/receiver state first. Safe to call from any platform.
+  Future<void> switchToReceiverMode(String deviceName) async {
+    await stop();
+    await startTvListener(deviceName);
+  }
+
+  /// Switch this device into SENDER mode (scans for receivers and sends commands).
+  /// Stops any existing sender/receiver state first.
+  Future<void> switchToSenderMode() async {
+    await stop();
+    await startMobileDiscovery();
   }
 
   /// Restart scanning (for mobile)
