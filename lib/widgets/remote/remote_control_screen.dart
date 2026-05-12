@@ -9,6 +9,7 @@ import 'remote_addon_export.dart';
 import 'remote_channel_export.dart';
 import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
+import 'remote_transfer_all.dart';
 
 /// Full remote control UI modal
 class RemoteControlScreen extends StatefulWidget {
@@ -91,6 +92,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ] else if (_activeView == 'channels') ...[
                       // Channels view - send Debrify TV channels to TV
                       RemoteChannelExport(onBack: _closeView),
+                    ] else if (_activeView == 'transfer_all') ...[
+                      RemoteTransferAll(onBack: _closeView),
                     ] else ...[
                       // Main menu
                       _buildConnectedMenu(state),
@@ -417,6 +420,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     return Column(
       children: [
         // Menu items
+        _buildMenuItem(
+          icon: Icons.bolt_rounded,
+          title: 'Transfer Everything',
+          subtitle: 'One-click: send all setup and addons',
+          onTap: () => _openView('transfer_all'),
+        ),
+
+        const SizedBox(height: 8),
+
         _buildMenuItem(
           icon: Icons.gamepad_rounded,
           title: 'Navigate',

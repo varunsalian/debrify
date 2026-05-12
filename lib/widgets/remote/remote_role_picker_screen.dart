@@ -144,43 +144,45 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
                       ),
                       const SizedBox(height: 28),
                       if (isWide)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _RoleCard(
-                                focusNode: _sendFocus,
-                                icon: Icons.send_rounded,
-                                title: 'Send',
-                                subtitle:
-                                    'Control another device or push your '
-                                    'addons, channels, and setup to it.',
-                                bullets: const [
-                                  'Navigate with a D-pad',
-                                  'Send setup, addons, channels',
-                                  'Pair over Wi-Fi',
-                                ],
-                                onTap: _openSender,
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: _RoleCard(
+                                  focusNode: _sendFocus,
+                                  icon: Icons.send_rounded,
+                                  title: 'Send',
+                                  subtitle:
+                                      'Control another device or push your '
+                                      'addons, channels, and setup to it.',
+                                  bullets: const [
+                                    'Navigate with a D-pad',
+                                    'Send setup, addons, channels',
+                                    'Pair over Wi-Fi',
+                                  ],
+                                  onTap: _openSender,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _RoleCard(
-                                focusNode: _recvFocus,
-                                icon: Icons.download_rounded,
-                                title: 'Receive',
-                                subtitle:
-                                    'Let another device control this one or '
-                                    'send its setup to it.',
-                                bullets: const [
-                                  'Show as a target on the network',
-                                  'Receive addons, channels, sessions',
-                                  'Stay paired until you leave',
-                                ],
-                                onTap: _openReceiver,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _RoleCard(
+                                  focusNode: _recvFocus,
+                                  icon: Icons.download_rounded,
+                                  title: 'Receive',
+                                  subtitle:
+                                      'Let another device control this one or '
+                                      'send its setup to it.',
+                                  bullets: const [
+                                    'Show as a target on the network',
+                                    'Receive addons, channels, sessions',
+                                    'Stay paired until you leave',
+                                  ],
+                                  onTap: _openReceiver,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         )
                       else ...[
                         _RoleCard(
