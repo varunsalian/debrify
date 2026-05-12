@@ -1126,60 +1126,6 @@ class TraktResultsViewState extends State<TraktResultsView> {
                           ],
                         ],
                       ),
-                      // Add from Debrid button
-                      FutureBuilder<List<bool>>(
-                        future: Future.wait([
-                          StorageService.getApiKey().then(
-                            (k) => k != null && k.isNotEmpty,
-                          ),
-                          StorageService.getTorboxApiKey().then(
-                            (k) => k != null && k.isNotEmpty,
-                          ),
-                        ]),
-                        builder: (context, snapshot) {
-                          final rdEnabled = snapshot.data?[0] ?? false;
-                          final torboxEnabled = snapshot.data?[1] ?? false;
-                          if (!rdEnabled && !torboxEnabled) {
-                            return const SizedBox.shrink();
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  Navigator.of(dialogContext).pop();
-                                  _pushDebridSelectSource(
-                                    show: show,
-                                    imdbId: imdbId,
-                                    rdEnabled: rdEnabled,
-                                    torboxEnabled: torboxEnabled,
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.cloud_download_outlined,
-                                  size: 18,
-                                  color: Color(0xFF60A5FA),
-                                ),
-                                label: const Text(
-                                  'Add from Debrid',
-                                  style: TextStyle(color: Color(0xFF60A5FA)),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFF60A5FA),
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
