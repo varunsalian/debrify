@@ -5,7 +5,6 @@ import '../../models/webdav_item.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/webdav_service.dart';
-import '../../widgets/cinematic_backdrop.dart';
 
 class WebDavSettingsPage extends StatefulWidget {
   const WebDavSettingsPage({super.key});
@@ -189,194 +188,161 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF14101C),
-        body: Stack(
-          children: const [
-            CinematicBackdrop(),
-            Center(child: CircularProgressIndicator(color: Color(0xFFED1C24))),
-          ],
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
-      backgroundColor: const Color(0xFF14101C),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: const Text(
-          'WebDAV',
-          style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.3),
-        ),
-      ),
-      body: Stack(
-        children: [
-          const CinematicBackdrop(),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      appBar: AppBar(title: const Text('WebDAV')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _section(
               children: [
-                _section(
-                  children: [
-                    _TvFriendlyTextField(
-                      controller: _nameController,
-                      focusNode: _nameFocusNode,
-                      nextFocusNode: _urlFocusNode,
-                      labelText: 'Server name',
-                      hintText: 'Seedbox',
-                      prefixIcon: const Icon(Icons.badge_rounded),
-                    ),
-                    const SizedBox(height: 12),
-                    _TvFriendlyTextField(
-                      controller: _urlController,
-                      focusNode: _urlFocusNode,
-                      previousFocusNode: _nameFocusNode,
-                      nextFocusNode: _usernameFocusNode,
-                      keyboardType: TextInputType.url,
-                      labelText: 'Server URL',
-                      hintText: 'https://example.com/remote.php/dav/files/me',
-                      prefixIcon: const Icon(Icons.link_rounded),
-                    ),
-                    const SizedBox(height: 12),
-                    _TvFriendlyTextField(
-                      controller: _usernameController,
-                      focusNode: _usernameFocusNode,
-                      previousFocusNode: _urlFocusNode,
-                      nextFocusNode: _passwordFocusNode,
-                      labelText: 'Username',
-                      hintText: 'Optional username',
-                      prefixIcon: const Icon(Icons.person_rounded),
-                    ),
-                    const SizedBox(height: 12),
-                    _TvFriendlyTextField(
-                      controller: _passwordController,
-                      focusNode: _passwordFocusNode,
-                      previousFocusNode: _usernameFocusNode,
-                      nextFocusNode: _saveFocusNode,
-                      rightFocusNode: _passwordVisibilityFocusNode,
-                      obscureText: _obscure,
-                      labelText: 'Password or app token',
-                      hintText: 'Optional password',
-                      prefixIcon: const Icon(Icons.key_rounded),
-                      suffix: _PasswordVisibilityButton(
-                        focusNode: _passwordVisibilityFocusNode,
-                        passwordFocusNode: _passwordFocusNode,
-                        saveFocusNode: _saveFocusNode,
-                        obscure: _obscure,
-                        onToggle: () => setState(() => _obscure = !_obscure),
-                      ),
-                      onSubmitted: (_) => _save(),
-                    ),
-                    const SizedBox(height: 16),
-                    CallbackShortcuts(
-                      bindings: {
-                        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-                            _passwordFocusNode.requestFocus(),
-                      },
-                      child: FilledButton.icon(
-                        focusNode: _saveFocusNode,
-                        onPressed: _saving ? null : _save,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.cloud_done_rounded),
-                        label: Text(_saving ? 'Testing...' : 'Save and Test'),
-                      ),
-                    ),
-                  ],
+                _TvFriendlyTextField(
+                  controller: _nameController,
+                  focusNode: _nameFocusNode,
+                  nextFocusNode: _urlFocusNode,
+                  labelText: 'Server name',
+                  hintText: 'Seedbox',
+                  prefixIcon: const Icon(Icons.badge_rounded),
                 ),
-                if (_servers.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _section(
-                    children: [
-                      for (final server in _servers)
-                        ListTile(
-                          leading: Radio<String>(
-                            value: server.id,
-                            groupValue: _editingId,
-                            onChanged: (_) async {
-                              await StorageService.setSelectedWebDavServerId(
-                                server.id,
-                              );
-                              _editServer(server);
-                              MainPageBridge.notifyIntegrationChanged();
-                            },
-                          ),
-                          title: Text(server.name),
-                          subtitle: Text(server.baseUrl),
-                          trailing: IconButton(
-                            onPressed: () => _editServer(server),
-                            icon: const Icon(Icons.edit_rounded),
-                          ),
-                          onTap: () async {
-                            await StorageService.setSelectedWebDavServerId(
-                              server.id,
-                            );
-                            _editServer(server);
-                            MainPageBridge.notifyIntegrationChanged();
-                          },
-                        ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: _newServer,
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Add another server'),
-                      ),
-                    ],
+                const SizedBox(height: 12),
+                _TvFriendlyTextField(
+                  controller: _urlController,
+                  focusNode: _urlFocusNode,
+                  previousFocusNode: _nameFocusNode,
+                  nextFocusNode: _usernameFocusNode,
+                  keyboardType: TextInputType.url,
+                  labelText: 'Server URL',
+                  hintText: 'https://example.com/remote.php/dav/files/me',
+                  prefixIcon: const Icon(Icons.link_rounded),
+                ),
+                const SizedBox(height: 12),
+                _TvFriendlyTextField(
+                  controller: _usernameController,
+                  focusNode: _usernameFocusNode,
+                  previousFocusNode: _urlFocusNode,
+                  nextFocusNode: _passwordFocusNode,
+                  labelText: 'Username',
+                  hintText: 'Optional username',
+                  prefixIcon: const Icon(Icons.person_rounded),
+                ),
+                const SizedBox(height: 12),
+                _TvFriendlyTextField(
+                  controller: _passwordController,
+                  focusNode: _passwordFocusNode,
+                  previousFocusNode: _usernameFocusNode,
+                  nextFocusNode: _saveFocusNode,
+                  rightFocusNode: _passwordVisibilityFocusNode,
+                  obscureText: _obscure,
+                  labelText: 'Password or app token',
+                  hintText: 'Optional password',
+                  prefixIcon: const Icon(Icons.key_rounded),
+                  suffix: _PasswordVisibilityButton(
+                    focusNode: _passwordVisibilityFocusNode,
+                    passwordFocusNode: _passwordFocusNode,
+                    saveFocusNode: _saveFocusNode,
+                    obscure: _obscure,
+                    onToggle: () => setState(() => _obscure = !_obscure),
                   ),
-                ],
+                  onSubmitted: (_) => _save(),
+                ),
                 const SizedBox(height: 16),
-                _section(
-                  children: [
-                    SwitchListTile(
-                      value: _enabled,
-                      onChanged: _servers.isEmpty ? null : _setEnabled,
-                      title: const Text('Enable WebDAV'),
-                      subtitle: const Text('Show WebDAV features in the app'),
-                    ),
-                    SwitchListTile(
-                      value: _hiddenFromNav,
-                      onChanged: _enabled ? _setHidden : null,
-                      title: const Text('Hide from navigation'),
-                      subtitle: const Text(
-                        'Keep configured but remove the tab',
-                      ),
-                    ),
-                    SwitchListTile(
-                      value: _showVideosOnly,
-                      onChanged: _setShowVideosOnly,
-                      title: const Text('Show videos only'),
-                      subtitle: const Text(
-                        'Hide non-video files while browsing',
-                      ),
-                    ),
-                  ],
-                ),
-                if (_enabled) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    focusNode: _disconnectFocusNode,
-                    onPressed: _disconnect,
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Disconnect WebDAV'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFED1C24),
-                      side: const BorderSide(color: Color(0xFFED1C24)),
-                    ),
+                CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                        _passwordFocusNode.requestFocus(),
+                  },
+                  child: FilledButton.icon(
+                    focusNode: _saveFocusNode,
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_done_rounded),
+                    label: Text(_saving ? 'Testing...' : 'Save and Test'),
                   ),
-                ],
+                ),
               ],
             ),
-          ),
-        ],
+            if (_servers.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _section(
+                children: [
+                  for (final server in _servers)
+                    ListTile(
+                      leading: Radio<String>(
+                        value: server.id,
+                        groupValue: _editingId,
+                        onChanged: (_) async {
+                          await StorageService.setSelectedWebDavServerId(
+                            server.id,
+                          );
+                          _editServer(server);
+                          MainPageBridge.notifyIntegrationChanged();
+                        },
+                      ),
+                      title: Text(server.name),
+                      subtitle: Text(server.baseUrl),
+                      trailing: IconButton(
+                        onPressed: () => _editServer(server),
+                        icon: const Icon(Icons.edit_rounded),
+                      ),
+                      onTap: () async {
+                        await StorageService.setSelectedWebDavServerId(
+                          server.id,
+                        );
+                        _editServer(server);
+                        MainPageBridge.notifyIntegrationChanged();
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _newServer,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add another server'),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            _section(
+              children: [
+                SwitchListTile(
+                  value: _enabled,
+                  onChanged: _servers.isEmpty ? null : _setEnabled,
+                  title: const Text('Enable WebDAV'),
+                  subtitle: const Text('Show WebDAV features in the app'),
+                ),
+                SwitchListTile(
+                  value: _hiddenFromNav,
+                  onChanged: _enabled ? _setHidden : null,
+                  title: const Text('Hide from navigation'),
+                  subtitle: const Text('Keep configured but remove the tab'),
+                ),
+                SwitchListTile(
+                  value: _showVideosOnly,
+                  onChanged: _setShowVideosOnly,
+                  title: const Text('Show videos only'),
+                  subtitle: const Text('Hide non-video files while browsing'),
+                ),
+              ],
+            ),
+            if (_enabled) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                focusNode: _disconnectFocusNode,
+                onPressed: _disconnect,
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Disconnect WebDAV'),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -385,16 +351,9 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.05),
-            Colors.white.withValues(alpha: 0.02),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        color: const Color(0xFF111827).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(children: children),
     );

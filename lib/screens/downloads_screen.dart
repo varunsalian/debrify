@@ -11,7 +11,6 @@ import '../services/download_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/shimmer.dart';
-import '../widgets/cinematic_backdrop.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -42,9 +41,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   final Set<String> _busyGroupIds = {};
 
   // Focus state for Add button
-  final FocusNode _addButtonFocusNode = FocusNode(
-    debugLabel: 'downloads-add-button',
-  );
+  final FocusNode _addButtonFocusNode = FocusNode(debugLabel: 'downloads-add-button');
   bool _addButtonFocused = false;
 
   // TV content focus handler
@@ -78,10 +75,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     _bytesSub = DownloadService.instance.bytesProgressStream.listen((evt) {
       setState(() {
-        _bytesByTaskId[evt.taskId] = (
-          evt.bytes,
-          evt.total >= 0 ? evt.total : null,
-        );
+        _bytesByTaskId[evt.taskId] = (evt.bytes, evt.total >= 0 ? evt.total : null);
       });
     }, onError: (_) {});
 
@@ -112,10 +106,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
     });
   }
 
-  Future<void> _runGroupAction(
-    String groupId,
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runGroupAction(String groupId, Future<void> Function() action) async {
     if (!mounted) return;
     setState(() {
       _busyGroupIds.add(groupId);
@@ -125,9 +116,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Action failed: $e')),
+        );
       }
     } finally {
       if (mounted) {
@@ -212,14 +203,11 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   }
 
   Future<void> _handleClearFinished(List<TorrentDownloadGroup> groups) async {
-    final confirm =
-        await showDialog<bool>(
+    final confirm = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Clear all finished?'),
-            content: const Text(
-              'This removes completed entries from the list.',
-            ),
+            content: const Text('This removes completed entries from the list.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
@@ -266,10 +254,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(
             children: [
-              const Text(
-                'Finished',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              const Text('Finished', style: TextStyle(fontWeight: FontWeight.w600)),
               const Spacer(),
               TextButton.icon(
                 onPressed: _busyGroupIds.isEmpty
@@ -297,10 +282,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   @override
   void dispose() {
     if (_tvContentFocusHandler != null) {
-      MainPageBridge.unregisterTvContentFocusHandler(
-        2,
-        _tvContentFocusHandler!,
-      );
+      MainPageBridge.unregisterTvContentFocusHandler(2, _tvContentFocusHandler!);
     }
     _addButtonFocusNode.dispose();
     _tabController.dispose();
@@ -320,66 +302,23 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   // Check if a URL is a download link by looking for file extensions
   bool _isDownloadLink(String url) {
     if (url.isEmpty) return false;
-
+    
     // Common file extensions that indicate downloadable content
     final downloadExtensions = [
-      '.mp4',
-      '.avi',
-      '.mkv',
-      '.mov',
-      '.wmv',
-      '.flv',
-      '.webm',
-      '.m4v',
-      '.mp3',
-      '.wav',
-      '.flac',
-      '.aac',
-      '.ogg',
-      '.wma',
-      '.pdf',
-      '.doc',
-      '.docx',
-      '.xls',
-      '.xlsx',
-      '.ppt',
-      '.pptx',
-      '.zip',
-      '.rar',
-      '.7z',
-      '.tar',
-      '.gz',
-      '.bz2',
-      '.jpg',
-      '.jpeg',
-      '.png',
-      '.gif',
-      '.bmp',
-      '.tiff',
-      '.svg',
-      '.exe',
-      '.dmg',
-      '.pkg',
-      '.deb',
-      '.rpm',
-      '.apk',
-      '.iso',
-      '.img',
-      '.bin',
-      '.txt',
-      '.csv',
-      '.json',
-      '.xml',
-      '.html',
-      '.css',
-      '.js',
-      '.torrent',
-      '.magnet',
+      '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v',
+      '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma',
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.svg',
+      '.exe', '.dmg', '.pkg', '.deb', '.rpm', '.apk',
+      '.iso', '.img', '.bin',
+      '.txt', '.csv', '.json', '.xml', '.html', '.css', '.js',
+      '.torrent', '.magnet'
     ];
-
+    
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
-
+    
     final path = uri.path.toLowerCase();
     return downloadExtensions.any((ext) => path.endsWith(ext));
   }
@@ -417,9 +356,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       String filename = manualName;
       if (!nameTouched) {
         try {
-          final suggested = await DownloadTask(
-            url: url,
-          ).withSuggestedFilename(unique: false);
+          final suggested = await DownloadTask(url: url)
+              .withSuggestedFilename(unique: false);
           filename = suggested.filename;
           nameCtrl.text = filename;
         } catch (_) {
@@ -464,10 +402,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       }
 
       try {
-        expectedSize = await DownloadTask(
-          url: url,
-          filename: filename,
-        ).expectedFileSize();
+        expectedSize = await DownloadTask(url: url, filename: filename)
+            .expectedFileSize();
       } catch (_) {
         expectedSize = null;
       }
@@ -493,196 +429,159 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       barrierColor: Colors.black.withValues(alpha: 0.4),
       backgroundColor: const Color(0xFF0B1220),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setLocal) {
-            final kb = MediaQuery.of(context).viewInsets.bottom;
-            // If we arrived with a prefilled URL, compute destination, filename and size once
-            if ((initialUrl?.isNotEmpty ?? false) &&
-                destPath == null &&
-                urlCtrl.text.trim().isNotEmpty) {
-              // schedule to avoid calling setState during build
-              Future.microtask(() => recompute(setLocal));
-            }
-            return AnimatedPadding(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              padding: EdgeInsets.only(bottom: kb),
-              child: SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 44,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF334155),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
+        return StatefulBuilder(builder: (context, setLocal) {
+          final kb = MediaQuery.of(context).viewInsets.bottom;
+          // If we arrived with a prefilled URL, compute destination, filename and size once
+          if ((initialUrl?.isNotEmpty ?? false) && destPath == null && urlCtrl.text.trim().isNotEmpty) {
+            // schedule to avoid calling setState during build
+            Future.microtask(() => recompute(setLocal));
+          }
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.only(bottom: kb),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.download_for_offline_rounded,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Add Download',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () async {
-                                final data = await Clipboard.getData(
-                                  'text/plain',
-                                );
-                                if (data?.text != null &&
-                                    data!.text!.isNotEmpty) {
-                                  urlCtrl.text = data.text!;
-                                  await recompute(setLocal);
-                                }
-                              },
-                              icon: const Icon(
-                                Icons.paste,
-                                color: Colors.white,
-                              ),
-                              tooltip: 'Paste',
-                            ),
-                          ],
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(999),
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      // Modern preview card
-                      if (urlCtrl.text.trim().isNotEmpty ||
-                          nameCtrl.text.trim().isNotEmpty)
-                        _PreviewCard(
-                          filename: nameCtrl.text.trim(),
-                          host: Uri.tryParse(urlCtrl.text.trim())?.host ?? '',
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                      const SizedBox(height: 16),
-                      _StyledField(
-                        controller: urlCtrl,
-                        label: 'Download URL',
-                        hint: 'https://example.com/file',
-                        icon: Icons.link,
-                        onChanged: (_) => recompute(setLocal),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      const SizedBox(height: 12),
-                      _StyledField(
-                        controller: nameCtrl,
-                        label: 'File name',
-                        hint: 'movie.mp4',
-                        icon: Icons.insert_drive_file,
-                        onChanged: (_) {
-                          nameTouched = true;
-                          recompute(setLocal);
-                        },
-                      ),
-                      if (destPath != null) ...[
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _chip(Icons.folder, destPath!),
-                            _chip(
-                              Icons.storage_rounded,
-                              expectedSize != null
-                                  ? humanSize(expectedSize!)
-                                  : 'Unknown size',
-                            ),
-                            if (nameCtrl.text.contains('.'))
-                              _chip(
-                                Icons.badge_rounded,
-                                nameCtrl.text.split('.').last.toUpperCase(),
-                              ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Row(
+                      child: Row(
                         children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                side: const BorderSide(
-                                  color: Color(0xFF334155),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text('Cancel'),
-                            ),
+                          const Icon(Icons.download_for_offline_rounded, color: Colors.white),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text('Add Download',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: (urlCtrl.text.trim().isEmpty)
-                                  ? null
-                                  : () => Navigator.of(context).pop(true),
-                              icon: const Icon(Icons.download_rounded),
-                              label: const Text('Download'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                backgroundColor: const Color(0xFF6366F1),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                elevation: 2,
-                              ),
-                            ),
-                          ),
+                          IconButton(
+                            onPressed: () async {
+                              final data = await Clipboard.getData('text/plain');
+                              if (data?.text != null && data!.text!.isNotEmpty) {
+                                urlCtrl.text = data.text!;
+                                await recompute(setLocal);
+                              }
+                            },
+                            icon: const Icon(Icons.paste, color: Colors.white),
+                            tooltip: 'Paste',
+                          )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // Modern preview card
+                    if (urlCtrl.text.trim().isNotEmpty || nameCtrl.text.trim().isNotEmpty)
+                      _PreviewCard(
+                        filename: nameCtrl.text.trim(),
+                        host: Uri.tryParse(urlCtrl.text.trim())?.host ?? '',
+                      ),
+                    const SizedBox(height: 16),
+                    _StyledField(
+                      controller: urlCtrl,
+                      label: 'Download URL',
+                      hint: 'https://example.com/file',
+                      icon: Icons.link,
+                      onChanged: (_) => recompute(setLocal),
+                    ),
+                    const SizedBox(height: 12),
+                    _StyledField(
+                      controller: nameCtrl,
+                      label: 'File name',
+                      hint: 'movie.mp4',
+                      icon: Icons.insert_drive_file,
+                      onChanged: (_) {
+                        nameTouched = true;
+                        recompute(setLocal);
+                      },
+                    ),
+                    if (destPath != null) ...[
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _chip(Icons.folder, destPath!),
+                          _chip(Icons.storage_rounded,
+                              expectedSize != null ? humanSize(expectedSize!) : 'Unknown size'),
+                          if (nameCtrl.text.contains('.'))
+                            _chip(Icons.badge_rounded, nameCtrl.text.split('.').last.toUpperCase()),
                         ],
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFF334155)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: (urlCtrl.text.trim().isEmpty)
+                                ? null
+                                : () => Navigator.of(context).pop(true),
+                            icon: const Icon(Icons.download_rounded),
+                            label: const Text('Download'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: const Color(0xFF6366F1),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
                 ),
               ),
-            );
-          },
-        );
+            ),
+          );
+        });
       },
     );
 
     if (res == true) {
       final url = urlCtrl.text.trim();
-      final fileName = nameCtrl.text.trim().isEmpty
-          ? null
-          : nameCtrl.text.trim();
+      final fileName = nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim();
       await DownloadService.instance.enqueueDownload(
         url: url,
         fileName: fileName,
@@ -706,107 +605,83 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
     return Stack(
       children: [
-        const CinematicBackdrop(),
         Column(
           children: [
             Container(
               margin: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
-                controller: _tabController,
-                isScrollable: false,
-                dividerColor: Colors.transparent,
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicatorPadding: const EdgeInsets.all(4),
-                labelPadding: const EdgeInsets.symmetric(vertical: 10),
-                overlayColor: MaterialStateProperty.all(Colors.transparent),
-                indicator: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFFED1C24), Color(0xFFB81D24)],
-                  ),
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFED1C24).withValues(alpha: 0.35),
-                      blurRadius: 14,
-                      spreadRadius: -3,
-                    ),
-                  ],
-                ),
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white.withValues(alpha: 0.55),
-                labelStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.1,
-                ),
-                unselectedLabelStyle: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                ),
-                tabs: const [
-                  Tab(text: 'In Progress'),
-                  Tab(text: 'Finished'),
-                ],
-              ),
+            controller: _tabController,
+            isScrollable: false,
+            dividerColor: Colors.transparent,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding: const EdgeInsets.all(6),
+            labelPadding: const EdgeInsets.symmetric(vertical: 10),
+            overlayColor: MaterialStateProperty.all(Colors.transparent),
+            indicator: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(10),
             ),
-            Expanded(
-              child: _loading
-                  ? ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: 6,
-                      itemBuilder: (context, index) => Container(
-                        key: ValueKey('download-shimmer-$index'),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.outline.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Shimmer(width: double.infinity, height: 16),
-                            SizedBox(height: 8),
-                            Shimmer(width: 160, height: 14),
-                          ],
-                        ),
+            labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
+            unselectedLabelColor:
+                Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+            tabs: const [
+              Tab(text: 'In Progress'),
+              Tab(text: 'Finished'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: 6,
+                  itemBuilder: (context, index) => Container(
+                    key: ValueKey('download-shimmer-$index'),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withValues(alpha: 0.3),
                       ),
-                    )
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _TorrentGroupList(
-                          groups: inProgressGroups,
-                          busyGroupIds: _busyGroupIds,
-                          isFinishedTab: false,
-                          onOpenGroup: _openGroupDetail,
-                          onPauseAll: (group) => _runGroupAction(
-                            group.id,
-                            () => _pauseGroup(group),
-                          ),
-                          onResumeAll: (group) => _runGroupAction(
-                            group.id,
-                            () => _resumeGroup(group),
-                          ),
-                          onCancelAll: (group) => _runGroupAction(
-                            group.id,
-                            () => _cancelGroup(group),
-                          ),
-                        ),
-                        _buildFinishedTab(finishedGroups),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Shimmer(width: double.infinity, height: 16),
+                        SizedBox(height: 8),
+                        Shimmer(width: 160, height: 14),
                       ],
                     ),
-            ),
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _TorrentGroupList(
+                      groups: inProgressGroups,
+                      busyGroupIds: _busyGroupIds,
+                      isFinishedTab: false,
+                      onOpenGroup: _openGroupDetail,
+                      onPauseAll: (group) =>
+                          _runGroupAction(group.id, () => _pauseGroup(group)),
+                      onResumeAll: (group) =>
+                          _runGroupAction(group.id, () => _resumeGroup(group)),
+                      onCancelAll: (group) =>
+                          _runGroupAction(group.id, () => _cancelGroup(group)),
+                    ),
+                    _buildFinishedTab(finishedGroups),
+                  ],
+                ),
+        ),
           ],
         ),
         Positioned(
@@ -852,9 +727,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       final fileName = uri?.path.split('/').last ?? 'file';
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                            'Found download link in clipboard: $fileName',
-                          ),
+                          content: Text('Found download link in clipboard: $fileName'),
                           duration: const Duration(seconds: 2),
                         ),
                       );
@@ -866,10 +739,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(20),
@@ -930,9 +800,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
           Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
           const SizedBox(width: 6),
           ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.7,
-            ),
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
             child: Text(
               text,
               style: const TextStyle(fontSize: 12),
@@ -979,10 +847,7 @@ class _StyledField extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFF6366F1)),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 14,
-          horizontal: 12,
-        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       ),
     );
   }
@@ -1025,31 +890,19 @@ class _PreviewCard extends StatelessWidget {
                     host,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
                   ),
                 ),
               ],
             ),
-          ],
+          ]
         ],
       ),
     );
   }
 }
 
-enum TorrentGroupState {
-  moving,
-  downloading,
-  queued,
-  paused,
-  waiting,
-  failed,
-  canceled,
-  completed,
-}
+enum TorrentGroupState { moving, downloading, queued, paused, waiting, failed, canceled, completed }
 
 extension TorrentGroupStateExt on TorrentGroupState {
   String get label {
@@ -1174,8 +1027,7 @@ TorrentMeta parseTorrentMeta(String? meta) {
       }
 
       // Check if this is a TorBox download (regular or web download)
-      if (decoded['torboxDownload'] == true ||
-          decoded['torboxWebDownload'] == true) {
+      if (decoded['torboxDownload'] == true || decoded['torboxWebDownload'] == true) {
         isTorbox = true;
         // ZIP downloads support HTTP Range requests
         if (decoded['torboxZip'] == true) {
@@ -1276,22 +1128,16 @@ class TorrentDownloadGroup {
   });
 
   bool get isFinished =>
-      state == TorrentGroupState.completed ||
-      state == TorrentGroupState.canceled;
+      state == TorrentGroupState.completed || state == TorrentGroupState.canceled;
 
   bool get hasIssues => failedFiles > 0 || hasMoveFailure || notFoundFiles > 0;
 
   bool get hasActive =>
-      runningFiles > 0 ||
-      queuedFiles > 0 ||
-      pausedFiles > 0 ||
-      waitingFiles > 0 ||
-      hasMoveInProgress;
+      runningFiles > 0 || queuedFiles > 0 || pausedFiles > 0 || waitingFiles > 0 || hasMoveInProgress;
 
   /// TorBox CDN doesn't support HTTP Range for individual files, but ZIP downloads do.
   /// Returns true if ANY item in this group is a non-resumable TorBox download.
-  bool get hasTorboxNonResumable =>
-      items.any((item) => item.meta.isTorboxNonResumable);
+  bool get hasTorboxNonResumable => items.any((item) => item.meta.isTorboxNonResumable);
 }
 
 class _TorrentGroupBuilder {
@@ -1338,9 +1184,7 @@ class _TorrentGroupBuilder {
     required double? moveProgress,
     required bool moveFailed,
   }) {
-    items.add(
-      TorrentDownloadItem(record: record, details: details, meta: meta),
-    );
+    items.add(TorrentDownloadItem(record: record, details: details, meta: meta));
     totalFiles += 1;
 
     final created = record.task.creationTime;
@@ -1413,25 +1257,19 @@ class _TorrentGroupBuilder {
     int? downloaded = raw?.$1;
     if (downloaded == null && total != null && total > 0) {
       downloaded = (progressValue * total).clamp(0, total).round();
-    } else if (downloaded == null &&
-        record.status == TaskStatus.complete &&
-        total != null &&
-        total > 0) {
+    } else if (downloaded == null && record.status == TaskStatus.complete && total != null && total > 0) {
       downloaded = total;
     }
 
     if (total != null && total > 0) {
       totalBytes += total;
-      downloadedBytes +=
-          (downloaded ?? (record.status == TaskStatus.complete ? total : 0));
+      downloadedBytes += (downloaded ?? (record.status == TaskStatus.complete ? total : 0));
     } else {
       fallbackProgressSum += progressValue;
       fallbackProgressCount += 1;
     }
 
-    if (progress != null &&
-        progress.hasNetworkSpeed &&
-        record.status == TaskStatus.running) {
+    if (progress != null && progress.hasNetworkSpeed && record.status == TaskStatus.running) {
       speedBytesPerSecond += progress.networkSpeed * 1024 * 1024;
     }
   }
@@ -1453,9 +1291,7 @@ class _TorrentGroupBuilder {
     effectiveProgress = effectiveProgress.clamp(0.0, 1.0);
 
     Duration? eta;
-    if (speedBytesPerSecond > 0 &&
-        totalBytesInt != null &&
-        downloadedBytesInt != null) {
+    if (speedBytesPerSecond > 0 && totalBytesInt != null && downloadedBytesInt != null) {
       final remaining = totalBytesInt - downloadedBytesInt;
       if (remaining > 0) {
         eta = Duration(seconds: (remaining / speedBytesPerSecond).round());
@@ -1484,9 +1320,7 @@ class _TorrentGroupBuilder {
     );
 
     final aggregatedEta = eta != null ? formatEta(eta) : null;
-    final aggregatedSpeed = speedBytesPerSecond > 0
-        ? formatSpeed(speedBytesPerSecond)
-        : null;
+    final aggregatedSpeed = speedBytesPerSecond > 0 ? formatSpeed(speedBytesPerSecond) : null;
     ActiveDownloadInfo? activeDownload;
     if (_firstRunningName != null) {
       activeDownload = ActiveDownloadInfo(
@@ -1532,11 +1366,7 @@ class _TitleChoice {
   const _TitleChoice(this.title, this.fallback);
 }
 
-_TitleChoice _deriveTitle(
-  TaskRecord record,
-  DownloadRecordDetails? details,
-  TorrentMeta meta,
-) {
+_TitleChoice _deriveTitle(TaskRecord record, DownloadRecordDetails? details, TorrentMeta meta) {
   final torrentName = details?.torrentName?.trim();
   if (torrentName != null && torrentName.isNotEmpty) {
     return _TitleChoice(torrentName, false);
@@ -1571,9 +1401,7 @@ double _progressValue(TaskRecord record, TaskProgressUpdate? progress) {
 }
 
 int? _expectedTotalBytes(TaskRecord record, TaskProgressUpdate? progress) {
-  if (progress != null &&
-      progress.hasExpectedFileSize &&
-      progress.expectedFileSize > 0) {
+  if (progress != null && progress.hasExpectedFileSize && progress.expectedFileSize > 0) {
     return progress.expectedFileSize;
   }
   if (record.expectedFileSize > 0) {
@@ -1692,11 +1520,7 @@ List<TorrentDownloadGroup> buildTorrentGroups({
   return groups;
 }
 
-String _deriveGroupId(
-  TaskRecord record,
-  DownloadRecordDetails? details,
-  TorrentMeta meta,
-) {
+String _deriveGroupId(TaskRecord record, DownloadRecordDetails? details, TorrentMeta meta) {
   if (meta.torrentHash != null && meta.torrentHash!.isNotEmpty) {
     return 'hash:${meta.torrentHash!.toLowerCase()}';
   }
@@ -1800,45 +1624,22 @@ class _TorrentGroupListState extends State<_TorrentGroupList> {
         final bool isIOS = Platform.isIOS;
 
         // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
-        final bool canPause =
-            !isIOS &&
-            !widget.isFinishedTab &&
-            !isBusy &&
-            !group.hasTorboxNonResumable &&
-            widget.onPauseAll != null &&
-            (group.runningFiles > 0 ||
-                group.queuedFiles > 0 ||
-                group.waitingFiles > 0);
-        final bool canResume =
-            !isIOS &&
-            !widget.isFinishedTab &&
-            !isBusy &&
-            !group.hasTorboxNonResumable &&
-            widget.onResumeAll != null &&
+        final bool canPause = !isIOS && !widget.isFinishedTab && !isBusy && !group.hasTorboxNonResumable && widget.onPauseAll != null &&
+            (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
+        final bool canResume = !isIOS && !widget.isFinishedTab && !isBusy && !group.hasTorboxNonResumable && widget.onResumeAll != null &&
             group.pausedFiles > 0;
-        final bool canCancel =
-            !isBusy &&
-            widget.onCancelAll != null &&
-            (group.hasActive ||
-                group.failedFiles > 0 ||
-                group.notFoundFiles > 0);
+        final bool canCancel = !isBusy && widget.onCancelAll != null &&
+            (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0);
 
         VoidCallback? pause = canPause ? () => widget.onPauseAll!(group) : null;
-        VoidCallback? resume = canResume
-            ? () => widget.onResumeAll!(group)
-            : null;
-        VoidCallback? cancel = canCancel
-            ? () => widget.onCancelAll!(group)
-            : null;
+        VoidCallback? resume = canResume ? () => widget.onResumeAll!(group) : null;
+        VoidCallback? cancel = canCancel ? () => widget.onCancelAll!(group) : null;
 
         // Show info when TorBox group is active but pause is unavailable
-        final bool showTorboxInfo =
-            group.hasTorboxNonResumable &&
+        final bool showTorboxInfo = group.hasTorboxNonResumable &&
             !widget.isFinishedTab &&
             !Platform.isIOS &&
-            (group.runningFiles > 0 ||
-                group.queuedFiles > 0 ||
-                group.waitingFiles > 0);
+            (group.runningFiles > 0 || group.queuedFiles > 0 || group.waitingFiles > 0);
 
         final bool isFocused = _focusedIndex == index;
 
@@ -1854,9 +1655,7 @@ class _TorrentGroupListState extends State<_TorrentGroupList> {
           },
           onShowFocusHighlight: (focused) {
             setState(() {
-              _focusedIndex = focused
-                  ? index
-                  : (_focusedIndex == index ? null : _focusedIndex);
+              _focusedIndex = focused ? index : (_focusedIndex == index ? null : _focusedIndex);
             });
           },
           child: AnimatedContainer(
@@ -1864,10 +1663,7 @@ class _TorrentGroupListState extends State<_TorrentGroupList> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: isFocused
-                  ? Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 2,
-                    )
+                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
                   : null,
             ),
             child: PressableScale(
@@ -1935,10 +1731,7 @@ String _primaryStatusText(TorrentDownloadGroup group) {
   if (group.state != TorrentGroupState.waiting && group.waitingFiles > 0) {
     suffix.add(_countLabel(group.waitingFiles, 'waiting'));
   }
-  if (group.state != TorrentGroupState.failed &&
-      (group.failedFiles > 0 ||
-          group.notFoundFiles > 0 ||
-          group.hasMoveFailure)) {
+  if (group.state != TorrentGroupState.failed && (group.failedFiles > 0 || group.notFoundFiles > 0 || group.hasMoveFailure)) {
     final issues = group.failedFiles + group.notFoundFiles;
     if (group.hasMoveFailure) {
       suffix.add('move retry');
@@ -1979,9 +1772,7 @@ String _bucketLine(TorrentDownloadGroup group) {
 }
 
 String _countLabel(int count, String word) {
-  final normalized = word.endsWith('s')
-      ? word.substring(0, word.length - 1)
-      : word;
+  final normalized = word.endsWith('s') ? word.substring(0, word.length - 1) : word;
   final plural = '${normalized}s';
   switch (normalized) {
     case 'issue':
@@ -2004,9 +1795,7 @@ String _activeMetrics(ActiveDownloadInfo info) {
   if (info.eta != null && info.eta!.isNotEmpty && info.eta! != '--') {
     parts.add('≈ ${info.eta} left');
   }
-  if (info.speed != null &&
-      info.speed!.isNotEmpty &&
-      info.speed! != '-- MB/s') {
+  if (info.speed != null && info.speed!.isNotEmpty && info.speed! != '-- MB/s') {
     parts.add(info.speed!);
   }
   if (info.hasQueued) {
@@ -2045,15 +1834,17 @@ class _TorrentGroupCard extends StatelessWidget {
     final ActiveDownloadInfo? active = group.activeDownload;
 
     final chips = <Widget>[
-      _InfoChip(icon: Icons.layers_rounded, label: '${group.totalFiles} files'),
+      _InfoChip(
+        icon: Icons.layers_rounded,
+        label: '${group.totalFiles} files',
+      ),
     ];
 
     if (group.downloadedBytes != null && group.totalBytes != null) {
       chips.add(
         _InfoChip(
           icon: Icons.data_usage_rounded,
-          label:
-              '${formatBytes(group.downloadedBytes!)} / ${formatBytes(group.totalBytes!)}',
+          label: '${formatBytes(group.downloadedBytes!)} / ${formatBytes(group.totalBytes!)}',
         ),
       );
     } else if (group.totalBytes != null) {
@@ -2075,7 +1866,10 @@ class _TorrentGroupCard extends StatelessWidget {
     }
     if (group.eta != null && !group.eta!.isNegative) {
       chips.add(
-        _InfoChip(icon: Icons.timer_rounded, label: formatEta(group.eta)),
+        _InfoChip(
+          icon: Icons.timer_rounded,
+          label: formatEta(group.eta),
+        ),
       );
     }
     if (group.failedFiles > 0 || group.notFoundFiles > 0) {
@@ -2102,7 +1896,10 @@ class _TorrentGroupCard extends StatelessWidget {
       final hash = group.torrentHash!;
       final shortHash = hash.length > 12 ? '${hash.substring(0, 12)}…' : hash;
       chips.add(
-        _InfoChip(icon: Icons.tag_rounded, label: shortHash.toUpperCase()),
+        _InfoChip(
+          icon: Icons.tag_rounded,
+          label: shortHash.toUpperCase(),
+        ),
       );
     }
 
@@ -2172,9 +1969,7 @@ class _TorrentGroupCard extends StatelessWidget {
                                   group.title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
@@ -2199,16 +1994,13 @@ class _TorrentGroupCard extends StatelessWidget {
                                     'Current: ${active.fileName}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                   ),
                                   if (_activeMetrics(active).isNotEmpty)
                                     Text(
                                       _activeMetrics(active),
                                       style: textTheme.bodySmall?.copyWith(
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
+                                        color: theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                 ],
@@ -2234,18 +2026,18 @@ class _TorrentGroupCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
-                value: group.progress.isNaN
-                    ? 0
-                    : group.progress.clamp(0.0, 1.0),
+                value: group.progress.isNaN ? 0 : group.progress.clamp(0.0, 1.0),
                 minHeight: 8,
-                backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(
-                  0.3,
-                ),
+                backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 valueColor: AlwaysStoppedAnimation(stateColor),
               ),
             ),
             const SizedBox(height: 16),
-            Wrap(spacing: 10, runSpacing: 10, children: chips),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: chips,
+            ),
             if (actions.isNotEmpty || showTorboxPauseInfo) ...[
               const SizedBox(height: 16),
               if (showTorboxPauseInfo)
@@ -2253,11 +2045,7 @@ class _TorrentGroupCard extends StatelessWidget {
                   padding: EdgeInsets.only(bottom: actions.isNotEmpty ? 8 : 0),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        size: 14,
-                        color: Colors.white.withValues(alpha: 0.5),
-                      ),
+                      Icon(Icons.info_outline_rounded, size: 14, color: Colors.white.withValues(alpha: 0.5)),
                       const SizedBox(width: 6),
                       Text(
                         'Pause unavailable for TorBox',
@@ -2301,8 +2089,7 @@ class _InfoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Color fg = foreground ?? theme.colorScheme.onSurfaceVariant;
-    final Color bg =
-        background ?? theme.colorScheme.surfaceVariant.withOpacity(0.4);
+    final Color bg = background ?? theme.colorScheme.surfaceVariant.withOpacity(0.4);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -2316,10 +2103,7 @@ class _InfoChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w500,
-            ),
+            style: theme.textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -2347,6 +2131,7 @@ Color _groupStateColor(ThemeData theme, TorrentGroupState state) {
       return const Color(0xFF22C55E);
   }
 }
+
 
 class _DownloadTile extends StatelessWidget {
   final TaskRecord record;
@@ -2396,19 +2181,16 @@ class _DownloadTile extends StatelessWidget {
     final double rawProgress = progress?.progress ?? record.progress;
     final name = record.task.filename;
 
-    final int? totalBytes =
-        rawTotal ??
-        (() {
-          if (progress?.hasExpectedFileSize == true) {
-            return progress!.expectedFileSize;
-          } else if (record.expectedFileSize > 0) {
-            return record.expectedFileSize;
-          } else {
-            return null;
-          }
-        })();
-    final bool isActive =
-        record.status == TaskStatus.running ||
+    final int? totalBytes = rawTotal ?? (() {
+      if (progress?.hasExpectedFileSize == true) {
+        return progress!.expectedFileSize;
+      } else if (record.expectedFileSize > 0) {
+        return record.expectedFileSize;
+      } else {
+        return null;
+      }
+    })();
+    final bool isActive = record.status == TaskStatus.running ||
         record.status == TaskStatus.paused ||
         record.status == TaskStatus.enqueued ||
         record.status == TaskStatus.waitingToRetry;
@@ -2416,230 +2198,193 @@ class _DownloadTile extends StatelessWidget {
     final double shownProgress = record.status == TaskStatus.complete
         ? 1.0
         : isActive
-        ? (rawProgress.isNaN || rawProgress < 0.0)
-              ? 0.0
-              : rawProgress.clamp(0.0, 1.0)
-        : 0.0;
+            ? (rawProgress.isNaN || rawProgress < 0.0)
+                ? 0.0
+                : rawProgress.clamp(0.0, 1.0)
+            : 0.0;
 
-    final int? downloadedBytes =
-        rawBytes ??
-        (totalBytes != null ? (shownProgress * totalBytes).round() : null);
-    final String? speedStr = progress?.hasNetworkSpeed == true
-        ? progress!.networkSpeedAsString
-        : null;
-    final String? etaStr = progress?.hasTimeRemaining == true
-        ? progress!.timeRemainingAsString
-        : null;
+    final int? downloadedBytes = rawBytes ?? (totalBytes != null
+        ? (shownProgress * totalBytes).round()
+        : null);
+    final String? speedStr =
+        progress?.hasNetworkSpeed == true ? progress!.networkSpeedAsString : null;
+    final String? etaStr =
+        progress?.hasTimeRemaining == true ? progress!.timeRemainingAsString : null;
 
     return Stack(
       children: [
         Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        record.status == TaskStatus.complete &&
-                                (moveProgress == null || moveProgress == 1.0)
-                            ? Icons.check_circle
-                            : Icons.download_rounded,
-                        color: const Color(0xFF6366F1),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            record.status == TaskStatus.complete
-                                ? (moveFailed
-                                      ? 'Move failed — kept in app storage'
-                                      : (moveProgress != null &&
-                                                moveProgress! < 1.0
-                                            ? 'Moving to selected folder…'
-                                            : 'Completed'))
-                                : _statusText(record.status),
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    record.status == TaskStatus.complete && (moveProgress == null || moveProgress == 1.0)
+                        ? Icons.check_circle
+                        : Icons.download_rounded,
+                    color: const Color(0xFF6366F1),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                LinearProgressIndicator(
-                  value: shownProgress,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                if (record.status == TaskStatus.complete &&
-                    !moveFailed &&
-                    moveProgress != null &&
-                    moveProgress! < 1.0) ...[
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: moveProgress!.clamp(0.0, 1.0),
-                    minHeight: 6,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Moving ${(moveProgress! * 100).toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                // Rich stats row
-                if (isActive)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (speedStr != null)
-                        _StatChip(icon: Icons.speed, label: speedStr),
-                      _StatChip(
-                        icon: Icons.storage_rounded,
-                        label:
-                            '${downloadedBytes != null ? formatBytes(downloadedBytes) : '—'} / ${totalBytes != null ? formatBytes(totalBytes) : '—'}',
-                      ),
-                      if (etaStr != null)
-                        _StatChip(icon: Icons.timer, label: 'ETA $etaStr'),
-                      if (speedStr == null &&
-                          (downloadedBytes == null || totalBytes == null))
-                        _StatChip(
-                          icon: Icons.info_outline,
-                          label: '${(shownProgress * 100).toStringAsFixed(0)}%',
-                        ),
-                    ],
-                  ),
-                if (!isActive &&
-                    record.status == TaskStatus.complete &&
-                    totalBytes != null) ...[
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _StatChip(
-                        icon: Icons.storage_rounded,
-                        label: formatBytes(totalBytes),
-                      ),
-                    ],
-                  ),
-                ],
-                if (record.status == TaskStatus.complete)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        final fileInfo = DownloadService.instance
-                            .getLastFileForTask(record.task.taskId);
-                        if (fileInfo == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('File not available to open yet'),
-                            ),
-                          );
-                          return;
-                        }
-                        final ok = await AndroidNativeDownloader.openContentUri(
-                          fileInfo.$1,
-                          fileInfo.$2,
-                        );
-                        if (!ok) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Opened Downloads instead'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Open'),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
-                    if (record.task is DownloadTask &&
-                        record.status == TaskStatus.running &&
-                        !Platform.isIOS &&
-                        !isTorboxNonResumable)
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await DownloadService.instance.pause(record.task);
-                          await onChanged();
-                        },
-                        icon: const Icon(Icons.pause),
-                        label: const Text('Pause'),
-                      ),
-                    if (record.task is DownloadTask &&
-                        record.status == TaskStatus.paused &&
-                        !Platform.isIOS &&
-                        !isTorboxNonResumable)
-                      FilledButton.tonalIcon(
-                        onPressed: () async {
-                          await DownloadService.instance.resume(record.task);
-                          await onChanged();
-                        },
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Resume'),
-                      ),
-                    if ((record.status == TaskStatus.enqueued ||
-                            record.status == TaskStatus.running ||
-                            record.status == TaskStatus.paused) &&
-                        !(Platform.isIOS &&
-                            record.status == TaskStatus.running))
-                      TextButton.icon(
-                        onPressed: () async {
-                          await DownloadService.instance.cancel(record.task);
-                          await onChanged();
-                        },
-                        icon: const Icon(Icons.stop_circle, color: Colors.red),
-                        label: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    const Spacer(),
-                    // Removed inline Clear button; handled by top-right X overlay
-                    if (isActive)
                       Text(
-                        '${(shownProgress * 100).toStringAsFixed(0)}%',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                  ],
+                      const SizedBox(height: 6),
+                      Text(
+                          record.status == TaskStatus.complete
+                              ? (moveFailed
+                                  ? 'Move failed — kept in app storage'
+                                  : (moveProgress != null && moveProgress! < 1.0
+                                      ? 'Moving to selected folder…'
+                                      : 'Completed'))
+                              : _statusText(record.status),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 12)),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: shownProgress,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            if (record.status == TaskStatus.complete && !moveFailed && moveProgress != null && moveProgress! < 1.0) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: moveProgress!.clamp(0.0, 1.0),
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              const SizedBox(height: 4),
+              Text('Moving ${(moveProgress! * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+            ],
+            const SizedBox(height: 10),
+            // Rich stats row
+            if (isActive)
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (speedStr != null)
+                    _StatChip(icon: Icons.speed, label: speedStr),
+                  _StatChip(
+                    icon: Icons.storage_rounded,
+                    label:
+                        '${downloadedBytes != null ? formatBytes(downloadedBytes) : '—'} / ${totalBytes != null ? formatBytes(totalBytes) : '—'}',
+                  ),
+                  if (etaStr != null)
+                    _StatChip(icon: Icons.timer, label: 'ETA $etaStr'),
+                  if (speedStr == null &&
+                      (downloadedBytes == null || totalBytes == null))
+                    _StatChip(
+                        icon: Icons.info_outline,
+                        label: '${(shownProgress * 100).toStringAsFixed(0)}%'),
+                ],
+              ),
+            if (!isActive && record.status == TaskStatus.complete && totalBytes != null) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _StatChip(
+                    icon: Icons.storage_rounded,
+                    label: formatBytes(totalBytes),
+                  ),
+                ],
+              ),
+            ],
+            if (record.status == TaskStatus.complete)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final fileInfo = DownloadService.instance.getLastFileForTask(record.task.taskId);
+                    if (fileInfo == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('File not available to open yet')),
+                      );
+                      return;
+                    }
+                    final ok = await AndroidNativeDownloader.openContentUri(fileInfo.$1, fileInfo.$2);
+                    if (!ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Opened Downloads instead')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Open'),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // TorBox CDN doesn't support HTTP Range for individual files (but ZIP downloads do)
+                if (record.task is DownloadTask && record.status == TaskStatus.running && !Platform.isIOS && !isTorboxNonResumable)
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await DownloadService.instance.pause(record.task);
+                      await onChanged();
+                    },
+                    icon: const Icon(Icons.pause),
+                    label: const Text('Pause'),
+                  ),
+                if (record.task is DownloadTask && record.status == TaskStatus.paused && !Platform.isIOS && !isTorboxNonResumable)
+                  FilledButton.tonalIcon(
+                    onPressed: () async {
+                      await DownloadService.instance.resume(record.task);
+                      await onChanged();
+                    },
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Resume'),
+                  ),
+                if ((record.status == TaskStatus.enqueued ||
+                    record.status == TaskStatus.running ||
+                    record.status == TaskStatus.paused) &&
+                    !(Platform.isIOS && record.status == TaskStatus.running))
+                  TextButton.icon(
+                    onPressed: () async {
+                      await DownloadService.instance.cancel(record.task);
+                      await onChanged();
+                    },
+                    icon: const Icon(Icons.stop_circle, color: Colors.red),
+                    label: const Text('Cancel',
+                        style: TextStyle(color: Colors.red)),
+                  ),
+                const Spacer(),
+                // Removed inline Clear button; handled by top-right X overlay
+                if (isActive)
+                  Text('${(shownProgress * 100).toStringAsFixed(0)}%',
+                      style:
+                          TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+              ],
+            ),
+          ],
         ),
+      ),
+    ),
         if (!isActive)
           Positioned(
             right: 8,
@@ -2650,7 +2395,10 @@ class _DownloadTile extends StatelessWidget {
                 await onChanged();
               },
               radius: 18,
-              child: const Icon(Icons.close_rounded, color: Colors.red),
+              child: const Icon(
+                Icons.close_rounded,
+                color: Colors.red,
+              ),
             ),
           ),
       ],
@@ -2670,16 +2418,17 @@ class _StatChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF334155),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: const Color(0xFF475569).withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: const Color(0xFF475569).withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
         ],
       ),
     );
@@ -2699,12 +2448,10 @@ class TorrentDownloadDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<TorrentDownloadDetailScreen> createState() =>
-      _TorrentDownloadDetailScreenState();
+  State<TorrentDownloadDetailScreen> createState() => _TorrentDownloadDetailScreenState();
 }
 
-class _TorrentDownloadDetailScreenState
-    extends State<TorrentDownloadDetailScreen> {
+class _TorrentDownloadDetailScreenState extends State<TorrentDownloadDetailScreen> {
   final Map<String, TaskProgressUpdate> _progressByTaskId = {};
   final Map<String, (int bytes, int? total)> _bytesByTaskId = {};
   final Map<String, double> _moveProgressByTaskId = {};
@@ -2737,16 +2484,11 @@ class _TorrentDownloadDetailScreenState
       });
       _recomputeGroup();
     });
-    _statusSub = DownloadService.instance.statusStream.listen(
-      (_) => _refresh(),
-    );
+    _statusSub = DownloadService.instance.statusStream.listen((_) => _refresh());
     _bytesSub = DownloadService.instance.bytesProgressStream.listen((evt) {
       if (!mounted) return;
       setState(() {
-        _bytesByTaskId[evt.taskId] = (
-          evt.bytes,
-          evt.total >= 0 ? evt.total : null,
-        );
+        _bytesByTaskId[evt.taskId] = (evt.bytes, evt.total >= 0 ? evt.total : null);
       });
       _recomputeGroup();
     }, onError: (_) {});
@@ -2820,9 +2562,9 @@ class _TorrentDownloadDetailScreenState
       await _refresh();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Action failed: $e')),
+        );
       }
     } finally {
       if (mounted) {
@@ -2936,23 +2678,17 @@ class _TorrentDownloadDetailScreenState
               group: group,
               isBusy: _busy,
               isFinished: group.isFinished,
-              onPauseAll:
-                  (!isIOS &&
-                      !group.isFinished &&
+              onPauseAll: (!isIOS && !group.isFinished &&
                       (group.runningFiles > 0 ||
                           group.queuedFiles > 0 ||
                           group.waitingFiles > 0))
                   ? () => _runAction(_pauseAll)
                   : null,
-              onResumeAll:
-                  (!isIOS && !group.isFinished && group.pausedFiles > 0)
+              onResumeAll: (!isIOS && !group.isFinished && group.pausedFiles > 0)
                   ? () => _runAction(_resumeAll)
                   : null,
-              onCancelAll:
-                  (!group.isFinished &&
-                      (group.hasActive ||
-                          group.failedFiles > 0 ||
-                          group.notFoundFiles > 0))
+              onCancelAll: (!group.isFinished &&
+                      (group.hasActive || group.failedFiles > 0 || group.notFoundFiles > 0))
                   ? () => _runAction(_cancelAll)
                   : null,
             );
@@ -2981,29 +2717,17 @@ class _TorrentDownloadDetailScreenState
   Widget build(BuildContext context) {
     final title = _group?.title ?? widget.groupTitle;
     return Scaffold(
-      backgroundColor: const Color(0xFF14101C),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.3,
-          ),
-        ),
+        title: Text(title),
         actions: [
           IconButton(
             onPressed: _refresh,
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh',
-            color: const Color(0xFFED1C24),
           ),
         ],
       ),
-      body: Stack(children: [const CinematicBackdrop(), _buildBody()]),
+      body: _buildBody(),
     );
   }
 }
