@@ -19,6 +19,8 @@ import '../../services/debrify_tv_repository.dart';
 import '../../services/debrify_tv_cache_service.dart';
 import '../../models/debrify_tv_cache.dart';
 import '../../models/debrify_tv_channel_record.dart';
+import '../../models/indexer_manager_config.dart';
+import '../../models/webdav_item.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback =
@@ -246,6 +248,12 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
+        break;
+      case ConfigCommand.webDav:
+        await _handleWebDavConfig(data);
+        break;
+      case ConfigCommand.indexerManagers:
+        await _handleIndexerManagersConfig(data);
         break;
       case ConfigCommand.debrifyChannel:
         await _handleDebrifyChannelConfig(data);
@@ -495,6 +503,157 @@ class RemoteCommandRouter {
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure search engines: $e');
       _showSnackBar('Search engines: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle WebDAV servers config — merges incoming entries into the local
+  /// list, de-duped by normalized base URL.
+  Future<void> _handleWebDavConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring WebDAV servers...');
+
+      final decoded = jsonDecode(jsonData);
+      if (decoded is! List) {
+        _showSnackBar('WebDAV: Invalid payload', isError: true);
+        return;
+      }
+
+      String normalize(String url) =>
+          url.trim().toLowerCase().replaceFirst(RegExp(r'/+$'), '');
+
+      final existing = await StorageService.getWebDavServers();
+      final existingKeys = <String>{
+        for (final s in existing) normalize(s.baseUrl),
+      };
+      final merged = List<WebDavConfig>.from(existing);
+      int imported = 0;
+      int skipped = 0;
+      for (final raw in decoded) {
+        if (raw is! Map) {
+          skipped++;
+          continue;
+        }
+        try {
+          final config = WebDavConfig.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (config.baseUrl.trim().isEmpty) {
+            skipped++;
+            continue;
+          }
+          final key = normalize(config.baseUrl);
+          if (existingKeys.contains(key)) {
+            skipped++;
+            continue;
+          }
+          merged.add(config);
+          existingKeys.add(key);
+          imported++;
+        } catch (e) {
+          debugPrint('RemoteCommandRouter: WebDAV entry failed: $e');
+          skipped++;
+        }
+      }
+
+      if (imported > 0) {
+        await StorageService.saveWebDavServers(merged);
+      }
+
+      if (imported > 0 && skipped == 0) {
+        _showSnackBar(
+          '$imported WebDAV server${imported == 1 ? '' : 's'} configured',
+        );
+      } else if (imported > 0) {
+        _showSnackBar(
+          'WebDAV: $imported added, $skipped already present or invalid',
+        );
+      } else if (skipped > 0) {
+        _showSnackBar('WebDAV: nothing new to add');
+      } else {
+        _showSnackBar('WebDAV: empty payload', isError: true);
+      }
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure WebDAV: $e');
+      _showSnackBar('WebDAV: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle indexer manager (Jackett / Prowlarr) configs — merges incoming
+  /// entries into the local list, de-duped by (type, normalized baseUrl).
+  Future<void> _handleIndexerManagersConfig(String jsonData) async {
+    try {
+      debugPrint('RemoteCommandRouter: Configuring indexer managers...');
+
+      final decoded = jsonDecode(jsonData);
+      if (decoded is! List) {
+        _showSnackBar('Indexer managers: Invalid payload', isError: true);
+        return;
+      }
+
+      String normalize(String url) =>
+          url.trim().toLowerCase().replaceFirst(RegExp(r'/+$'), '');
+      String fingerprint(IndexerManagerConfig c) =>
+          '${c.type.value}|${normalize(c.baseUrl)}';
+
+      final existing = await StorageService.getIndexerManagerConfigs();
+      final existingKeys = <String>{
+        for (final c in existing) fingerprint(c),
+      };
+      final merged = List<IndexerManagerConfig>.from(existing);
+      int imported = 0;
+      int skipped = 0;
+      for (final raw in decoded) {
+        if (raw is! Map) {
+          skipped++;
+          continue;
+        }
+        try {
+          final config = IndexerManagerConfig.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (config.baseUrl.trim().isEmpty ||
+              config.apiKey.trim().isEmpty) {
+            skipped++;
+            continue;
+          }
+          final key = fingerprint(config);
+          if (existingKeys.contains(key)) {
+            skipped++;
+            continue;
+          }
+          merged.add(config);
+          existingKeys.add(key);
+          imported++;
+        } catch (e) {
+          debugPrint(
+            'RemoteCommandRouter: indexer manager entry failed: $e',
+          );
+          skipped++;
+        }
+      }
+
+      if (imported > 0) {
+        await StorageService.setIndexerManagerConfigs(merged);
+      }
+
+      if (imported > 0 && skipped == 0) {
+        _showSnackBar(
+          '$imported indexer manager${imported == 1 ? '' : 's'} configured',
+        );
+      } else if (imported > 0) {
+        _showSnackBar(
+          'Indexer managers: $imported added, $skipped already present or invalid',
+        );
+      } else if (skipped > 0) {
+        _showSnackBar('Indexer managers: nothing new to add');
+      } else {
+        _showSnackBar('Indexer managers: empty payload', isError: true);
+      }
+    } catch (e) {
+      debugPrint(
+        'RemoteCommandRouter: Failed to configure indexer managers: $e',
+      );
+      _showSnackBar('Indexer managers: Configuration failed', isError: true);
     }
   }
 

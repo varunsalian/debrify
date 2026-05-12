@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/webdav_item.dart';
 import '../services/main_page_bridge.dart';
 
 import '../services/account_service.dart';
@@ -131,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTorboxApiKey(),
       PikPakApiService.instance.isAuthenticated(),
       StorageService.getWebDavEnabled(),
-      StorageService.getWebDavBaseUrl(),
+      StorageService.getWebDavServers(),
       StorageService.getTraktAccessToken(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
@@ -147,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final torboxKey = results[1] as String?;
     final pikpakAuth = results[2] as bool;
     final webDavEnabled = results[3] as bool;
-    final webDavBaseUrl = results[4] as String?;
+    final webDavServers = results[4] as List<WebDavConfig>;
     final traktToken = results[5] as String?;
     final traktExpiry = results[6] as int?;
     final traktUsername = results[7] as String?;
@@ -189,10 +190,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _pikpakCaption = 'Logged in';
     }
 
-    if (webDavEnabled && webDavBaseUrl != null && webDavBaseUrl.isNotEmpty) {
+    if (webDavEnabled && webDavServers.isNotEmpty) {
       _webDavConnected = true;
       _webDavStatus = 'Active';
-      _webDavCaption = Uri.tryParse(webDavBaseUrl)?.host ?? webDavBaseUrl;
+      final first = webDavServers.first;
+      final host = Uri.tryParse(first.baseUrl)?.host;
+      final label = (host != null && host.isNotEmpty) ? host : first.baseUrl;
+      _webDavCaption = webDavServers.length == 1
+          ? label
+          : '$label (+${webDavServers.length - 1} more)';
     } else {
       _webDavConnected = false;
       _webDavStatus = 'Not connected';
@@ -787,8 +793,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             const Text(
               'Saved credentials (Real-Debrid, Torbox, PikPak, Trakt) will '
-              'be overwritten. Addons and search engines you already have '
-              'are kept as-is.',
+              'be overwritten. Addons, search engines, WebDAV servers, and '
+              'indexer managers you already have are kept as-is.',
               style: TextStyle(fontSize: 12),
             ),
             if (summary.addonCount > 0 || summary.searchEngineCount > 0)
@@ -797,6 +803,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Text(
                   'Restoring addons and search engines needs a network '
                   'connection.',
+                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              ),
+            if (summary.webDavServerCount > 0 ||
+                summary.indexerManagerCount > 0)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'WebDAV and Jackett/Prowlarr URLs may be local-network '
+                  'only — they won\'t work on a different network.',
                   style: TextStyle(fontSize: 12, color: Colors.white60),
                 ),
               ),
@@ -892,6 +908,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       lines.add('Search engines (${s.searchEngineCount})');
     }
     if (s.addonCount > 0) lines.add('Stremio addons (${s.addonCount})');
+    if (s.webDavServerCount > 0) {
+      lines.add('WebDAV servers (${s.webDavServerCount})');
+    }
+    if (s.indexerManagerCount > 0) {
+      lines.add('Jackett/Prowlarr (${s.indexerManagerCount})');
+    }
     return lines;
   }
 
@@ -907,6 +929,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (r.addonsImported > 0) {
       parts.add('${r.addonsImported} new addon(s)');
     }
+    if (r.webDavServersImported > 0) {
+      parts.add('${r.webDavServersImported} WebDAV server(s)');
+    }
+    if (r.indexerManagersImported > 0) {
+      parts.add('${r.indexerManagersImported} indexer manager(s)');
+    }
 
     if (parts.isEmpty && !r.hasAnyFailure) {
       return 'Nothing new to restore — everything was already present';
@@ -919,6 +947,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (r.addonsAlreadyPresent > 0) {
       notes.add('${r.addonsAlreadyPresent} addon(s) already present');
     }
+    if (r.webDavServersAlreadyPresent > 0) {
+      notes.add(
+        '${r.webDavServersAlreadyPresent} WebDAV server(s) already present',
+      );
+    }
+    if (r.indexerManagersAlreadyPresent > 0) {
+      notes.add(
+        '${r.indexerManagersAlreadyPresent} indexer manager(s) already present',
+      );
+    }
     final withNotes = notes.isEmpty ? base : '$base (${notes.join(', ')})';
 
     if (!r.hasAnyFailure) return withNotes;
@@ -930,6 +968,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       failed.add('${r.searchEnginesFailed} engine(s)');
     }
     if (r.addonsFailed > 0) failed.add('${r.addonsFailed} addon(s)');
+    if (r.webDavServersFailed > 0) {
+      failed.add('${r.webDavServersFailed} WebDAV server(s)');
+    }
+    if (r.indexerManagersFailed > 0) {
+      failed.add('${r.indexerManagersFailed} indexer manager(s)');
+    }
     failed.addAll(r.errors);
     return '$withNotes — failed: ${failed.join(', ')}';
   }

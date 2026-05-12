@@ -1894,7 +1894,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
     final webDavEnabled = await StorageService.getWebDavEnabled();
-    final webDavBaseUrl = await StorageService.getWebDavBaseUrl();
+    final webDavServers = await StorageService.getWebDavServers();
     final webDavHidden = await StorageService.getWebDavHiddenFromNav();
 
     if (!mounted) return;
@@ -1912,8 +1912,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       torboxHidden: tbHidden,
       pikpakEnabled: pikpakEnabled,
       pikpakHidden: pikpakHidden,
-      webDavEnabled:
-          webDavEnabled && webDavBaseUrl != null && webDavBaseUrl.isNotEmpty,
+      webDavEnabled: webDavEnabled && webDavServers.isNotEmpty,
       webDavHidden: webDavHidden,
     );
   }

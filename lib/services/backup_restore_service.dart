@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/indexer_manager_config.dart';
+import '../models/webdav_item.dart';
 import 'engine/local_engine_storage.dart';
 import 'engine/remote_engine_manager.dart';
 import 'pikpak_api_service.dart';
@@ -19,6 +21,8 @@ import 'stremio_service.dart';
 ///   - Trakt session (access, refresh, expiry, username)
 ///   - Search engine IDs (restore re-downloads YAML from the remote registry)
 ///   - Stremio addon manifest URLs (restore re-fetches manifests)
+///   - WebDAV servers (URL + credentials, may be LAN-only)
+///   - Indexer managers (Jackett / Prowlarr — URL + API key, may be LAN-only)
 ///
 /// Restore intentionally skips remote validation (network) for credentials —
 /// the user trusts their own backup, so we write the stored values directly.
@@ -48,6 +52,24 @@ class BackupRestoreService {
       debugPrint('BackupRestoreService: Failed to read addons: $e');
     }
 
+    List<Map<String, dynamic>> webDavServers = const [];
+    try {
+      final servers = await StorageService.getWebDavServers();
+      webDavServers = servers.map((s) => s.toJson()).toList();
+    } catch (e) {
+      debugPrint('BackupRestoreService: Failed to read WebDAV servers: $e');
+    }
+
+    List<Map<String, dynamic>> indexerManagers = const [];
+    try {
+      final configs = await StorageService.getIndexerManagerConfigs();
+      indexerManagers = configs.map((c) => c.toJson()).toList();
+    } catch (e) {
+      debugPrint(
+        'BackupRestoreService: Failed to read indexer manager configs: $e',
+      );
+    }
+
     return <String, dynamic>{
       'version': currentVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
@@ -73,6 +95,8 @@ class BackupRestoreService {
         },
       if (engineIds.isNotEmpty) 'searchEngineIds': engineIds,
       if (addonUrls.isNotEmpty) 'addonManifestUrls': addonUrls,
+      if (webDavServers.isNotEmpty) 'webDavServers': webDavServers,
+      if (indexerManagers.isNotEmpty) 'indexerManagers': indexerManagers,
     };
   }
 
@@ -92,6 +116,8 @@ class BackupRestoreService {
       searchEngineCount:
           (map['searchEngineIds'] as List?)?.length ?? 0,
       addonCount: (map['addonManifestUrls'] as List?)?.length ?? 0,
+      webDavServerCount: (map['webDavServers'] as List?)?.length ?? 0,
+      indexerManagerCount: (map['indexerManagers'] as List?)?.length ?? 0,
     );
   }
 
@@ -238,7 +264,124 @@ class BackupRestoreService {
       }
     }
 
+    if (selection.webDav) {
+      final list = map['webDavServers'];
+      if (list is List && list.isNotEmpty) {
+        await _restoreWebDavServers(list, report);
+      }
+    }
+
+    if (selection.indexerManagers) {
+      final list = map['indexerManagers'];
+      if (list is List && list.isNotEmpty) {
+        await _restoreIndexerManagers(list, report);
+      }
+    }
+
     return report;
+  }
+
+  /// Merge restored WebDAV servers into the existing list. We de-dupe by
+  /// normalized base URL — restoring the same backup twice doesn't duplicate
+  /// entries, but a different server at a different URL is added.
+  static Future<void> _restoreWebDavServers(
+    List<dynamic> entries,
+    RestoreReport report,
+  ) async {
+    try {
+      final existing = await StorageService.getWebDavServers();
+      final existingUrls = <String>{
+        for (final s in existing) _normalizeUrl(s.baseUrl),
+      };
+      final merged = List<WebDavConfig>.from(existing);
+      for (final raw in entries) {
+        if (raw is! Map) {
+          report.webDavServersFailed++;
+          continue;
+        }
+        try {
+          final config = WebDavConfig.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (config.baseUrl.trim().isEmpty) {
+            report.webDavServersFailed++;
+            continue;
+          }
+          final key = _normalizeUrl(config.baseUrl);
+          if (existingUrls.contains(key)) {
+            report.webDavServersAlreadyPresent++;
+            continue;
+          }
+          merged.add(config);
+          existingUrls.add(key);
+          report.webDavServersImported++;
+        } catch (e) {
+          debugPrint('BackupRestoreService: WebDAV entry failed: $e');
+          report.webDavServersFailed++;
+        }
+      }
+      if (report.webDavServersImported > 0) {
+        await StorageService.saveWebDavServers(merged);
+        // setWebDavEnabled is handled inside saveWebDavServers.
+      }
+    } catch (e) {
+      report.errors.add('WebDAV: $e');
+    }
+  }
+
+  /// Merge restored indexer manager configs into the existing list. De-duped
+  /// by (type, normalized baseUrl) so re-importing the same backup is a
+  /// no-op, but a different host or different type is added.
+  static Future<void> _restoreIndexerManagers(
+    List<dynamic> entries,
+    RestoreReport report,
+  ) async {
+    try {
+      final existing = await StorageService.getIndexerManagerConfigs();
+      String fingerprint(IndexerManagerConfig c) =>
+          '${c.type.value}|${_normalizeUrl(c.baseUrl)}';
+      final existingKeys = <String>{
+        for (final c in existing) fingerprint(c),
+      };
+      final merged = List<IndexerManagerConfig>.from(existing);
+      for (final raw in entries) {
+        if (raw is! Map) {
+          report.indexerManagersFailed++;
+          continue;
+        }
+        try {
+          final config = IndexerManagerConfig.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (config.baseUrl.trim().isEmpty || config.apiKey.trim().isEmpty) {
+            report.indexerManagersFailed++;
+            continue;
+          }
+          final key = fingerprint(config);
+          if (existingKeys.contains(key)) {
+            report.indexerManagersAlreadyPresent++;
+            continue;
+          }
+          merged.add(config);
+          existingKeys.add(key);
+          report.indexerManagersImported++;
+        } catch (e) {
+          debugPrint(
+            'BackupRestoreService: indexer manager entry failed: $e',
+          );
+          report.indexerManagersFailed++;
+        }
+      }
+      if (report.indexerManagersImported > 0) {
+        await StorageService.setIndexerManagerConfigs(merged);
+      }
+    } catch (e) {
+      report.errors.add('Indexer managers: $e');
+    }
+  }
+
+  static String _normalizeUrl(String url) {
+    return url.trim().toLowerCase().replaceFirst(RegExp(r'/+$'), '');
   }
 
   static Future<void> _restoreSearchEngines(
@@ -321,6 +464,8 @@ class BackupSummary {
   final bool hasTrakt;
   final int searchEngineCount;
   final int addonCount;
+  final int webDavServerCount;
+  final int indexerManagerCount;
 
   BackupSummary({
     required this.version,
@@ -331,6 +476,8 @@ class BackupSummary {
     required this.hasTrakt,
     required this.searchEngineCount,
     required this.addonCount,
+    required this.webDavServerCount,
+    required this.indexerManagerCount,
   });
 
   bool get isEmpty =>
@@ -339,7 +486,9 @@ class BackupSummary {
       !hasPikpak &&
       !hasTrakt &&
       searchEngineCount == 0 &&
-      addonCount == 0;
+      addonCount == 0 &&
+      webDavServerCount == 0 &&
+      indexerManagerCount == 0;
 }
 
 /// Which categories to include when restoring.
@@ -350,6 +499,8 @@ class BackupSelection {
   final bool trakt;
   final bool searchEngines;
   final bool addons;
+  final bool webDav;
+  final bool indexerManagers;
 
   const BackupSelection({
     required this.realDebrid,
@@ -358,6 +509,8 @@ class BackupSelection {
     required this.trakt,
     required this.searchEngines,
     required this.addons,
+    required this.webDav,
+    required this.indexerManagers,
   });
 
   const BackupSelection.all()
@@ -366,7 +519,9 @@ class BackupSelection {
         pikpak = true,
         trakt = true,
         searchEngines = true,
-        addons = true;
+        addons = true,
+        webDav = true,
+        indexerManagers = true;
 
   BackupSelection copyWith({
     bool? realDebrid,
@@ -375,6 +530,8 @@ class BackupSelection {
     bool? trakt,
     bool? searchEngines,
     bool? addons,
+    bool? webDav,
+    bool? indexerManagers,
   }) {
     return BackupSelection(
       realDebrid: realDebrid ?? this.realDebrid,
@@ -383,6 +540,8 @@ class BackupSelection {
       trakt: trakt ?? this.trakt,
       searchEngines: searchEngines ?? this.searchEngines,
       addons: addons ?? this.addons,
+      webDav: webDav ?? this.webDav,
+      indexerManagers: indexerManagers ?? this.indexerManagers,
     );
   }
 }
@@ -402,6 +561,12 @@ class RestoreReport {
   int addonsImported = 0;
   int addonsAlreadyPresent = 0;
   int addonsFailed = 0;
+  int webDavServersImported = 0;
+  int webDavServersAlreadyPresent = 0;
+  int webDavServersFailed = 0;
+  int indexerManagersImported = 0;
+  int indexerManagersAlreadyPresent = 0;
+  int indexerManagersFailed = 0;
   final List<String> errors = [];
 
   int get totalSuccess =>
@@ -410,10 +575,16 @@ class RestoreReport {
       (pikpak ? 1 : 0) +
       (trakt ? 1 : 0) +
       searchEnginesImported +
-      addonsImported;
+      addonsImported +
+      webDavServersImported +
+      indexerManagersImported;
 
   int get totalFailed =>
-      searchEnginesFailed + addonsFailed + errors.length +
+      searchEnginesFailed +
+      addonsFailed +
+      webDavServersFailed +
+      indexerManagersFailed +
+      errors.length +
       (pikpakLoginFailed ? 1 : 0);
 
   bool get hasAnyFailure => totalFailed > 0;

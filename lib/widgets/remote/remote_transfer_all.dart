@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/indexer_manager_config.dart';
 import '../../models/stremio_addon.dart';
+import '../../models/webdav_item.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -53,6 +55,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   String? _traktUsername;
   List<String> _engineIds = [];
   List<StremioAddon> _addons = [];
+  List<WebDavConfig> _webDavServers = [];
+  List<IndexerManagerConfig> _indexerManagers = [];
 
   final _pikpakPasswordController = TextEditingController();
   bool _showPikpakPassword = false;
@@ -105,6 +109,24 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _addons = [];
       }
 
+      try {
+        _webDavServers = await StorageService.getWebDavServers();
+      } catch (e) {
+        debugPrint('RemoteTransferAll: Failed to load WebDAV servers: $e');
+        _webDavServers = [];
+      }
+
+      try {
+        _indexerManagers = await StorageService.getIndexerManagerConfigs();
+      } catch (e) {
+        debugPrint(
+          'RemoteTransferAll: Failed to load indexer manager configs: $e',
+        );
+        _indexerManagers = [];
+      }
+      final hasWebDav = _webDavServers.isNotEmpty;
+      final hasIndexers = _indexerManagers.isNotEmpty;
+
       final items = <_TransferItem>[];
       if (hasRd) {
         items.add(_TransferItem(
@@ -146,6 +168,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           label: 'Search Engines (${_engineIds.length})',
           icon: Icons.search,
           color: const Color(0xFF8B5CF6),
+        ));
+      }
+      if (hasWebDav) {
+        items.add(_TransferItem(
+          key: ConfigCommand.webDav,
+          label: 'WebDAV (${_webDavServers.length})',
+          icon: Icons.dns_rounded,
+          color: const Color(0xFF0EA5E9),
+        ));
+      }
+      if (hasIndexers) {
+        items.add(_TransferItem(
+          key: ConfigCommand.indexerManagers,
+          label: 'Jackett/Prowlarr (${_indexerManagers.length})',
+          icon: Icons.manage_search_rounded,
+          color: const Color(0xFFEAB308),
         ));
       }
       for (final addon in _addons) {
@@ -295,6 +333,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ConfigCommand.searchEngines,
           targetIp,
           configData: jsonEncode(_engineIds),
+        );
+      case ConfigCommand.webDav:
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.webDav,
+          targetIp,
+          configData: jsonEncode(
+            _webDavServers.map((s) => s.toJson()).toList(),
+          ),
+        );
+      case ConfigCommand.indexerManagers:
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.indexerManagers,
+          targetIp,
+          configData: jsonEncode(
+            _indexerManagers.map((c) => c.toJson()).toList(),
+          ),
         );
       default:
         return Future.value(false);

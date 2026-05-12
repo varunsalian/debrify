@@ -76,6 +76,8 @@ class ConfigCommand {
   static const String pikpak = 'pikpak';
   static const String trakt = 'trakt';
   static const String searchEngines = 'search_engines';
+  static const String webDav = 'webdav';
+  static const String indexerManagers = 'indexer_managers';
   static const String debrifyChannel = 'debrify_channel';
   static const String debrifyChannelStart = 'debrify_channel_start';
   static const String debrifyChannelChunk = 'debrify_channel_chunk';
