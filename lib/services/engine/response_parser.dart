@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:xml/xml.dart';
 import '../../models/engine_config/engine_config.dart';
 
 /// Exception thrown when response validation fails
@@ -220,6 +221,92 @@ class ResponseParser {
       debugPrint('ResponseParser.parse stackTrace: $stackTrace');
       rethrow;
     }
+  }
+
+  /// Parse an RSS/XML response body and feed it through the same downstream
+  /// logic as JSON. Each `<item>` becomes a `Map<String,dynamic>` keyed by
+  /// child tag name (namespace prefix stripped, e.g. `<nyaa:seeders>` → key
+  /// `seeders`). A few well-known numeric fields are normalized so the YAML
+  /// can reference `size_bytes`, `seeders`, etc. with the same shape as JSON
+  /// engines.
+  List<Map<String, dynamic>> parseRss(
+    String body,
+    ResponseConfig config, {
+    String searchType = 'keyword',
+  }) {
+    debugPrint('ResponseParser: Parsing RSS body (${body.length} chars)');
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(body);
+    } catch (e) {
+      debugPrint('ResponseParser: RSS parse failed: $e');
+      return const [];
+    }
+
+    final channel = doc.rootElement.getElement('channel');
+    if (channel == null) {
+      debugPrint('ResponseParser: No <channel> element');
+      return const [];
+    }
+
+    final items = channel.findElements('item').map(_xmlItemToMap).toList();
+    debugPrint('ResponseParser: RSS parsed ${items.length} items');
+
+    final wrapped = <String, dynamic>{
+      'channel': <String, dynamic>{'item': items},
+    };
+
+    return parseJson(wrapped, config, searchType: searchType);
+  }
+
+  Map<String, dynamic> _xmlItemToMap(XmlElement item) {
+    final map = <String, dynamic>{};
+    for (final child in item.childElements) {
+      // Strip namespace prefix: <nyaa:seeders> → "seeders"
+      final name = child.name.local;
+      final text = child.innerText.trim();
+      map[name] = text;
+    }
+    // Normalize well-known numeric fields so YAML field_mappings can target
+    // them with the same shape as JSON engines.
+    final seeders = int.tryParse(map['seeders']?.toString() ?? '');
+    if (seeders != null) map['seeders'] = seeders;
+    final leechers = int.tryParse(map['leechers']?.toString() ?? '');
+    if (leechers != null) map['leechers'] = leechers;
+    final downloads = int.tryParse(map['downloads']?.toString() ?? '');
+    if (downloads != null) map['downloads'] = downloads;
+
+    final sizeStr = map['size']?.toString();
+    if (sizeStr != null && sizeStr.isNotEmpty) {
+      final bytes = _parseHumanSize(sizeStr);
+      if (bytes != null) map['size_bytes'] = bytes;
+    }
+    return map;
+  }
+
+  /// Parse a humanized size string like "1.4 GiB" or "350 MB" to bytes.
+  /// Returns null if it can't be parsed.
+  int? _parseHumanSize(String input) {
+    final match = RegExp(
+      r'([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]?i?B)',
+      caseSensitive: false,
+    ).firstMatch(input);
+    if (match == null) return null;
+    final value = double.tryParse(match.group(1)!);
+    if (value == null) return null;
+    final unit = match.group(2)!.toUpperCase();
+    const units = <String, int>{
+      'B': 1,
+      'KB': 1000, 'KIB': 1024,
+      'MB': 1000 * 1000, 'MIB': 1024 * 1024,
+      'GB': 1000 * 1000 * 1000, 'GIB': 1024 * 1024 * 1024,
+      'TB': 1000 * 1000 * 1000 * 1000, 'TIB': 1024 * 1024 * 1024 * 1024,
+      'PB': 1000 * 1000 * 1000 * 1000 * 1000,
+      'PIB': 1024 * 1024 * 1024 * 1024 * 1024,
+    };
+    final multiplier = units[unit];
+    if (multiplier == null) return null;
+    return (value * multiplier).round();
   }
 
   /// Extract JSON from Jina-wrapped response

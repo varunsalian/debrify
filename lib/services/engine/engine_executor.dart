@@ -96,25 +96,32 @@ class EngineExecutor {
             break;
           }
 
-          // Parse and unwrap response (handles Jina wrapping)
-          dynamic responseJson;
+          // Parse response to get raw results. RSS engines skip the JSON
+          // decode entirely; everything else goes through the JSON+Jina path.
+          final List<Map<String, dynamic>> rawResults;
           dynamic unwrappedJson;
-          try {
-            responseJson = json.decode(response.body);
-            // Unwrap Jina response if needed - extract inner JSON from data.content
-            unwrappedJson = _unwrapJinaIfNeeded(responseJson, config.response.format);
-          } catch (e) {
-            debugPrint('EngineExecutor: Error parsing response JSON: $e');
-            responseJson = null;
-            unwrappedJson = null;
+          if (config.response.format == 'rss') {
+            rawResults = _responseParser.parseRss(
+              response.body,
+              config.response,
+              searchType: searchType,
+            );
+          } else {
+            dynamic responseJson;
+            try {
+              responseJson = json.decode(response.body);
+              unwrappedJson = _unwrapJinaIfNeeded(responseJson, config.response.format);
+            } catch (e) {
+              debugPrint('EngineExecutor: Error parsing response JSON: $e');
+              responseJson = null;
+              unwrappedJson = null;
+            }
+            rawResults = _responseParser.parseJson(
+              unwrappedJson,
+              config.response,
+              searchType: searchType,
+            );
           }
-
-          // Parse response to get raw results (pass unwrapped JSON)
-          final List<Map<String, dynamic>> rawResults = _responseParser.parseJson(
-            unwrappedJson,
-            config.response,
-            searchType: searchType,
-          );
 
           if (rawResults.isEmpty) {
             debugPrint('EngineExecutor: No results on page $pageNumber');
