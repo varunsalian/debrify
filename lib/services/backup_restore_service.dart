@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
+import 'engine/config_loader.dart';
+import 'engine/engine_registry.dart';
 import 'engine/local_engine_storage.dart';
 import 'engine/remote_engine_manager.dart';
 import 'pikpak_api_service.dart';
@@ -422,6 +424,14 @@ class BackupRestoreService {
           debugPrint('BackupRestoreService: engine $id failed: $e');
           report.searchEnginesFailed++;
         }
+      }
+
+      // Refresh the in-memory engine registry so newly-imported engines are
+      // visible to keyword search without an app restart. Skip when nothing
+      // was actually written to disk — the registry already matches.
+      if (report.searchEnginesImported > 0) {
+        ConfigLoader().clearCache();
+        await EngineRegistry.instance.reload();
       }
     } catch (e) {
       report.errors.add('Search engines: $e');

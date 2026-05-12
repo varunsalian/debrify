@@ -11,6 +11,8 @@ import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../services/engine/config_loader.dart';
+import '../../services/engine/engine_registry.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/community/magnet_yaml_service.dart';
@@ -441,6 +443,7 @@ class RemoteCommandRouter {
       final availableEngines = await remoteManager.fetchAvailableEngines();
       int successCount = 0;
       int failCount = 0;
+      int newlyImported = 0;
 
       for (final engineId in engineIds) {
         // Find the engine info
@@ -480,12 +483,20 @@ class RemoteCommandRouter {
             icon: engineInfo.icon,
           );
           successCount++;
+          newlyImported++;
         } catch (e) {
           debugPrint(
             'RemoteCommandRouter: Failed to import engine $engineId: $e',
           );
           failCount++;
         }
+      }
+
+      // Refresh the in-memory registry so the new engines are visible to
+      // keyword search without an app restart.
+      if (newlyImported > 0) {
+        ConfigLoader().clearCache();
+        await EngineRegistry.instance.reload();
       }
 
       if (failCount == 0) {
