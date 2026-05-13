@@ -315,8 +315,14 @@ class PaginationHandler {
     if (value is bool) return value;
     if (value is num) return value > 0;
     if (value is String) {
+      if (value.isEmpty) return false;
       final lower = value.toLowerCase();
-      return lower == 'true' || lower == '1' || lower == 'yes';
+      // Explicit false-y strings; everything else (URLs, cursor tokens,
+      // non-empty values) signals "more pages exist".
+      if (lower == 'false' || lower == '0' || lower == 'no' || lower == 'null') {
+        return false;
+      }
+      return true;
     }
     return true;
   }

@@ -61,9 +61,17 @@ class EngineExecutor {
           paginationLocation = config.pagination.offset!.location;
         }
 
+        // When pagination location is "path", merge pagination state into the
+        // search params so that {page}/{offset}/{after} placeholders in URL
+        // templates get substituted by replacePathParams. Skip for the other
+        // locations to keep existing engines bit-identical.
+        final Map<String, dynamic> effectiveParams = paginationLocation == 'path'
+            ? <String, dynamic>{...params, ...paginationParams}
+            : params;
+
         // Build parameters separated by location (query vs body)
         final Map<String, Map<String, dynamic>> separatedParams =
-            buildParameters(config.request, params, paginationParams, paginationLocation);
+            buildParameters(config.request, effectiveParams, paginationParams, paginationLocation);
 
         final Map<String, String> queryParams =
             (separatedParams['query'] as Map<String, dynamic>).cast<String, String>();
@@ -71,7 +79,7 @@ class EngineExecutor {
             separatedParams['body'] as Map<String, dynamic>;
 
         // Build the URL with query params only
-        final String url = buildUrl(config.request, params, queryParams);
+        final String url = buildUrl(config.request, effectiveParams, queryParams);
 
         debugPrint('EngineExecutor: Fetching page $pageNumber from: $url');
         if (bodyParams.isNotEmpty) {
@@ -422,6 +430,10 @@ class EngineExecutor {
       paginationParams.forEach((key, value) {
         bodyParams[key] = int.tryParse(value) ?? value;
       });
+    } else if (paginationLocation == 'path') {
+      // Path-templated pagination: caller has already merged paginationParams
+      // into effectiveParams so replacePathParams can substitute {page} etc.
+      // Skip query/body injection here to avoid double-sending the param.
     } else {
       queryParams.addAll(paginationParams);
     }

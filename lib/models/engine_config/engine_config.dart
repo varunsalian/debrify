@@ -364,7 +364,7 @@ class PaginationConfig {
 class CursorConfig {
   final String responseField;
   final String paramName;
-  final String location; // 'query' or 'body'
+  final String location; // 'query', 'body', or 'path'
 
   const CursorConfig({
     required this.responseField,
@@ -393,7 +393,7 @@ class PageConfig {
   final String paramName;
   final int startPage;
   final String? hasMoreField;
-  final String location; // 'query' or 'body'
+  final String location; // 'query', 'body', or 'path'
 
   const PageConfig({
     required this.paramName,
@@ -424,7 +424,7 @@ class PageConfig {
 class OffsetConfig {
   final String paramName;
   final int startOffset;
-  final String location; // 'query' or 'body'
+  final String location; // 'query', 'body', or 'path'
 
   const OffsetConfig({
     this.paramName = 'offset',
