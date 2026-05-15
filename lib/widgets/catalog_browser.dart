@@ -19,7 +19,9 @@ import '../screens/torbox/torbox_downloads_screen.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
+import 'catalog_item_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../screens/catalog_item_detail_screen.dart';
 
 /// A browsable catalog widget that shows content from Stremio addons.
 ///
@@ -753,39 +755,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             : const Color(0xFF34D399),
       ),
     );
-  }
-
-  KeyEventResult _handleContentItemKey(
-    int index,
-    KeyEvent event, {
-    bool? isQuickPlayFocused,
-  }) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // List navigation (up/down only)
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index == 0) {
-        // Move to catalog dropdown (first dropdown in the row)
-        _catalogDropdownFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      }
-      if (index > 0 && index - 1 < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[index - 1]);
-        return KeyEventResult.handled;
-      }
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index + 1 < _contentFocusNodes.length) {
-        FocusScope.of(context).requestFocus(_contentFocusNodes[index + 1]);
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Select/Enter is now handled within the card widget for button selection
-    // This handler only handles navigation
-
-    return KeyEventResult.ignored;
   }
 
   @override
@@ -2390,745 +2359,101 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       );
     }
 
-    return ListView.builder(
+    return _buildContentGrid();
+  }
+
+  Widget _buildContentGrid() {
+    final w = MediaQuery.of(context).size.width;
+    final crossAxisCount =
+        catalogGridColumnsFor(w, isTelevision: widget.isTelevision);
+    final hPadding = w >= 900 ? 24.0 : 16.0;
+
+    return GridView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _content.length + (_hasMoreContent ? 1 : 0),
+      padding: EdgeInsets.fromLTRB(hPadding, 8, hPadding, 32),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        // Tile: poster (2:3) + room for title and one meta line below.
+        childAspectRatio: 0.58,
+        mainAxisSpacing: 18,
+        crossAxisSpacing: 12,
+      ),
+      itemCount: _content.length + (_hasMoreContent ? crossAxisCount : 0),
       itemBuilder: (context, index) {
         if (index >= _content.length) {
-          // Loading indicator at end
           return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
+            child: SizedBox(
+              width: 24,
+              height: 24,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           );
         }
 
         final item = _content[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: _CatalogItemCard(
-            item: item,
-            isTelevision: widget.isTelevision,
-            focusNode: index < _contentFocusNodes.length
-                ? _contentFocusNodes[index]
-                : null,
-            onQuickPlay: () => _onQuickPlay(item),
-            onSources: () => _onItemTap(item),
-            onKeyEvent: (event, {bool? isQuickPlayFocused}) =>
-                _handleContentItemKey(
-                  index,
-                  event,
-                  isQuickPlayFocused: isQuickPlayFocused,
-                ),
-            showQuickPlay: widget.showQuickPlay,
-            onTraktMenuAction:
-                (item.hasValidImdbId ||
-                    (item.hasValidId &&
-                        (item.type == 'movie' || item.type == 'series')))
-                ? (action) => handleTraktMenuAction(
-                    context,
-                    item,
-                    action,
-                    onSelectSource: widget.onSelectSource,
-                    onEditSource: _handleSelectSourceAction,
-                    onPlayRandomEpisode: (show) async {
-                      await widget.onPlayRandomEpisode?.call(
-                        show,
-                        _selectedAddon,
-                      );
-                    },
-                    onSearchPacks: widget.onSearchPacks,
-                    onAddToStremioTv: _handleAddToStremioTv,
-                  )
-                : null,
-            hasBoundSource: _boundSources.containsKey(
-              item.effectiveImdbId ?? item.id,
-            ),
-            isTraktAuthenticated: _isTraktAuthenticated,
+        return CatalogItemTile(
+          item: item,
+          isTelevision: widget.isTelevision,
+          focusNode: index < _contentFocusNodes.length
+              ? _contentFocusNodes[index]
+              : null,
+          hasBoundSource: _boundSources.containsKey(
+            item.effectiveImdbId ?? item.id,
           ),
+          onOpen: () => _openItemDetail(item),
         );
       },
     );
   }
-}
 
-/// Horizontal card widget for displaying a catalog item (movie/series/channel)
-/// Features Quick Play and Sources buttons with DPAD navigation support
-class _CatalogItemCard extends StatefulWidget {
-  final StremioMeta item;
-  final FocusNode? focusNode;
-  final VoidCallback onQuickPlay;
-  final VoidCallback onSources;
-  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused})
-  onKeyEvent;
-  final bool showQuickPlay;
-  final void Function(TraktItemMenuAction action)? onTraktMenuAction;
-  final bool hasBoundSource;
-  final bool isTraktAuthenticated;
-  final bool isTelevision;
+  Future<void> _openItemDetail(StremioMeta item) async {
+    final hasTrakt =
+        item.hasValidImdbId ||
+        (item.hasValidId &&
+            (item.type == 'movie' || item.type == 'series'));
+    final hasBoundSource =
+        _boundSources.containsKey(item.effectiveImdbId ?? item.id);
 
-  const _CatalogItemCard({
-    required this.item,
-    this.focusNode,
-    required this.onQuickPlay,
-    required this.onSources,
-    required this.onKeyEvent,
-    this.showQuickPlay = true,
-    this.onTraktMenuAction,
-    this.hasBoundSource = false,
-    this.isTraktAuthenticated = false,
-    this.isTelevision = false,
-  });
+    final traktItems = hasTrakt
+        ? buildTraktAddOnlyMenuItems(
+            isSeries: item.type == 'series',
+            isMovie: item.type == 'movie',
+            hasBoundSource: hasBoundSource,
+            isTraktAuthenticated: _isTraktAuthenticated,
+          )
+        : const <PopupMenuEntry<TraktItemMenuAction>>[];
 
-  @override
-  State<_CatalogItemCard> createState() => _CatalogItemCardState();
-}
-
-class _CatalogItemCardState extends State<_CatalogItemCard> {
-  bool _isFocused = false;
-  int _focusedButtonIndex = 0;
-  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
-      GlobalKey();
-
-  int get _buttonCount {
-    int count = 1; // Browse
-    if (widget.showQuickPlay) count++;
-    if (widget.onTraktMenuAction != null) count++;
-    return count;
-  }
-
-  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-  int? get _moreIndex =>
-      widget.onTraktMenuAction != null ? _buttonCount - 1 : null;
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_focusedButtonIndex > 0) {
-        setState(() => _focusedButtonIndex--);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_focusedButtonIndex < _buttonCount - 1) {
-        setState(() => _focusedButtonIndex++);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_focusedButtonIndex == 0) {
-        widget.onSources();
-      } else if (_focusedButtonIndex == _quickPlayIndex) {
-        widget.onQuickPlay();
-      } else if (_focusedButtonIndex == _moreIndex) {
-        _menuKey.currentState?.showButtonMenu();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return widget.onKeyEvent(
-      event,
-      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
-    );
-  }
-
-  /// Strip HTML tags from description text
-  String _stripHtml(String text) {
-    return text.replaceAll(RegExp(r'<[^>]*>'), '');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-          if (focused) {
-            _focusedButtonIndex = 0;
-          }
-        });
-        if (focused) {
-          Scrollable.ensureVisible(
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CatalogItemDetailScreen(
+          item: item,
+          isTelevision: widget.isTelevision,
+          showQuickPlay: widget.showQuickPlay,
+          hasBoundSource: hasBoundSource,
+          traktMenuItems: traktItems,
+          onTraktAction: (action) => handleTraktMenuAction(
             context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
-          );
-        }
-      },
-      onKeyEvent: _handleKeyEvent,
-      child: GestureDetector(
-        onTap: widget.onSources,
-        child: widget.isTelevision
-            ? Container(
-                clipBehavior: Clip.hardEdge,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _isFocused
-                        ? Colors.white.withValues(alpha: 0.35)
-                        : Colors.white.withValues(alpha: 0.06),
-                    width: _isFocused ? 1.5 : 1,
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _buildBackdropImage(
-                        widget.item.background ?? widget.item.poster,
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.95),
-                              Colors.black.withValues(alpha: 0.8),
-                              Colors.black.withValues(alpha: 0.5),
-                            ],
-                            stops: const [0.0, 0.5, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final useVerticalLayout = constraints.maxWidth < 500;
-                          return useVerticalLayout
-                              ? _buildVerticalLayout(theme, colorScheme)
-                              : _buildHorizontalLayout(theme, colorScheme);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : AnimatedScale(
-                scale: _isFocused ? 1.02 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: _isFocused
-                          ? Colors.white.withValues(alpha: 0.35)
-                          : Colors.white.withValues(alpha: 0.06),
-                      width: _isFocused ? 1.5 : 1,
-                    ),
-                    boxShadow: _isFocused
-                        ? [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              blurRadius: 16,
-                              spreadRadius: 0,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: _buildBackdropImage(
-                            widget.item.background ?? widget.item.poster,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                colors: [
-                                  Colors.black.withValues(alpha: 0.95),
-                                  Colors.black.withValues(alpha: 0.8),
-                                  Colors.black.withValues(alpha: 0.5),
-                                ],
-                                stops: const [0.0, 0.5, 1.0],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final useVerticalLayout =
-                                  constraints.maxWidth < 500;
-                              return useVerticalLayout
-                                  ? _buildVerticalLayout(theme, colorScheme)
-                                  : _buildHorizontalLayout(theme, colorScheme);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
-
-  /// Horizontal layout for wide screens - thumbnail, details, and buttons in a row
-  Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 80,
-            height: 120,
-            child: _buildPoster(colorScheme),
+            item,
+            action,
+            onSelectSource: widget.onSelectSource,
+            onEditSource: _handleSelectSourceAction,
+            onPlayRandomEpisode: (show) async {
+              await widget.onPlayRandomEpisode?.call(show, _selectedAddon);
+            },
+            onSearchPacks: widget.onSearchPacks,
+            onAddToStremioTv: _handleAddToStremioTv,
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.item.name,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  shadows: widget.isTelevision
-                      ? null
-                      : [const Shadow(blurRadius: 8, color: Colors.black)],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null &&
-                  widget.item.genres!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: widget.item.genres!.take(3).map((genre) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      child: Text(
-                        genre,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (widget.item.description != null &&
-                  widget.item.description!.isNotEmpty &&
-                  _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _stripHtml(widget.item.description!),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        _buildActionButton(
-          icon: Icons.list_rounded,
-          label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-          color: _accentPurple,
-          isHighlighted: _isFocused && _focusedButtonIndex == 0,
-          onTap: widget.onSources,
-        ),
-        if (widget.showQuickPlay) ...[
-          const SizedBox(width: 6),
-          _buildActionButton(
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            color: _accentRed,
-            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
-            onTap: widget.onQuickPlay,
-          ),
-        ],
-        if (widget.onTraktMenuAction != null) ...[
-          const SizedBox(width: 4),
-          buildTraktAddOnlyOverflowMenu(
-            isHighlighted: _isFocused && _focusedButtonIndex == _moreIndex,
-            menuKey: _menuKey,
-            onSelected: (action) => widget.onTraktMenuAction?.call(action),
-            isMovie: widget.item.type == 'movie',
-            isSeries: widget.item.type == 'series',
-            hasBoundSource: widget.hasBoundSource,
-            isTraktAuthenticated: widget.isTraktAuthenticated,
-          ),
-        ],
-      ],
-    );
-  }
-
-  /// Vertical layout for narrow screens - content stacked with buttons below
-  Widget _buildVerticalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 60,
-                height: 85,
-                child: _buildPoster(colorScheme),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.item.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      shadows: widget.isTelevision
-                          ? null
-                          : [const Shadow(blurRadius: 8, color: Colors.black)],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null &&
-                      widget.item.genres!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: widget.item.genres!.take(3).map((genre) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: Text(
-                            genre,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        if (widget.item.description != null &&
-            widget.item.description!.isNotEmpty &&
-            _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            _stripHtml(widget.item.description!),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-              height: 1.4,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.list_rounded,
-                label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-                color: _accentPurple,
-                isHighlighted: _isFocused && _focusedButtonIndex == 0,
-                onTap: widget.onSources,
-              ),
-            ),
-            if (widget.showQuickPlay) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: 'Play',
-                  color: _accentRed,
-                  isHighlighted:
-                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
-                  onTap: widget.onQuickPlay,
-                ),
-              ),
-            ],
-            if (widget.onTraktMenuAction != null) ...[
-              const SizedBox(width: 4),
-              buildTraktAddOnlyOverflowMenu(
-                isHighlighted: _isFocused && _focusedButtonIndex == _moreIndex,
-                menuKey: _menuKey,
-                onSelected: (action) => widget.onTraktMenuAction?.call(action),
-                isMovie: widget.item.type == 'movie',
-                isSeries: widget.item.type == 'series',
-                hasBoundSource: widget.hasBoundSource,
-                isTraktAuthenticated: widget.isTraktAuthenticated,
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetadataRow(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      children: [
-        _buildTypeBadge(widget.item.type),
-        if (widget.item.year != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            widget.item.year!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 12,
-            ),
-          ),
-        ],
-        if (widget.item.imdbRating != null) ...[
-          const SizedBox(width: 8),
-          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
-          const SizedBox(width: 2),
-          Text(
-            widget.item.imdbRating!.toStringAsFixed(1),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required bool isHighlighted,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isHighlighted ? 1.08 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isHighlighted ? color : color.withValues(alpha: 0.6),
-              width: 1,
-            ),
-            boxShadow: isHighlighted
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: isHighlighted
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isHighlighted
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          ),
+          onPlay: () => _onQuickPlay(item),
+          onBrowse: () => _onItemTap(item),
         ),
       ),
     );
-  }
-
-  Widget _buildPoster(ColorScheme colorScheme) {
-    if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: widget.item.poster!,
-        memCacheWidth: 200,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          color: colorScheme.surfaceContainerHighest,
-          child: Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: colorScheme.primary,
-              ),
-            ),
-          ),
-        ),
-        errorWidget: (context, url, error) => _buildPlaceholder(colorScheme),
-      );
-    }
-    return _buildPlaceholder(colorScheme);
-  }
-
-  Widget _buildPlaceholder(ColorScheme colorScheme) {
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Center(
-        child: Icon(
-          _getTypeIcon(widget.item.type),
-          size: 24,
-          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeBadge(String type) {
-    Color color;
-    String label;
-
-    switch (type.toLowerCase()) {
-      case 'movie':
-        color = const Color(0xFF60A5FA);
-        label = 'Movie';
-        break;
-      case 'series':
-        color = const Color(0xFF34D399);
-        label = 'Series';
-        break;
-      case 'tv':
-      case 'channel':
-        color = Colors.pink;
-        label = 'TV';
-        break;
-      case 'anime':
-        color = Colors.deepPurple;
-        label = 'Anime';
-        break;
-      default:
-        color = Colors.teal;
-        label = type;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  IconData _getTypeIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'movie':
-        return Icons.movie_rounded;
-      case 'series':
-        return Icons.tv_rounded;
-      case 'tv':
-      case 'channel':
-        return Icons.live_tv_rounded;
-      case 'anime':
-        return Icons.animation_rounded;
-      default:
-        return Icons.folder_rounded;
-    }
   }
 }
+
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 

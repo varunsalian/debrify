@@ -290,6 +290,125 @@ Future<void> handleTraktMenuAction(
   );
 }
 
+/// Returns the popup-menu items for the add-only Trakt menu. Useful when you
+/// want to render your own trigger (button etc) and call `showMenu(...)` or
+/// build a custom `PopupMenuButton` with a styled child.
+List<PopupMenuEntry<TraktItemMenuAction>> buildTraktAddOnlyMenuItems({
+  bool isSeries = false,
+  bool isMovie = false,
+  bool hasBoundSource = false,
+  bool isTraktAuthenticated = true,
+}) {
+  return [
+    if (isTraktAuthenticated) ...[
+      const PopupMenuItem(
+        value: TraktItemMenuAction.addToWatchlist,
+        child: Row(
+          children: [
+            Icon(Icons.bookmark_add_outlined,
+                size: 18, color: Color(0xFFFBBF24)),
+            SizedBox(width: 12),
+            Text('Add to Trakt Watchlist'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: TraktItemMenuAction.addToCollection,
+        child: Row(
+          children: [
+            Icon(Icons.library_add_outlined,
+                size: 18, color: Color(0xFF60A5FA)),
+            SizedBox(width: 12),
+            Text('Add to Trakt Collection'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: TraktItemMenuAction.markWatched,
+        child: Row(
+          children: [
+            Icon(Icons.visibility, size: 18, color: Color(0xFF34D399)),
+            SizedBox(width: 12),
+            Text('Mark as Watched on Trakt'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: TraktItemMenuAction.rate,
+        child: Row(
+          children: [
+            Icon(Icons.star_rate_rounded,
+                size: 18, color: Color(0xFFFBBF24)),
+            SizedBox(width: 12),
+            Text('Rate on Trakt'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: TraktItemMenuAction.addToList,
+        child: Row(
+          children: [
+            Icon(Icons.playlist_add, size: 18, color: Color(0xFFEC4899)),
+            SizedBox(width: 12),
+            Text('Add to Trakt List...'),
+          ],
+        ),
+      ),
+    ],
+    if (isSeries || isMovie)
+      PopupMenuItem(
+        value: TraktItemMenuAction.selectSource,
+        child: Row(
+          children: [
+            Icon(
+              hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+              size: 18,
+              color: const Color(0xFF60A5FA),
+            ),
+            const SizedBox(width: 12),
+            Text(hasBoundSource
+                ? (isMovie ? 'Edit Source' : 'Edit Sources')
+                : 'Select Source'),
+          ],
+        ),
+      ),
+    if (isSeries)
+      const PopupMenuItem(
+        value: TraktItemMenuAction.playRandomEpisode,
+        child: Row(
+          children: [
+            Icon(Icons.shuffle_rounded, size: 18, color: Color(0xFFF59E0B)),
+            SizedBox(width: 12),
+            Text('Play Random Episode'),
+          ],
+        ),
+      ),
+    if (isSeries)
+      const PopupMenuItem(
+        value: TraktItemMenuAction.searchPacks,
+        child: Row(
+          children: [
+            Icon(Icons.inventory_2_outlined,
+                size: 18, color: Color(0xFFFBBF24)),
+            SizedBox(width: 12),
+            Text('Search Season Packs'),
+          ],
+        ),
+      ),
+    if (isSeries || isMovie)
+      const PopupMenuItem(
+        value: TraktItemMenuAction.addToStremioTv,
+        child: Row(
+          children: [
+            Icon(Icons.live_tv_rounded, size: 18, color: Color(0xFF22C55E)),
+            SizedBox(width: 12),
+            Text('Add to Stremio TV'),
+          ],
+        ),
+      ),
+  ];
+}
+
 /// Builds the add-only Trakt overflow menu (no remove actions).
 /// For use in catalog/search cards where we're not in a Trakt list context.
 Widget buildTraktAddOnlyOverflowMenu({

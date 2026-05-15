@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
@@ -16,7 +15,9 @@ import '../screens/debrid_downloads_screen.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
+import 'catalog_item_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
+import '../screens/catalog_item_detail_screen.dart';
 
 /// Displays aggregated search results from all catalog sources
 ///
@@ -297,21 +298,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     );
   }
 
-  /// Scroll a result card into view when focused
-  void _scrollResultIntoView(int index) {
-    if (index < 0 || index >= _resultCardKeys.length) return;
-    final key = _resultCardKeys[index];
-    final context = key.currentContext;
-    if (context != null) {
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.3, // Show focused item in upper-middle of viewport
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
   /// Sort results by relevance to the search query
   /// Priority: exact match > starts with > contains > other
   List<StremioMeta> _sortByRelevance(List<StremioMeta> results, String query) {
@@ -355,6 +341,49 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     });
 
     return sorted;
+  }
+
+  Future<void> _openItemDetail(StremioMeta item) async {
+    final hasTrakt = item.hasValidImdbId ||
+        (item.hasValidId &&
+            (item.type == 'movie' || item.type == 'series'));
+    final hasBoundSource =
+        _boundSources.containsKey(item.effectiveImdbId ?? item.id);
+
+    final traktItems = hasTrakt
+        ? buildTraktAddOnlyMenuItems(
+            isSeries: item.type == 'series',
+            isMovie: item.type == 'movie',
+            hasBoundSource: hasBoundSource,
+            isTraktAuthenticated: _isTraktAuthenticated,
+          )
+        : const <PopupMenuEntry<TraktItemMenuAction>>[];
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CatalogItemDetailScreen(
+          item: item,
+          isTelevision: widget.isTelevision,
+          showQuickPlay: widget.showQuickPlay,
+          hasBoundSource: hasBoundSource,
+          traktMenuItems: traktItems,
+          onTraktAction: (action) => handleTraktMenuAction(
+            context,
+            item,
+            action,
+            onSelectSource: widget.onSelectSource,
+            onEditSource: _handleSelectSourceAction,
+            onPlayRandomEpisode: (show) async {
+              await widget.onPlayRandomEpisode?.call(show, show.sourceAddon);
+            },
+            onSearchPacks: widget.onSearchPacks,
+            onAddToStremioTv: _handleAddToStremioTv,
+          ),
+          onPlay: () => _onQuickPlay(item),
+          onBrowse: () => _onItemSelected(item),
+        ),
+      ),
+    );
   }
 
   void _onItemSelected(StremioMeta item) {
@@ -448,38 +477,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         _results.isNotEmpty) {
       _resultFocusNodes[0].requestFocus();
       return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
-  }
-
-  KeyEventResult _handleResultKeyEvent(
-    FocusNode node,
-    KeyEvent event,
-    int index, {
-    bool? isQuickPlayFocused,
-  }) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Select/Enter is now handled within the card widget for button selection
-
-    // Arrow navigation in list (up/down only)
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index == 0) {
-        // First item: go to keyword card
-        _keywordSearchFocusNode.requestFocus();
-      } else {
-        // Move up one item
-        _resultFocusNodes[index - 1].requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _results.length - 1) {
-        _resultFocusNodes[index + 1].requestFocus();
-        return KeyEventResult.handled;
-      }
     }
 
     return KeyEventResult.ignored;
@@ -1230,69 +1227,32 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             ),
           ),
 
-        // Results list
+        // Results grid
         if (!_isLoading && _error == null && _results.isNotEmpty)
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverList(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: catalogGridColumnsFor(
+                  MediaQuery.of(context).size.width,
+                  isTelevision: widget.isTelevision,
+                ),
+                childAspectRatio: 0.58,
+                mainAxisSpacing: 18,
+                crossAxisSpacing: 12,
+              ),
               delegate: SliverChildBuilderDelegate((context, index) {
                 final item = _results[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: KeyedSubtree(
-                    key: _resultCardKeys[index],
-                    child: _CatalogResultCard(
-                      item: item,
-                      focusNode: _resultFocusNodes[index],
-                      isFocused: _focusedIndex == index,
-                      onQuickPlay: () => _onQuickPlay(item),
-                      onSources: () => _onItemSelected(item),
-                      onFocusChange: (focused) {
-                        setState(() {
-                          _focusedIndex = focused ? index : _focusedIndex;
-                        });
-                        // Scroll into view when focused
-                        if (focused) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _scrollResultIntoView(index);
-                          });
-                        }
-                      },
-                      onKeyEvent: (node, event, {bool? isQuickPlayFocused}) =>
-                          _handleResultKeyEvent(
-                            node,
-                            event,
-                            index,
-                            isQuickPlayFocused: isQuickPlayFocused,
-                          ),
-                      showQuickPlay: widget.showQuickPlay,
-                      onTraktMenuAction:
-                          (item.hasValidImdbId ||
-                              (item.hasValidId &&
-                                  (item.type == 'movie' ||
-                                      item.type == 'series')))
-                          ? (action) => handleTraktMenuAction(
-                              context,
-                              item,
-                              action,
-                              onSelectSource: widget.onSelectSource,
-                              onEditSource: _handleSelectSourceAction,
-                              onPlayRandomEpisode: (show) async {
-                                await widget.onPlayRandomEpisode?.call(
-                                  show,
-                                  show.sourceAddon,
-                                );
-                              },
-                              onSearchPacks: widget.onSearchPacks,
-                              onAddToStremioTv: _handleAddToStremioTv,
-                            )
-                          : null,
-                      hasBoundSource: _boundSources.containsKey(
-                        item.effectiveImdbId ?? item.id,
-                      ),
-                      isTraktAuthenticated: _isTraktAuthenticated,
-                      isTelevision: widget.isTelevision,
+                return KeyedSubtree(
+                  key: _resultCardKeys[index],
+                  child: CatalogItemTile(
+                    item: item,
+                    isTelevision: widget.isTelevision,
+                    focusNode: _resultFocusNodes[index],
+                    hasBoundSource: _boundSources.containsKey(
+                      item.effectiveImdbId ?? item.id,
                     ),
+                    onOpen: () => _openItemDetail(item),
                   ),
                 );
               }, childCount: _results.length),
@@ -1429,642 +1389,6 @@ class _KeywordSearchCard extends StatelessWidget {
 
 /// Horizontal catalog result card with thumbnail on left
 /// Features Quick Play and Sources buttons with DPAD navigation support
-class _CatalogResultCard extends StatefulWidget {
-  final StremioMeta item;
-  final FocusNode focusNode;
-  final bool isFocused;
-  final VoidCallback onQuickPlay;
-  final VoidCallback onSources;
-  final ValueChanged<bool> onFocusChange;
-  final KeyEventResult Function(FocusNode, KeyEvent, {bool? isQuickPlayFocused})
-  onKeyEvent;
-  final bool showQuickPlay;
-  final void Function(TraktItemMenuAction action)? onTraktMenuAction;
-  final bool hasBoundSource;
-  final bool isTraktAuthenticated;
-  final bool isTelevision;
-
-  const _CatalogResultCard({
-    required this.item,
-    required this.focusNode,
-    required this.isFocused,
-    required this.onQuickPlay,
-    required this.onSources,
-    required this.onFocusChange,
-    required this.onKeyEvent,
-    this.showQuickPlay = true,
-    this.onTraktMenuAction,
-    this.hasBoundSource = false,
-    this.isTraktAuthenticated = false,
-    this.isTelevision = false,
-  });
-
-  @override
-  State<_CatalogResultCard> createState() => _CatalogResultCardState();
-}
-
-class _CatalogResultCardState extends State<_CatalogResultCard> {
-  int _focusedButtonIndex = 0;
-  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
-      GlobalKey();
-
-  int get _buttonCount {
-    int count = 1; // Browse
-    if (widget.showQuickPlay) count++;
-    if (widget.onTraktMenuAction != null) count++;
-    return count;
-  }
-
-  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-  int? get _moreIndex =>
-      widget.onTraktMenuAction != null ? _buttonCount - 1 : null;
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_focusedButtonIndex > 0) {
-        setState(() => _focusedButtonIndex--);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_focusedButtonIndex < _buttonCount - 1) {
-        setState(() => _focusedButtonIndex++);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_focusedButtonIndex == 0) {
-        widget.onSources();
-      } else if (_focusedButtonIndex == _quickPlayIndex) {
-        widget.onQuickPlay();
-      } else if (_focusedButtonIndex == _moreIndex) {
-        _menuKey.currentState?.showButtonMenu();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return widget.onKeyEvent(
-      node,
-      event,
-      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
-    );
-  }
-
-  void _handleFocusChange(bool focused) {
-    if (focused) {
-      setState(() => _focusedButtonIndex = 0);
-    }
-    widget.onFocusChange(focused);
-  }
-
-  String _stripHtml(String text) {
-    return text.replaceAll(RegExp(r'<[^>]*>'), '');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: _handleFocusChange,
-      onKeyEvent: _handleKeyEvent,
-      child: GestureDetector(
-        onTap: widget.onSources,
-        child: _buildCardWrapper(theme, colorScheme),
-      ),
-    );
-  }
-
-  Widget _buildCardWrapper(ThemeData theme, ColorScheme colorScheme) {
-    final cardStack = Stack(
-      children: [
-        Positioned.fill(
-          child: _buildBackdropImage(
-            widget.item.background ?? widget.item.poster,
-          ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.black.withValues(alpha: 0.95),
-                  Colors.black.withValues(alpha: 0.8),
-                  Colors.black.withValues(alpha: 0.5),
-                ],
-                stops: const [0.0, 0.5, 1.0],
-              ),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final useVerticalLayout = constraints.maxWidth < 500;
-              return useVerticalLayout
-                  ? _buildVerticalLayout(theme, colorScheme)
-                  : _buildHorizontalLayout(theme, colorScheme);
-            },
-          ),
-        ),
-      ],
-    );
-
-    if (widget.isTelevision) {
-      return Container(
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: widget.isFocused
-                ? Colors.white.withValues(alpha: 0.35)
-                : Colors.white.withValues(alpha: 0.06),
-            width: widget.isFocused ? 1.5 : 1,
-          ),
-        ),
-        child: cardStack,
-      );
-    }
-
-    return AnimatedScale(
-      scale: widget.isFocused ? 1.02 : 1.0,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: widget.isFocused
-                ? Colors.white.withValues(alpha: 0.35)
-                : Colors.white.withValues(alpha: 0.06),
-            width: widget.isFocused ? 1.5 : 1,
-          ),
-          boxShadow: widget.isFocused
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    blurRadius: 16,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : null,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: cardStack,
-        ),
-      ),
-    );
-  }
-
-  /// Horizontal layout for wide screens - thumbnail, details, and buttons in a row
-  Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Poster
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 80,
-            height: 120,
-            child: _buildPoster(colorScheme),
-          ),
-        ),
-        const SizedBox(width: 14),
-        // Details
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.item.name,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  shadows: widget.isTelevision
-                      ? null
-                      : [const Shadow(blurRadius: 8, color: Colors.black)],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null &&
-                  widget.item.genres!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: widget.item.genres!.take(3).map((genre) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      child: Text(
-                        genre,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (widget.item.description != null &&
-                  widget.item.description!.isNotEmpty &&
-                  _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _stripHtml(widget.item.description!),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Action buttons
-        _buildActionButton(
-          icon: Icons.list_rounded,
-          label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-          color: const Color(0xFF8B5CF6),
-          isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
-          onTap: widget.onSources,
-        ),
-        if (widget.showQuickPlay) ...[
-          const SizedBox(width: 6),
-          _buildActionButton(
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            color: const Color(0xFFED1C24),
-            isHighlighted:
-                widget.isFocused && _focusedButtonIndex == _quickPlayIndex,
-            onTap: widget.onQuickPlay,
-          ),
-        ],
-        if (widget.onTraktMenuAction != null) ...[
-          const SizedBox(width: 4),
-          buildTraktAddOnlyOverflowMenu(
-            isHighlighted:
-                widget.isFocused && _focusedButtonIndex == _moreIndex,
-            menuKey: _menuKey,
-            onSelected: (action) => widget.onTraktMenuAction?.call(action),
-            isMovie: widget.item.type == 'movie',
-            isSeries: widget.item.type == 'series',
-            hasBoundSource: widget.hasBoundSource,
-            isTraktAuthenticated: widget.isTraktAuthenticated,
-          ),
-        ],
-      ],
-    );
-  }
-
-  /// Vertical layout for narrow screens - content stacked with buttons below
-  Widget _buildVerticalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 60,
-                height: 85,
-                child: _buildPoster(colorScheme),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.item.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      shadows: widget.isTelevision
-                          ? null
-                          : [const Shadow(blurRadius: 8, color: Colors.black)],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null &&
-                      widget.item.genres!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: widget.item.genres!.take(3).map((genre) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: Text(
-                            genre,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        if (widget.item.description != null &&
-            widget.item.description!.isNotEmpty &&
-            _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            _stripHtml(widget.item.description!),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-              height: 1.4,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.list_rounded,
-                label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-                color: const Color(0xFF8B5CF6),
-                isHighlighted: widget.isFocused && _focusedButtonIndex == 0,
-                onTap: widget.onSources,
-              ),
-            ),
-            if (widget.showQuickPlay) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: 'Play',
-                  color: const Color(0xFFED1C24),
-                  isHighlighted:
-                      widget.isFocused &&
-                      _focusedButtonIndex == _quickPlayIndex,
-                  onTap: widget.onQuickPlay,
-                ),
-              ),
-            ],
-            if (widget.onTraktMenuAction != null) ...[
-              const SizedBox(width: 4),
-              buildTraktAddOnlyOverflowMenu(
-                isHighlighted:
-                    widget.isFocused && _focusedButtonIndex == _moreIndex,
-                menuKey: _menuKey,
-                onSelected: (action) => widget.onTraktMenuAction?.call(action),
-                isMovie: widget.item.type == 'movie',
-                isSeries: widget.item.type == 'series',
-                hasBoundSource: widget.hasBoundSource,
-                isTraktAuthenticated: widget.isTraktAuthenticated,
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetadataRow(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      children: [
-        _buildTypeBadge(),
-        if (widget.item.year != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            widget.item.year!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 12,
-            ),
-          ),
-        ],
-        if (widget.item.imdbRating != null) ...[
-          const SizedBox(width: 8),
-          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
-          const SizedBox(width: 2),
-          Text(
-            widget.item.imdbRating!.toStringAsFixed(1),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required bool isHighlighted,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isHighlighted ? 1.08 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isHighlighted ? color : color.withValues(alpha: 0.6),
-              width: 1,
-            ),
-            boxShadow: isHighlighted
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: isHighlighted
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isHighlighted
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static const _placeholderGradient = BoxDecoration(
-    gradient: LinearGradient(colors: [Color(0xFF1A1A2E), Color(0xFF06080F)]),
-  );
-
-  Widget _buildBackdropImage(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(decoration: _placeholderGradient);
-    }
-    return CachedNetworkImage(
-      imageUrl: imageUrl,
-      memCacheWidth: 600,
-      fit: BoxFit.cover,
-      placeholder: (context, url) =>
-          Container(decoration: _placeholderGradient),
-      errorWidget: (context, url, error) =>
-          Container(decoration: _placeholderGradient),
-    );
-  }
-
-  Widget _buildPoster(ColorScheme colorScheme) {
-    if (widget.item.poster != null && widget.item.poster!.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: widget.item.poster!,
-        memCacheWidth: 200,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          color: colorScheme.surfaceContainerHighest,
-          child: Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: colorScheme.primary,
-              ),
-            ),
-          ),
-        ),
-        errorWidget: (context, url, error) => _buildPlaceholder(colorScheme),
-      );
-    }
-    return _buildPlaceholder(colorScheme);
-  }
-
-  Widget _buildPlaceholder(ColorScheme colorScheme) {
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Center(
-        child: Icon(
-          widget.item.type == 'movie' ? Icons.movie : Icons.tv,
-          size: 24,
-          color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTypeBadge() {
-    final typeLabel = widget.item.type == 'movie'
-        ? 'Movie'
-        : widget.item.type == 'series'
-        ? 'Series'
-        : widget.item.type;
-    final color = widget.item.type == 'series'
-        ? const Color(0xFF34D399)
-        : const Color(0xFF60A5FA);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        typeLabel,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-/// Horizontal shimmer loading card
 class _ShimmerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
