@@ -159,44 +159,53 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
     final genres = item.genres ?? const [];
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
     final description = item.description ?? '';
+    final wide = MediaQuery.of(context).size.width >= 900;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Title
+        // Small uppercase eyebrow above the title.
         Text(
-          item.name,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 30,
+          typeLabel,
+          style: TextStyle(
+            color: HomeTheme.accent.withValues(alpha: 0.95),
+            fontSize: 11,
             fontWeight: FontWeight.w800,
-            letterSpacing: -0.8,
-            height: 1.1,
+            letterSpacing: 2.4,
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: wide ? 10 : 8),
+        // Title — large and condensed
+        Text(
+          item.name,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: wide ? 44 : 30,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -1.0,
+            height: 1.0,
+          ),
+        ),
+        SizedBox(height: wide ? 14 : 10),
 
-        // Meta row: TYPE · YEAR · ⭐ 8.4
+        // Meta row: YEAR · ⭐ 8.4
         DefaultTextStyle(
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 13,
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: wide ? 14 : 13,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.6,
+            letterSpacing: 0.5,
           ),
           child: Wrap(
             spacing: 10,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(typeLabel),
-              if (item.year != null && item.year!.isNotEmpty) ...[
-                _dot(),
+              if (item.year != null && item.year!.isNotEmpty)
                 Text(item.year!),
-              ],
               if (rating != null) ...[
-                _dot(),
+                if (item.year != null && item.year!.isNotEmpty) _dot(),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -205,7 +214,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
                       size: 16,
                       color: Color(0xFFFACC15),
                     ),
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 4),
                     Text(rating.toStringAsFixed(1)),
                   ],
                 ),
@@ -215,10 +224,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
         ),
 
         if (genres.isNotEmpty) ...[
-          const SizedBox(height: 14),
+          SizedBox(height: wide ? 18 : 14),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 7,
+            runSpacing: 7,
             children: [
               for (final g in genres.take(5)) _GenreChip(label: g),
             ],
@@ -226,9 +235,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
         ],
 
         if (description.isNotEmpty) ...[
-          const SizedBox(height: 18),
+          SizedBox(height: wide ? 22 : 18),
           _Description(
             text: description,
+            wide: wide,
             expanded: _descriptionExpanded,
             onToggle: () => setState(
               () => _descriptionExpanded = !_descriptionExpanded,
@@ -236,7 +246,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
           ),
         ],
 
-        const SizedBox(height: 22),
+        SizedBox(height: wide ? 30 : 22),
 
         // Actions
         _ActionRow(
@@ -376,10 +386,12 @@ class _GenreChip extends StatelessWidget {
 
 class _Description extends StatelessWidget {
   final String text;
+  final bool wide;
   final bool expanded;
   final VoidCallback onToggle;
   const _Description({
     required this.text,
+    required this.wide,
     required this.expanded,
     required this.onToggle,
   });
@@ -387,9 +399,9 @@ class _Description extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
-      color: Colors.white.withValues(alpha: 0.78),
-      fontSize: 15,
-      height: 1.45,
+      color: Colors.white.withValues(alpha: 0.82),
+      fontSize: wide ? 17 : 15,
+      height: 1.5,
       letterSpacing: 0.1,
     );
 
@@ -497,12 +509,13 @@ class _ActionRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          flex: hasMore ? 3 : 3,
+          flex: 3,
           child: _PrimaryButton(
             focusNode: playFocus,
             icon: Icons.play_arrow_rounded,
             label: 'Play',
             filled: true,
+            accent: _kNetflixRed,
             onTap: onPlay,
           ),
         ),
@@ -516,6 +529,8 @@ class _ActionRow extends StatelessWidget {
     );
   }
 }
+
+const Color _kNetflixRed = Color(0xFFE50914);
 
 /// Icon-only "More" button. Matches the visual height of [_PrimaryButton]
 /// and opens a popup menu with the supplied Trakt items.
@@ -557,19 +572,28 @@ class _MoreButtonState extends State<_MoreButton> {
         return KeyEventResult.ignored;
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        height: 50,
+        duration: const Duration(milliseconds: 160),
+        height: 54,
         decoration: BoxDecoration(
           color: _focused
-              ? Colors.white.withValues(alpha: 0.14)
+              ? Colors.white.withValues(alpha: 0.18)
               : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: _focused
                 ? Colors.white
                 : Colors.white.withValues(alpha: 0.18),
             width: 1.2,
           ),
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
         child: PopupMenuButton<TraktItemMenuAction>(
           key: _menuKey,
@@ -602,8 +626,14 @@ class _PrimaryButton extends StatefulWidget {
   final FocusNode focusNode;
   final IconData icon;
   final String label;
+
+  /// Filled buttons get a solid background ([accent] when provided, white
+  /// otherwise). Outlined buttons have a glass background.
   final bool filled;
   final bool tinted;
+
+  /// Optional brand accent for a filled button. Falls back to white.
+  final Color? accent;
   final VoidCallback onTap;
 
   const _PrimaryButton({
@@ -613,6 +643,7 @@ class _PrimaryButton extends StatefulWidget {
     required this.filled,
     required this.onTap,
     this.tinted = false,
+    this.accent,
   });
 
   @override
@@ -625,18 +656,27 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final filled = widget.filled;
-    final accent = widget.tinted ? HomeTheme.accent : Colors.white;
+    final accent = widget.accent;
+
+    final filledBg = accent ?? Colors.white;
+    final filledFg = accent == null ? Colors.black : Colors.white;
+    final outlineAccent = widget.tinted ? HomeTheme.accent : Colors.white;
 
     final bg = filled
-        ? (_focused ? Colors.white : Colors.white.withValues(alpha: 0.95))
+        ? (_focused
+            ? Color.lerp(filledBg, Colors.white, 0.12)!
+            : filledBg)
         : (_focused
-            ? Colors.white.withValues(alpha: 0.14)
+            ? Colors.white.withValues(alpha: 0.18)
             : Colors.white.withValues(alpha: 0.06));
 
-    final fg = filled ? Colors.black : Colors.white;
+    final fg = filled ? filledFg : Colors.white;
     final borderColor = filled
         ? Colors.transparent
-        : (_focused ? accent : Colors.white.withValues(alpha: 0.18));
+        : (_focused ? outlineAccent : Colors.white.withValues(alpha: 0.18));
+
+    final glowColor =
+        filled ? (accent ?? Colors.white) : Colors.white;
 
     return Focus(
       focusNode: widget.focusNode,
@@ -654,17 +694,17 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          height: 50,
+          duration: const Duration(milliseconds: 160),
+          height: 54,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: borderColor, width: filled ? 0 : 1.2),
-            boxShadow: _focused && filled
+            boxShadow: _focused
                 ? [
                     BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      blurRadius: 24,
+                      color: glowColor.withValues(alpha: 0.45),
+                      blurRadius: 26,
                       spreadRadius: 1,
                     ),
                   ]
@@ -675,15 +715,15 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(widget.icon, color: fg, size: 22),
-              const SizedBox(width: 8),
+              Icon(widget.icon, color: fg, size: 24),
+              const SizedBox(width: 10),
               Text(
                 widget.label,
                 style: TextStyle(
                   color: fg,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
                 ),
               ),
             ],

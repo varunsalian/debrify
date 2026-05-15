@@ -43,25 +43,31 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
 
     final card = AnimatedScale(
-      duration: const Duration(milliseconds: 160),
+      duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
-      scale: _active ? 1.05 : 1.0,
+      scale: _active ? 1.08 : 1.0,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: _active ? 0.55 : 0.35),
-              blurRadius: _active ? 26 : 14,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: _active ? 0.65 : 0.35),
+              blurRadius: _active ? 36 : 14,
+              offset: const Offset(0, 14),
             ),
-            if (_active)
+            if (_active) ...[
               BoxShadow(
-                color: HomeTheme.accent.withValues(alpha: 0.4),
-                blurRadius: 28,
-                spreadRadius: 1,
+                color: HomeTheme.accent.withValues(alpha: 0.55),
+                blurRadius: 38,
+                spreadRadius: 2,
               ),
+              BoxShadow(
+                color: HomeTheme.accent.withValues(alpha: 0.25),
+                blurRadius: 80,
+                spreadRadius: 8,
+              ),
+            ],
           ],
         ),
         child: ClipRRect(
@@ -79,28 +85,92 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               else
                 _placeholder(item.name),
 
+              // Bottom gradient — only when focused — for the inline title.
+              if (_active)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.0),
+                            Colors.black.withValues(alpha: 0.65),
+                            Colors.black.withValues(alpha: 0.92),
+                          ],
+                          stops: const [0.0, 0.55, 0.85, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
               Positioned(
-                top: 8,
-                left: 8,
+                top: 10,
+                left: 10,
                 child: _GlassChip(label: typeLabel),
               ),
 
               if (rating != null)
                 Positioned(
-                  top: 8,
-                  right: 8,
+                  top: 10,
+                  right: 10,
                   child: _RatingChip(value: rating),
                 ),
 
               if (widget.hasBoundSource)
                 const Positioned(
-                  bottom: 8,
-                  right: 8,
+                  bottom: 10,
+                  right: 10,
                   child: Icon(
                     Icons.bookmark_rounded,
-                    size: 16,
+                    size: 18,
                     color: Colors.white,
                     shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                  ),
+                ),
+
+              // Focused title overlay — appears inside the poster on focus
+              // so the chrome below the tile stays calm.
+              if (_active)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: IgnorePointer(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                            height: 1.15,
+                          ),
+                        ),
+                        if (item.year != null && item.year!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              item.year!,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -110,7 +180,10 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: HomeTheme.accent, width: 2),
+                        border: Border.all(
+                          color: HomeTheme.accent,
+                          width: 2.5,
+                        ),
                       ),
                     ),
                   ),
@@ -142,40 +215,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         child: GestureDetector(
           onTap: widget.onOpen,
           behavior: HitTestBehavior.opaque,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: card),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                    letterSpacing: -0.1,
-                  ),
-                ),
-              ),
-              if (item.year != null && item.year!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 2, top: 2),
-                  child: Text(
-                    item.year!,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          child: card,
         ),
       ),
     );
@@ -203,12 +243,12 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
   }
 }
 
-/// Number of grid columns for a given width. TV always gets 6.
+/// Number of grid columns for a given width. Fewer columns = bigger posters
+/// = a more premium feel. TV tops out at 5.
 int catalogGridColumnsFor(double width, {bool isTelevision = false}) {
-  if (isTelevision || width >= 1400) return 6;
-  if (width >= 1100) return 5;
-  if (width >= 800) return 4;
-  if (width >= 520) return 3;
+  if (isTelevision || width >= 1500) return 5;
+  if (width >= 1100) return 4;
+  if (width >= 700) return 3;
   return 2;
 }
 

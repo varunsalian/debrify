@@ -1230,16 +1230,21 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         // Results grid
         if (!_isLoading && _error == null && _results.isNotEmpty)
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            padding: EdgeInsets.fromLTRB(
+              MediaQuery.of(context).size.width >= 900 ? 40 : 20,
+              8,
+              MediaQuery.of(context).size.width >= 900 ? 40 : 20,
+              24,
+            ),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: catalogGridColumnsFor(
                   MediaQuery.of(context).size.width,
                   isTelevision: widget.isTelevision,
                 ),
-                childAspectRatio: 0.58,
-                mainAxisSpacing: 18,
-                crossAxisSpacing: 12,
+                childAspectRatio: 0.667,
+                mainAxisSpacing: 24,
+                crossAxisSpacing: 18,
               ),
               delegate: SliverChildBuilderDelegate((context, index) {
                 final item = _results[index];

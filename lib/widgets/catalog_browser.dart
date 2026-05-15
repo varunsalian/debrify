@@ -2366,20 +2366,20 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     final w = MediaQuery.of(context).size.width;
     final crossAxisCount =
         catalogGridColumnsFor(w, isTelevision: widget.isTelevision);
-    final hPadding = w >= 900 ? 24.0 : 16.0;
+    final hPadding = w >= 900 ? 40.0 : 20.0;
 
     return GridView.builder(
       controller: _scrollController,
-      padding: EdgeInsets.fromLTRB(hPadding, 8, hPadding, 32),
+      padding: EdgeInsets.fromLTRB(hPadding, 16, hPadding, 40),
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        // Tile: poster (2:3) + room for title and one meta line below.
-        childAspectRatio: 0.58,
-        mainAxisSpacing: 18,
-        crossAxisSpacing: 12,
+        // Pure poster aspect (2:3) — title appears inside the poster on focus.
+        childAspectRatio: 0.667,
+        mainAxisSpacing: 24,
+        crossAxisSpacing: 18,
       ),
       itemCount: _content.length + (_hasMoreContent ? crossAxisCount : 0),
       itemBuilder: (context, index) {
