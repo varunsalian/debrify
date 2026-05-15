@@ -8,6 +8,7 @@ import '../models/stremio_addon.dart';
 import '../services/main_page_bridge.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 
 /// Compact "Now Playing" bar — slim music-player style with poster art.
@@ -59,7 +60,9 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
   bool? _cachedAuth;
   DateTime? _cachedAuthAt;
 
-  static const _red = Color(0xFFE50914); // Netflix red
+  // Warm "live" accent — distinct from the cool indigo used by other sections,
+  // signals an active/playing state without the harsh Netflix red.
+  static const _red = HomeTheme.highlight;
   static const _watchingGreen = Color(0xFF10B981);
   static const _pollWhenPlaying = Duration(seconds: 30);
   static const _pollWhenIdle = Duration(minutes: 2);

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/iptv_playlist.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 
 /// Horizontal scrollable IPTV channel favorites section for the home screen
@@ -199,50 +200,10 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 3,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF14B8A6),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Live TV',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    height: 1.1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_favoriteChannels.length}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
+        HomeSectionHeader(
+          title: 'Live TV',
+          count: _favoriteChannels.length,
+          isTelevision: widget.isTelevision,
         ),
         const SizedBox(height: 8),
         // Horizontal scrolling favorites with edge fade and scroll indicators
@@ -451,13 +412,11 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-                                ),
+                                gradient: HomeTheme.livePulseGradient,
                                 borderRadius: BorderRadius.circular(6),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                                    color: HomeTheme.highlight.withValues(alpha: 0.4),
                                     blurRadius: 8,
                                   ),
                                 ],

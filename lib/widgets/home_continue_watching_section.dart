@@ -13,6 +13,7 @@ import '../services/main_page_bridge.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 
 /// Continue Watching section for the home screen.
@@ -76,8 +77,6 @@ class _HomeContinueWatchingSectionState
   final ScrollController _scrollController = ScrollController();
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
-
-  static const _accentColor = Color(0xFF6366F1);
 
   @override
   void initState() {
@@ -883,50 +882,10 @@ class _HomeContinueWatchingSectionState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Section header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 3,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: _accentColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Continue Watching',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    height: 1.1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_items.length}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
+        HomeSectionHeader(
+          title: 'Continue Watching',
+          count: _items.length,
+          isTelevision: widget.isTelevision,
         ),
         // Horizontal card list
         SizedBox(
@@ -1061,18 +1020,20 @@ class _HomeContinueWatchingSectionState
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: contentType == 'series'
-                      ? _accentColor
-                      : const Color(0xFFEF4444),
+                  color: Colors.black.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 0.5,
+                  ),
                 ),
                 child: Text(
                   contentType == 'series' ? 'SERIES' : 'MOVIE',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ),
@@ -1157,9 +1118,7 @@ class _HomeContinueWatchingSectionState
                         widthFactor: progressPercent.clamp(0.0, 1.0),
                         child: Container(
                           decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Color(0xFFED1C24), Color(0xFFFF6B6B)],
-                            ),
+                            gradient: HomeTheme.progressGradient,
                           ),
                         ),
                       ),

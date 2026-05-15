@@ -16717,7 +16717,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       },
       child: Stack(
         children: [
-          // Base gradient background
+          // Base — cinematic near-black. Slight tonal lift at top, pure
+          // black at the bottom. No color tint; content provides color.
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
@@ -16725,79 +16726,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFF14101C),
-                    Color(0xFF0A0810),
-                    Color(0xFF030305),
+                    Color(0xFF0E0E12),
+                    Color(0xFF07070A),
+                    Color(0xFF000000),
                   ],
-                  stops: [0.0, 0.35, 1.0],
+                  stops: [0.0, 0.4, 1.0],
                 ),
               ),
             ),
           ),
-          // Top-center crimson ambient glow — frames the hero card
+          // Subtle top spotlight — colorless, just lifts the chrome out of
+          // pure black so content carries the color, not the background.
           Positioned(
-            top: -180,
+            top: -220,
             left: 0,
             right: 0,
             child: IgnorePointer(
               child: Center(
                 child: Container(
-                  width: 520,
-                  height: 360,
+                  width: 600,
+                  height: 420,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        const Color(0xFFED1C24).withValues(alpha: 0.18),
-                        const Color(0xFFED1C24).withValues(alpha: 0.05),
+                        Colors.white.withValues(alpha: 0.05),
+                        Colors.white.withValues(alpha: 0.015),
                         Colors.transparent,
                       ],
-                      stops: const [0.0, 0.45, 1.0],
+                      stops: const [0.0, 0.5, 1.0],
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Top-left purple-blue ambient glow
-          Positioned(
-            top: -80,
-            left: -60,
-            child: IgnorePointer(
-              child: Container(
-                width: 320,
-                height: 320,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF6366F1).withValues(alpha: 0.12),
-                      const Color(0xFF6366F1).withValues(alpha: 0.04),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Bottom-right teal ambient glow
-          Positioned(
-            bottom: -60,
-            right: -40,
-            child: IgnorePointer(
-              child: Container(
-                width: 280,
-                height: 280,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF10B981).withValues(alpha: 0.08),
-                      const Color(0xFF10B981).withValues(alpha: 0.02),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
                   ),
                 ),
               ),
@@ -18635,7 +18593,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   Widget _buildHomeSection() {
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      padding: const EdgeInsets.only(top: 4, bottom: 32),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
       children: [
         // Today Calendar (Trakt upcoming episodes) — self-hides when empty
         RepaintBoundary(

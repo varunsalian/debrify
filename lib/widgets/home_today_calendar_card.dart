@@ -5,6 +5,7 @@ import '../models/trakt/trakt_calendar_entry.dart';
 import '../screens/trakt_calendar_screen.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 import 'home_trakt_now_playing_card.dart';
 
@@ -254,11 +255,8 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
 
   // ─── Hero card ──────────────────────────────────────────────────────────
 
-  /// Netflix-style brand red.
-  static const Color _kNetflixRed = Color(0xFFE50914);
-
-  /// Deep near-black card background (matches Netflix UI).
-  static const Color _kCardBg = Color(0xFF141414);
+  /// Soft accent reserved for the focus ring only.
+  static const Color _kFocusAccent = HomeTheme.accent;
 
   /// Breakpoint above which we render bigger poster + bigger type.
   static const double _kWideBreakpoint = 720;
@@ -321,20 +319,26 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                 final wide = constraints.maxWidth >= _kWideBreakpoint;
                 return Container(
                   decoration: BoxDecoration(
-                    color: _kCardBg,
-                    borderRadius: BorderRadius.circular(16),
+                    color: HomeTheme.cardBg,
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: hasFocus
-                          ? _kNetflixRed
-                          : Colors.white.withValues(alpha: 0.06),
+                          ? _kFocusAccent.withValues(alpha: 0.85)
+                          : Colors.white.withValues(alpha: 0.05),
                       width: hasFocus ? 2 : 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 24,
-                        offset: const Offset(0, 10),
+                        color: Colors.black.withValues(alpha: 0.55),
+                        blurRadius: 32,
+                        offset: const Offset(0, 14),
                       ),
+                      if (hasFocus)
+                        BoxShadow(
+                          color: _kFocusAccent.withValues(alpha: 0.35),
+                          blurRadius: 28,
+                          spreadRadius: 1,
+                        ),
                     ],
                     image: fanartUrl != null
                         ? DecorationImage(
@@ -353,32 +357,26 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
                         onTap: _openFullCalendar,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            // Single gradient: Netflix red tint on left,
-                            // deep card-bg over the content area, fading to
-                            // near-transparent on the right so the fanart
-                            // shows through.
+                            // Cinematic scrim: pure card-bg on the left
+                            // fading to transparent on the right so the
+                            // fanart breathes. No tinted accent.
                             gradient: LinearGradient(
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
                               colors: [
-                                Color.alphaBlend(
-                                  _kNetflixRed.withValues(alpha: 0.35),
-                                  _kCardBg,
-                                ),
-                                _kCardBg.withValues(alpha: 0.92),
-                                _kCardBg.withValues(alpha: 0.55),
-                                _kCardBg.withValues(alpha: 0.08),
+                                HomeTheme.cardBg,
+                                HomeTheme.cardBg.withValues(alpha: 0.92),
+                                HomeTheme.cardBg.withValues(alpha: 0.45),
+                                HomeTheme.cardBg.withValues(alpha: 0.0),
                               ],
-                              stops: const [0.0, 0.3, 0.6, 1.0],
+                              stops: const [0.0, 0.35, 0.7, 1.0],
                             ),
                           ),
                           child: IntrinsicHeight(
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Left accent stripe (Netflix red)
-                                Container(width: 4, color: _kNetflixRed),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 16),
                                 // Poster
                                 Padding(
                                   padding: EdgeInsets.symmetric(
@@ -458,31 +456,47 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          // Label row
+          // Label — clean uppercase editorial type, no chip
           Row(
             children: [
-              Flexible(child: _pill(label, accent: _kNetflixRed)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+              ),
               if (extraOnDay > 0) ...[
-                const SizedBox(width: 6),
-                _pill(
-                  '+$extraOnDay MORE',
-                  accent: Colors.white.withValues(alpha: 0.6),
-                  muted: true,
+                Text(
+                  '  ·  +$extraOnDay MORE',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ],
             ],
           ),
-          SizedBox(height: wide ? 8 : 6),
-          // Show title
+          SizedBox(height: wide ? 10 : 8),
+          // Show title — bolder, tighter for cinematic feel
           Text(
             featured.showTitle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Colors.white,
-              fontSize: wide ? 18 : 15,
+              fontSize: wide ? 22 : 18,
               fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
+              letterSpacing: -0.5,
+              height: 1.1,
             ),
           ),
           SizedBox(height: wide ? 4 : 2),

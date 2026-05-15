@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../screens/playlist_content_view_screen.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style horizontal scrollable favorites section for the home screen
@@ -42,7 +43,7 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  static const _accentColor = Color(0xFFED1C24);
+  static const _accentColor = HomeTheme.accent;
 
   void reload() => _loadFavorites();
 
@@ -437,50 +438,10 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
   }
 
   Widget _buildSectionHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 20,
-            decoration: BoxDecoration(
-              color: _accentColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Favorites',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-                height: 1.1,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '${_favoriteItems.length}',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return HomeSectionHeader(
+      title: 'Favorites',
+      count: _favoriteItems.length,
+      isTelevision: widget.isTelevision,
     );
   }
 
@@ -707,21 +668,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                               alignment: Alignment.centerLeft,
                               widthFactor: progressPercent,
                               child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFED1C24),
-                                      Color(0xFFFF4D4D),
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accentColor
-                                          .withValues(alpha: 0.6),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, -1),
-                                    ),
-                                  ],
+                                decoration: const BoxDecoration(
+                                  gradient: HomeTheme.progressGradient,
                                 ),
                               ),
                             ),
@@ -975,21 +923,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
                               alignment: Alignment.centerLeft,
                               widthFactor: progressPercent,
                               child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFED1C24),
-                                      Color(0xFFFF4D4D),
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accentColor
-                                          .withValues(alpha: 0.6),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, -1),
-                                    ),
-                                  ],
+                                decoration: const BoxDecoration(
+                                  gradient: HomeTheme.progressGradient,
                                 ),
                               ),
                             ),

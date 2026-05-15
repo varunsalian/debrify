@@ -17,6 +17,7 @@ import '../services/main_page_bridge.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
+import 'home/home_theme.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
@@ -77,8 +78,6 @@ class _HomeTraktContinueWatchingSectionState
   final ScrollController _scrollController = ScrollController();
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
-
-  static const _accentColor = Color(0xFFED1C24);
 
   @override
   void initState() {
@@ -1122,9 +1121,7 @@ class _HomeTraktContinueWatchingSectionState
   @override
   Widget build(BuildContext context) {
     final isMovies = widget.contentType == 'movies';
-    final title = isMovies
-        ? 'Continue Watching · Movies (Trakt)'
-        : 'Continue Watching · Shows (Trakt)';
+    final title = isMovies ? 'Trakt Movies' : 'Trakt Shows';
 
     if (_isLoading) {
       return Column(
@@ -1284,50 +1281,10 @@ class _HomeTraktContinueWatchingSectionState
   // ── Section header ────────────────────────────────────────────────────────
 
   Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 20,
-            decoration: BoxDecoration(
-              color: _accentColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-                height: 1.1,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '${_items.length}',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return HomeSectionHeader(
+      title: title,
+      count: _items.length,
+      isTelevision: widget.isTelevision,
     );
   }
 
@@ -1356,18 +1313,22 @@ class _HomeTraktContinueWatchingSectionState
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: _accentColor.withValues(alpha: 0.2),
+            color: Colors.black.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+              width: 0.5,
+            ),
           ),
           child: Text(
             epCode,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: _accentColor,
-              letterSpacing: 0.3,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.6,
             ),
           ),
         ),
@@ -1422,7 +1383,6 @@ class _HomeTraktContinueWatchingSectionState
         final year = item.year ?? '';
         final rating = item.imdbRating;
         final genres = item.genres;
-        final typeBadge = item.type == 'series' ? 'SERIES' : 'MOVIE';
 
         final cardContent = ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -1603,9 +1563,7 @@ class _HomeTraktContinueWatchingSectionState
                           widthFactor: progressPercent.clamp(0.0, 1.0),
                           child: Container(
                             decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Color(0xFFED1C24), Color(0xFFFF6B6B)],
-                              ),
+                              gradient: HomeTheme.progressGradient,
                             ),
                           ),
                         ),
