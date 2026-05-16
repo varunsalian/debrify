@@ -8,7 +8,7 @@ import '../../services/video_player_launcher.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import 'iptv_filters.dart';
-import 'iptv_channel_card.dart';
+import 'iptv_channel_tile.dart';
 import 'iptv_empty_state.dart';
 
 /// Main view for IPTV M3U results, to be embedded in TorrentSearchScreen
@@ -442,20 +442,38 @@ class IptvResultsViewState extends State<IptvResultsView> {
       );
     }
 
-    // Results list
+    // Results grid — logo-forward cards.
+    final w = MediaQuery.of(context).size.width;
+    final crossAxisCount =
+        iptvGridColumnsFor(w, isTelevision: widget.isTelevision);
+    final hPadding = w >= 900 ? 32.0 : 16.0;
+
     return TvFocusScrollWrapper(
-      child: ListView.builder(
+      child: GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.only(top: 8, bottom: 16),
+        padding: EdgeInsets.fromLTRB(hPadding, 12, hPadding, 24),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: 1.2,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 14,
+        ),
         itemCount: _filteredChannels.length,
         itemBuilder: (context, index) {
           final channel = _filteredChannels[index];
-          return IptvChannelCard(
+          return IptvChannelTile(
             channel: channel,
+            isTelevision: widget.isTelevision,
             onTap: () => _playChannel(channel),
-            focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+            focusNode: index < _cardFocusNodes.length
+                ? _cardFocusNodes[index]
+                : null,
             isFavorited: _favoriteUrls.contains(channel.url),
-            onFavoriteToggle: (isFavorited) => _toggleFavorite(channel, isFavorited),
+            onFavoriteToggle: (isFavorited) =>
+                _toggleFavorite(channel, isFavorited),
           );
         },
       ),

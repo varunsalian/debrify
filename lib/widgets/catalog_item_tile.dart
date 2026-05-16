@@ -16,6 +16,10 @@ class CatalogItemTile extends StatefulWidget {
   final bool hasBoundSource;
   final VoidCallback onOpen;
 
+  /// Optional watch progress (0..1). When > 0 a slim bar is pinned to the
+  /// bottom of the poster — used by the Trakt "continue watching" grid.
+  final double? progress;
+
   const CatalogItemTile({
     super.key,
     required this.item,
@@ -23,6 +27,7 @@ class CatalogItemTile extends StatefulWidget {
     required this.focusNode,
     required this.hasBoundSource,
     required this.onOpen,
+    this.progress,
   });
 
   @override
@@ -176,6 +181,19 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   ),
                 ),
 
+              // Continue-watching progress bar, pinned to the poster bottom.
+              if (widget.progress != null && widget.progress! > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: _ProgressBar(
+                      value: widget.progress!.clamp(0.0, 1.0),
+                    ),
+                  ),
+                ),
+
               if (_active)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -294,6 +312,30 @@ class _GlassChip extends StatelessWidget {
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
         ),
+      ),
+    );
+  }
+}
+
+/// Slim "continue watching" progress bar (Netflix-style red fill).
+class _ProgressBar extends StatelessWidget {
+  final double value;
+  const _ProgressBar({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 4,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: Colors.black.withValues(alpha: 0.55)),
+          FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: value,
+            child: const ColoredBox(color: Color(0xFFE50914)),
+          ),
+        ],
       ),
     );
   }

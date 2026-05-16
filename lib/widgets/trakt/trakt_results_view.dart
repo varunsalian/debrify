@@ -8,10 +8,12 @@ import '../../services/trakt/trakt_service.dart';
 import '../../services/trakt/trakt_item_transformer.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import 'trakt_menu_helpers.dart';
+import '../catalog_item_tile.dart';
 import '../../services/tvmaze_service.dart';
 import '../../services/local_bound_source_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/storage_service.dart';
+import '../../screens/catalog_item_detail_screen.dart';
 import '../../screens/debrid_downloads_screen.dart';
 import '../../screens/torbox/torbox_downloads_screen.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
@@ -670,6 +672,182 @@ class TraktResultsViewState extends State<TraktResultsView> {
       traktSource: true,
     );
     widget.onItemSelected(selection);
+  }
+
+  /// Opens the cinematic detail screen (Play / Sources / quick actions),
+  /// matching the catalog grid. Sources/Episodes and Play defer to the
+  /// existing Trakt handlers via the detail screen's buttons.
+  Future<void> _openItemDetail(StremioMeta item) async {
+    final hasBoundSource =
+        _boundSources.containsKey(item.effectiveImdbId ?? item.id);
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CatalogItemDetailScreen(
+          item: item,
+          isTelevision: widget.isTelevision,
+          showQuickPlay: widget.showQuickPlay,
+          hasBoundSource: hasBoundSource,
+          traktMenuOptions: _buildTraktQuickActions(item, hasBoundSource),
+          onTraktAction: (action) => _onMenuAction(item, action),
+          onPlay: () => _onQuickPlay(item),
+          onBrowse: () => _onItemTap(item),
+        ),
+      ),
+    );
+  }
+
+  /// Context-aware quick actions for the detail screen: shows Remove-from-X
+  /// when viewing that Trakt list (watchlist/collection/ratings/custom list/
+  /// continue-watching), Add-to-X otherwise. App/Stremio actions come first,
+  /// then the Trakt-syncing ones (badged TRAKT in the UI).
+  List<TraktMenuOption> _buildTraktQuickActions(
+    StremioMeta item,
+    bool hasBoundSource,
+  ) {
+    final lt = _selectedListType;
+    final id = item.effectiveImdbId ?? item.id;
+    final isSeries = item.type == 'series';
+    final isMovie = item.type == 'movie';
+    final pct = (_selectedContentType == TraktContentType.movies &&
+            _progressLoaded)
+        ? _watchProgress[id]
+        : null;
+    final isWatched = (pct ?? 0) >= 100 ||
+        (pct == null &&
+            (lt == TraktListType.progress || lt == TraktListType.history));
+
+    return [
+      // ── App / Stremio (no TRAKT badge) ──
+      if (isSeries || isMovie)
+        TraktMenuOption(
+          action: TraktItemMenuAction.selectSource,
+          icon: hasBoundSource ? Icons.edit_rounded : Icons.link_rounded,
+          color: const Color(0xFF60A5FA),
+          label: hasBoundSource
+              ? (isMovie ? 'Edit Source' : 'Edit Sources')
+              : 'Select Source',
+          caption: hasBoundSource ? 'Edit Source' : 'Select Source',
+        ),
+      const TraktMenuOption(
+        action: TraktItemMenuAction.addToStremioTv,
+        icon: Icons.cast_rounded,
+        color: Color(0xFF22C55E),
+        label: 'Add to Stremio TV',
+        caption: 'Stremio TV',
+      ),
+      if (isSeries)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.searchPacks,
+          icon: Icons.inventory_2_rounded,
+          color: Color(0xFFFBBF24),
+          label: 'Search Season Packs',
+          caption: 'Packs',
+        ),
+
+      // ── Trakt-syncing (badged TRAKT) ──
+      if (_isAuthenticated) ...[
+        if (lt == TraktListType.watchlist)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.removeFromWatchlist,
+            icon: Icons.bookmark_remove_rounded,
+            color: Color(0xFFFBBF24),
+            label: 'Remove from Trakt Watchlist',
+            caption: 'Watchlist',
+            isTrakt: true,
+          )
+        else
+          const TraktMenuOption(
+            action: TraktItemMenuAction.addToWatchlist,
+            icon: Icons.bookmark_add_rounded,
+            color: Color(0xFFFBBF24),
+            label: 'Add to Trakt Watchlist',
+            caption: 'Watchlist',
+            isTrakt: true,
+          ),
+        if (lt == TraktListType.collection)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.removeFromCollection,
+            icon: Icons.library_add_check_rounded,
+            color: Color(0xFF60A5FA),
+            label: 'Remove from Trakt Collection',
+            caption: 'Collection',
+            isTrakt: true,
+          )
+        else
+          const TraktMenuOption(
+            action: TraktItemMenuAction.addToCollection,
+            icon: Icons.video_library_rounded,
+            color: Color(0xFF60A5FA),
+            label: 'Add to Trakt Collection',
+            caption: 'Collection',
+            isTrakt: true,
+          ),
+        if (isWatched)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.markUnwatched,
+            icon: Icons.visibility_off_rounded,
+            color: Color(0xFF34D399),
+            label: 'Mark as Unwatched on Trakt',
+            caption: 'Unwatch',
+            isTrakt: true,
+          )
+        else
+          const TraktMenuOption(
+            action: TraktItemMenuAction.markWatched,
+            icon: Icons.check_circle_rounded,
+            color: Color(0xFF34D399),
+            label: 'Mark as Watched on Trakt',
+            caption: 'Watched',
+            isTrakt: true,
+          ),
+        if (lt == TraktListType.ratings)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.removeRating,
+            icon: Icons.star_border_rounded,
+            color: Color(0xFFFBBF24),
+            label: 'Remove Trakt Rating',
+            caption: 'Rating',
+            isTrakt: true,
+          )
+        else
+          const TraktMenuOption(
+            action: TraktItemMenuAction.rate,
+            icon: Icons.star_rounded,
+            color: Color(0xFFFBBF24),
+            label: 'Rate on Trakt',
+            caption: 'Rate',
+            isTrakt: true,
+          ),
+        if (lt == TraktListType.customList)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.removeFromList,
+            icon: Icons.playlist_remove_rounded,
+            color: Color(0xFFEC4899),
+            label: 'Remove from Trakt List',
+            caption: 'List',
+            isTrakt: true,
+          )
+        else
+          const TraktMenuOption(
+            action: TraktItemMenuAction.addToList,
+            icon: Icons.playlist_add_rounded,
+            color: Color(0xFFEC4899),
+            label: 'Add to Trakt List…',
+            caption: 'Add to List',
+            isTrakt: true,
+          ),
+        if (lt == TraktListType.progress)
+          const TraktMenuOption(
+            action: TraktItemMenuAction.removeFromPlayback,
+            icon: Icons.delete_outline_rounded,
+            color: Color(0xFFEF4444),
+            label: 'Remove from Continue Watching',
+            caption: 'Remove',
+            isTrakt: true,
+          ),
+      ],
+    ];
   }
 
   void _onQuickPlay(StremioMeta item) async {
@@ -2287,69 +2465,47 @@ class TraktResultsViewState extends State<TraktResultsView> {
       );
     }
 
+    final w = MediaQuery.of(context).size.width;
+    final crossAxisCount =
+        catalogGridColumnsFor(w, isTelevision: widget.isTelevision);
+    final hPadding = w >= 900 ? 40.0 : 20.0;
+    final showProgress =
+        _selectedContentType == TraktContentType.movies && _progressLoaded;
+
     return TvFocusScrollWrapper(
-      child: ListView.builder(
+      child: GridView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.only(top: 8, bottom: 16, left: 16, right: 16),
+        padding: EdgeInsets.fromLTRB(hPadding, 12, hPadding, 24),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          // Pure poster aspect (2:3) — title appears inside on focus.
+          childAspectRatio: 0.667,
+          mainAxisSpacing: 24,
+          crossAxisSpacing: 18,
+        ),
         itemCount: _filteredItems.length,
         itemBuilder: (context, index) {
           final item = _filteredItems[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _TraktItemCard(
-              item: item,
-              progress:
-                  _selectedContentType == TraktContentType.movies &&
-                      _progressLoaded
-                  ? _watchProgress[item.effectiveImdbId ?? item.id]
-                  : null,
-              focusNode: index < _cardFocusNodes.length
-                  ? _cardFocusNodes[index]
-                  : null,
-              onSources: () => _onItemTap(item),
-              onQuickPlay: () => _onQuickPlay(item),
-              showQuickPlay: widget.showQuickPlay,
-              onKeyEvent: (event, {bool? isQuickPlayFocused}) => _handleCardKey(
-                index,
-                event,
-                isQuickPlayFocused: isQuickPlayFocused,
-              ),
-              listType: _selectedListType,
-              onMenuAction: (action) => _onMenuAction(item, action),
-              hasBoundSource: _boundSources.containsKey(
-                item.effectiveImdbId ?? item.id,
-              ),
+          final pct =
+              showProgress ? _watchProgress[item.effectiveImdbId ?? item.id] : null;
+          return CatalogItemTile(
+            item: item,
+            isTelevision: widget.isTelevision,
+            focusNode: index < _cardFocusNodes.length
+                ? _cardFocusNodes[index]
+                : null,
+            hasBoundSource: _boundSources.containsKey(
+              item.effectiveImdbId ?? item.id,
             ),
+            progress: (pct != null && pct > 0) ? pct / 100.0 : null,
+            onOpen: () => _openItemDetail(item),
           );
         },
       ),
     );
-  }
-
-  KeyEventResult _handleCardKey(
-    int index,
-    KeyEvent event, {
-    bool? isQuickPlayFocused,
-  }) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index > 0) {
-        _cardFocusNodes[index - 1].requestFocus();
-      } else {
-        _listTypeFocusNode.requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _filteredItems.length - 1 &&
-          index < _cardFocusNodes.length - 1) {
-        _cardFocusNodes[index + 1].requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
   }
 
   Widget _buildEpisodeFiltersBar(BuildContext context) {
@@ -2681,815 +2837,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   }
 }
 
-// ─── Item Card ─────────────────────────────────────────────────────────────────
-
-/// Card widget for a single Trakt media item.
-/// Features Browse and Quick Play buttons with DPAD navigation support.
-class _TraktItemCard extends StatefulWidget {
-  final StremioMeta item;
-  final double? progress; // null = don't show, 0-100 = percentage
-  final FocusNode? focusNode;
-  final VoidCallback onSources;
-  final VoidCallback onQuickPlay;
-  final bool showQuickPlay;
-  final KeyEventResult Function(KeyEvent, {bool? isQuickPlayFocused})
-  onKeyEvent;
-  final TraktListType? listType;
-  final void Function(TraktItemMenuAction action)? onMenuAction;
-  final bool hasBoundSource;
-
-  const _TraktItemCard({
-    required this.item,
-    this.progress,
-    this.focusNode,
-    required this.onSources,
-    required this.onQuickPlay,
-    this.showQuickPlay = true,
-    required this.onKeyEvent,
-    this.listType,
-    this.onMenuAction,
-    this.hasBoundSource = false,
-  });
-
-  @override
-  State<_TraktItemCard> createState() => _TraktItemCardState();
-}
-
-class _TraktItemCardState extends State<_TraktItemCard> {
-  bool _isFocused = false;
-  // For DPAD: track which button is focused by index
-  // Order: [Browse=0] [Quick Play=1?] [More=last?]
-  int _focusedButtonIndex = 0;
-  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
-      GlobalKey();
-
-  int get _buttonCount {
-    int count = 1; // Browse always exists
-    if (widget.showQuickPlay) count++;
-    if (widget.onMenuAction != null) count++;
-    return count;
-  }
-
-  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-  int? get _moreIndex => widget.onMenuAction != null ? _buttonCount - 1 : null;
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Left/Right arrow navigation between buttons
-    // Order: [Browse] [Quick Play?] [More?]
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_focusedButtonIndex > 0) {
-        setState(() => _focusedButtonIndex--);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_focusedButtonIndex < _buttonCount - 1) {
-        setState(() => _focusedButtonIndex++);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    // Select/Enter triggers the focused button
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_focusedButtonIndex == 0) {
-        widget.onSources();
-      } else if (_focusedButtonIndex == _quickPlayIndex) {
-        widget.onQuickPlay();
-      } else if (_focusedButtonIndex == _moreIndex) {
-        _menuKey.currentState?.showButtonMenu();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return widget.onKeyEvent(
-      event,
-      isQuickPlayFocused: _focusedButtonIndex == _quickPlayIndex,
-    );
-  }
-
-  String _stripHtml(String text) {
-    return text.replaceAll(RegExp(r'<[^>]*>'), '');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-          _focusedButtonIndex = 0;
-        });
-        if (focused) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
-          );
-        }
-      },
-      onKeyEvent: _handleKeyEvent,
-      child: GestureDetector(
-        onTap: widget.onSources,
-        child: AnimatedScale(
-          scale: _isFocused ? 1.02 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: _isFocused
-                    ? Colors.white.withValues(alpha: 0.35)
-                    : Colors.white.withValues(alpha: 0.06),
-                width: _isFocused ? 1.5 : 1,
-              ),
-              boxShadow: _isFocused
-                  ? [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        blurRadius: 16,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Stack(
-                children: [
-                  // Layer 1: Backdrop image
-                  Positioned.fill(
-                    child: _buildOttBackdropImage(
-                      widget.item.background ?? widget.item.poster,
-                    ),
-                  ),
-                  // Layer 2: Dark gradient scrim
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.95),
-                            Colors.black.withValues(alpha: 0.8),
-                            Colors.black.withValues(alpha: 0.5),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Layer 3: Content
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final useVerticalLayout = constraints.maxWidth < 500;
-                        return useVerticalLayout
-                            ? _buildVerticalLayout(theme, colorScheme)
-                            : _buildHorizontalLayout(theme, colorScheme);
-                      },
-                    ),
-                  ),
-                  // Layer 4: Progress bar
-                  if (widget.progress != null && widget.progress! > 0)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: (widget.progress! / 100).clamp(0.0, 1.0),
-                          child: Container(
-                            height: 3,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  _traktRed,
-                                  _traktRed.withValues(alpha: 0.7),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverflowMenu() {
-    final listType = widget.listType;
-    final isWatched =
-        (widget.progress ?? 0) >= 100 ||
-        (widget.progress == null &&
-            (listType == TraktListType.progress ||
-                listType == TraktListType.history));
-    final isHighlighted = _isFocused && _focusedButtonIndex == _moreIndex;
-
-    return Container(
-      decoration: isHighlighted
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.4),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                ),
-              ],
-            )
-          : null,
-      child: PopupMenuButton<TraktItemMenuAction>(
-        key: _menuKey,
-        icon: Icon(
-          Icons.more_vert,
-          size: 20,
-          color: isHighlighted
-              ? Colors.white
-              : Colors.white.withValues(alpha: 0.7),
-        ),
-        tooltip: 'More options',
-        color: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        onSelected: (action) => widget.onMenuAction?.call(action),
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: listType == TraktListType.watchlist
-                ? TraktItemMenuAction.removeFromWatchlist
-                : TraktItemMenuAction.addToWatchlist,
-            child: Row(
-              children: [
-                Icon(
-                  listType == TraktListType.watchlist
-                      ? Icons.bookmark_remove
-                      : Icons.bookmark_add_outlined,
-                  size: 18,
-                  color: const Color(0xFFFBBF24),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  listType == TraktListType.watchlist
-                      ? 'Remove from Watchlist'
-                      : 'Add to Watchlist',
-                ),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: listType == TraktListType.collection
-                ? TraktItemMenuAction.removeFromCollection
-                : TraktItemMenuAction.addToCollection,
-            child: Row(
-              children: [
-                Icon(
-                  listType == TraktListType.collection
-                      ? Icons.library_add_check
-                      : Icons.library_add_outlined,
-                  size: 18,
-                  color: const Color(0xFF60A5FA),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  listType == TraktListType.collection
-                      ? 'Remove from Collection'
-                      : 'Add to Collection',
-                ),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: isWatched
-                ? TraktItemMenuAction.markUnwatched
-                : TraktItemMenuAction.markWatched,
-            child: Row(
-              children: [
-                Icon(
-                  isWatched ? Icons.visibility_off : Icons.visibility,
-                  size: 18,
-                  color: const Color(0xFF34D399),
-                ),
-                const SizedBox(width: 12),
-                Text(isWatched ? 'Mark as Unwatched' : 'Mark as Watched'),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: listType == TraktListType.ratings
-                ? TraktItemMenuAction.removeRating
-                : TraktItemMenuAction.rate,
-            child: Row(
-              children: [
-                Icon(
-                  listType == TraktListType.ratings
-                      ? Icons.star_border
-                      : Icons.star_rate_rounded,
-                  size: 18,
-                  color: const Color(0xFFFBBF24),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  listType == TraktListType.ratings ? 'Remove Rating' : 'Rate',
-                ),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: listType == TraktListType.customList
-                ? TraktItemMenuAction.removeFromList
-                : TraktItemMenuAction.addToList,
-            child: Row(
-              children: [
-                Icon(
-                  listType == TraktListType.customList
-                      ? Icons.playlist_remove
-                      : Icons.playlist_add,
-                  size: 18,
-                  color: const Color(0xFFEC4899),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  listType == TraktListType.customList
-                      ? 'Remove from List'
-                      : 'Add to List...',
-                ),
-              ],
-            ),
-          ),
-          if (listType == TraktListType.progress)
-            const PopupMenuItem(
-              value: TraktItemMenuAction.removeFromPlayback,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: Color(0xFFEF4444),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Remove from Continue Watching'),
-                ],
-              ),
-            ),
-          PopupMenuItem(
-            value: TraktItemMenuAction.selectSource,
-            child: Row(
-              children: [
-                Icon(
-                  widget.hasBoundSource
-                      ? Icons.edit_rounded
-                      : Icons.link_rounded,
-                  size: 18,
-                  color: const Color(0xFF60A5FA),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  widget.hasBoundSource
-                      ? (widget.item.type == 'movie'
-                            ? 'Edit Source'
-                            : 'Edit Sources')
-                      : 'Select Source',
-                ),
-              ],
-            ),
-          ),
-          if (widget.item.type == 'series')
-            const PopupMenuItem(
-              value: TraktItemMenuAction.searchPacks,
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.inventory_2_outlined,
-                    size: 18,
-                    color: Color(0xFFFBBF24),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Search Season Packs'),
-                ],
-              ),
-            ),
-          const PopupMenuItem(
-            value: TraktItemMenuAction.addToStremioTv,
-            child: Row(
-              children: [
-                Icon(Icons.live_tv_rounded, size: 18, color: Color(0xFF22C55E)),
-                SizedBox(width: 12),
-                Text('Add to Stremio TV'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHorizontalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Poster with progress bar overlay
-        _buildPosterWithProgress(colorScheme, width: 80, height: 120),
-        const SizedBox(width: 14),
-        // Details
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.item.name,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  shadows: [const Shadow(blurRadius: 8, color: Colors.black)],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              _buildMetadataRow(theme, colorScheme),
-              if (widget.item.genres != null &&
-                  widget.item.genres!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: widget.item.genres!.take(3).map((genre) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                      ),
-                      child: Text(
-                        genre,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (widget.item.description != null &&
-                  widget.item.description!.isNotEmpty &&
-                  _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _stripHtml(widget.item.description!),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Action buttons (side-by-side)
-        _buildActionButton(
-          icon: Icons.list_rounded,
-          label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-          color: const Color(0xFF8B5CF6),
-          isHighlighted: _isFocused && _focusedButtonIndex == 0,
-          onTap: widget.onSources,
-        ),
-        if (widget.showQuickPlay) ...[
-          const SizedBox(width: 6),
-          _buildActionButton(
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            color: _traktRed,
-            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
-            onTap: widget.onQuickPlay,
-          ),
-        ],
-        if (widget.onMenuAction != null) ...[
-          const SizedBox(width: 4),
-          _buildOverflowMenu(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildVerticalLayout(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPosterWithProgress(colorScheme, width: 60, height: 85),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.item.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      shadows: [
-                        const Shadow(blurRadius: 8, color: Colors.black),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  _buildMetadataRow(theme, colorScheme),
-                  if (widget.item.genres != null &&
-                      widget.item.genres!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: widget.item.genres!.take(3).map((genre) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                            ),
-                          ),
-                          child: Text(
-                            genre,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        if (widget.item.description != null &&
-            widget.item.description!.isNotEmpty &&
-            _stripHtml(widget.item.description!).trim().isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            _stripHtml(widget.item.description!),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-              height: 1.4,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.list_rounded,
-                label: widget.item.type == 'series' ? 'Episodes' : 'Sources',
-                color: const Color(0xFF8B5CF6),
-                isHighlighted: _isFocused && _focusedButtonIndex == 0,
-                onTap: widget.onSources,
-              ),
-            ),
-            if (widget.showQuickPlay) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: 'Play',
-                  color: _traktRed,
-                  isHighlighted:
-                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
-                  onTap: widget.onQuickPlay,
-                ),
-              ),
-            ],
-            if (widget.onMenuAction != null) ...[
-              const SizedBox(width: 4),
-              _buildOverflowMenu(),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPoster(ColorScheme colorScheme) {
-    if (widget.item.poster != null) {
-      return Image.network(
-        widget.item.poster!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPosterPlaceholder(colorScheme),
-      );
-    }
-    return _buildPosterPlaceholder(colorScheme);
-  }
-
-  Widget _buildPosterPlaceholder(ColorScheme colorScheme) {
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      child: Icon(
-        widget.item.type == 'series' ? Icons.tv_rounded : Icons.movie_rounded,
-        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-        size: 32,
-      ),
-    );
-  }
-
-  Widget _buildPosterWithProgress(
-    ColorScheme colorScheme, {
-    required double width,
-    required double height,
-  }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: _buildPoster(colorScheme),
-      ),
-    );
-  }
-
-  Widget _buildMetadataRow(ThemeData theme, ColorScheme colorScheme) {
-    return Row(
-      children: [
-        // Type badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: widget.item.type == 'series'
-                ? const Color(0xFF34D399).withValues(alpha: 0.15)
-                : const Color(0xFF60A5FA).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            widget.item.type == 'series' ? 'Series' : 'Movie',
-            style: TextStyle(
-              color: widget.item.type == 'series'
-                  ? const Color(0xFF34D399)
-                  : const Color(0xFF60A5FA),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        if (widget.item.year != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            widget.item.year!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 12,
-            ),
-          ),
-        ],
-        if (widget.item.imdbRating != null) ...[
-          const SizedBox(width: 8),
-          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFBBF24)),
-          const SizedBox(width: 2),
-          Text(
-            widget.item.imdbRating!.toStringAsFixed(1),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-        if (widget.progress != null && widget.progress! > 0) ...[
-          const SizedBox(width: 8),
-          Text(
-            widget.progress! >= 100.0
-                ? 'Watched'
-                : '${widget.progress!.round()}%',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required bool isHighlighted,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isHighlighted ? 1.08 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isHighlighted ? color : color.withValues(alpha: 0.6),
-              width: 1,
-            ),
-            boxShadow: isHighlighted
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: isHighlighted
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isHighlighted
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Episode Card ───────────────────────────────────────────────────────────────
 
-/// Card widget for a single Trakt episode.
-/// Follows the same pattern as [_TraktItemCard] with DPAD navigation support.
+/// Card widget for a single Trakt episode (the episode list stays a list).
 class _TraktEpisodeCard extends StatefulWidget {
   final TraktEpisode episode;
   final String? showPosterUrl;
