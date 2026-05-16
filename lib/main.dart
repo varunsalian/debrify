@@ -2298,17 +2298,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         Expanded(
                           child: SafeArea(
                             left: false,
-                            child: Column(
+                            child: Stack(
                               children: [
-                                // Top strip keeps the frameless window
-                                // draggable now that the AppBar is gone.
-                                const WindowDragArea(
-                                  child: SizedBox(
-                                    height: 26,
-                                    width: double.infinity,
+                                // Page fills the whole area so its own
+                                // background covers the animated backdrop.
+                                Positioned.fill(child: _buildAnimatedPage()),
+                                // Invisible top strip keeps the frameless
+                                // window draggable now that the AppBar is
+                                // gone — overlaid (not a reserved row) so it
+                                // doesn't expose the backdrop glow. Sits
+                                // above the screen's own header padding, so
+                                // it doesn't block any controls.
+                                const Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: WindowDragArea(
+                                    child: SizedBox(height: 26),
                                   ),
                                 ),
-                                Expanded(child: _buildAnimatedPage()),
                               ],
                             ),
                           ),
