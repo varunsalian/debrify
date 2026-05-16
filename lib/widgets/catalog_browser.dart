@@ -1841,6 +1841,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       _episodeSeasons = [];
       _selectedSeasonNumber = initialSeason ?? 1;
     });
+    // Hide the host bar as soon as the loading state is shown. Every
+    // terminal failure path below restores it (via onEpisodeModeExited or
+    // _fallbackToDirectSearch) so a failed entry can't leave it hidden.
+    widget.onEpisodeModeEntered?.call();
 
     // Load bound sources and watch progress for this show
     _loadBoundSourceForShow();
@@ -1859,6 +1863,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           _isLoadingEpisodes = false;
           _episodeErrorMessage = 'No addon selected';
         });
+        widget.onEpisodeModeExited?.call();
         return;
       }
 
@@ -1941,9 +1946,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
       });
-      // Notify only once the episode list is actually on screen, so a
-      // failed entry (fallback to direct search) never hides the host bar.
-      widget.onEpisodeModeEntered?.call();
 
       // Scroll to the target episode and focus it
       final targetEpIndex = initialEpisode != null

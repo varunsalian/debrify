@@ -3414,6 +3414,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _episodeController.clear();
 
     setState(() {
+      // Leaving the episode guide for a catalog/direct-search selection
+      // (incl. CatalogBrowser's _fallbackToDirectSearch) — always restore
+      // the host bar; episode mode hid it on entry.
+      _inEpisodeGuide = false;
       _searchMode = SearchMode.catalog;
       _selectedImdbTitle = ImdbTitleResult(
         imdbId: selection.imdbId,

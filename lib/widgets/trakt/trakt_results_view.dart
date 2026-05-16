@@ -1676,6 +1676,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
       _selectedSeasonNumber = 1;
       _episodeWatchProgress = {};
     });
+    // Hide the host bar as soon as the loading state is shown. Every
+    // terminal failure path below restores it via onEpisodeModeExited so
+    // a failed/empty entry can never leave the bar permanently hidden.
+    widget.onEpisodeModeEntered?.call();
 
     for (final node in _episodeFocusNodes) {
       node.dispose();
@@ -1704,6 +1708,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
           _seasons = [];
           _isLoadingEpisodes = false;
         });
+        widget.onEpisodeModeExited?.call();
         return;
       }
 
@@ -1768,9 +1773,6 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _selectedSeasonNumber = targetSeason;
         _isLoadingEpisodes = false;
       });
-      // Notify only once the episode list is actually on screen, so a
-      // failed/empty entry never hides the host bar.
-      widget.onEpisodeModeEntered?.call();
 
       // Load bound source for this show (non-blocking)
       _loadBoundSourceForShow();
@@ -1829,6 +1831,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _isLoadingEpisodes = false;
         _episodeErrorMessage = 'Failed to load seasons: $e';
       });
+      widget.onEpisodeModeExited?.call();
     }
   }
 
