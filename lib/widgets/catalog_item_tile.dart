@@ -46,13 +46,18 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
     final poster = item.poster;
     final rating = item.imdbRating;
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
+    // TVs are low-powered: keep the focus highlight but make it instant
+    // (no per-frame tweening of large posters/shadows).
+    final fx = widget.isTelevision
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
 
     final card = AnimatedScale(
-      duration: const Duration(milliseconds: 180),
+      duration: fx,
       curve: Curves.easeOutCubic,
       scale: _active ? 1.08 : 1.0,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: fx,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
@@ -227,7 +232,9 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               context,
               alignment: 0.5,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-              duration: const Duration(milliseconds: 280),
+              duration: widget.isTelevision
+                  ? Duration.zero
+                  : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );
           });

@@ -63,9 +63,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     );
+    // TVs are low-powered — skip the staggered entrance reveal entirely
+    // (jump straight to the final state, controller stays idle).
+    if (widget.isTelevision) _revealCtrl.value = 1.0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _revealCtrl.forward();
+      if (!widget.isTelevision) _revealCtrl.forward();
       // Land focus on Play (or Sources when Play is hidden, e.g. PikPak).
       (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
     });
@@ -82,7 +85,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isWide = size.width >= 900;
+    final isWide = _wide;
     final backdropUrl = widget.item.background ?? widget.item.poster;
 
     return Scaffold(
@@ -97,7 +100,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             left: 0,
             right: 0,
             height: isWide ? size.height : size.height * 0.55,
-            child: _Backdrop(url: backdropUrl, isWide: isWide),
+            child: _Backdrop(
+              url: backdropUrl,
+              isWide: isWide,
+              animate: !widget.isTelevision,
+            ),
           ),
 
           // ── Content ──────────────────────────────────────────────────────
@@ -116,7 +123,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             left: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(widget.isTelevision ? 28 : 8),
                 child: _GlassIconButton(
                   icon: Icons.arrow_back_rounded,
                   onTap: () => Navigator.of(context).pop(),
@@ -144,17 +151,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget _buildWideContent(Size size) {
-    // Content sheet: bottom-left, max ~52% width, vertically aligned to
-    // the lower third so the artwork breathes above it.
-    final maxWidth = (size.width * 0.55).clamp(420.0, 720.0);
+    // Content sheet bottom-left over the full-bleed art. TVs overscan, so
+    // keep it well off the physical bezel.
+    final tv = widget.isTelevision;
+    final maxWidth = (size.width * 0.56).clamp(440.0, 760.0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(48, 0, 24, 40),
+      padding: EdgeInsets.fromLTRB(tv ? 64 : 48, 0, tv ? 48 : 24, tv ? 44 : 40),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
+            // Don't clip the focus glow on Play/Sources/quick actions.
+            clipBehavior: Clip.none,
             child: _buildContentColumn(),
           ),
         ),
@@ -162,25 +172,41 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     );
   }
 
-  bool get _wide => MediaQuery.of(context).size.width >= 900;
+  /// The cinematic bottom-left sheet is the premium look for landscape
+  /// screens (incl. TV). Portrait/narrow windows use the single-scroll
+  /// phone layout instead.
+  bool get _wide {
+    if (widget.isTelevision) return true;
+    final s = MediaQuery.of(context).size;
+    return s.width >= 900 && s.width > s.height;
+  }
+
+  /// Limited vertical space (Android TV is only ~540 logical px tall at
+  /// DPR 2.0) — shrink typography/spacing so the cinematic layout still
+  /// fits on one screen instead of overflowing.
+  bool get _tight => MediaQuery.of(context).size.height < 620;
 
   /// Wide: cinematic bottom-left sheet — info first, Play/Sources at the end.
   Widget _buildContentColumn() {
-    final w = _wide;
+    final t = _tight; // vertically-constrained (e.g. Android TV 540px)
     final children = <Widget>[
       _secEyebrow(0.00),
-      SizedBox(height: w ? 10 : 8),
+      SizedBox(height: t ? 6 : 10),
       _secTitle(0.10),
-      SizedBox(height: w ? 14 : 10),
-      _secMeta(0.22),
+      SizedBox(height: t ? 8 : 14),
+      _secMeta(0.20),
     ];
-    final g = _secGenres(0.34);
-    if (g != null) children..add(SizedBox(height: w ? 18 : 14))..add(g);
-    final d = _secDescription(0.42);
-    if (d != null) children..add(SizedBox(height: w ? 22 : 18))..add(d);
-    final q = _secQuickActions(0.50);
-    if (q != null) children..add(SizedBox(height: w ? 24 : 20))..add(q);
-    children..add(SizedBox(height: w ? 30 : 22))..add(_buildActionRow(0.58));
+    final g = _secGenres(0.30);
+    if (g != null) children..add(SizedBox(height: t ? 10 : 18))..add(g);
+    // Play/Sources sit high (after genres) so they're visible without
+    // scrolling, then the synopsis and quick-action grid.
+    children
+      ..add(SizedBox(height: t ? 16 : 26))
+      ..add(_buildActionRow(0.40));
+    final d = _secDescription(0.50);
+    if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
+    final q = _secQuickActions(0.58);
+    if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -238,12 +264,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         start: start,
         child: Text(
           widget.item.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white,
-            fontSize: _wide ? 44 : 30,
+            fontSize: _wide ? (_tight ? 30 : 44) : 28,
             fontWeight: FontWeight.w900,
             letterSpacing: -1.0,
-            height: 1.0,
+            height: 1.05,
             shadows: const [
               Shadow(
                 color: Color(0xB3000000),
@@ -265,7 +293,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       child: DefaultTextStyle(
         style: TextStyle(
           color: Colors.white.withValues(alpha: 0.78),
-          fontSize: _wide ? 14 : 13,
+          fontSize: _wide && !_tight ? 14 : 13,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
           shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
@@ -320,6 +348,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       start: start,
       child: _QuickActions(
         options: widget.traktMenuOptions,
+        tv: widget.isTelevision,
         onSelected: widget.onTraktAction!,
       ),
     );
@@ -334,6 +363,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       child: _Description(
         text: description,
         wide: _wide,
+        dense: _tight,
+        collapsedLines: _tight ? 2 : 4,
         expanded: _descriptionExpanded,
         onToggle: () => setState(
           () => _descriptionExpanded = !_descriptionExpanded,
@@ -356,6 +387,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         hasBoundSource: widget.hasBoundSource,
         playFocus: _playFocus,
         browseFocus: _browseFocus,
+        tv: widget.isTelevision,
         onPlay: () {
           Navigator.of(context).pop();
           widget.onPlay();
@@ -430,7 +462,15 @@ class _Reveal extends StatelessWidget {
 class _Backdrop extends StatefulWidget {
   final String? url;
   final bool isWide;
-  const _Backdrop({required this.url, required this.isWide});
+
+  /// When false (TV) the Ken-Burns push-in and fade-in are skipped — a
+  /// static image, so there's no continuous repaint on low-power devices.
+  final bool animate;
+  const _Backdrop({
+    required this.url,
+    required this.isWide,
+    this.animate = true,
+  });
 
   @override
   State<_Backdrop> createState() => _BackdropState();
@@ -438,21 +478,64 @@ class _Backdrop extends StatefulWidget {
 
 class _BackdropState extends State<_Backdrop>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ken;
+  AnimationController? _ken;
 
   @override
   void initState() {
     super.initState();
-    _ken = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 22),
-    )..repeat(reverse: true);
+    if (widget.animate) {
+      _ken = AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: 22),
+      )..repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
-    _ken.dispose();
+    _ken?.dispose();
     super.dispose();
+  }
+
+  Widget _image(String url) {
+    final ken = _ken;
+
+    // Static (TV): no fade-in, no Ken-Burns — cheapest possible.
+    if (ken == null) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        errorBuilder: (_, __, ___) => Container(color: Colors.black),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: ken,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(ken.value);
+        return Transform.scale(
+          scale: 1.0 + 0.07 * t,
+          alignment: Alignment(0, -0.7 + 0.2 * t),
+          child: child,
+        );
+      },
+      child: Image.network(
+        url,
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        frameBuilder: (_, child, frame, wasSync) {
+          if (wasSync) return child;
+          return AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 650),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
+        errorBuilder: (_, __, ___) => Container(color: Colors.black),
+      ),
+    );
   }
 
   @override
@@ -465,32 +548,7 @@ class _BackdropState extends State<_Backdrop>
         fit: StackFit.expand,
         children: [
           if (url != null && url.isNotEmpty)
-            AnimatedBuilder(
-              animation: _ken,
-              builder: (context, child) {
-                final t = Curves.easeInOut.transform(_ken.value);
-                return Transform.scale(
-                  scale: 1.0 + 0.07 * t,
-                  alignment: Alignment(0, -0.7 + 0.2 * t),
-                  child: child,
-                );
-              },
-              child: Image.network(
-                url,
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                frameBuilder: (_, child, frame, wasSync) {
-                  if (wasSync) return child;
-                  return AnimatedOpacity(
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(milliseconds: 650),
-                    curve: Curves.easeOut,
-                    child: child,
-                  );
-                },
-                errorBuilder: (_, __, ___) => Container(color: Colors.black),
-              ),
-            )
+            _image(url)
           else
             Container(color: Colors.black),
 
@@ -590,6 +648,8 @@ class _GenreChip extends StatelessWidget {
 class _Description extends StatelessWidget {
   final String text;
   final bool wide;
+  final bool dense;
+  final int collapsedLines;
   final bool expanded;
   final VoidCallback onToggle;
   const _Description({
@@ -597,14 +657,16 @@ class _Description extends StatelessWidget {
     required this.wide,
     required this.expanded,
     required this.onToggle,
+    this.dense = false,
+    this.collapsedLines = 4,
   });
 
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
       color: Colors.white.withValues(alpha: 0.82),
-      fontSize: wide ? 17 : 15,
-      height: 1.5,
+      fontSize: dense ? 13 : (wide ? 17 : 15),
+      height: dense ? 1.4 : 1.5,
       letterSpacing: 0.1,
     );
 
@@ -612,7 +674,7 @@ class _Description extends StatelessWidget {
       builder: (context, constraints) {
         final tp = TextPainter(
           text: TextSpan(text: text, style: style),
-          maxLines: 4,
+          maxLines: collapsedLines,
           textDirection: TextDirection.ltr,
         )..layout(maxWidth: constraints.maxWidth);
         final overflows = tp.didExceedMaxLines;
@@ -623,7 +685,7 @@ class _Description extends StatelessWidget {
             Text(
               text,
               style: style,
-              maxLines: expanded ? null : 4,
+              maxLines: expanded ? null : collapsedLines,
               overflow: expanded ? TextOverflow.visible : TextOverflow.fade,
             ),
             if (overflows) ...[
@@ -657,6 +719,7 @@ class _ActionRow extends StatelessWidget {
   final bool hasBoundSource;
   final FocusNode playFocus;
   final FocusNode browseFocus;
+  final bool tv;
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
 
@@ -667,6 +730,7 @@ class _ActionRow extends StatelessWidget {
     required this.hasBoundSource,
     required this.playFocus,
     required this.browseFocus,
+    required this.tv,
     required this.onPlay,
     required this.onBrowse,
   });
@@ -683,6 +747,7 @@ class _ActionRow extends StatelessWidget {
       label: browseLabel,
       filled: !showQuickPlay,
       compact: compact,
+      tv: tv,
       onTap: onBrowse,
       tinted: hasBoundSource,
     );
@@ -695,6 +760,7 @@ class _ActionRow extends StatelessWidget {
       label: 'Play',
       filled: true,
       compact: compact,
+      tv: tv,
       accent: _kNetflixRed,
       onTap: onPlay,
     );
@@ -732,10 +798,12 @@ const Color _kNetflixRed = Color(0xFFE50914);
 /// users always see every action. Items are a fixed width so rows align.
 class _QuickActions extends StatelessWidget {
   final List<TraktMenuOption> options;
+  final bool tv;
   final void Function(TraktItemMenuAction) onSelected;
 
   const _QuickActions({
     required this.options,
+    required this.tv,
     required this.onSelected,
   });
 
@@ -762,6 +830,7 @@ class _QuickActions extends StatelessWidget {
             for (final o in options)
               _QuickAction(
                 option: o,
+                tv: tv,
                 onTap: () => onSelected(o.action),
               ),
           ],
@@ -773,10 +842,12 @@ class _QuickActions extends StatelessWidget {
 
 class _QuickAction extends StatefulWidget {
   final TraktMenuOption option;
+  final bool tv;
   final VoidCallback onTap;
 
   const _QuickAction({
     required this.option,
+    required this.tv,
     required this.onTap,
   });
 
@@ -814,7 +885,9 @@ class _QuickActionState extends State<_QuickAction> {
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: AnimatedScale(
-            duration: const Duration(milliseconds: 150),
+            duration: widget.tv
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
             curve: Curves.easeOutCubic,
             scale: _active ? 1.06 : 1.0,
             child: SizedBox(
@@ -827,7 +900,9 @@ class _QuickActionState extends State<_QuickAction> {
                     alignment: Alignment.center,
                     children: [
                       AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
+                        duration: widget.tv
+                            ? Duration.zero
+                            : const Duration(milliseconds: 150),
                         width: 54,
                         height: 54,
                         decoration: BoxDecoration(
@@ -927,6 +1002,9 @@ class _PrimaryButton extends StatefulWidget {
   /// Narrow screens: shorter button, smaller icon/text, tighter spacing.
   final bool compact;
 
+  /// TV: skip the focus tween (instant), keep the highlight.
+  final bool tv;
+
   /// Optional brand accent for a filled button. Falls back to white.
   final Color? accent;
   final VoidCallback onTap;
@@ -938,6 +1016,7 @@ class _PrimaryButton extends StatefulWidget {
     required this.filled,
     required this.onTap,
     this.compact = false,
+    this.tv = false,
     this.tinted = false,
     this.accent,
   });
@@ -999,11 +1078,15 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedScale(
-          duration: const Duration(milliseconds: 160),
+          duration: widget.tv
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,
           scale: _focused ? 1.035 : 1.0,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
+            duration: widget.tv
+                ? Duration.zero
+                : const Duration(milliseconds: 160),
             height: widget.compact ? 48 : 54,
             padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
             decoration: BoxDecoration(

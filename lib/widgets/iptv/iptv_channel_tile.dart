@@ -44,12 +44,17 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
         ? 'LIVE'
         : (ch.contentType == 'vod' ? 'VOD' : null);
 
+    // TVs are low-powered: keep the focus highlight, drop the tweening.
+    final fx = widget.isTelevision
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+
     final card = AnimatedScale(
-      duration: const Duration(milliseconds: 180),
+      duration: fx,
       curve: Curves.easeOutCubic,
       scale: _active ? 1.06 : 1.0,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: fx,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
@@ -180,7 +185,9 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
               context,
               alignment: 0.5,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-              duration: const Duration(milliseconds: 280),
+              duration: widget.isTelevision
+                  ? Duration.zero
+                  : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );
           });
