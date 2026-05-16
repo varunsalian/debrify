@@ -20,6 +20,7 @@ import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
 import 'catalog_item_tile.dart';
 import 'episode_tile.dart';
+import 'home/home_theme.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
 
@@ -2066,14 +2067,14 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1A1A2E), _surfaceDark],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 0.5,
           ),
-          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
@@ -2107,16 +2108,24 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                 return KeyEventResult.ignored;
               },
               child: Container(
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  shape: BoxShape.circle,
                   color: _episodeBackButtonFocusNode.hasFocus
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.transparent,
-                  border: _episodeBackButtonFocusNode.hasFocus
-                      ? Border.all(color: const Color(0xFF60A5FA), width: 2)
-                      : null,
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : Colors.white.withValues(alpha: 0.06),
+                  border: Border.all(
+                    color: _episodeBackButtonFocusNode.hasFocus
+                        ? HomeTheme.focusGold
+                        : Colors.white.withValues(alpha: 0.14),
+                    width: _episodeBackButtonFocusNode.hasFocus ? 2 : 1,
+                  ),
                 ),
                 child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  color: Colors.white,
                   icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: _exitEpisodeMode,
                   tooltip: 'Back to shows',
@@ -2210,34 +2219,33 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: hasFocus
-                  ? const Color(0xFF60A5FA)
-                  : Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.3),
+                  ? HomeTheme.focusGold
+                  : Colors.white.withValues(alpha: 0.10),
               width: hasFocus ? 2.0 : 1.0,
             ),
             boxShadow: hasFocus
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
-                      blurRadius: 12,
+                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      blurRadius: 14,
                       spreadRadius: 0,
                     ),
                   ]
                 : null,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
               focusNode: _episodeSeasonDropdownFocusNode,
               focusColor: Colors.transparent,
               value: _selectedSeasonNumber,
               isDense: true,
-              dropdownColor: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: const Color(0xFF14141C),
               icon: Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 20,
@@ -2460,10 +2468,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 }
 
 
-// ─── Shared helpers ─────────────────────────────────────────────────────────
-
-const _surfaceDark = Color(0xFF06080F);
-
 // ─── Select Source Button for catalog episode browser ────────────────────────
 
 class _CatalogSelectSourceButton extends StatefulWidget {
@@ -2539,25 +2543,25 @@ class _CatalogSelectSourceButtonState
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.hasBoundSource
-                ? const Color(0xFF60A5FA).withValues(alpha: 0.15)
-                : Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
+                ? HomeTheme.focusGold.withValues(alpha: 0.14)
+                : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
-                  ? const Color(0xFF60A5FA)
+                  ? HomeTheme.focusGold
                   : widget.hasBoundSource
-                  ? const Color(0xFF60A5FA).withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.15),
+                  ? HomeTheme.focusGold.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.14),
               width: _isFocused ? 2 : 1,
             ),
             boxShadow: _isFocused
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
-                      blurRadius: 8,
+                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      blurRadius: 12,
                     ),
                   ]
                 : null,
@@ -2571,10 +2575,10 @@ class _CatalogSelectSourceButtonState
                     : Icons.link_off_rounded,
                 size: 16,
                 color: widget.hasBoundSource
-                    ? const Color(0xFF60A5FA)
-                    : Colors.white.withValues(alpha: 0.6),
+                    ? HomeTheme.focusGold
+                    : Colors.white.withValues(alpha: 0.85),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Text(
                 widget.hasBoundSource
                     ? (widget.sourceCount > 1
@@ -2583,10 +2587,10 @@ class _CatalogSelectSourceButtonState
                     : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource
-                      ? const Color(0xFF60A5FA)
-                      : Colors.white.withValues(alpha: 0.6),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                      ? HomeTheme.focusGold
+                      : Colors.white.withValues(alpha: 0.85),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
