@@ -250,6 +250,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
 
         // Actions
         _ActionRow(
+          compact: !wide,
           showQuickPlay: widget.showQuickPlay,
           isSeries: item.type == 'series',
           hasBoundSource: widget.hasBoundSource,
@@ -448,6 +449,7 @@ class _Description extends StatelessWidget {
 // ── Action row (PLAY + BROWSE) ──────────────────────────────────────────────
 
 class _ActionRow extends StatelessWidget {
+  final bool compact;
   final bool showQuickPlay;
   final bool isSeries;
   final bool hasBoundSource;
@@ -460,6 +462,7 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback onBrowse;
 
   const _ActionRow({
+    required this.compact,
     required this.showQuickPlay,
     required this.isSeries,
     required this.hasBoundSource,
@@ -477,12 +480,15 @@ class _ActionRow extends StatelessWidget {
     final browseLabel = isSeries ? 'Episodes' : 'Sources';
     final browseIcon = isSeries ? Icons.list_alt_rounded : Icons.layers_rounded;
     final hasMore = traktMenuItems.isNotEmpty && onTraktAction != null;
+    final gap = compact ? 8.0 : 10.0;
+    final moreWidth = compact ? 48.0 : 56.0;
 
     final browse = _PrimaryButton(
       focusNode: browseFocus,
       icon: browseIcon,
       label: browseLabel,
       filled: !showQuickPlay,
+      compact: compact,
       onTap: onBrowse,
       tinted: hasBoundSource,
     );
@@ -490,6 +496,7 @@ class _ActionRow extends StatelessWidget {
     final more = hasMore
         ? _MoreButton(
             focusNode: moreFocus,
+            compact: compact,
             items: traktMenuItems,
             onSelected: onTraktAction!,
           )
@@ -499,31 +506,54 @@ class _ActionRow extends StatelessWidget {
       if (more == null) return browse;
       return Row(
         children: [
-          Expanded(flex: 4, child: browse),
-          const SizedBox(width: 10),
-          SizedBox(width: 56, child: more),
+          Expanded(child: browse),
+          SizedBox(width: gap),
+          SizedBox(width: moreWidth, child: more),
+        ],
+      );
+    }
+
+    final play = _PrimaryButton(
+      focusNode: playFocus,
+      icon: Icons.play_arrow_rounded,
+      label: 'Play',
+      filled: true,
+      compact: compact,
+      accent: _kNetflixRed,
+      onTap: onPlay,
+    );
+
+    // Narrow screens: stack a full-width Play on top of the secondary
+    // actions so every label has room and never gets clipped.
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          play,
+          SizedBox(height: gap),
+          if (more == null)
+            browse
+          else
+            Row(
+              children: [
+                Expanded(child: browse),
+                SizedBox(width: gap),
+                SizedBox(width: moreWidth, child: more),
+              ],
+            ),
         ],
       );
     }
 
     return Row(
       children: [
-        Expanded(
-          flex: 3,
-          child: _PrimaryButton(
-            focusNode: playFocus,
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            filled: true,
-            accent: _kNetflixRed,
-            onTap: onPlay,
-          ),
-        ),
-        const SizedBox(width: 10),
+        Expanded(flex: 3, child: play),
+        SizedBox(width: gap),
         Expanded(flex: 2, child: browse),
         if (more != null) ...[
-          const SizedBox(width: 10),
-          SizedBox(width: 56, child: more),
+          SizedBox(width: gap),
+          SizedBox(width: moreWidth, child: more),
         ],
       ],
     );
@@ -536,11 +566,13 @@ const Color _kNetflixRed = Color(0xFFE50914);
 /// and opens a popup menu with the supplied Trakt items.
 class _MoreButton extends StatefulWidget {
   final FocusNode focusNode;
+  final bool compact;
   final List<PopupMenuEntry<TraktItemMenuAction>> items;
   final void Function(TraktItemMenuAction) onSelected;
 
   const _MoreButton({
     required this.focusNode,
+    required this.compact,
     required this.items,
     required this.onSelected,
   });
@@ -573,7 +605,7 @@ class _MoreButtonState extends State<_MoreButton> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        height: 54,
+        height: widget.compact ? 48 : 54,
         decoration: BoxDecoration(
           color: _focused
               ? Colors.white.withValues(alpha: 0.18)
@@ -609,11 +641,11 @@ class _MoreButtonState extends State<_MoreButton> {
           ),
           onSelected: widget.onSelected,
           itemBuilder: (_) => widget.items,
-          child: const Center(
+          child: Center(
             child: Icon(
               Icons.more_horiz_rounded,
               color: Colors.white,
-              size: 22,
+              size: widget.compact ? 20 : 22,
             ),
           ),
         ),
@@ -632,6 +664,9 @@ class _PrimaryButton extends StatefulWidget {
   final bool filled;
   final bool tinted;
 
+  /// Narrow screens: shorter button, smaller icon/text, tighter spacing.
+  final bool compact;
+
   /// Optional brand accent for a filled button. Falls back to white.
   final Color? accent;
   final VoidCallback onTap;
@@ -642,6 +677,7 @@ class _PrimaryButton extends StatefulWidget {
     required this.label,
     required this.filled,
     required this.onTap,
+    this.compact = false,
     this.tinted = false,
     this.accent,
   });
@@ -695,7 +731,8 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          height: 54,
+          height: widget.compact ? 48 : 54,
+          padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(10),
@@ -715,15 +752,20 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(widget.icon, color: fg, size: 24),
-              const SizedBox(width: 10),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
+              Icon(widget.icon, color: fg, size: widget.compact ? 20 : 24),
+              SizedBox(width: widget.compact ? 7 : 10),
+              Flexible(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: widget.compact ? 14 : 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],
