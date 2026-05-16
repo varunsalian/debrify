@@ -287,13 +287,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _quickPlayPending = false;
   AdvancedSearchSelection? _quickPlaySelection;
 
-  // Movie Quick Play mask — for movies (which need no episode guide), cover
-  // the torrent-search UI with a loading panel from tap until auto-play takes
-  // over, so the user never sees the search screen populate. Torn down at
-  // every Quick Play terminal point; on failure the search UI is revealed as
-  // a graceful fallback. Series are unaffected (they need the episode guide).
+  // Quick Play mask — Quick Play (a movie, or a specific series episode)
+  // never needs the episode guide, so cover the torrent-search UI with a
+  // loading panel from tap until auto-play takes over. Torn down at every
+  // Quick Play terminal point; on failure the search UI is revealed as a
+  // graceful fallback. NOTE: episode-guide *browsing* uses _enterEpisodeMode
+  // (a different path) and is unaffected by this mask.
   bool _quickPlayMovieMasking = false;
   String? _quickPlayMovieMaskTitle;
+  // Epoch for the active masked Quick Play attempt. Bumped when a new
+  // attempt starts or the user cancels, so a long pre-search phase (e.g.
+  // the series IMDb metadata probe) can detect it was superseded/cancelled
+  // and bail before auto-playing. See _handleCatalogItemSelected.
+  int _quickPlayMaskGeneration = 0;
 
   // Select Source mode - user is picking a torrent to bind to a series
   bool _isSelectSourceMode = false;
@@ -3430,6 +3436,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _cameFromCatalogBrowse = true;
     _previousSearchQuery = _searchController.text;
 
+    // Snapshot the Quick Play epoch before any pre-search await below
+    // (notably the series IMDb metadata probe). If it changes before we
+    // kick off the search, this attempt was cancelled or superseded.
+    final int maskGenAtEntry = _quickPlayMaskGeneration;
+
     // Clear any stale season/episode UI state before applying the new
     // selection. Explicit episode flows re-populate these immediately below.
     _seasonController.clear();
@@ -3532,6 +3543,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Now search with season data available (if fetched)
     if (!mounted) return;
+    // Cancelled/superseded during the pre-search phase (e.g. user hit
+    // Cancel on the mask while the series metadata probe was in flight):
+    // abandon silently. State was already reset by _cancelQuickPlayMovieMask
+    // or is now owned by the newer attempt — do not auto-play.
+    if (_quickPlayMaskGeneration != maskGenAtEntry) return;
     _createAdvancedSelectionAndSearch();
   }
 
@@ -4138,14 +4154,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // Set quick play pending state.
-    // Movies need no episode guide — mask the search UI so the user never
-    // sees it populate before auto-play. Series keep the existing flow.
-    final maskMovie = !selection.isSeries;
+    // Quick Play (a movie OR a specific series episode) never needs the
+    // episode guide, so mask the search UI until auto-play takes over.
+    // Episode-guide browsing is a different path (_enterEpisodeMode) and
+    // is unaffected. Bump the generation so a cancel — or a newer Quick
+    // Play (e.g. next-episode auto-advance) — during the pre-search phase
+    // invalidates this attempt before it can auto-play.
+    _quickPlayMaskGeneration++;
     setState(() {
       _quickPlayPending = true;
       _quickPlaySelection = selection;
-      _quickPlayMovieMasking = maskMovie;
-      _quickPlayMovieMaskTitle = maskMovie ? selection.title : null;
+      _quickPlayMovieMasking = true;
+      _quickPlayMovieMaskTitle = selection.title;
     });
 
     // Trigger the same flow as regular catalog selection
@@ -12120,6 +12140,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   void _cancelQuickPlayMovieMask() {
     if (!_quickPlayMovieMasking) return;
     _activeSearchRequestId++;
+    // Invalidate the attempt so a pre-search phase still awaiting (e.g.
+    // the series metadata probe in _handleCatalogItemSelected) bails out
+    // instead of proceeding to auto-play after the user cancelled.
+    _quickPlayMaskGeneration++;
     if (!mounted) {
       _quickPlayPending = false;
       _quickPlayMovieMasking = false;
