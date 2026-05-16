@@ -2418,13 +2418,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _boundSources.containsKey(item.effectiveImdbId ?? item.id);
 
     final traktItems = hasTrakt
-        ? buildTraktAddOnlyMenuItems(
+        ? buildTraktAddOnlyMenuOptions(
             isSeries: item.type == 'series',
             isMovie: item.type == 'movie',
             hasBoundSource: hasBoundSource,
             isTraktAuthenticated: _isTraktAuthenticated,
           )
-        : const <PopupMenuEntry<TraktItemMenuAction>>[];
+        : const <TraktMenuOption>[];
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -2433,7 +2433,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           isTelevision: widget.isTelevision,
           showQuickPlay: widget.showQuickPlay,
           hasBoundSource: hasBoundSource,
-          traktMenuItems: traktItems,
+          traktMenuOptions: traktItems,
           onTraktAction: (action) => handleTraktMenuAction(
             context,
             item,

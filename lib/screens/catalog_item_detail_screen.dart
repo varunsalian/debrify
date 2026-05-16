@@ -22,11 +22,11 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// Opens the sources/episodes flow (was "Sources" / "Episodes" in the list).
   final VoidCallback onBrowse;
 
-  /// Pre-built Trakt menu items. When non-empty a "More" button appears
-  /// next to Play/Browse.
-  final List<PopupMenuEntry<TraktItemMenuAction>> traktMenuItems;
+  /// Trakt actions. When non-empty a "More" button appears next to
+  /// Play/Browse and opens the cinematic action sheet.
+  final List<TraktMenuOption> traktMenuOptions;
 
-  /// Invoked when the user picks a Trakt action from the "More" menu.
+  /// Invoked when the user picks a Trakt action from the "More" sheet.
   final void Function(TraktItemMenuAction action)? onTraktAction;
 
   const CatalogItemDetailScreen({
@@ -37,7 +37,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.isTelevision = false,
     this.showQuickPlay = true,
     this.hasBoundSource = false,
-    this.traktMenuItems = const [],
+    this.traktMenuOptions = const [],
     this.onTraktAction,
   });
 
@@ -46,30 +46,37 @@ class CatalogItemDetailScreen extends StatefulWidget {
       _CatalogItemDetailScreenState();
 }
 
-class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
+class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
+    with SingleTickerProviderStateMixin {
   final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
-  final FocusNode _moreFocus = FocusNode(debugLabel: 'detail-more');
 
   bool _descriptionExpanded = false;
+
+  /// Drives the staggered entrance reveal of the content sections.
+  late final AnimationController _revealCtrl;
 
   @override
   void initState() {
     super.initState();
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
-        }
-      });
-    }
+    _revealCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _revealCtrl.forward();
+      if (widget.isTelevision) {
+        (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();
-    _moreFocus.dispose();
     super.dispose();
   }
 
@@ -124,36 +131,16 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
   }
 
   Widget _buildNarrowContent(Size size) {
-    // Actions are pinned to the bottom so they're always reachable without
-    // scrolling. The info block (title…description) bottom-anchors in the
-    // space above and scrolls only if it's taller than that space.
-    return Column(
-      children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [_buildInfoColumn()],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: _buildActionRow(),
-        ),
-      ],
+    // Prime-style single natural scroll: hero, then title/meta/genres, then
+    // Play/Sources high up, the quick-action row, and the synopsis. Nothing
+    // is pinned — the important controls already sit in the first screenful.
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.only(top: size.height * 0.26, bottom: 36),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: _buildNarrowColumn(),
+      ),
     );
   }
 
@@ -176,141 +163,210 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
     );
   }
 
-  /// Wide layout: info + actions stacked in one scrollable, bottom-left sheet.
+  bool get _wide => MediaQuery.of(context).size.width >= 900;
+
+  /// Wide: cinematic bottom-left sheet — info first, Play/Sources at the end.
   Widget _buildContentColumn() {
-    final wide = MediaQuery.of(context).size.width >= 900;
+    final w = _wide;
+    final children = <Widget>[
+      _secEyebrow(0.00),
+      SizedBox(height: w ? 10 : 8),
+      _secTitle(0.10),
+      SizedBox(height: w ? 14 : 10),
+      _secMeta(0.22),
+    ];
+    final g = _secGenres(0.34);
+    if (g != null) children..add(SizedBox(height: w ? 18 : 14))..add(g);
+    final d = _secDescription(0.42);
+    if (d != null) children..add(SizedBox(height: w ? 22 : 18))..add(d);
+    final q = _secQuickActions(0.50);
+    if (q != null) children..add(SizedBox(height: w ? 24 : 20))..add(q);
+    children..add(SizedBox(height: w ? 30 : 22))..add(_buildActionRow(0.58));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildInfoColumn(),
-        SizedBox(height: wide ? 30 : 22),
-        _buildActionRow(),
-      ],
+      children: children,
     );
   }
 
-  /// Eyebrow → title → meta → genres → description (no actions).
-  Widget _buildInfoColumn() {
-    final item = widget.item;
-    final rating = item.imdbRating;
-    final genres = item.genres ?? const [];
-    final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
-    final description = item.description ?? '';
-    final wide = MediaQuery.of(context).size.width >= 900;
-
+  /// Narrow (Prime-style): one natural scroll — Play/Sources high under the
+  /// meta, then the synopsis, then the quick-action grid.
+  Widget _buildNarrowColumn() {
+    final children = <Widget>[
+      _secEyebrow(0.00),
+      const SizedBox(height: 8),
+      _secTitle(0.10),
+      const SizedBox(height: 10),
+      _secMeta(0.20),
+    ];
+    final g = _secGenres(0.30);
+    if (g != null) children..add(const SizedBox(height: 14))..add(g);
+    children
+      ..add(const SizedBox(height: 22))
+      ..add(_buildActionRow(0.40));
+    final d = _secDescription(0.50);
+    if (d != null) children..add(const SizedBox(height: 22))..add(d);
+    final q = _secQuickActions(0.58);
+    if (q != null) children..add(const SizedBox(height: 26))..add(q);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        // Small uppercase eyebrow above the title.
-        Text(
-          typeLabel,
+      children: children,
+    );
+  }
+
+  // ── Sections ──────────────────────────────────────────────────────────────
+
+  Widget _secEyebrow(double start) => _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Text(
+          widget.item.type == 'series' ? 'SERIES' : 'MOVIE',
           style: TextStyle(
-            color: HomeTheme.focusGold.withValues(alpha: 0.95),
+            color: HomeTheme.focusGold,
             fontSize: 11,
             fontWeight: FontWeight.w800,
             letterSpacing: 2.4,
+            shadows: const [
+              Shadow(color: Color(0x803B2A00), blurRadius: 10),
+            ],
           ),
         ),
-        SizedBox(height: wide ? 10 : 8),
-        // Title — large and condensed
-        Text(
-          item.name,
+      );
+
+  Widget _secTitle(double start) => _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Text(
+          widget.item.name,
           style: TextStyle(
             color: Colors.white,
-            fontSize: wide ? 44 : 30,
+            fontSize: _wide ? 44 : 30,
             fontWeight: FontWeight.w900,
             letterSpacing: -1.0,
             height: 1.0,
-          ),
-        ),
-        SizedBox(height: wide ? 14 : 10),
-
-        // Meta row: YEAR · ⭐ 8.4
-        DefaultTextStyle(
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.75),
-            fontSize: wide ? 14 : 13,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (item.year != null && item.year!.isNotEmpty)
-                Text(item.year!),
-              if (rating != null) ...[
-                if (item.year != null && item.year!.isNotEmpty) _dot(),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      size: 16,
-                      color: Color(0xFFFACC15),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(rating.toStringAsFixed(1)),
-                  ],
-                ),
-              ],
+            shadows: const [
+              Shadow(
+                color: Color(0xB3000000),
+                blurRadius: 18,
+                offset: Offset(0, 3),
+              ),
             ],
           ),
         ),
+      );
 
-        if (genres.isNotEmpty) ...[
-          SizedBox(height: wide ? 18 : 14),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              for (final g in genres.take(5)) _GenreChip(label: g),
+  Widget _secMeta(double start) {
+    final item = widget.item;
+    final rating = item.imdbRating;
+    final hasYear = item.year != null && item.year!.isNotEmpty;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.78),
+          fontSize: _wide ? 14 : 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
+        ),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (hasYear) Text(item.year!),
+            if (rating != null) ...[
+              if (hasYear) _dot(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.star_rounded,
+                    size: 16,
+                    color: Color(0xFFFACC15),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(rating.toStringAsFixed(1)),
+                ],
+              ),
             ],
-          ),
-        ],
-
-        if (description.isNotEmpty) ...[
-          SizedBox(height: wide ? 22 : 18),
-          _Description(
-            text: description,
-            wide: wide,
-            expanded: _descriptionExpanded,
-            onToggle: () => setState(
-              () => _descriptionExpanded = !_descriptionExpanded,
-            ),
-          ),
-        ],
-
-      ],
+          ],
+        ),
+      ),
     );
   }
 
-  /// The Play / Sources / More action row, pulled out so the narrow layout
-  /// can pin it to the bottom while the info column scrolls above it.
-  Widget _buildActionRow() {
+  Widget? _secGenres(double start) {
+    final genres = widget.item.genres ?? const [];
+    if (genres.isEmpty) return null;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Wrap(
+        spacing: 7,
+        runSpacing: 7,
+        children: [for (final g in genres.take(5)) _GenreChip(label: g)],
+      ),
+    );
+  }
+
+  Widget? _secQuickActions(double start) {
+    if (widget.traktMenuOptions.isEmpty || widget.onTraktAction == null) {
+      return null;
+    }
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: _QuickActions(
+        options: widget.traktMenuOptions,
+        isTelevision: widget.isTelevision,
+        onSelected: widget.onTraktAction!,
+      ),
+    );
+  }
+
+  Widget? _secDescription(double start) {
+    final description = widget.item.description ?? '';
+    if (description.isEmpty) return null;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: _Description(
+        text: description,
+        wide: _wide,
+        expanded: _descriptionExpanded,
+        onToggle: () => setState(
+          () => _descriptionExpanded = !_descriptionExpanded,
+        ),
+      ),
+    );
+  }
+
+  /// The Play / Sources action row.
+  Widget _buildActionRow(double start) {
     final item = widget.item;
-    final wide = MediaQuery.of(context).size.width >= 900;
-    return _ActionRow(
-      compact: !wide,
-      showQuickPlay: widget.showQuickPlay,
-      isSeries: item.type == 'series',
-      hasBoundSource: widget.hasBoundSource,
-      playFocus: _playFocus,
-      browseFocus: _browseFocus,
-      moreFocus: _moreFocus,
-      traktMenuItems: widget.traktMenuItems,
-      onTraktAction: widget.onTraktAction,
-      onPlay: () {
-        Navigator.of(context).pop();
-        widget.onPlay();
-      },
-      onBrowse: () {
-        Navigator.of(context).pop();
-        widget.onBrowse();
-      },
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      dy: 16,
+      child: _ActionRow(
+        compact: !_wide,
+        showQuickPlay: widget.showQuickPlay,
+        isSeries: item.type == 'series',
+        hasBoundSource: widget.hasBoundSource,
+        playFocus: _playFocus,
+        browseFocus: _browseFocus,
+        onPlay: () {
+          Navigator.of(context).pop();
+          widget.onPlay();
+        },
+        onBrowse: () {
+          Navigator.of(context).pop();
+          widget.onBrowse();
+        },
+      ),
     );
   }
 
@@ -323,73 +379,179 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
       );
 }
 
+// ── Staggered entrance reveal ───────────────────────────────────────────────
+
+/// Fades + slides a section in from below, on an [Interval] of [parent] so
+/// successive sections cascade. Cheap: a single shared controller drives all.
+class _Reveal extends StatelessWidget {
+  final AnimationController parent;
+
+  /// Where on the 0‥1 timeline this section starts (earlier = sooner).
+  final double start;
+
+  /// How far (px) it travels up into place.
+  final double dy;
+  final Widget child;
+
+  const _Reveal({
+    required this.parent,
+    required this.start,
+    required this.child,
+    this.dy = 26,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final anim = CurvedAnimation(
+      parent: parent,
+      curve: Interval(
+        start,
+        (start + 0.42).clamp(0.0, 1.0),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, child) => Opacity(
+        opacity: anim.value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * dy),
+          child: child,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
 // ── Backdrop ────────────────────────────────────────────────────────────────
 
-class _Backdrop extends StatelessWidget {
+/// Cinematic backdrop: a slow Ken-Burns push-in, a gentle fade-in once the
+/// image decodes, a layered vertical scrim, a corner vignette, and (on wide)
+/// a left-side scrim where the content sits.
+class _Backdrop extends StatefulWidget {
   final String? url;
   final bool isWide;
   const _Backdrop({required this.url, required this.isWide});
 
   @override
+  State<_Backdrop> createState() => _BackdropState();
+}
+
+class _BackdropState extends State<_Backdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ken;
+
+  @override
+  void initState() {
+    super.initState();
+    _ken = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 22),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ken.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (url != null && url!.isNotEmpty)
-          Image.network(
-            url!,
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-            errorBuilder: (_, __, ___) => Container(color: Colors.black),
-          )
-        else
-          Container(color: Colors.black),
+    final isWide = widget.isWide;
+    final url = widget.url;
 
-        // Vertical scrim
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isWide
-                  ? const [
-                      Color(0x33000000),
-                      Color(0x66000000),
-                      Color(0xCC050507),
-                      Color(0xFF050507),
-                    ]
-                  : const [
-                      Color(0x33000000),
-                      Color(0x66000000),
-                      Color(0xCC050507),
-                      Color(0xFF050507),
-                    ],
-              stops: isWide
-                  ? const [0.0, 0.4, 0.78, 1.0]
-                  : const [0.0, 0.45, 0.85, 1.0],
-            ),
-          ),
-        ),
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (url != null && url.isNotEmpty)
+            AnimatedBuilder(
+              animation: _ken,
+              builder: (context, child) {
+                final t = Curves.easeInOut.transform(_ken.value);
+                return Transform.scale(
+                  scale: 1.0 + 0.07 * t,
+                  alignment: Alignment(0, -0.7 + 0.2 * t),
+                  child: child,
+                );
+              },
+              child: Image.network(
+                url,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                frameBuilder: (_, child, frame, wasSync) {
+                  if (wasSync) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: const Duration(milliseconds: 650),
+                    curve: Curves.easeOut,
+                    child: child,
+                  );
+                },
+                errorBuilder: (_, __, ___) => Container(color: Colors.black),
+              ),
+            )
+          else
+            Container(color: Colors.black),
 
-        // Side scrim on wide layouts — darken the left where content sits,
-        // fade to clear art on the right.
-        if (isWide)
-          const DecoratedBox(
+          // Vertical scrim — content side stays legible, art breathes up top.
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Color(0xDD050507),
-                  Color(0x88050507),
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [
                   Color(0x22000000),
-                  Color(0x00000000),
+                  Color(0x44000000),
+                  Color(0xAA050507),
+                  Color(0xF2050507),
+                  Color(0xFF050507),
                 ],
-                stops: [0.0, 0.35, 0.65, 1.0],
+                stops: isWide
+                    ? const [0.0, 0.35, 0.62, 0.85, 1.0]
+                    : const [0.0, 0.38, 0.7, 0.9, 1.0],
               ),
             ),
           ),
-      ],
+
+          // Corner vignette — frames the art, cinema style.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.25),
+                radius: 1.15,
+                colors: [
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0x55000000),
+                ],
+                stops: [0.0, 0.62, 1.0],
+              ),
+            ),
+          ),
+
+          // Side scrim on wide layouts — darken the left where content sits,
+          // fade to clear art on the right.
+          if (isWide)
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Color(0xDD050507),
+                    Color(0x88050507),
+                    Color(0x22000000),
+                    Color(0x00000000),
+                  ],
+                  stops: [0.0, 0.35, 0.65, 1.0],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -497,9 +659,6 @@ class _ActionRow extends StatelessWidget {
   final bool hasBoundSource;
   final FocusNode playFocus;
   final FocusNode browseFocus;
-  final FocusNode moreFocus;
-  final List<PopupMenuEntry<TraktItemMenuAction>> traktMenuItems;
-  final void Function(TraktItemMenuAction action)? onTraktAction;
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
 
@@ -510,9 +669,6 @@ class _ActionRow extends StatelessWidget {
     required this.hasBoundSource,
     required this.playFocus,
     required this.browseFocus,
-    required this.moreFocus,
-    required this.traktMenuItems,
-    required this.onTraktAction,
     required this.onPlay,
     required this.onBrowse,
   });
@@ -521,9 +677,7 @@ class _ActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final browseLabel = isSeries ? 'Episodes' : 'Sources';
     final browseIcon = isSeries ? Icons.list_alt_rounded : Icons.layers_rounded;
-    final hasMore = traktMenuItems.isNotEmpty && onTraktAction != null;
     final gap = compact ? 8.0 : 10.0;
-    final moreWidth = compact ? 48.0 : 56.0;
 
     final browse = _PrimaryButton(
       focusNode: browseFocus,
@@ -535,25 +689,7 @@ class _ActionRow extends StatelessWidget {
       tinted: hasBoundSource,
     );
 
-    final more = hasMore
-        ? _MoreButton(
-            focusNode: moreFocus,
-            compact: compact,
-            items: traktMenuItems,
-            onSelected: onTraktAction!,
-          )
-        : null;
-
-    if (!showQuickPlay) {
-      if (more == null) return browse;
-      return Row(
-        children: [
-          Expanded(child: browse),
-          SizedBox(width: gap),
-          SizedBox(width: moreWidth, child: more),
-        ],
-      );
-    }
+    if (!showQuickPlay) return browse;
 
     final play = _PrimaryButton(
       focusNode: playFocus,
@@ -565,8 +701,8 @@ class _ActionRow extends StatelessWidget {
       onTap: onPlay,
     );
 
-    // Narrow screens: stack a full-width Play on top of the secondary
-    // actions so every label has room and never gets clipped.
+    // Narrow screens: stack a full-width Play on top of Sources so every
+    // label has room and never gets clipped.
     if (compact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -574,16 +710,7 @@ class _ActionRow extends StatelessWidget {
         children: [
           play,
           SizedBox(height: gap),
-          if (more == null)
-            browse
-          else
-            Row(
-              children: [
-                Expanded(child: browse),
-                SizedBox(width: gap),
-                SizedBox(width: moreWidth, child: more),
-              ],
-            ),
+          browse,
         ],
       );
     }
@@ -593,10 +720,6 @@ class _ActionRow extends StatelessWidget {
         Expanded(flex: 3, child: play),
         SizedBox(width: gap),
         Expanded(flex: 2, child: browse),
-        if (more != null) ...[
-          SizedBox(width: gap),
-          SizedBox(width: moreWidth, child: more),
-        ],
       ],
     );
   }
@@ -604,90 +727,193 @@ class _ActionRow extends StatelessWidget {
 
 const Color _kNetflixRed = Color(0xFFE50914);
 
-/// Icon-only "More" button. Matches the visual height of [_PrimaryButton]
-/// and opens a popup menu with the supplied Trakt items.
-class _MoreButton extends StatefulWidget {
-  final FocusNode focusNode;
-  final bool compact;
-  final List<PopupMenuEntry<TraktItemMenuAction>> items;
+// ── Quick actions row ───────────────────────────────────────────────────────
+
+/// Prime-style quick actions: a wrapped grid of uniform icon buttons with a
+/// caption underneath. Everything is visible at once — no hidden scroll — so
+/// users always see every action. Items are a fixed width so rows align.
+class _QuickActions extends StatelessWidget {
+  final List<TraktMenuOption> options;
+  final bool isTelevision;
   final void Function(TraktItemMenuAction) onSelected;
 
-  const _MoreButton({
-    required this.focusNode,
-    required this.compact,
-    required this.items,
+  const _QuickActions({
+    required this.options,
+    required this.isTelevision,
     required this.onSelected,
   });
 
   @override
-  State<_MoreButton> createState() => _MoreButtonState();
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'QUICK ACTIONS',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 18,
+          children: [
+            for (var i = 0; i < options.length; i++)
+              _QuickAction(
+                option: options[i],
+                autofocus: isTelevision && i == 0,
+                onTap: () => onSelected(options[i].action),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
-class _MoreButtonState extends State<_MoreButton> {
-  bool _focused = false;
-  final GlobalKey<PopupMenuButtonState<TraktItemMenuAction>> _menuKey =
-      GlobalKey();
+class _QuickAction extends StatefulWidget {
+  final TraktMenuOption option;
+  final bool autofocus;
+  final VoidCallback onTap;
 
-  void _open() => _menuKey.currentState?.showButtonMenu();
+  const _QuickAction({
+    required this.option,
+    required this.autofocus,
+    required this.onTap,
+  });
+
+  @override
+  State<_QuickAction> createState() => _QuickActionState();
+}
+
+class _QuickActionState extends State<_QuickAction> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool get _active => _focused || _hovered;
 
   @override
   Widget build(BuildContext context) {
+    final o = widget.option;
+
     return Focus(
-      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          _open();
+                event.logicalKey == LogicalKeyboardKey.space ||
+                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+          widget.onTap();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        height: widget.compact ? 48 : 54,
-        decoration: BoxDecoration(
-          color: _focused
-              ? Colors.white.withValues(alpha: 0.18)
-              : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: _focused
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.18),
-            width: 1.2,
-          ),
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    blurRadius: 22,
-                    spreadRadius: 1,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            scale: _active ? 1.06 : 1.0,
+            child: SizedBox(
+              width: 80,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white
+                              .withValues(alpha: _active ? 0.16 : 0.07),
+                          border: Border.all(
+                            color: _active
+                                ? HomeTheme.focusGold
+                                : Colors.white.withValues(alpha: 0.12),
+                            width: _active ? 1.6 : 1,
+                          ),
+                          boxShadow: _active
+                              ? [
+                                  BoxShadow(
+                                    color: HomeTheme.focusGold
+                                        .withValues(alpha: 0.32),
+                                    blurRadius: 18,
+                                    spreadRadius: 0.5,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Icon(
+                          o.icon,
+                          size: 24,
+                          color: Colors.white
+                              .withValues(alpha: _active ? 1.0 : 0.92),
+                        ),
+                      ),
+                      if (o.isTrakt)
+                        Positioned(
+                          top: -4,
+                          right: -2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFED1C24),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: const Color(0xFF050507),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: const Text(
+                              'TRAKT',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 7,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.6,
+                                height: 1.0,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ]
-              : null,
-        ),
-        child: PopupMenuButton<TraktItemMenuAction>(
-          key: _menuKey,
-          tooltip: 'More',
-          padding: EdgeInsets.zero,
-          color: const Color(0xFF111118),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-          ),
-          onSelected: widget.onSelected,
-          itemBuilder: (_) => widget.items,
-          child: Center(
-            child: Icon(
-              Icons.more_horiz_rounded,
-              color: Colors.white,
-              size: widget.compact ? 20 : 22,
+                  const SizedBox(height: 9),
+                  Text(
+                    o.caption,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white
+                          .withValues(alpha: _active ? 1.0 : 0.62),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                      height: 1.15,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

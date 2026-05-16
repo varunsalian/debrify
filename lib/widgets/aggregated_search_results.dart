@@ -351,13 +351,13 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
         _boundSources.containsKey(item.effectiveImdbId ?? item.id);
 
     final traktItems = hasTrakt
-        ? buildTraktAddOnlyMenuItems(
+        ? buildTraktAddOnlyMenuOptions(
             isSeries: item.type == 'series',
             isMovie: item.type == 'movie',
             hasBoundSource: hasBoundSource,
             isTraktAuthenticated: _isTraktAuthenticated,
           )
-        : const <PopupMenuEntry<TraktItemMenuAction>>[];
+        : const <TraktMenuOption>[];
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -366,7 +366,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           isTelevision: widget.isTelevision,
           showQuickPlay: widget.showQuickPlay,
           hasBoundSource: hasBoundSource,
-          traktMenuItems: traktItems,
+          traktMenuOptions: traktItems,
           onTraktAction: (action) => handleTraktMenuAction(
             context,
             item,
