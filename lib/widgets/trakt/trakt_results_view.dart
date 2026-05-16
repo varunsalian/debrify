@@ -1777,54 +1777,23 @@ class TraktResultsViewState extends State<TraktResultsView> {
       // Load bound source for this show (non-blocking)
       _loadBoundSourceForShow();
 
-      // Scroll to the requested episode after the frame renders.
-      if (targetEpisodeNumber != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || generation != _episodeModeGeneration) return;
-          final season = _seasons.firstWhere(
-            (s) => s.number == targetSeason,
-            orElse: () => _seasons.first,
-          );
-          final epIndex = season.episodes.indexWhere(
-            (e) => e.number == targetEpisodeNumber,
-          );
-          if (epIndex >= 0) {
-            // Scroll to the episode if it's not at the top
-            if (epIndex > 0 && _episodeScrollController.hasClients) {
-              final maxExtent =
-                  _episodeScrollController.position.maxScrollExtent;
-              final ratio = epIndex / season.episodes.length;
-              _episodeScrollController.jumpTo(
-                (maxExtent * ratio).clamp(0.0, maxExtent),
-              );
-            }
-            // After the item is built, focus it and ensure visible
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted || generation != _episodeModeGeneration) return;
-              if (epIndex < _episodeFocusNodes.length) {
-                _episodeFocusNodes[epIndex].requestFocus();
-                final ctx = _episodeFocusNodes[epIndex].context;
-                if (ctx != null) {
-                  Scrollable.ensureVisible(
-                    ctx,
-                    alignment: 0.3,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                }
-              }
-            });
-          }
-        });
-      } else {
-        // No next episode — focus the first episode card
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || generation != _episodeModeGeneration) return;
-          if (_episodeFocusNodes.isNotEmpty) {
-            _episodeFocusNodes[0].requestFocus();
-          }
-        });
-      }
+      // Scroll to (and focus) the requested episode once its tile is
+      // actually built. Robust against variable EpisodeTile height, lazy
+      // ListView building, and the host bar-hide relayout.
+      final scrollSeason = _seasons.firstWhere(
+        (s) => s.number == targetSeason,
+        orElse: () => _seasons.first,
+      );
+      final scrollEpIndex = targetEpisodeNumber != null
+          ? scrollSeason.episodes.indexWhere(
+              (e) => e.number == targetEpisodeNumber,
+            )
+          : -1;
+      _scrollFocusEpisode(
+        scrollEpIndex < 0 ? 0 : scrollEpIndex,
+        scrollSeason.episodes.length,
+        generation,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -2060,6 +2029,45 @@ class TraktResultsViewState extends State<TraktResultsView> {
     if (_episodeFocusNodes.isNotEmpty) {
       _episodeFocusNodes[0].requestFocus();
     }
+  }
+
+  /// Robustly brings episode [epIndex] into view and focuses it.
+  ///
+  /// The episode list is a lazy ListView with variable-height tiles, so a
+  /// single proportional jump is unreliable — an off-screen target tile
+  /// isn't built, leaving its FocusNode contextless and the jump estimate
+  /// wrong. This re-reads scroll metrics each frame and converges (the
+  /// builder's maxScrollExtent grows as more rows lay out), then once the
+  /// tile exists just focuses it — EpisodeTile.onFocusChange centers it
+  /// precisely. Bounded so it can never spin.
+  void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
+    const int maxAttempts = 16;
+    void attempt(int n) {
+      if (!mounted || generation != _episodeModeGeneration) return;
+      if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
+      final node = _episodeFocusNodes[epIndex];
+      if (node.context != null) {
+        // Target tile built — focus it; the tile self-scrolls into view.
+        node.requestFocus();
+        return;
+      }
+      if (n >= maxAttempts || !_episodeScrollController.hasClients) {
+        node.requestFocus(); // best effort, then stop
+        return;
+      }
+      final pos = _episodeScrollController.position;
+      final ratio = episodeCount > 1 ? epIndex / (episodeCount - 1) : 0.0;
+      final target = (pos.maxScrollExtent * ratio).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      if ((target - pos.pixels).abs() > 1.0) {
+        _episodeScrollController.jumpTo(target);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => attempt(n + 1));
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
   @override

@@ -1929,11 +1929,41 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         );
       }).toList()..sort((a, b) => a.number.compareTo(b.number));
 
-      // Pick the target season: prefer initialSeason if it exists in the data
+      // Resolve where to land. Explicit initialSeason/initialEpisode (deep
+      // links, calendar) win; otherwise fall back to this show's last-played
+      // episode. Catalog has no Trakt-style next-episode service, so without
+      // this it always opens at S01E01. Mirrors _onQuickPlay's lookup.
+      int? effectiveSeason = initialSeason;
+      int? effectiveEpisode = initialEpisode;
+      if (effectiveSeason == null || effectiveEpisode == null) {
+        final imdbId = show.effectiveImdbId;
+        if (imdbId != null) {
+          final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+            imdbId,
+          );
+          if (!mounted || generation != _episodeModeGeneration) return;
+          if (lastPlayed != null) {
+            effectiveSeason ??= lastPlayed['season'] as int?;
+            effectiveEpisode ??= lastPlayed['episode'] as int?;
+          }
+        }
+        if (effectiveSeason == null || effectiveEpisode == null) {
+          final byTitle = await StorageService.getLastPlayedEpisode(
+            seriesTitle: show.name,
+          );
+          if (!mounted || generation != _episodeModeGeneration) return;
+          if (byTitle != null) {
+            effectiveSeason ??= byTitle['season'] as int?;
+            effectiveEpisode ??= byTitle['episode'] as int?;
+          }
+        }
+      }
+
+      // Pick the target season: prefer the resolved season if it exists
       final targetSeason =
-          (initialSeason != null &&
-              seasons.any((s) => s.number == initialSeason))
-          ? seasons.firstWhere((s) => s.number == initialSeason)
+          (effectiveSeason != null &&
+              seasons.any((s) => s.number == effectiveSeason))
+          ? seasons.firstWhere((s) => s.number == effectiveSeason)
           : seasons.first;
 
       // Build focus nodes for target season
@@ -1947,37 +1977,60 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _isLoadingEpisodes = false;
       });
 
-      // Scroll to the target episode and focus it
-      final targetEpIndex = initialEpisode != null
-          ? targetSeason.episodes.indexWhere((e) => e.number == initialEpisode)
+      // Scroll to (and focus) the target episode once its tile is built.
+      // Robust against variable EpisodeTile height + lazy ListView building
+      // (the old fixed focusIndex*128 estimate is wrong for the new tile).
+      final targetEpIndex = effectiveEpisode != null
+          ? targetSeason.episodes.indexWhere((e) => e.number == effectiveEpisode)
           : -1;
-      final focusIndex = targetEpIndex >= 0 ? targetEpIndex : 0;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || generation != _episodeModeGeneration) return;
-        // Scroll to target episode if not at top
-        if (focusIndex > 0 && _episodeScrollController.hasClients) {
-          final offset = focusIndex * 128.0;
-          _episodeScrollController.jumpTo(
-            offset.clamp(
-              0.0,
-              _episodeScrollController.position.maxScrollExtent,
-            ),
-          );
-        }
-        // Focus the episode card after scroll
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || generation != _episodeModeGeneration) return;
-          if (focusIndex < _episodeFocusNodes.length) {
-            _episodeFocusNodes[focusIndex].requestFocus();
-          }
-        });
-      });
+      _scrollFocusEpisode(
+        targetEpIndex < 0 ? 0 : targetEpIndex,
+        targetSeason.episodes.length,
+        generation,
+      );
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('CatalogBrowser: Episode fetch failed: $e');
       _fallbackToDirectSearch(show);
     }
+  }
+
+  /// Robustly brings episode [epIndex] into view and focuses it.
+  ///
+  /// The episode list is a lazy ListView with variable-height tiles, so a
+  /// single fixed/proportional jump is unreliable — an off-screen target
+  /// tile isn't built, leaving its FocusNode contextless. This re-reads
+  /// scroll metrics each frame and converges (the builder's maxScrollExtent
+  /// grows as more rows lay out), then once the tile exists just focuses it
+  /// — EpisodeTile.onFocusChange centers it precisely. Bounded so it can
+  /// never spin.
+  void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
+    const int maxAttempts = 16;
+    void attempt(int n) {
+      if (!mounted || generation != _episodeModeGeneration) return;
+      if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
+      final node = _episodeFocusNodes[epIndex];
+      if (node.context != null) {
+        node.requestFocus();
+        return;
+      }
+      if (n >= maxAttempts || !_episodeScrollController.hasClients) {
+        node.requestFocus(); // best effort, then stop
+        return;
+      }
+      final pos = _episodeScrollController.position;
+      final ratio = episodeCount > 1 ? epIndex / (episodeCount - 1) : 0.0;
+      final target = (pos.maxScrollExtent * ratio).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      if ((target - pos.pixels).abs() > 1.0) {
+        _episodeScrollController.jumpTo(target);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => attempt(n + 1));
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
   /// Exit episode mode and notify parent (used by back button, PopScope, addon switch)
