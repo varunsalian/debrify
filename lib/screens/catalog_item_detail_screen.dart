@@ -349,6 +349,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       child: _QuickActions(
         options: widget.traktMenuOptions,
         tv: widget.isTelevision,
+        // Phone (narrow layout): force a tidy 3-up grid. Wide/TV keeps
+        // its free-flowing wrap.
+        phone: !_wide,
         onSelected: widget.onTraktAction!,
       ),
     );
@@ -799,11 +802,16 @@ const Color _kNetflixRed = Color(0xFFE50914);
 class _QuickActions extends StatelessWidget {
   final List<TraktMenuOption> options;
   final bool tv;
+
+  /// Phone (narrow layout): lay out as an even 3-column grid so narrow
+  /// widths don't drop to an ugly 2-up. Wide/TV keeps the free wrap.
+  final bool phone;
   final void Function(TraktItemMenuAction) onSelected;
 
   const _QuickActions({
     required this.options,
     required this.tv,
+    required this.phone,
     required this.onSelected,
   });
 
@@ -823,19 +831,55 @@ class _QuickActions extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 18,
-          children: [
-            for (final o in options)
-              _QuickAction(
-                option: o,
-                tv: tv,
-                onTap: () => onSelected(o.action),
-              ),
-          ],
-        ),
+        if (phone) _grid() else _wrap(),
       ],
+    );
+  }
+
+  Widget _wrap() => Wrap(
+        spacing: 8,
+        runSpacing: 18,
+        children: [
+          for (final o in options)
+            _QuickAction(
+              option: o,
+              tv: tv,
+              onTap: () => onSelected(o.action),
+            ),
+        ],
+      );
+
+  Widget _grid() {
+    const cols = 3;
+    const gap = 8.0;
+    final rows = <Widget>[];
+    for (var i = 0; i < options.length; i += cols) {
+      final cells = <Widget>[];
+      for (var j = 0; j < cols; j++) {
+        if (j > 0) cells.add(const SizedBox(width: gap));
+        final idx = i + j;
+        cells.add(
+          Expanded(
+            child: idx < options.length
+                ? _QuickAction(
+                    option: options[idx],
+                    tv: tv,
+                    expand: true,
+                    onTap: () => onSelected(options[idx].action),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        );
+      }
+      if (i > 0) rows.add(const SizedBox(height: 18));
+      rows.add(
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
     );
   }
 }
@@ -843,12 +887,16 @@ class _QuickActions extends StatelessWidget {
 class _QuickAction extends StatefulWidget {
   final TraktMenuOption option;
   final bool tv;
+
+  /// Grid mode: fill the parent cell instead of a fixed 80px box.
+  final bool expand;
   final VoidCallback onTap;
 
   const _QuickAction({
     required this.option,
     required this.tv,
     required this.onTap,
+    this.expand = false,
   });
 
   @override
@@ -891,7 +939,7 @@ class _QuickActionState extends State<_QuickAction> {
             curve: Curves.easeOutCubic,
             scale: _active ? 1.06 : 1.0,
             child: SizedBox(
-              width: 80,
+              width: widget.expand ? null : 80,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
