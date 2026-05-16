@@ -52,20 +52,22 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: _active ? 0.65 : 0.35),
-              blurRadius: _active ? 36 : 14,
+              color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
+              blurRadius: _active ? 38 : 14,
               offset: const Offset(0, 14),
             ),
             if (_active) ...[
+              // Tight bright gold rim.
               BoxShadow(
-                color: HomeTheme.accent.withValues(alpha: 0.55),
-                blurRadius: 38,
-                spreadRadius: 2,
+                color: HomeTheme.focusGold.withValues(alpha: 0.6),
+                blurRadius: 30,
+                spreadRadius: 1,
               ),
+              // Wide warm amber bloom for the cinematic falloff.
               BoxShadow(
-                color: HomeTheme.accent.withValues(alpha: 0.25),
-                blurRadius: 80,
-                spreadRadius: 8,
+                color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
+                blurRadius: 90,
+                spreadRadius: 10,
               ),
             ],
           ],
@@ -181,7 +183,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: HomeTheme.accent,
+                          color: HomeTheme.focusGold,
                           width: 2.5,
                         ),
                       ),

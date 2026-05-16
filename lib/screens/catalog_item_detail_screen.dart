@@ -124,13 +124,36 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
   }
 
   Widget _buildNarrowContent(Size size) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.only(top: size.height * 0.42, bottom: 32),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: _buildContentColumn(),
-      ),
+    // Actions are pinned to the bottom so they're always reachable without
+    // scrolling. The info block (title…description) bottom-anchors in the
+    // space above and scrolls only if it's taller than that space.
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [_buildInfoColumn()],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: _buildActionRow(),
+        ),
+      ],
     );
   }
 
@@ -153,7 +176,22 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
     );
   }
 
+  /// Wide layout: info + actions stacked in one scrollable, bottom-left sheet.
   Widget _buildContentColumn() {
+    final wide = MediaQuery.of(context).size.width >= 900;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildInfoColumn(),
+        SizedBox(height: wide ? 30 : 22),
+        _buildActionRow(),
+      ],
+    );
+  }
+
+  /// Eyebrow → title → meta → genres → description (no actions).
+  Widget _buildInfoColumn() {
     final item = widget.item;
     final rating = item.imdbRating;
     final genres = item.genres ?? const [];
@@ -169,7 +207,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
         Text(
           typeLabel,
           style: TextStyle(
-            color: HomeTheme.accent.withValues(alpha: 0.95),
+            color: HomeTheme.focusGold.withValues(alpha: 0.95),
             fontSize: 11,
             fontWeight: FontWeight.w800,
             letterSpacing: 2.4,
@@ -246,29 +284,33 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen> {
           ),
         ],
 
-        SizedBox(height: wide ? 30 : 22),
-
-        // Actions
-        _ActionRow(
-          compact: !wide,
-          showQuickPlay: widget.showQuickPlay,
-          isSeries: item.type == 'series',
-          hasBoundSource: widget.hasBoundSource,
-          playFocus: _playFocus,
-          browseFocus: _browseFocus,
-          moreFocus: _moreFocus,
-          traktMenuItems: widget.traktMenuItems,
-          onTraktAction: widget.onTraktAction,
-          onPlay: () {
-            Navigator.of(context).pop();
-            widget.onPlay();
-          },
-          onBrowse: () {
-            Navigator.of(context).pop();
-            widget.onBrowse();
-          },
-        ),
       ],
+    );
+  }
+
+  /// The Play / Sources / More action row, pulled out so the narrow layout
+  /// can pin it to the bottom while the info column scrolls above it.
+  Widget _buildActionRow() {
+    final item = widget.item;
+    final wide = MediaQuery.of(context).size.width >= 900;
+    return _ActionRow(
+      compact: !wide,
+      showQuickPlay: widget.showQuickPlay,
+      isSeries: item.type == 'series',
+      hasBoundSource: widget.hasBoundSource,
+      playFocus: _playFocus,
+      browseFocus: _browseFocus,
+      moreFocus: _moreFocus,
+      traktMenuItems: widget.traktMenuItems,
+      onTraktAction: widget.onTraktAction,
+      onPlay: () {
+        Navigator.of(context).pop();
+        widget.onPlay();
+      },
+      onBrowse: () {
+        Navigator.of(context).pop();
+        widget.onBrowse();
+      },
     );
   }
 
@@ -696,7 +738,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 
     final filledBg = accent ?? Colors.white;
     final filledFg = accent == null ? Colors.black : Colors.white;
-    final outlineAccent = widget.tinted ? HomeTheme.accent : Colors.white;
+    final outlineAccent = widget.tinted ? HomeTheme.focusGold : Colors.white;
 
     final bg = filled
         ? (_focused
@@ -712,7 +754,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
         : (_focused ? outlineAccent : Colors.white.withValues(alpha: 0.18));
 
     final glowColor =
-        filled ? (accent ?? Colors.white) : Colors.white;
+        filled ? (accent ?? Colors.white) : outlineAccent;
 
     return Focus(
       focusNode: widget.focusNode,

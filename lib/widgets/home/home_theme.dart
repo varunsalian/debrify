@@ -12,6 +12,12 @@ class HomeTheme {
   /// Soft indigo — used for focus glow on hero cards only.
   static const Color accent = Color(0xFF818CF8);
 
+  /// Cinematic focus accent for poster tiles & detail-screen actions — a warm
+  /// gold that reads as premium "film", distinct from the indigo chrome
+  /// accent. Pair [focusGold] (crisp rim) with [focusGoldDeep] (soft bloom).
+  static const Color focusGold = Color(0xFFFBBF24);
+  static const Color focusGoldDeep = Color(0xFFF59E0B);
+
   /// Warm highlight — reserved for "live" / now-playing indicators only.
   static const Color highlight = Color(0xFFF59E0B);
 
