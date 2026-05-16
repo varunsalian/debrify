@@ -66,9 +66,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _revealCtrl.forward();
-      if (widget.isTelevision) {
-        (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
-      }
+      // Land focus on Play (or Sources when Play is hidden, e.g. PikPak).
+      (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
     });
   }
 
@@ -321,7 +320,6 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       start: start,
       child: _QuickActions(
         options: widget.traktMenuOptions,
-        isTelevision: widget.isTelevision,
         onSelected: widget.onTraktAction!,
       ),
     );
@@ -734,12 +732,10 @@ const Color _kNetflixRed = Color(0xFFE50914);
 /// users always see every action. Items are a fixed width so rows align.
 class _QuickActions extends StatelessWidget {
   final List<TraktMenuOption> options;
-  final bool isTelevision;
   final void Function(TraktItemMenuAction) onSelected;
 
   const _QuickActions({
     required this.options,
-    required this.isTelevision,
     required this.onSelected,
   });
 
@@ -763,11 +759,10 @@ class _QuickActions extends StatelessWidget {
           spacing: 8,
           runSpacing: 18,
           children: [
-            for (var i = 0; i < options.length; i++)
+            for (final o in options)
               _QuickAction(
-                option: options[i],
-                autofocus: isTelevision && i == 0,
-                onTap: () => onSelected(options[i].action),
+                option: o,
+                onTap: () => onSelected(o.action),
               ),
           ],
         ),
@@ -778,12 +773,10 @@ class _QuickActions extends StatelessWidget {
 
 class _QuickAction extends StatefulWidget {
   final TraktMenuOption option;
-  final bool autofocus;
   final VoidCallback onTap;
 
   const _QuickAction({
     required this.option,
-    required this.autofocus,
     required this.onTap,
   });
 
@@ -801,7 +794,6 @@ class _QuickActionState extends State<_QuickAction> {
     final o = widget.option;
 
     return Focus(
-      autofocus: widget.autofocus,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
@@ -964,7 +956,6 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 
     final filledBg = accent ?? Colors.white;
     final filledFg = accent == null ? Colors.black : Colors.white;
-    final outlineAccent = widget.tinted ? HomeTheme.focusGold : Colors.white;
 
     final bg = filled
         ? (_focused
@@ -975,12 +966,22 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             : Colors.white.withValues(alpha: 0.06));
 
     final fg = filled ? filledFg : Colors.white;
-    final borderColor = filled
-        ? Colors.transparent
-        : (_focused ? outlineAccent : Colors.white.withValues(alpha: 0.18));
 
-    final glowColor =
-        filled ? (accent ?? Colors.white) : outlineAccent;
+    // Focus is always shown as a bright gold ring + glow (+ a slight
+    // scale-up) regardless of the button's base colour, so it's obvious
+    // even on the red Play button.
+    final Color borderColor;
+    if (_focused) {
+      borderColor = HomeTheme.focusGold;
+    } else if (filled) {
+      borderColor = Colors.transparent;
+    } else if (widget.tinted) {
+      // A bound source: hint with a soft gold resting border.
+      borderColor = HomeTheme.focusGold.withValues(alpha: 0.5);
+    } else {
+      borderColor = Colors.white.withValues(alpha: 0.18);
+    }
+    final borderWidth = _focused ? 2.5 : (filled ? 0.0 : 1.2);
 
     return Focus(
       focusNode: widget.focusNode,
@@ -997,46 +998,51 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       },
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
+        child: AnimatedScale(
           duration: const Duration(milliseconds: 160),
-          height: widget.compact ? 48 : 54,
-          padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: borderColor, width: filled ? 0 : 1.2),
-            boxShadow: _focused
-                ? [
-                    BoxShadow(
-                      color: glowColor.withValues(alpha: 0.45),
-                      blurRadius: 26,
-                      spreadRadius: 1,
+          curve: Curves.easeOutCubic,
+          scale: _focused ? 1.035 : 1.0,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: widget.compact ? 48 : 54,
+            padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: _focused
+                  ? [
+                      BoxShadow(
+                        color: HomeTheme.focusGold.withValues(alpha: 0.55),
+                        blurRadius: 30,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, color: fg, size: widget.compact ? 20 : 24),
+                SizedBox(width: widget.compact ? 7 : 10),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: widget.compact ? 14 : 16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
                     ),
-                  ]
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(widget.icon, color: fg, size: widget.compact ? 20 : 24),
-              SizedBox(width: widget.compact ? 7 : 10),
-              Flexible(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: widget.compact ? 14 : 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
