@@ -689,7 +689,22 @@ class TraktResultsViewState extends State<TraktResultsView> {
           showQuickPlay: widget.showQuickPlay,
           hasBoundSource: hasBoundSource,
           traktMenuOptions: _buildTraktQuickActions(item, hasBoundSource),
-          onTraktAction: (action) => _onMenuAction(item, action),
+          onTraktAction: (action) {
+            // These actions take the user away from / replace the host
+            // screen (pack search, source picker, Stremio TV, random
+            // episode). The detail screen is pushed on top, so close it
+            // first or the result happens invisibly behind it.
+            const leaves = {
+              TraktItemMenuAction.searchPacks,
+              TraktItemMenuAction.selectSource,
+              TraktItemMenuAction.addToStremioTv,
+              TraktItemMenuAction.playRandomEpisode,
+            };
+            if (leaves.contains(action) && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            _onMenuAction(item, action);
+          },
           onPlay: () => _onQuickPlay(item),
           onBrowse: () => _onItemTap(item),
         ),

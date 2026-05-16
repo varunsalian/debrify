@@ -2434,18 +2434,33 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           showQuickPlay: widget.showQuickPlay,
           hasBoundSource: hasBoundSource,
           traktMenuOptions: traktItems,
-          onTraktAction: (action) => handleTraktMenuAction(
-            context,
-            item,
-            action,
-            onSelectSource: widget.onSelectSource,
-            onEditSource: _handleSelectSourceAction,
-            onPlayRandomEpisode: (show) async {
-              await widget.onPlayRandomEpisode?.call(show, _selectedAddon);
-            },
-            onSearchPacks: widget.onSearchPacks,
-            onAddToStremioTv: _handleAddToStremioTv,
-          ),
+          onTraktAction: (action) {
+            // searchPacks/selectSource/stremioTv/random replace or leave
+            // the host screen; the detail screen is pushed on top, so
+            // close it first or the result happens invisibly behind it.
+            const leaves = {
+              TraktItemMenuAction.searchPacks,
+              TraktItemMenuAction.selectSource,
+              TraktItemMenuAction.addToStremioTv,
+              TraktItemMenuAction.playRandomEpisode,
+            };
+            if (leaves.contains(action) &&
+                Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+            handleTraktMenuAction(
+              context,
+              item,
+              action,
+              onSelectSource: widget.onSelectSource,
+              onEditSource: _handleSelectSourceAction,
+              onPlayRandomEpisode: (show) async {
+                await widget.onPlayRandomEpisode?.call(show, _selectedAddon);
+              },
+              onSearchPacks: widget.onSearchPacks,
+              onAddToStremioTv: _handleAddToStremioTv,
+            );
+          },
           onPlay: () => _onQuickPlay(item),
           onBrowse: () => _onItemTap(item),
         ),
