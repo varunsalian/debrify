@@ -287,6 +287,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _quickPlayPending = false;
   AdvancedSearchSelection? _quickPlaySelection;
 
+  // Movie Quick Play mask — for movies (which need no episode guide), cover
+  // the torrent-search UI with a loading panel from tap until auto-play takes
+  // over, so the user never sees the search screen populate. Torn down at
+  // every Quick Play terminal point; on failure the search UI is revealed as
+  // a graceful fallback. Series are unaffected (they need the episode guide).
+  bool _quickPlayMovieMasking = false;
+  String? _quickPlayMovieMaskTitle;
+
   // Select Source mode - user is picking a torrent to bind to a series
   bool _isSelectSourceMode = false;
   StremioMeta? _selectSourceShow;
@@ -2539,7 +2547,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   Future<void> _searchTorrents(String query) async {
-    if (query.trim().isEmpty) return;
+    if (query.trim().isEmpty) {
+      // No search will run, so the Quick Play completion hook won't fire —
+      // never leave a movie Quick Play mask frozen on an empty query.
+      _clearQuickPlayMovieMask();
+      return;
+    }
 
     final int requestId = ++_activeSearchRequestId;
     final SearchSourceOption searchSourceSnapshot = _selectedSource;
@@ -2947,6 +2960,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _listAnimationController.forward();
     } catch (e) {
       if (!mounted || requestId != _activeSearchRequestId) {
+        // This search was superseded/abandoned — make sure a pending movie
+        // Quick Play mask can't outlive it.
+        _clearQuickPlayMovieMask();
         return;
       }
       setState(() {
@@ -2963,6 +2979,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _errorMessage = errorMsg;
         _isLoading = false;
         _searchPhase = SearchPhase.idle;
+        // The Quick Play completion hook never runs on a search error, so
+        // clear pending state here and reveal the search UI (showing the
+        // error) as the graceful fallback instead of a frozen mask.
+        _quickPlayPending = false;
+        _quickPlayMovieMasking = false;
+        _quickPlayMovieMaskTitle = null;
       });
     }
   }
@@ -4115,10 +4137,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
 
-    // Set quick play pending state
+    // Set quick play pending state.
+    // Movies need no episode guide — mask the search UI so the user never
+    // sees it populate before auto-play. Series keep the existing flow.
+    final maskMovie = !selection.isSeries;
     setState(() {
       _quickPlayPending = true;
       _quickPlaySelection = selection;
+      _quickPlayMovieMasking = maskMovie;
+      _quickPlayMovieMaskTitle = maskMovie ? selection.title : null;
     });
 
     // Trigger the same flow as regular catalog selection
@@ -5577,6 +5604,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _quickPlayPending = false;
       });
+      _clearQuickPlayMovieMask();
       _failStartupContinueWatchingAutoLaunch('No sources found for Quick Play');
       // Show a snackbar to inform user
       if (mounted) {
@@ -5623,6 +5651,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _quickPlayPending = false;
       });
+      _clearQuickPlayMovieMask();
       _failStartupContinueWatchingAutoLaunch(reason);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5654,6 +5683,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       setState(() {
         _quickPlayPending = false;
       });
+      // Player launches next and covers the screen; drop the mask now.
+      _clearQuickPlayMovieMask();
 
       _completeStartupContinueWatchingAutoLaunch();
       _restoreFocusToCard(index >= 0 ? index : 0);
@@ -5756,6 +5787,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       debugPrint(
         'TorrentSearchScreen: Quick Play - activating torrent at index $index',
       );
+      // Keep the mask up through debrid resolution for a continuous
+      // experience — the debrid overlay renders invisibly while masked
+      // (see _addToRealDebrid / _showTorboxLoadingDialog). It is torn
+      // down by _resetQuickPlayState() on every terminal outcome
+      // (player launched, retries exhausted, or hard error).
       _completeStartupContinueWatchingAutoLaunch();
       _handleTorrentCardActivated(selectedTorrent, index >= 0 ? index : 0);
     }
@@ -7918,6 +7954,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     String torrentName, {
     bool forcePlay = false,
   }) async {
+    // PikPak shows its own (non-suppressed) progress overlay and never
+    // routes through _resetQuickPlayState, so hand the UI back to it now:
+    // drop the movie Quick Play mask here. This matches PikPak's existing
+    // UX and prevents a stranded mask on the PikPak path.
+    _clearQuickPlayMovieMask();
     try {
       final magnet = await _pikPakMagnet(infohash, torrentName);
 
@@ -11307,8 +11348,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       return;
     }
 
-    // Show loading overlay
-    DebridLoadingOverlay.showRealDebrid(context, torrentName);
+    // Show loading overlay. During a movie Quick Play the screen already
+    // shows a continuous loading mask, so render this one invisibly (route
+    // lifecycle unchanged) to avoid a jarring second overlay.
+    DebridLoadingOverlay.showRealDebrid(
+      context,
+      torrentName,
+      suppressVisual: _quickPlayMovieMasking,
+    );
 
     try {
       final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
@@ -12050,12 +12097,54 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return true;
   }
 
+  /// Tears down the movie Quick Play mask, revealing the underlying
+  /// search UI as a graceful fallback. Idempotent and safe on any path
+  /// (including when unmounted).
+  void _clearQuickPlayMovieMask() {
+    if (!_quickPlayMovieMasking) return;
+    if (!mounted) {
+      _quickPlayMovieMasking = false;
+      _quickPlayMovieMaskTitle = null;
+      return;
+    }
+    setState(() {
+      _quickPlayMovieMasking = false;
+      _quickPlayMovieMaskTitle = null;
+    });
+  }
+
+  /// User backed out of / cancelled a movie Quick Play before it resolved.
+  /// Abandons the in-flight search (bumping the request id makes its result
+  /// a no-op via the existing stale-request guards) and resets Quick Play +
+  /// loading state so the revealed UI isn't left spinning.
+  void _cancelQuickPlayMovieMask() {
+    if (!_quickPlayMovieMasking) return;
+    _activeSearchRequestId++;
+    if (!mounted) {
+      _quickPlayPending = false;
+      _quickPlayMovieMasking = false;
+      _quickPlayMovieMaskTitle = null;
+      return;
+    }
+    setState(() {
+      _quickPlayPending = false;
+      _quickPlaySelection = null;
+      _quickPlayMovieMasking = false;
+      _quickPlayMovieMaskTitle = null;
+      _isLoading = false;
+      _searchPhase = SearchPhase.idle;
+    });
+  }
+
   /// Resets Quick Play state after completion or failure
   void _resetQuickPlayState() {
     setState(() {
       _quickPlayPending = false;
       _quickPlayTorrentsList = [];
       _quickPlayCurrentIndex = 0;
+      // Catch-all: any terminal Quick Play path drops the movie mask.
+      _quickPlayMovieMasking = false;
+      _quickPlayMovieMaskTitle = null;
     });
   }
 
@@ -12116,6 +12205,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final apiKey = await StorageService.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showTorboxApiKeyMissingMessage();
+      _clearQuickPlayMovieMask();
       return;
     }
 
@@ -12334,7 +12424,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _showTorboxLoadingDialog(String torrentName) {
-    DebridLoadingOverlay.showTorbox(context, torrentName);
+    // Invisible (but lifecycle-intact) during a movie Quick Play — see
+    // the matching note in _addToRealDebrid.
+    DebridLoadingOverlay.showTorbox(
+      context,
+      torrentName,
+      suppressVisual: _quickPlayMovieMasking,
+    );
   }
 
   Future<TorboxTorrent?> _fetchTorboxTorrentById(
@@ -18368,7 +18464,86 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                       ),
                     ),
                   ),
+          // Movie Quick Play mask — opaque full-screen cover so the user
+          // never sees the torrent-search UI populate before auto-play
+          // takes over. Painted last → on top of everything. Torn down at
+          // every Quick Play terminal point (see _clearQuickPlayMovieMask).
+          // Driven solely by the mask flag — it must outlive _quickPlayPending
+          // (which is cleared at the debrid handoff while the mask stays up
+          // through resolution). Every terminal path explicitly clears it.
+          if (_quickPlayMovieMasking)
+            Positioned.fill(child: _buildQuickPlayMovieMask()),
         ],
+      ),
+    );
+  }
+
+  /// Full-screen opaque loading panel shown over the search UI during a
+  /// movie Quick Play, so the search screen is never visible to the user.
+  Widget _buildQuickPlayMovieMask() {
+    const accent = Color(0xFF6366F1);
+    return PopScope(
+      // Block the route pop, but treat Back as "cancel this Quick Play"
+      // so the user is never trapped on the loading panel.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (!didPop) _cancelQuickPlayMovieMask();
+      },
+      child: GestureDetector(
+        // Opaque sink: swallow stray taps so controls hidden behind the
+        // mask can't be triggered. Child buttons are hit-tested first.
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: Container(
+          color: const Color(0xFF07070A),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  valueColor: AlwaysStoppedAnimation<Color>(accent),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _quickPlayMovieMaskTitle?.isNotEmpty == true
+                    ? _quickPlayMovieMaskTitle!
+                    : 'Starting playback',
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Finding the best source…',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: _cancelQuickPlayMovieMask,
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

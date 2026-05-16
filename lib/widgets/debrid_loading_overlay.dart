@@ -6,26 +6,44 @@ import 'package:flutter/material.dart';
 class DebridLoadingOverlay {
   DebridLoadingOverlay._();
 
-  /// Show the loading overlay. Returns the dialog route so it can be dismissed.
+  /// Show the loading overlay.
+  ///
+  /// When [suppressVisual] is true the route is still pushed and dismissed
+  /// exactly as normal (so every existing dismiss/pop call site keeps
+  /// working unchanged), but it renders fully transparent with no content.
+  /// Used during movie Quick Play, where the caller already shows its own
+  /// continuous loading mask underneath and a second visible overlay would
+  /// be jarring.
   static void show(
     BuildContext context, {
     required String provider,
     required String torrentName,
     Color accentColor = const Color(0xFF6366F1),
     IconData icon = Icons.cloud_download_rounded,
+    bool suppressVisual = false,
   }) {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.7),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (_, __, ___) => _DebridLoadingContent(
-        provider: provider,
-        torrentName: torrentName,
-        accentColor: accentColor,
-        icon: icon,
-      ),
+      barrierColor: suppressVisual
+          ? Colors.transparent
+          : Colors.black.withValues(alpha: 0.7),
+      transitionDuration: suppressVisual
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
+      pageBuilder: (_, __, ___) => suppressVisual
+          // Invisible, but Back must NOT pop this route: the caller's
+          // explicit Navigator.pop() pairing depends on it still being on
+          // top. Back is a safe no-op during the short resolve window.
+          ? const PopScope(canPop: false, child: SizedBox.shrink())
+          : _DebridLoadingContent(
+              provider: provider,
+              torrentName: torrentName,
+              accentColor: accentColor,
+              icon: icon,
+            ),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
+        if (suppressVisual) return child;
         final curved = CurvedAnimation(
           parent: animation,
           curve: Curves.easeOutCubic,
@@ -85,23 +103,33 @@ class DebridLoadingOverlay {
   }
 
   /// Provider-specific helpers
-  static void showRealDebrid(BuildContext context, String torrentName) {
+  static void showRealDebrid(
+    BuildContext context,
+    String torrentName, {
+    bool suppressVisual = false,
+  }) {
     show(
       context,
       provider: 'Real-Debrid',
       torrentName: torrentName,
       accentColor: const Color(0xFF10B981),
       icon: Icons.cloud_download_rounded,
+      suppressVisual: suppressVisual,
     );
   }
 
-  static void showTorbox(BuildContext context, String torrentName) {
+  static void showTorbox(
+    BuildContext context,
+    String torrentName, {
+    bool suppressVisual = false,
+  }) {
     show(
       context,
       provider: 'Torbox',
       torrentName: torrentName,
       accentColor: const Color(0xFF8B5CF6),
       icon: Icons.flash_on_rounded,
+      suppressVisual: suppressVisual,
     );
   }
 }
