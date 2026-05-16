@@ -73,6 +73,9 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user exits episode drill-down mode (back button)
   final VoidCallback? onEpisodeModeExited;
 
+  /// Callback when user enters episode drill-down (opens a series).
+  final VoidCallback? onEpisodeModeEntered;
+
   /// Whether running on Android TV (disables animations, shadows, clips for GPU perf)
   final bool isTelevision;
 
@@ -90,6 +93,7 @@ class CatalogBrowser extends StatefulWidget {
     this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onEpisodeModeExited,
+    this.onEpisodeModeEntered,
     this.isTelevision = false,
   });
 
@@ -1936,6 +1940,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
       });
+      // Notify only once the episode list is actually on screen, so a
+      // failed entry (fallback to direct search) never hides the host bar.
+      widget.onEpisodeModeEntered?.call();
 
       // Scroll to the target episode and focus it
       final targetEpIndex = initialEpisode != null

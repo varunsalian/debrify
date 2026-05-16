@@ -356,6 +356,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _previousSearchQuery = ''; // The query text before catalog selection
   SearchSourceOption?
   _sourceBeforeEpisodeDrillDown; // Source to return to when exiting episode mode from aggregated search
+  // True while a series episode guide is open — hides the top search/addon
+  // bar to give the episode list that space.
+  bool _inEpisodeGuide = false;
   final TextEditingController _seasonController = TextEditingController();
   final TextEditingController _episodeController = TextEditingController();
 
@@ -3632,7 +3635,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   /// Called when user exits episode mode in CatalogBrowser — return to previous source if applicable.
+  void _onEpisodeGuideEntered() {
+    if (mounted && !_inEpisodeGuide) {
+      setState(() => _inEpisodeGuide = true);
+    }
+  }
+
+  void _onEpisodeGuideExited() {
+    if (mounted && _inEpisodeGuide) {
+      setState(() => _inEpisodeGuide = false);
+    }
+  }
+
   void _handleEpisodeModeExited() {
+    _onEpisodeGuideExited();
     final previousSource = _sourceBeforeEpisodeDrillDown;
     if (previousSource == null) return;
 
@@ -16767,8 +16783,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               policy: OrderedTraversalPolicy(),
               child: Column(
                 children: [
-                  // ── Controls ──
-                  Padding(
+                  // ── Controls ── (hidden while an episode guide is open)
+                  if (!_inEpisodeGuide)
+                    Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 8,
@@ -17123,6 +17140,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
                               onEpisodeModeExited: _handleEpisodeModeExited,
+                              onEpisodeModeEntered: _onEpisodeGuideEntered,
                             ),
                           ),
 
@@ -17217,6 +17235,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               },
                               onEpisodeModeExited:
                                   _handleTraktEpisodeModeExited,
+                              onEpisodeModeEntered: _onEpisodeGuideEntered,
                             ),
                           ),
 
@@ -18525,6 +18544,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleTraktEpisodeModeExited() {
+    _onEpisodeGuideExited();
     final pendingAction = _pendingTraktEpisodeModeExitAction;
     _pendingTraktEpisodeModeExitAction = null;
     if (pendingAction == null) {

@@ -133,6 +133,9 @@ class TraktResultsView extends StatefulWidget {
   final VoidCallback? onUpArrowFromFilters;
   final VoidCallback? onEpisodeModeExited;
 
+  /// Called when user enters episode drill-down (opens a series).
+  final VoidCallback? onEpisodeModeEntered;
+
   /// Called when user wants to select a torrent source for a series.
   /// Parent should trigger series probing search in select-source mode.
   final void Function(StremioMeta show)? onSelectSource;
@@ -152,6 +155,7 @@ class TraktResultsView extends StatefulWidget {
     this.showQuickPlay = true,
     this.onUpArrowFromFilters,
     this.onEpisodeModeExited,
+    this.onEpisodeModeEntered,
     this.onSelectSource,
     this.onKeywordSelectSource,
     this.onSearchPacks,
@@ -1765,6 +1769,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         _selectedSeasonNumber = targetSeason;
         _isLoadingEpisodes = false;
       });
+      // Notify only once the episode list is actually on screen, so a
+      // failed/empty entry never hides the host bar.
+      widget.onEpisodeModeEntered?.call();
 
       // Load bound source for this show (non-blocking)
       _loadBoundSourceForShow();
