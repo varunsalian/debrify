@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
@@ -20,6 +19,7 @@ import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
 import 'catalog_item_tile.dart';
+import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
 
@@ -1884,6 +1884,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         final overview = v['overview'] as String?;
         final released = v['released'] as String?;
         final thumbnail = v['thumbnail'] as String?;
+        final ratingRaw = v['imdbRating'] ?? v['rating'];
+        final rating = ratingRaw is num
+            ? ratingRaw.toDouble()
+            : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
 
         final episode = TraktEpisode(
           season: seasonNum,
@@ -1892,6 +1896,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           overview: overview,
           firstAired: released,
           thumbnailUrl: thumbnail,
+          rating: rating,
         );
 
         seasonMap.putIfAbsent(seasonNum, () => []);
@@ -2048,31 +2053,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     } else if (widget.onItemSelected != null) {
       widget.onItemSelected!(selection);
     }
-  }
-
-  KeyEventResult _handleEpisodeCardKey(int index, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (index > 0) {
-        _episodeFocusNodes[index - 1].requestFocus();
-      } else {
-        // First episode: go to season dropdown if available, else back button
-        if (_episodeSeasons.isNotEmpty) {
-          _episodeSeasonDropdownFocusNode.requestFocus();
-        } else {
-          _episodeBackButtonFocusNode.requestFocus();
-        }
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (index < _episodeFocusNodes.length - 1) {
-        _episodeFocusNodes[index + 1].requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   Widget _buildEpisodeFiltersBar() {
@@ -2303,27 +2283,30 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       orElse: () => _episodeSeasons.first,
     );
 
+    final w = MediaQuery.of(context).size.width;
+    final hPad = w >= 900 ? 40.0 : 16.0;
+
     return TvFocusScrollWrapper(
       child: ListView.builder(
         controller: _episodeScrollController,
-        padding: const EdgeInsets.only(top: 8, bottom: 16, left: 16, right: 16),
+        padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 28),
         itemCount: currentSeason.episodes.length,
         itemBuilder: (context, index) {
           final episode = currentSeason.episodes[index];
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _CatalogEpisodeCard(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: EpisodeTile(
               episode: episode,
-              showPosterUrl: _selectedShow?.poster,
+              showImageUrl: _selectedShow?.poster,
+              isTelevision: widget.isTelevision,
+              showQuickPlay: widget.showQuickPlay,
               focusNode: index < _episodeFocusNodes.length
                   ? _episodeFocusNodes[index]
                   : null,
-              onBrowse: () => _onEpisodeTap(episode),
-              onQuickPlay: () => _onEpisodeQuickPlay(episode),
-              showQuickPlay: widget.showQuickPlay,
-              watchProgress:
-                  _episodeWatchProgress['${episode.season}-${episode.number}'],
-              onKeyEvent: (event) => _handleEpisodeCardKey(index, event),
+              watchProgress: _episodeWatchProgress[
+                  '${episode.season}-${episode.number}'],
+              onPlay: () => _onEpisodeQuickPlay(episode),
+              onSources: () => _onEpisodeTap(episode),
             ),
           );
         },
@@ -2473,508 +2456,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 
 const _surfaceDark = Color(0xFF06080F);
-const _placeholderGradient = BoxDecoration(
-  gradient: LinearGradient(colors: [Color(0xFF1A1A2E), _surfaceDark]),
-);
-
-Widget _buildBackdropImage(String? imageUrl) {
-  if (imageUrl == null || imageUrl.isEmpty) {
-    return Container(decoration: _placeholderGradient);
-  }
-  return CachedNetworkImage(
-    imageUrl: imageUrl,
-    memCacheWidth: 600,
-    fit: BoxFit.cover,
-    placeholder: (_, __) => Container(decoration: _placeholderGradient),
-    errorWidget: (_, __, ___) => Container(decoration: _placeholderGradient),
-  );
-}
-
-// ─── Episode card for catalog browser ───────────────────────────────────────
-
-const _accentPurple = Color(0xFF8B5CF6);
-const _accentRed = Color(0xFFED1C24);
-
-class _CatalogEpisodeCard extends StatefulWidget {
-  final TraktEpisode episode;
-  final String? showPosterUrl;
-  final FocusNode? focusNode;
-  final VoidCallback onBrowse;
-  final VoidCallback onQuickPlay;
-  final bool showQuickPlay;
-  final double? watchProgress;
-  final KeyEventResult Function(KeyEvent) onKeyEvent;
-
-  const _CatalogEpisodeCard({
-    required this.episode,
-    this.showPosterUrl,
-    this.focusNode,
-    required this.onBrowse,
-    required this.onQuickPlay,
-    this.showQuickPlay = true,
-    this.watchProgress,
-    required this.onKeyEvent,
-  });
-
-  @override
-  State<_CatalogEpisodeCard> createState() => _CatalogEpisodeCardState();
-}
-
-class _CatalogEpisodeCardState extends State<_CatalogEpisodeCard> {
-  bool _isFocused = false;
-  int _focusedButtonIndex = 0;
-
-  int get _buttonCount => widget.showQuickPlay ? 2 : 1;
-  int? get _quickPlayIndex => widget.showQuickPlay ? 1 : null;
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_focusedButtonIndex > 0) {
-        setState(() => _focusedButtonIndex--);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_focusedButtonIndex < _buttonCount - 1) {
-        setState(() => _focusedButtonIndex++);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_focusedButtonIndex == 0) {
-        widget.onBrowse();
-      } else if (_focusedButtonIndex == _quickPlayIndex) {
-        widget.onQuickPlay();
-      }
-      return KeyEventResult.handled;
-    }
-
-    return widget.onKeyEvent(event);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) {
-        setState(() {
-          _isFocused = focused;
-          _focusedButtonIndex = 0;
-        });
-        if (focused) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
-          );
-        }
-      },
-      onKeyEvent: _handleKeyEvent,
-      child: GestureDetector(
-        onTap: widget.onBrowse,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: _isFocused
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? Colors.white.withValues(alpha: 0.3)
-                  : Colors.white.withValues(alpha: 0.06),
-              width: _isFocused ? 1.5 : 1,
-            ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      blurRadius: 16,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return constraints.maxWidth < 500
-                  ? _buildVerticalLayout(theme)
-                  : _buildHorizontalLayout(theme);
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHorizontalLayout(ThemeData theme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Episode thumbnail with progress bar
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 155,
-            height: 88,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildBackdropImage(
-                  widget.episode.thumbnailUrl ?? widget.showPosterUrl,
-                ),
-                if (widget.watchProgress != null && widget.watchProgress! > 0)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: (widget.watchProgress! / 100).clamp(
-                          0.0,
-                          1.0,
-                        ),
-                        child: Container(
-                          height: 3,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                _accentRed,
-                                _accentRed.withValues(alpha: 0.7),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        // Episode details
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.episode.displayTitle,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              _buildMetadataRow(),
-              if (widget.episode.overview != null &&
-                  widget.episode.overview!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  widget.episode.overview!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
-                    fontSize: 11,
-                    height: 1.4,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        _buildActionButton(
-          icon: Icons.list_rounded,
-          label: 'Sources',
-          color: _accentPurple,
-          isHighlighted: _isFocused && _focusedButtonIndex == 0,
-          onTap: widget.onBrowse,
-        ),
-        if (widget.showQuickPlay) ...[
-          const SizedBox(width: 6),
-          _buildActionButton(
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            color: _accentRed,
-            isHighlighted: _isFocused && _focusedButtonIndex == _quickPlayIndex,
-            onTap: widget.onQuickPlay,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildVerticalLayout(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 120,
-                height: 68,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildBackdropImage(
-                      widget.episode.thumbnailUrl ?? widget.showPosterUrl,
-                    ),
-                    if (widget.watchProgress != null &&
-                        widget.watchProgress! > 0)
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: (widget.watchProgress! / 100).clamp(
-                              0.0,
-                              1.0,
-                            ),
-                            child: Container(
-                              height: 3,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    _accentRed,
-                                    _accentRed.withValues(alpha: 0.7),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.episode.displayTitle,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  _buildMetadataRow(),
-                ],
-              ),
-            ),
-          ],
-        ),
-        if (widget.episode.overview != null &&
-            widget.episode.overview!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            widget.episode.overview!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-              height: 1.4,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionButton(
-                icon: Icons.list_rounded,
-                label: 'Sources',
-                color: _accentPurple,
-                isHighlighted: _isFocused && _focusedButtonIndex == 0,
-                onTap: widget.onBrowse,
-              ),
-            ),
-            if (widget.showQuickPlay) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: 'Play',
-                  color: _accentRed,
-                  isHighlighted:
-                      _isFocused && _focusedButtonIndex == _quickPlayIndex,
-                  onTap: widget.onQuickPlay,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetadataRow() {
-    final ep = widget.episode;
-    final progress = widget.watchProgress;
-    final seasonLabel = ep.season.toString().padLeft(2, '0');
-    final epLabel = ep.number.toString().padLeft(2, '0');
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: const Color(0xFF34D399).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            'S${seasonLabel}E$epLabel',
-            style: const TextStyle(
-              color: Color(0xFF34D399),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        if (ep.formattedAirDate != null)
-          Text(
-            ep.formattedAirDate!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 11,
-            ),
-          ),
-        if (ep.runtime != null)
-          Text(
-            '${ep.runtime} min',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 11,
-            ),
-          ),
-        if (ep.rating != null)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.star_rounded,
-                size: 13,
-                color: Color(0xFFFBBF24),
-              ),
-              const SizedBox(width: 2),
-              Text(
-                ep.rating!.toStringAsFixed(1),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        if (progress != null && progress > 0)
-          Text(
-            progress >= 100.0 ? 'Watched' : '${progress.round()}%',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 11,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required bool isHighlighted,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: isHighlighted ? 1.08 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isHighlighted ? color : Colors.black.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isHighlighted ? color : color.withValues(alpha: 0.6),
-              width: 1,
-            ),
-            boxShadow: isHighlighted
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: isHighlighted
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.9),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isHighlighted
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ─── Select Source Button for catalog episode browser ────────────────────────
 
