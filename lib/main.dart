@@ -2227,6 +2227,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
                 // TV Layout: Sidebar + Content
                 if (_isAndroidTv) {
+                  final tvIndices = _sidebarOrderedIndices(visibleIndices);
+                  final tvSelected = tvIndices.indexOf(_selectedIndex);
                   return Scaffold(
                     backgroundColor: Colors.transparent,
                     body: Row(
@@ -2234,17 +2236,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // TV Sidebar Navigation
                         TvSidebarNav(
                           key: _tvSidebarKey,
-                          currentIndex: currentNavIndex,
+                          currentIndex: tvSelected == -1 ? 0 : tvSelected,
                           items: [
-                            for (final navItem in navItems)
+                            for (final index in tvIndices)
                               TvNavItem(
-                                navItem.icon,
-                                navItem.label,
-                                tag: navItem.tag,
+                                _icons[index],
+                                _titles[index],
+                                section: _navSectionForIndex(index),
                               ),
                           ],
                           onTap: (relativeIndex) {
-                            final actualIndex = visibleIndices[relativeIndex];
+                            final actualIndex = tvIndices[relativeIndex];
                             _onItemTapped(actualIndex);
                             // Focus is handled by sidebar via MainPageBridge
                           },

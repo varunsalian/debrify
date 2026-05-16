@@ -286,8 +286,16 @@ class TvSidebarNavState extends State<TvSidebarNav>
                     final isSelected = index == widget.currentIndex;
                     final isFocused =
                         index == _focusedIndex && _hasSidebarFocus;
+                    // A section header is drawn as a decoration inside the
+                    // first cell of each group — it is NOT a list entry, so
+                    // the focus-node / key-nav index math stays 1:1 with
+                    // widget.items and needs no changes.
+                    final bool startsSection =
+                        item.section != null &&
+                        (index == 0 ||
+                            widget.items[index - 1].section != item.section);
 
-                    return Padding(
+                    final navRow = Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: _TvNavItemWidget(
                         item: item,
@@ -300,6 +308,15 @@ class TvSidebarNavState extends State<TvSidebarNav>
                         onKeyEvent: (event) => _handleKeyEvent(index, event),
                       ),
                     );
+
+                    if (!startsSection) return navRow;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionHeader(item.section!),
+                        navRow,
+                      ],
+                    );
                   },
                 ),
               ),
@@ -307,6 +324,44 @@ class TvSidebarNavState extends State<TvSidebarNav>
           ),
         ),
       ),
+    );
+  }
+
+  /// Group label that collapses away with the rail — the icons-only
+  /// collapsed state (48px) has no room for text. Driven by the same
+  /// _expandAnimation as the branding: heightFactor reclaims the vertical
+  /// space when collapsed, opacity ramps faster so the text only appears
+  /// once the rail is mostly open.
+  Widget _buildSectionHeader(String text) {
+    return AnimatedBuilder(
+      animation: _expandAnimation,
+      builder: (context, _) {
+        final v = _expandAnimation.value.clamp(0.0, 1.0);
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            heightFactor: v,
+            child: Opacity(
+              opacity: (v * 1.6 - 0.6).clamp(0.0, 1.0),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 12, 6),
+                child: Text(
+                  text.toUpperCase(),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.38),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -644,5 +699,9 @@ class TvNavItem {
   final String label;
   final String? tag;
 
-  const TvNavItem(this.icon, this.label, {this.tag});
+  /// Group header this item sits under (e.g. "Main"). Consecutive items
+  /// sharing a section render one header above the first of the group.
+  final String? section;
+
+  const TvNavItem(this.icon, this.label, {this.tag, this.section});
 }
