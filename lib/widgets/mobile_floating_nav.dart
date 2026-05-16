@@ -375,13 +375,26 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (int i = 0; i < widget.items.length; i++) ...[
+                  // Sections replace the per-item dividers: a header is
+                  // drawn above the first item of each group, and no
+                  // divider is inserted between items. Falls back to the
+                  // old divided list when items carry no section.
+                  if (widget.items[i].section != null &&
+                      (i == 0 ||
+                          widget.items[i - 1].section !=
+                              widget.items[i].section))
+                    _SectionLabel(
+                      widget.items[i].section!,
+                      first: i == 0,
+                    ),
                   _GlassMenuItem(
                     item: widget.items[i],
                     isSelected: i == widget.currentIndex,
                     gradient: widget.getGradientForIndex(i),
                     onTap: () => widget.onSelectItem(i),
                   ),
-                  if (i < widget.items.length - 1)
+                  if (widget.items[i].section == null &&
+                      i < widget.items.length - 1)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Divider(
@@ -475,6 +488,30 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Group header inside the expanded menu. Matches the desktop / TV rail
+/// label styling so all three nav surfaces read the same.
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final bool first;
+  const _SectionLabel(this.text, {this.first = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(14, first ? 6 : 16, 12, 6),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.38),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
       ),
     );
   }
@@ -790,5 +827,10 @@ class MobileNavItem {
   final String label;
   final String? tag;
 
-  const MobileNavItem(this.icon, this.label, {this.tag});
+  /// Group header this item sits under (e.g. "Main"). Consecutive items
+  /// sharing a section render one header above the first of the group;
+  /// when set, sections replace the per-item dividers.
+  final String? section;
+
+  const MobileNavItem(this.icon, this.label, {this.tag, this.section});
 }

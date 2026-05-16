@@ -2318,7 +2318,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   );
                 }
 
-                // Mobile & Desktop Layout
+                // Mobile & Desktop Layout. The top bar (mid-width desktop)
+                // stays a flat list; the mobile floating menu is grouped
+                // into the same sections as the rails.
+                final mobileIndices = _sidebarOrderedIndices(visibleIndices);
+                final mobileSelected = mobileIndices.indexOf(_selectedIndex);
                 return Scaffold(
                   backgroundColor: Colors.transparent,
                   // Hide AppBar on mobile - we'll use floating nav instead
@@ -2346,17 +2350,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                       // Floating nav on mobile
                       if (isMobile)
                         MobileFloatingNav(
-                          currentIndex: currentNavIndex,
+                          currentIndex:
+                              mobileSelected == -1 ? 0 : mobileSelected,
                           items: [
-                            for (final navItem in navItems)
+                            for (final index in mobileIndices)
                               MobileNavItem(
-                                navItem.icon,
-                                navItem.label,
-                                tag: navItem.tag,
+                                _icons[index],
+                                _titles[index],
+                                section: _navSectionForIndex(index),
                               ),
                           ],
                           onTap: (relativeIndex) {
-                            final actualIndex = visibleIndices[relativeIndex];
+                            final actualIndex = mobileIndices[relativeIndex];
                             _onItemTapped(actualIndex);
                           },
                           onRemoteControlTap: () {
