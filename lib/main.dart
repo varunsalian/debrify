@@ -46,6 +46,7 @@ import 'widgets/auto_launch_overlay.dart';
 import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
 import 'widgets/tv_sidebar_nav.dart';
+import 'widgets/desktop_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
@@ -2038,6 +2039,81 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return indices;
   }
 
+  /// Group label for the desktop sidebar, keyed by screen index (the index
+  /// into [_pages]/[_titles], not the visible-nav position).
+  String _navSectionForIndex(int screenIndex) {
+    switch (screenIndex) {
+      case 0: // Home
+      case 2: // Downloads
+        return 'Main';
+      case 3: // Debrify TV
+      case 9: // Stremio TV
+        return 'TV';
+      case 4: // Real Debrid
+      case 5: // Torbox
+      case 6: // PikPak
+      case 10: // WebDAV
+        return 'Library';
+      case 7: // Addons
+      case 8: // Settings
+        return 'Setup';
+      default:
+        return 'Main';
+    }
+  }
+
+  /// Canonical sidebar section order. The visible-nav order interleaves
+  /// sections (e.g. Downloads sits between Home and Debrify TV), so the
+  /// desktop sidebar reorders by this rank — stable within a section — to
+  /// keep each group contiguous and its header shown once.
+  static const List<String> _navSectionOrder = [
+    'Main',
+    'Library',
+    'TV',
+    'Setup',
+  ];
+
+  /// [visibleIndices] reordered so entries are grouped by section, in
+  /// [_navSectionOrder], preserving original order within each section.
+  List<int> _sidebarOrderedIndices(List<int> visibleIndices) {
+    final ordered = [...visibleIndices];
+    ordered.sort((a, b) {
+      final ra = _navSectionOrder.indexOf(_navSectionForIndex(a));
+      final rb = _navSectionOrder.indexOf(_navSectionForIndex(b));
+      if (ra != rb) return ra.compareTo(rb);
+      return visibleIndices.indexOf(a).compareTo(visibleIndices.indexOf(b));
+    });
+    return ordered;
+  }
+
+  /// Shared fade + slide page switcher used by every layout (TV, desktop
+  /// sidebar, top-bar/mobile). Keyed by [_selectedIndex] so tab swaps
+  /// animate. Each layout wraps this in its own SafeArea/Column as needed.
+  Widget _buildAnimatedPage() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        transitionBuilder: (child, animation) {
+          final offsetAnimation = Tween<Offset>(
+            begin: const Offset(0.02, 0.02),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          );
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: offsetAnimation, child: child),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey<int>(_selectedIndex),
+          child: _pages[_selectedIndex],
+        ),
+      ),
+    );
+  }
+
   void _showMissingApiKeySnack(String provider) {
     final bool integrationDisabled = provider == 'Real Debrid'
         ? !_rdIntegrationEnabled
@@ -2181,34 +2257,57 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         Expanded(
                           child: SafeArea(
                             left: false,
-                            child: FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 350),
-                                transitionBuilder: (child, animation) {
-                                  final offsetAnimation =
-                                      Tween<Offset>(
-                                        begin: const Offset(0.02, 0.02),
-                                        end: Offset.zero,
-                                      ).animate(
-                                        CurvedAnimation(
-                                          parent: animation,
-                                          curve: Curves.easeOutCubic,
-                                        ),
-                                      );
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(
-                                      position: offsetAnimation,
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: KeyedSubtree(
-                                  key: ValueKey<int>(_selectedIndex),
-                                  child: _pages[_selectedIndex],
-                                ),
+                            child: _buildAnimatedPage(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Wide desktop: persistent left sidebar instead of top nav.
+                final isDesktopWide =
+                    !_isAndroidTv && constraints.maxWidth >= 1000;
+                if (isDesktopWide) {
+                  final sidebarIndices =
+                      _sidebarOrderedIndices(visibleIndices);
+                  final sidebarSelected =
+                      sidebarIndices.indexOf(_selectedIndex);
+                  return Scaffold(
+                    backgroundColor: Colors.transparent,
+                    body: Row(
+                      children: [
+                        DesktopSidebarNav(
+                          currentIndex:
+                              sidebarSelected == -1 ? 0 : sidebarSelected,
+                          entries: [
+                            for (final index in sidebarIndices)
+                              DesktopNavEntry(
+                                _icons[index],
+                                _titles[index],
+                                _navSectionForIndex(index),
                               ),
+                          ],
+                          onTap: (relativeIndex) {
+                            final actualIndex = sidebarIndices[relativeIndex];
+                            _onItemTapped(actualIndex);
+                          },
+                        ),
+                        Expanded(
+                          child: SafeArea(
+                            left: false,
+                            child: Column(
+                              children: [
+                                // Top strip keeps the frameless window
+                                // draggable now that the AppBar is gone.
+                                const WindowDragArea(
+                                  child: SizedBox(
+                                    height: 26,
+                                    width: double.infinity,
+                                  ),
+                                ),
+                                Expanded(child: _buildAnimatedPage()),
+                              ],
                             ),
                           ),
                         ),
@@ -2241,37 +2340,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         ),
                   body: Stack(
                     children: [
-                      SafeArea(
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 350),
-                            transitionBuilder: (child, animation) {
-                              final offsetAnimation =
-                                  Tween<Offset>(
-                                    begin: const Offset(0.02, 0.02),
-                                    end: Offset.zero,
-                                  ).animate(
-                                    CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                    ),
-                                  );
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: offsetAnimation,
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: KeyedSubtree(
-                              key: ValueKey<int>(_selectedIndex),
-                              child: _pages[_selectedIndex],
-                            ),
-                          ),
-                        ),
-                      ),
+                      SafeArea(child: _buildAnimatedPage()),
                       // Floating nav on mobile
                       if (isMobile)
                         MobileFloatingNav(
