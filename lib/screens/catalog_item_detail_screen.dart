@@ -69,8 +69,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (!widget.isTelevision) _revealCtrl.forward();
-      // Land focus on Play (or Sources when Play is hidden, e.g. PikPak).
-      (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
+      // Land focus on Play (or Sources when Play is hidden, e.g. PikPak) so
+      // the remote has a starting point. TV only — on mobile/desktop an
+      // auto-applied golden focus border just looks out of place.
+      if (widget.isTelevision) {
+        (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
+      }
     });
   }
 

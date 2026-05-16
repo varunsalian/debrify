@@ -1995,15 +1995,17 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
   }
 
-  /// Robustly brings episode [epIndex] into view and focuses it.
+  /// Robustly brings episode [epIndex] into view.
   ///
   /// The episode list is a lazy ListView with variable-height tiles, so a
   /// single fixed/proportional jump is unreliable — an off-screen target
   /// tile isn't built, leaving its FocusNode contextless. This re-reads
   /// scroll metrics each frame and converges (the builder's maxScrollExtent
-  /// grows as more rows lay out), then once the tile exists just focuses it
-  /// — EpisodeTile.onFocusChange centers it precisely. Bounded so it can
-  /// never spin.
+  /// grows as more rows lay out). Once the tile exists: on TV focus it (the
+  /// tile self-centers via EpisodeTile.onFocusChange and shows the focus
+  /// border for the remote); on mobile/desktop just scroll it into view
+  /// without focusing — an auto-applied golden focus border there looks out
+  /// of place. Bounded so it can never spin.
   void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
     const int maxAttempts = 16;
     void attempt(int n) {
@@ -2011,11 +2013,21 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
       final node = _episodeFocusNodes[epIndex];
       if (node.context != null) {
-        node.requestFocus();
+        if (widget.isTelevision) {
+          node.requestFocus();
+        } else {
+          Scrollable.ensureVisible(
+            node.context!,
+            alignment: 0.5,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          );
+        }
         return;
       }
       if (n >= maxAttempts || !_episodeScrollController.hasClients) {
-        node.requestFocus(); // best effort, then stop
+        if (widget.isTelevision) node.requestFocus(); // best effort, then stop
         return;
       }
       final pos = _episodeScrollController.position;

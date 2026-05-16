@@ -728,7 +728,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
         ),
       const TraktMenuOption(
         action: TraktItemMenuAction.addToStremioTv,
-        icon: Icons.cast_rounded,
+        icon: Icons.live_tv_rounded,
         color: Color(0xFF22C55E),
         label: 'Add to Stremio TV',
         caption: 'Stremio TV',
@@ -2031,15 +2031,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
   }
 
-  /// Robustly brings episode [epIndex] into view and focuses it.
+  /// Robustly brings episode [epIndex] into view.
   ///
   /// The episode list is a lazy ListView with variable-height tiles, so a
   /// single proportional jump is unreliable — an off-screen target tile
   /// isn't built, leaving its FocusNode contextless and the jump estimate
   /// wrong. This re-reads scroll metrics each frame and converges (the
-  /// builder's maxScrollExtent grows as more rows lay out), then once the
-  /// tile exists just focuses it — EpisodeTile.onFocusChange centers it
-  /// precisely. Bounded so it can never spin.
+  /// builder's maxScrollExtent grows as more rows lay out). Once the tile
+  /// exists: on TV focus it (the tile self-centers via
+  /// EpisodeTile.onFocusChange and shows the focus border for the remote);
+  /// on mobile/desktop just scroll it into view without focusing — an
+  /// auto-applied golden focus border there looks out of place. Bounded so
+  /// it can never spin.
   void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
     const int maxAttempts = 16;
     void attempt(int n) {
@@ -2047,12 +2050,22 @@ class TraktResultsViewState extends State<TraktResultsView> {
       if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
       final node = _episodeFocusNodes[epIndex];
       if (node.context != null) {
-        // Target tile built — focus it; the tile self-scrolls into view.
-        node.requestFocus();
+        if (widget.isTelevision) {
+          // Tile self-scrolls into view via EpisodeTile.onFocusChange.
+          node.requestFocus();
+        } else {
+          Scrollable.ensureVisible(
+            node.context!,
+            alignment: 0.5,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          );
+        }
         return;
       }
       if (n >= maxAttempts || !_episodeScrollController.hasClients) {
-        node.requestFocus(); // best effort, then stop
+        if (widget.isTelevision) node.requestFocus(); // best effort, then stop
         return;
       }
       final pos = _episodeScrollController.position;

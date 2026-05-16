@@ -337,7 +337,7 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
     if (isSeries || isMovie)
       const TraktMenuOption(
         action: TraktItemMenuAction.addToStremioTv,
-        icon: Icons.cast_rounded,
+        icon: Icons.live_tv_rounded,
         color: Color(0xFF22C55E),
         label: 'Add to Stremio TV',
         caption: 'Stremio TV',
