@@ -698,22 +698,83 @@ class _Description extends StatelessWidget {
             ),
             if (overflows) ...[
               const SizedBox(height: 6),
-              GestureDetector(
-                onTap: onToggle,
-                child: Text(
-                  expanded ? 'Show less' : 'Read more',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.95),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
+              _ReadMoreToggle(
+                label: expanded ? 'Show less' : 'Read more',
+                onToggle: onToggle,
               ),
             ],
           ],
         );
       },
+    );
+  }
+}
+
+/// Focusable "Read more / Show less" toggle. A bare GestureDetector is not
+/// reachable or activatable with a D-pad/remote, so this mirrors the
+/// focus idiom used by [_QuickAction]: a [Focus] that tracks focus, accepts
+/// select/enter/space, and shows a gold affordance when focused or hovered.
+class _ReadMoreToggle extends StatefulWidget {
+  final String label;
+  final VoidCallback onToggle;
+  const _ReadMoreToggle({required this.label, required this.onToggle});
+
+  @override
+  State<_ReadMoreToggle> createState() => _ReadMoreToggleState();
+}
+
+class _ReadMoreToggleState extends State<_ReadMoreToggle> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool get _active => _focused || _hovered;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space ||
+                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+          widget.onToggle();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onToggle,
+          behavior: HitTestBehavior.opaque,
+          // Inactive state is byte-identical to the old bare text link (no
+          // box/indent, so the phone/touch look is unchanged). Focus/hover is
+          // signalled with gold + underline + a transform-only scale (no
+          // layout reflow), echoing _QuickAction's scale feedback.
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            scale: _active ? 1.04 : 1.0,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                color: _active
+                    ? HomeTheme.focusGold
+                    : Colors.white.withValues(alpha: 0.95),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+                decoration: _active ? TextDecoration.underline : null,
+                decorationColor: HomeTheme.focusGold,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
