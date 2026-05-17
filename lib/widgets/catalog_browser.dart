@@ -159,6 +159,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   int? _pendingEpisodeSeason;
   int? _pendingEpisodeEpisode;
   bool _pushingEpisodes = false; // Guards against double-push on fast re-tap
+  StremioMeta? _drillDownShow; // Last show opened in EpisodesScreen (for return)
 
   /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
@@ -193,6 +194,22 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       _pendingEpisodeSeason = season;
       _pendingEpisodeEpisode = episode;
     }
+  }
+
+  /// Public: re-open the most recently drilled-into show's episode list.
+  /// Called by the host when the user backs out of episode-sourced torrent
+  /// results so they land back on the episode list, not the catalog grid.
+  /// Reuses the exact same creation path (identical addon/wiring); no-op if
+  /// there is nothing remembered. [_enterEpisodeMode] guards addon/double-push.
+  void reEnterEpisodeDrillDown({int? season, int? episode}) {
+    final show = _drillDownShow;
+    if (show == null) return;
+    _enterEpisodeMode(
+      show,
+      initialSeason: season,
+      initialEpisode: episode,
+      instant: true, // no slide → the cleared grid never shows behind it
+    );
   }
 
   /// Check if content list has any items that can receive focus
@@ -1724,11 +1741,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     StremioMeta show, {
     int? initialSeason,
     int? initialEpisode,
+    bool instant = false,
   }) async {
     final addon = _selectedAddon;
     if (addon == null) return; // preserve existing deferral guard semantics
     if (_pushingEpisodes) return; // a drill-down route is already on the way
     _pushingEpisodes = true;
+    _drillDownShow = show; // remember for reEnterEpisodeDrillDown()
 
     final screen = EpisodesScreen(
       show: show,
@@ -1750,10 +1769,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           : (s) => _handleSelectSourceAction(s),
     );
 
-    // On TV the rest of the app suppresses route transitions for GPU perf
-    // (and the old inline episode mode had none); use an instant route there
-    // instead of MaterialPageRoute's slide.
-    final route = widget.isTelevision
+    // Instant, transition-less route when:
+    //  • TV — the app suppresses route transitions there for GPU perf, and
+    //    the old inline episode mode had none; or
+    //  • [instant] — a back-restore (reEnterEpisodeDrillDown). A slide here
+    //    would expose the just-cleared catalog grid behind the incoming
+    //    route for the duration of the animation (the "flash"). An opaque
+    //    zero-duration route is on top the instant push returns, so the
+    //    grid-clear happens fully hidden behind it.
+    final route = (widget.isTelevision || instant)
         ? PageRouteBuilder(
             settings: const RouteSettings(name: kEpisodesRouteName),
             transitionDuration: Duration.zero,

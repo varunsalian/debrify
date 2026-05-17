@@ -14,6 +14,13 @@ class AdvancedSearchSelection {
   /// Whether this selection originated from Trakt (continue watching, watchlist, etc.)
   final bool traktSource;
 
+  /// True only when built by [EpisodesScreen]'s episode "Browse/Sources" tap.
+  /// Lets the host return to the episode list (not the catalog grid) when the
+  /// user backs out of the resulting torrent search. Intrinsic to this one
+  /// selection, so it can't go stale or be confused with the Trakt inline
+  /// episode browser (which leaves this false).
+  final bool fromCatalogEpisodeDrillDown;
+
   const AdvancedSearchSelection({
     required this.imdbId,
     required this.isSeries,
@@ -25,6 +32,7 @@ class AdvancedSearchSelection {
     this.posterUrl,
     this.traktProgressPercent,
     this.traktSource = false,
+    this.fromCatalogEpisodeDrillDown = false,
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)

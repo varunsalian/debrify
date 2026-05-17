@@ -428,6 +428,9 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
+      // Lets the host send the user back to this episode list (not the
+      // catalog grid) when they back out of the torrent results.
+      fromCatalogEpisodeDrillDown: true,
     );
     _selectionDispatched = true;
     _popToHost();

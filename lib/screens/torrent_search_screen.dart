@@ -369,6 +369,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   // Back navigation state - track where user came from before searching
   bool _cameFromCatalogBrowse = false;
+  // True when the current results came from an EpisodesScreen episode tap, so
+  // _goBackToCatalog() returns to that episode list instead of the grid.
+  // Set intrinsically from the selection on every catalog selection (so it
+  // can't go stale); the season/episode below say where to land.
+  bool _resultsFromEpisodeTap = false;
+  int? _episodeReturnSeason;
+  int? _episodeReturnEpisode;
   String _previousSearchQuery = ''; // The query text before catalog selection
   SearchSourceOption?
   _sourceBeforeEpisodeDrillDown; // Source to return to when exiting episode mode from aggregated search
@@ -2334,6 +2341,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _goBackToCatalog() {
+    // If these results came from an EpisodesScreen episode tap, re-open that
+    // episode list *before* clearing results below. EpisodesScreen is an
+    // opaque full-screen route, so pushing it first means the catalog grid
+    // (revealed by the clear) is never painted — no flash. Clear the flags
+    // first so this can't loop; the push is synchronous (we're inside an
+    // event callback) and the grid-clear then happens hidden behind it.
+    if (_resultsFromEpisodeTap) {
+      final int? season = _episodeReturnSeason;
+      final int? episode = _episodeReturnEpisode;
+      _resultsFromEpisodeTap = false;
+      _episodeReturnSeason = null;
+      _episodeReturnEpisode = null;
+      _catalogBrowserKey.currentState
+          ?.reEnterEpisodeDrillDown(season: season, episode: episode);
+    }
+
     setState(() {
       // Clear search results
       _hasSearched = false;
@@ -3436,6 +3459,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     bool updateSearchText = false,
   }) async {
     _cameFromCatalogBrowse = true;
+    // Recomputed from the selection every call, so it never goes stale and a
+    // later non-episode/Trakt/movie selection clears it automatically.
+    _resultsFromEpisodeTap = selection.fromCatalogEpisodeDrillDown;
+    _episodeReturnSeason = selection.season;
+    _episodeReturnEpisode = selection.episode;
     _previousSearchQuery = _searchController.text;
 
     // Snapshot the Quick Play epoch before any pre-search await below
