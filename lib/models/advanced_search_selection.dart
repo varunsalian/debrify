@@ -21,6 +21,13 @@ class AdvancedSearchSelection {
   /// episode browser (which leaves this false).
   final bool fromCatalogEpisodeDrillDown;
 
+  /// True only when built by the catalog [CatalogItemDetailScreen]'s
+  /// "Sources/Browse" tap for a movie / no-meta series. Lets the host return
+  /// to that detail screen (not the catalog grid) when the user backs out of
+  /// the resulting torrent search. Intrinsic to this one selection, so it
+  /// can't go stale; mutually exclusive with [fromCatalogEpisodeDrillDown].
+  final bool fromCatalogItemDetail;
+
   const AdvancedSearchSelection({
     required this.imdbId,
     required this.isSeries,
@@ -33,6 +40,7 @@ class AdvancedSearchSelection {
     this.traktProgressPercent,
     this.traktSource = false,
     this.fromCatalogEpisodeDrillDown = false,
+    this.fromCatalogItemDetail = false,
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)

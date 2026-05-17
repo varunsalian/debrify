@@ -160,6 +160,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   int? _pendingEpisodeEpisode;
   bool _pushingEpisodes = false; // Guards against double-push on fast re-tap
   StremioMeta? _drillDownShow; // Last show opened in EpisodesScreen (for return)
+  bool _pushingDetail = false; // Guards against double-push of the detail route
+  StremioMeta? _detailItem; // Last item opened in the detail screen (for return)
 
   /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
@@ -210,6 +212,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       initialEpisode: episode,
       instant: true, // no slide → the cleared grid never shows behind it
     );
+  }
+
+  /// Public: re-open the most recently opened item detail screen. Called by
+  /// the host when the user backs out of detail-sourced torrent results (a
+  /// movie / no-meta series) so they land back on that detail screen, not the
+  /// catalog grid. No-op if there is nothing remembered.
+  void reEnterItemDetail() {
+    final item = _detailItem;
+    if (item == null) return;
+    _openItemDetail(item, instant: true);
   }
 
   /// Check if content list has any items that can receive focus
@@ -653,6 +665,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       year: item.year,
       contentType: item.type,
       posterUrl: item.poster,
+      // Reached only from the detail screen's Browse; lets the host send the
+      // user back to that detail screen (not the grid) on back from results.
+      fromCatalogItemDetail: true,
     );
 
     // The detail screen no longer self-pops on Browse (so series drill-down
@@ -1874,7 +1889,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     );
   }
 
-  Future<void> _openItemDetail(StremioMeta item) async {
+  Future<void> _openItemDetail(StremioMeta item, {bool instant = false}) async {
+    if (_pushingDetail) return; // a detail route is already on the way
+    _pushingDetail = true;
+    _detailItem = item; // remember for reEnterItemDetail()
+
     final hasTrakt =
         item.hasValidImdbId ||
         (item.hasValidId &&
@@ -1891,46 +1910,63 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           )
         : const <TraktMenuOption>[];
 
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        settings: const RouteSettings(name: kCatalogDetailRouteName),
-        builder: (_) => CatalogItemDetailScreen(
-          item: item,
-          isTelevision: widget.isTelevision,
-          showQuickPlay: widget.showQuickPlay,
-          hasBoundSource: hasBoundSource,
-          traktMenuOptions: traktItems,
-          onTraktAction: (action) {
-            // searchPacks/selectSource/stremioTv/random replace or leave
-            // the host screen; the detail screen is pushed on top, so
-            // close it first or the result happens invisibly behind it.
-            const leaves = {
-              TraktItemMenuAction.searchPacks,
-              TraktItemMenuAction.selectSource,
-              TraktItemMenuAction.addToStremioTv,
-              TraktItemMenuAction.playRandomEpisode,
-            };
-            if (leaves.contains(action) &&
-                Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            }
-            handleTraktMenuAction(
-              context,
-              item,
-              action,
-              onSelectSource: widget.onSelectSource,
-              onEditSource: _handleSelectSourceAction,
-              onPlayRandomEpisode: (show) async {
-                await widget.onPlayRandomEpisode?.call(show, _selectedAddon);
-              },
-              onSearchPacks: widget.onSearchPacks,
-              onAddToStremioTv: _handleAddToStremioTv,
-            );
+    final screen = CatalogItemDetailScreen(
+      item: item,
+      isTelevision: widget.isTelevision,
+      showQuickPlay: widget.showQuickPlay,
+      hasBoundSource: hasBoundSource,
+      traktMenuOptions: traktItems,
+      onTraktAction: (action) {
+        // searchPacks/selectSource/stremioTv/random replace or leave
+        // the host screen; the detail screen is pushed on top, so
+        // close it first or the result happens invisibly behind it.
+        const leaves = {
+          TraktItemMenuAction.searchPacks,
+          TraktItemMenuAction.selectSource,
+          TraktItemMenuAction.addToStremioTv,
+          TraktItemMenuAction.playRandomEpisode,
+        };
+        if (leaves.contains(action) && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        handleTraktMenuAction(
+          context,
+          item,
+          action,
+          onSelectSource: widget.onSelectSource,
+          onEditSource: _handleSelectSourceAction,
+          onPlayRandomEpisode: (show) async {
+            await widget.onPlayRandomEpisode?.call(show, _selectedAddon);
           },
-          onPlay: () => _onQuickPlay(item),
-          onBrowse: () => _onItemTap(item),
-        ),
-      ),
+          onSearchPacks: widget.onSearchPacks,
+          onAddToStremioTv: _handleAddToStremioTv,
+        );
+      },
+      onPlay: () => _onQuickPlay(item),
+      onBrowse: () => _onItemTap(item),
     );
+
+    // Only the back-restore (reEnterItemDetail) uses an instant route — same
+    // rationale as _enterEpisodeMode: a slide would expose the just-cleared
+    // catalog grid behind the incoming opaque route for the animation's
+    // duration (the "flash"). Normal opens keep the original MaterialPageRoute
+    // on every platform (this method never special-cased TV).
+    final route = instant
+        ? PageRouteBuilder(
+            settings: const RouteSettings(name: kCatalogDetailRouteName),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+            pageBuilder: (_, __, ___) => screen,
+          )
+        : MaterialPageRoute(
+            settings: const RouteSettings(name: kCatalogDetailRouteName),
+            builder: (_) => screen,
+          );
+
+    try {
+      await Navigator.of(context).push(route);
+    } finally {
+      _pushingDetail = false;
+    }
   }
 }

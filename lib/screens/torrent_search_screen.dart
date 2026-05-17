@@ -376,6 +376,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _resultsFromEpisodeTap = false;
   int? _episodeReturnSeason;
   int? _episodeReturnEpisode;
+  // True when the current results came from the catalog detail screen's
+  // Sources/Browse (movie / no-meta series), so _goBackToCatalog() returns to
+  // that detail screen instead of the grid. Recomputed from the selection
+  // every catalog selection (mutually exclusive with _resultsFromEpisodeTap).
+  bool _resultsFromItemDetail = false;
   String _previousSearchQuery = ''; // The query text before catalog selection
   SearchSourceOption?
   _sourceBeforeEpisodeDrillDown; // Source to return to when exiting episode mode from aggregated search
@@ -2357,6 +2362,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           ?.reEnterEpisodeDrillDown(season: season, episode: episode);
     }
 
+    // Same pattern for the movie / no-meta-series detail screen: re-open it
+    // (instant, opaque) before the grid-clear so it's never seen. Mutually
+    // exclusive with the episode case above (a selection sets at most one
+    // flag), so the order of these two blocks doesn't matter.
+    if (_resultsFromItemDetail) {
+      _resultsFromItemDetail = false;
+      _catalogBrowserKey.currentState?.reEnterItemDetail();
+    }
+
     setState(() {
       // Clear search results
       _hasSearched = false;
@@ -3462,6 +3476,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Recomputed from the selection every call, so it never goes stale and a
     // later non-episode/Trakt/movie selection clears it automatically.
     _resultsFromEpisodeTap = selection.fromCatalogEpisodeDrillDown;
+    _resultsFromItemDetail = selection.fromCatalogItemDetail;
     _episodeReturnSeason = selection.season;
     _episodeReturnEpisode = selection.episode;
     _previousSearchQuery = _searchController.text;
