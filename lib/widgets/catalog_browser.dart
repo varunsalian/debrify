@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
@@ -9,20 +8,17 @@ import '../models/advanced_search_selection.dart';
 import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
-import '../services/trakt/trakt_episode_model.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
-import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
 import 'catalog_item_tile.dart';
-import 'episode_tile.dart';
-import 'home/home_theme.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
+import '../screens/episodes_screen.dart';
 
 /// A browsable catalog widget that shows content from Stremio addons.
 ///
@@ -71,11 +67,13 @@ class CatalogBrowser extends StatefulWidget {
   /// Callback when user selects "Search Season Packs" for a series
   final void Function(StremioMeta show)? onSearchPacks;
 
-  /// Callback when user exits episode drill-down mode (back button)
+  /// Callback when the episode drill-down route is dismissed *without* a
+  /// terminal selection (back button / system back / gesture). The host uses
+  /// this to restore the search source it switched away from when entering
+  /// the drill-down (e.g. from aggregated "Browse series episodes"). It is
+  /// deliberately NOT fired when an episode/fallback is chosen — those paths
+  /// dispatch [onItemSelected]/[onQuickPlay] and the host owns that teardown.
   final VoidCallback? onEpisodeModeExited;
-
-  /// Callback when user enters episode drill-down (opens a series).
-  final VoidCallback? onEpisodeModeEntered;
 
   /// Whether running on Android TV (disables animations, shadows, clips for GPU perf)
   final bool isTelevision;
@@ -94,7 +92,6 @@ class CatalogBrowser extends StatefulWidget {
     this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onEpisodeModeExited,
-    this.onEpisodeModeEntered,
     this.isTelevision = false,
   });
 
@@ -161,49 +158,18 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   StremioMeta? _pendingEpisodeShow; // Deferred until _loadAddons completes
   int? _pendingEpisodeSeason;
   int? _pendingEpisodeEpisode;
-  int _episodeModeGeneration = 0;
-  StremioMeta? _selectedShow;
-  List<TraktSeason> _episodeSeasons = [];
-  int _selectedSeasonNumber = 1;
-  bool _isLoadingEpisodes = false;
-  String? _episodeErrorMessage;
-  Map<String, double> _episodeWatchProgress = {};
-  List<FocusNode> _episodeFocusNodes = [];
-  final ScrollController _episodeScrollController = ScrollController();
-  final FocusNode _episodeBackButtonFocusNode = FocusNode(
-    debugLabel: 'catalog-ep-back',
-  );
-  final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(
-    debugLabel: 'catalog-ep-season',
-  );
+  bool _pushingEpisodes = false; // Guards against double-push on fast re-tap
 
   /// Public method to request focus on the first dropdown (catalog dropdown)
   /// Called from parent when navigating down from Sources
   void requestFocusOnFirstDropdown() {
-    if (_selectedShow != null) {
-      // Episode mode: catalog dropdown is not in tree — focus season dropdown or back button
-      if (_episodeSeasons.isNotEmpty) {
-        _episodeSeasonDropdownFocusNode.requestFocus();
-      } else {
-        _episodeBackButtonFocusNode.requestFocus();
-      }
-    } else {
-      _catalogDropdownFocusNode.requestFocus();
-    }
+    _catalogDropdownFocusNode.requestFocus();
   }
 
   /// Public method to request focus on the last focused content item
   /// Called from parent when returning from sidebar navigation
   /// Returns true if focus was restored to a content item, false otherwise
   bool requestFocusOnLastItem() {
-    // Episode mode: focus episode items
-    if (_selectedShow != null) {
-      if (_episodeFocusNodes.isNotEmpty) {
-        _episodeFocusNodes.first.requestFocus();
-        return true;
-      }
-      return false;
-    }
     if (_focusedContentIndex >= 0 &&
         _focusedContentIndex < _contentFocusNodes.length) {
       _contentFocusNodes[_focusedContentIndex].requestFocus();
@@ -253,8 +219,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _providerDropdownFocusNode.onKeyEvent = _handleProviderDropdownKeyEvent;
     _catalogDropdownFocusNode.onKeyEvent = _handleCatalogDropdownKeyEvent;
     _genreDropdownFocusNode.onKeyEvent = _handleGenreDropdownKeyEvent;
-    _episodeSeasonDropdownFocusNode.onKeyEvent =
-        _handleEpisodeSeasonDropdownKeyEvent;
   }
 
   Future<void> _refreshTraktAuthState() async {
@@ -269,14 +233,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   /// Navigate down from top dropdowns: if in episode mode, go to season dropdown; otherwise content items.
   void _focusDownFromDropdowns() {
-    if (_selectedShow != null) {
-      // Episode mode: go to season dropdown (or back button if no seasons)
-      if (_episodeSeasons.isNotEmpty) {
-        _episodeSeasonDropdownFocusNode.requestFocus();
-      } else {
-        _episodeBackButtonFocusNode.requestFocus();
-      }
-    } else if (_contentFocusNodes.isNotEmpty) {
+    if (_contentFocusNodes.isNotEmpty) {
       _contentFocusNodes[0].requestFocus();
     }
   }
@@ -359,8 +316,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
     // Handle filterAddon changes (user switched addon in dropdown)
     if (widget.filterAddon != oldWidget.filterAddon) {
-      // Exit episode mode if active
-      if (_selectedShow != null) _exitEpisodeMode();
       // Reset state and reload with new addon
       setState(() {
         _selectedAddon = null;
@@ -403,9 +358,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _searchDebouncer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _episodeScrollController.dispose();
-    _episodeBackButtonFocusNode.dispose();
-    _episodeSeasonDropdownFocusNode.dispose();
     _providerDropdownFocusNode.dispose();
     _catalogDropdownFocusNode.dispose();
     _genreDropdownFocusNode.dispose();
@@ -413,9 +365,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     _catalogDropdownFocused.dispose();
     _genreDropdownFocused.dispose();
     for (final node in _contentFocusNodes) {
-      node.dispose();
-    }
-    for (final node in _episodeFocusNodes) {
       node.dispose();
     }
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
@@ -689,6 +638,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       posterUrl: item.poster,
     );
 
+    // The detail screen no longer self-pops on Browse (so series drill-down
+    // can stack on top of it). For the direct/movie path there is no pushed
+    // child, so close the detail route here or the host's inline search
+    // result would be hidden behind it.
+    Navigator.of(context).popUntil(
+      (r) => r.settings.name != kCatalogDetailRouteName,
+    );
     widget.onItemSelected!(selection);
   }
 
@@ -794,22 +750,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                 fontSize: 14,
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    // Episode drill-down mode
-    if (_selectedShow != null) {
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _exitEpisodeMode();
-        },
-        child: Column(
-          children: [
-            _buildEpisodeFiltersBar(),
-            Expanded(child: _buildEpisodeContent()),
           ],
         ),
       );
@@ -1146,10 +1086,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   /// Public: refresh bound sources cache (call after Select Source completes).
   void refreshBoundSources() async {
     await _loadBoundSources();
-    _loadBoundSourceForShow();
-    if (_selectedShow != null) {
-      _loadEpisodeWatchProgress(_selectedShow!);
-    }
   }
 
   /// Load bound sources for all currently displayed series and movie items.
@@ -1174,34 +1110,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         );
         _boundSources.addAll(sources);
       });
-    }
-  }
-
-  /// Load bound source for the currently selected show (episode mode).
-  Future<void> _loadBoundSourceForShow() async {
-    if (_selectedShow == null) return;
-    final imdbId = _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-    final list = await SeriesSourceService.getSources(imdbId);
-    if (mounted) {
-      setState(() {
-        if (list.isNotEmpty) {
-          _boundSources[imdbId] = list;
-        } else {
-          _boundSources.remove(imdbId);
-        }
-      });
-    }
-  }
-
-  /// Load episode watch progress for the selected show.
-  Future<void> _loadEpisodeWatchProgress(StremioMeta show) async {
-    final imdbId = show.effectiveImdbId;
-    if (imdbId == null) return;
-    final progress = await StorageService.getEpisodeWatchProgressByImdbId(
-      imdbId,
-    );
-    if (mounted) {
-      setState(() => _episodeWatchProgress = progress);
     }
   }
 
@@ -1812,588 +1720,56 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
   // ── Episode drill-down ──────────────────────────────────────────────────
 
-  /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
-  void _fallbackToDirectSearch(StremioMeta show) {
-    if (!mounted) return;
-    _exitEpisodeModeInternal();
-    final selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      contentType: show.type,
-      posterUrl: show.poster,
-    );
-    widget.onItemSelected?.call(selection);
-  }
-
-  void _enterEpisodeMode(
+  Future<void> _enterEpisodeMode(
     StremioMeta show, {
     int? initialSeason,
     int? initialEpisode,
   }) async {
-    final generation = ++_episodeModeGeneration;
+    final addon = _selectedAddon;
+    if (addon == null) return; // preserve existing deferral guard semantics
+    if (_pushingEpisodes) return; // a drill-down route is already on the way
+    _pushingEpisodes = true;
 
-    setState(() {
-      _selectedShow = show;
-      _isLoadingEpisodes = true;
-      _episodeErrorMessage = null;
-      _episodeSeasons = [];
-      _selectedSeasonNumber = initialSeason ?? 1;
-    });
-    // Hide the host bar as soon as the loading state is shown. Every
-    // terminal failure path below restores it (via onEpisodeModeExited or
-    // _fallbackToDirectSearch) so a failed entry can't leave it hidden.
-    widget.onEpisodeModeEntered?.call();
+    final screen = EpisodesScreen(
+      show: show,
+      addon: addon,
+      initialSeason: initialSeason,
+      initialEpisode: initialEpisode,
+      isTelevision: widget.isTelevision,
+      showQuickPlay: widget.showQuickPlay,
+      onItemSelected: widget.onItemSelected,
+      onQuickPlay: widget.onQuickPlay,
+      // Restore the host's pre-drill-down source only when the user backs
+      // out without picking anything; terminal selections route through
+      // onItemSelected/onQuickPlay and the host owns that teardown.
+      onExitedWithoutSelection: widget.onEpisodeModeExited,
+      boundSourceCount: (s) =>
+          _boundSources[s.effectiveImdbId ?? s.id]?.length ?? 0,
+      onSelectSource: widget.onSelectSource == null
+          ? null
+          : (s) => _handleSelectSourceAction(s),
+    );
 
-    // Load bound sources and watch progress for this show
-    _loadBoundSourceForShow();
-    _loadEpisodeWatchProgress(show);
-
-    for (final node in _episodeFocusNodes) {
-      node.dispose();
-    }
-    _episodeFocusNodes.clear();
+    // On TV the rest of the app suppresses route transitions for GPU perf
+    // (and the old inline episode mode had none); use an instant route there
+    // instead of MaterialPageRoute's slide.
+    final route = widget.isTelevision
+        ? PageRouteBuilder(
+            settings: const RouteSettings(name: kEpisodesRouteName),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+            pageBuilder: (_, __, ___) => screen,
+          )
+        : MaterialPageRoute(
+            settings: const RouteSettings(name: kEpisodesRouteName),
+            builder: (_) => screen,
+          );
 
     try {
-      // Fetch episodes from addon meta endpoint
-      final addon = _selectedAddon;
-      if (addon == null) {
-        setState(() {
-          _isLoadingEpisodes = false;
-          _episodeErrorMessage = 'No addon selected';
-        });
-        widget.onEpisodeModeExited?.call();
-        return;
-      }
-
-      final videos = await _stremioService.fetchSeriesMeta(addon, show.id);
-      if (!mounted || generation != _episodeModeGeneration) return;
-
-      if (videos == null || videos.isEmpty) {
-        _fallbackToDirectSearch(show);
-        return;
-      }
-
-      // Group videos into seasons
-      final seasonMap = <int, List<TraktEpisode>>{};
-      for (final v in videos) {
-        final seasonRaw = v['season'];
-        final seasonNum = seasonRaw is int
-            ? seasonRaw
-            : (seasonRaw is num ? seasonRaw.toInt() : null);
-        if (seasonNum == null || seasonNum <= 0) continue;
-
-        final epRaw = v['number'] ?? v['episode'];
-        final epNum = epRaw is int
-            ? epRaw
-            : (epRaw is num ? epRaw.toInt() : null);
-        if (epNum == null) continue;
-
-        final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
-        final overview = v['overview'] as String?;
-        final released = v['released'] as String?;
-        final thumbnail = v['thumbnail'] as String?;
-        final ratingRaw = v['imdbRating'] ?? v['rating'];
-        final rating = ratingRaw is num
-            ? ratingRaw.toDouble()
-            : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
-
-        final episode = TraktEpisode(
-          season: seasonNum,
-          number: epNum,
-          title: title,
-          overview: overview,
-          firstAired: released,
-          thumbnailUrl: thumbnail,
-          rating: rating,
-        );
-
-        seasonMap.putIfAbsent(seasonNum, () => []);
-        seasonMap[seasonNum]!.add(episode);
-      }
-
-      if (seasonMap.isEmpty) {
-        if (!mounted || generation != _episodeModeGeneration) return;
-        _fallbackToDirectSearch(show);
-        return;
-      }
-
-      // Sort seasons and episodes
-      final seasons = seasonMap.entries.map((e) {
-        final episodes = e.value..sort((a, b) => a.number.compareTo(b.number));
-        return TraktSeason(
-          number: e.key,
-          episodeCount: episodes.length,
-          episodes: episodes,
-        );
-      }).toList()..sort((a, b) => a.number.compareTo(b.number));
-
-      // Resolve where to land. Explicit initialSeason/initialEpisode (deep
-      // links, calendar) win; otherwise fall back to this show's last-played
-      // episode. Catalog has no Trakt-style next-episode service, so without
-      // this it always opens at S01E01. Mirrors _onQuickPlay's lookup.
-      int? effectiveSeason = initialSeason;
-      int? effectiveEpisode = initialEpisode;
-      if (effectiveSeason == null || effectiveEpisode == null) {
-        final imdbId = show.effectiveImdbId;
-        if (imdbId != null) {
-          final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
-            imdbId,
-          );
-          if (!mounted || generation != _episodeModeGeneration) return;
-          if (lastPlayed != null) {
-            effectiveSeason ??= lastPlayed['season'] as int?;
-            effectiveEpisode ??= lastPlayed['episode'] as int?;
-          }
-        }
-        if (effectiveSeason == null || effectiveEpisode == null) {
-          final byTitle = await StorageService.getLastPlayedEpisode(
-            seriesTitle: show.name,
-          );
-          if (!mounted || generation != _episodeModeGeneration) return;
-          if (byTitle != null) {
-            effectiveSeason ??= byTitle['season'] as int?;
-            effectiveEpisode ??= byTitle['episode'] as int?;
-          }
-        }
-      }
-
-      // Pick the target season: prefer the resolved season if it exists
-      final targetSeason =
-          (effectiveSeason != null &&
-              seasons.any((s) => s.number == effectiveSeason))
-          ? seasons.firstWhere((s) => s.number == effectiveSeason)
-          : seasons.first;
-
-      // Build focus nodes for target season
-      for (int i = 0; i < targetSeason.episodes.length; i++) {
-        _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
-      }
-
-      setState(() {
-        _episodeSeasons = seasons;
-        _selectedSeasonNumber = targetSeason.number;
-        _isLoadingEpisodes = false;
-      });
-
-      // Scroll to (and focus) the target episode once its tile is built.
-      // Robust against variable EpisodeTile height + lazy ListView building
-      // (the old fixed focusIndex*128 estimate is wrong for the new tile).
-      final targetEpIndex = effectiveEpisode != null
-          ? targetSeason.episodes.indexWhere((e) => e.number == effectiveEpisode)
-          : -1;
-      _scrollFocusEpisode(
-        targetEpIndex < 0 ? 0 : targetEpIndex,
-        targetSeason.episodes.length,
-        generation,
-      );
-    } catch (e) {
-      if (!mounted || generation != _episodeModeGeneration) return;
-      debugPrint('CatalogBrowser: Episode fetch failed: $e');
-      _fallbackToDirectSearch(show);
+      await Navigator.of(context).push(route);
+    } finally {
+      _pushingEpisodes = false;
     }
-  }
-
-  /// Robustly brings episode [epIndex] into view.
-  ///
-  /// The episode list is a lazy ListView with variable-height tiles, so a
-  /// single fixed/proportional jump is unreliable — an off-screen target
-  /// tile isn't built, leaving its FocusNode contextless. This re-reads
-  /// scroll metrics each frame and converges (the builder's maxScrollExtent
-  /// grows as more rows lay out). Once the tile exists: on TV focus it (the
-  /// tile self-centers via EpisodeTile.onFocusChange and shows the focus
-  /// border for the remote); on mobile/desktop just scroll it into view
-  /// without focusing — an auto-applied golden focus border there looks out
-  /// of place. Bounded so it can never spin.
-  void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
-    const int maxAttempts = 16;
-    void attempt(int n) {
-      if (!mounted || generation != _episodeModeGeneration) return;
-      if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
-      final node = _episodeFocusNodes[epIndex];
-      if (node.context != null) {
-        if (widget.isTelevision) {
-          node.requestFocus();
-        } else {
-          Scrollable.ensureVisible(
-            node.context!,
-            alignment: 0.5,
-            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-          );
-        }
-        return;
-      }
-      if (n >= maxAttempts || !_episodeScrollController.hasClients) {
-        if (widget.isTelevision) node.requestFocus(); // best effort, then stop
-        return;
-      }
-      final pos = _episodeScrollController.position;
-      final ratio = episodeCount > 1 ? epIndex / (episodeCount - 1) : 0.0;
-      final target = (pos.maxScrollExtent * ratio).clamp(
-        0.0,
-        pos.maxScrollExtent,
-      );
-      if ((target - pos.pixels).abs() > 1.0) {
-        _episodeScrollController.jumpTo(target);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) => attempt(n + 1));
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
-  }
-
-  /// Exit episode mode and notify parent (used by back button, PopScope, addon switch)
-  void _exitEpisodeMode() {
-    _exitEpisodeModeInternal();
-    widget.onEpisodeModeExited?.call();
-  }
-
-  /// Exit episode mode without notifying parent (used by _fallbackToDirectSearch
-  /// which dispatches onItemSelected instead)
-  void _exitEpisodeModeInternal() {
-    for (final node in _episodeFocusNodes) {
-      node.dispose();
-    }
-    _episodeFocusNodes.clear();
-    setState(() {
-      _selectedShow = null;
-      _episodeSeasons = [];
-      _selectedSeasonNumber = 1;
-      _isLoadingEpisodes = false;
-      _episodeErrorMessage = null;
-      _episodeWatchProgress = {};
-    });
-  }
-
-  void _onSeasonChanged(int? seasonNumber) {
-    if (seasonNumber == null || seasonNumber == _selectedSeasonNumber) return;
-
-    for (final node in _episodeFocusNodes) {
-      node.dispose();
-    }
-    _episodeFocusNodes.clear();
-
-    final season = _episodeSeasons.firstWhere(
-      (s) => s.number == seasonNumber,
-      orElse: () => _episodeSeasons.first,
-    );
-    for (int i = 0; i < season.episodes.length; i++) {
-      _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
-    }
-
-    if (_episodeScrollController.hasClients) {
-      _episodeScrollController.jumpTo(0);
-    }
-
-    setState(() => _selectedSeasonNumber = seasonNumber);
-  }
-
-  void _onEpisodeTap(TraktEpisode episode) {
-    final show = _selectedShow;
-    if (show == null || widget.onItemSelected == null) return;
-
-    final selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      season: episode.season,
-      episode: episode.number,
-      contentType: show.type,
-      posterUrl: show.poster,
-    );
-    widget.onItemSelected!(selection);
-  }
-
-  void _onEpisodeQuickPlay(TraktEpisode episode) {
-    final show = _selectedShow;
-    if (show == null) return;
-
-    final selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      season: episode.season,
-      episode: episode.number,
-      contentType: show.type,
-      posterUrl: show.poster,
-    );
-
-    if (widget.onQuickPlay != null) {
-      widget.onQuickPlay!(selection);
-    } else if (widget.onItemSelected != null) {
-      widget.onItemSelected!(selection);
-    }
-  }
-
-  Widget _buildEpisodeFiltersBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Back button — Focus-wrapped with blue accent border like Trakt
-            Focus(
-              focusNode: _episodeBackButtonFocusNode,
-              onFocusChange: (focused) => setState(() {}),
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                  widget.onRequestFocusAbove?.call();
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                  _episodeSeasonDropdownFocusNode.requestFocus();
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  if (_episodeFocusNodes.isNotEmpty) {
-                    _episodeFocusNodes.first.requestFocus();
-                  }
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.select ||
-                    event.logicalKey == LogicalKeyboardKey.enter ||
-                    event.logicalKey == LogicalKeyboardKey.escape ||
-                    event.logicalKey == LogicalKeyboardKey.goBack) {
-                  _exitEpisodeMode();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _episodeBackButtonFocusNode.hasFocus
-                      ? Colors.white.withValues(alpha: 0.16)
-                      : Colors.white.withValues(alpha: 0.06),
-                  border: Border.all(
-                    color: _episodeBackButtonFocusNode.hasFocus
-                        ? HomeTheme.focusGold
-                        : Colors.white.withValues(alpha: 0.14),
-                    width: _episodeBackButtonFocusNode.hasFocus ? 2 : 1,
-                  ),
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  color: Colors.white,
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: _exitEpisodeMode,
-                  tooltip: 'Back to shows',
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Show title
-            Expanded(
-              child: Text(
-                _selectedShow?.name ?? '',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            // Season dropdown — Trakt-style with blue accent border
-            if (_episodeSeasons.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              _buildEpisodeSeasonDropdown(),
-            ],
-
-            // Select Source button
-            if (_selectedShow != null && widget.onSelectSource != null) ...[
-              const SizedBox(width: 8),
-              Builder(
-                builder: (context) {
-                  final imdbId =
-                      _selectedShow!.effectiveImdbId ?? _selectedShow!.id;
-                  final sourceCount = _boundSources[imdbId]?.length ?? 0;
-                  return _CatalogSelectSourceButton(
-                    hasBoundSource: sourceCount > 0,
-                    sourceCount: sourceCount,
-                    onTap: () => _handleSelectSourceAction(_selectedShow!),
-                    onLeftFocus: _episodeSeasons.isNotEmpty
-                        ? _episodeSeasonDropdownFocusNode
-                        : _episodeBackButtonFocusNode,
-                    onDownArrow: _episodeFocusNodes.isNotEmpty
-                        ? () => _episodeFocusNodes.first.requestFocus()
-                        : null,
-                    onUpArrow: () => widget.onRequestFocusAbove?.call(),
-                  );
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  KeyEventResult _handleEpisodeSeasonDropdownKeyEvent(
-    FocusNode node,
-    KeyEvent event,
-  ) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      widget.onRequestFocusAbove?.call();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_episodeFocusNodes.isNotEmpty) {
-        _episodeFocusNodes.first.requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _episodeBackButtonFocusNode.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (widget.onSelectSource != null) {
-        node.nextFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  Widget _buildEpisodeSeasonDropdown() {
-    return ListenableBuilder(
-      listenable: _episodeSeasonDropdownFocusNode,
-      builder: (context, _) {
-        final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasFocus
-                  ? HomeTheme.focusGold
-                  : Colors.white.withValues(alpha: 0.10),
-              width: hasFocus ? 2.0 : 1.0,
-            ),
-            boxShadow: hasFocus
-                ? [
-                    BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
-                      blurRadius: 14,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : null,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              focusNode: _episodeSeasonDropdownFocusNode,
-              focusColor: Colors.transparent,
-              value: _selectedSeasonNumber,
-              isDense: true,
-              borderRadius: BorderRadius.circular(12),
-              dropdownColor: const Color(0xFF14141C),
-              icon: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 20,
-                color: hasFocus
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.7),
-              ),
-              items: _episodeSeasons.map((s) {
-                return DropdownMenuItem(
-                  value: s.number,
-                  child: Text(
-                    s.displayLabel,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                );
-              }).toList(),
-              onChanged: _onSeasonChanged,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEpisodeContent() {
-    if (_isLoadingEpisodes) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_episodeErrorMessage != null) {
-      return Center(
-        child: Text(
-          _episodeErrorMessage!,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-      );
-    }
-
-    if (_episodeSeasons.isEmpty) {
-      return Center(
-        child: Text(
-          'No episodes found',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-      );
-    }
-
-    final currentSeason = _episodeSeasons.firstWhere(
-      (s) => s.number == _selectedSeasonNumber,
-      orElse: () => _episodeSeasons.first,
-    );
-
-    final w = MediaQuery.of(context).size.width;
-    final hPad = w >= 900 ? 40.0 : 16.0;
-
-    return TvFocusScrollWrapper(
-      child: ListView.builder(
-        controller: _episodeScrollController,
-        padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 28),
-        itemCount: currentSeason.episodes.length,
-        itemBuilder: (context, index) {
-          final episode = currentSeason.episodes[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: EpisodeTile(
-              episode: episode,
-              showImageUrl: _selectedShow?.poster,
-              isTelevision: widget.isTelevision,
-              showQuickPlay: widget.showQuickPlay,
-              focusNode: index < _episodeFocusNodes.length
-                  ? _episodeFocusNodes[index]
-                  : null,
-              watchProgress: _episodeWatchProgress[
-                  '${episode.season}-${episode.number}'],
-              onPlay: () => _onEpisodeQuickPlay(episode),
-              onSources: () => _onEpisodeTap(episode),
-            ),
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildContentList() {
@@ -2493,6 +1869,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: kCatalogDetailRouteName),
         builder: (_) => CatalogItemDetailScreen(
           item: item,
           isTelevision: widget.isTelevision,
@@ -2528,140 +1905,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           },
           onPlay: () => _onQuickPlay(item),
           onBrowse: () => _onItemTap(item),
-        ),
-      ),
-    );
-  }
-}
-
-
-// ─── Select Source Button for catalog episode browser ────────────────────────
-
-class _CatalogSelectSourceButton extends StatefulWidget {
-  final bool hasBoundSource;
-  final int sourceCount;
-  final VoidCallback onTap;
-  final FocusNode? onLeftFocus;
-  final VoidCallback? onDownArrow;
-  final VoidCallback? onUpArrow;
-
-  const _CatalogSelectSourceButton({
-    required this.hasBoundSource,
-    this.sourceCount = 0,
-    required this.onTap,
-    this.onLeftFocus,
-    this.onDownArrow,
-    this.onUpArrow,
-  });
-
-  @override
-  State<_CatalogSelectSourceButton> createState() =>
-      _CatalogSelectSourceButtonState();
-}
-
-class _CatalogSelectSourceButtonState
-    extends State<_CatalogSelectSourceButton> {
-  final FocusNode _focusNode = FocusNode(
-    debugLabel: 'catalog-select-source-btn',
-  );
-  bool _isFocused = false;
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: _focusNode,
-      onFocusChange: (focused) => setState(() => _isFocused = focused),
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          widget.onUpArrow?.call();
-          return widget.onUpArrow != null
-              ? KeyEventResult.handled
-              : KeyEventResult.ignored;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            widget.onLeftFocus != null) {
-          widget.onLeftFocus!.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          return KeyEventResult.handled; // rightmost button
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          widget.onDownArrow?.call();
-          return widget.onDownArrow != null
-              ? KeyEventResult.handled
-              : KeyEventResult.ignored;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: widget.hasBoundSource
-                ? HomeTheme.focusGold.withValues(alpha: 0.14)
-                : Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused
-                  ? HomeTheme.focusGold
-                  : widget.hasBoundSource
-                  ? HomeTheme.focusGold.withValues(alpha: 0.45)
-                  : Colors.white.withValues(alpha: 0.14),
-              width: _isFocused ? 2 : 1,
-            ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
-                      blurRadius: 12,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                widget.hasBoundSource
-                    ? Icons.link_rounded
-                    : Icons.link_off_rounded,
-                size: 16,
-                color: widget.hasBoundSource
-                    ? HomeTheme.focusGold
-                    : Colors.white.withValues(alpha: 0.85),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                widget.hasBoundSource
-                    ? (widget.sourceCount > 1
-                          ? 'Sources (${widget.sourceCount})'
-                          : 'Source')
-                    : 'Select Source',
-                style: TextStyle(
-                  color: widget.hasBoundSource
-                      ? HomeTheme.focusGold
-                      : Colors.white.withValues(alpha: 0.85),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

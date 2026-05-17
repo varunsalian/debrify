@@ -398,7 +398,13 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
             );
           },
           onPlay: () => _onQuickPlay(item),
-          onBrowse: () => _onItemSelected(item),
+          // The shared detail screen no longer self-pops on Browse; preserve
+          // the prior pop-then-callback behaviour here (aggregated episode
+          // mode is still inline — migrated in a later slice).
+          onBrowse: () {
+            Navigator.of(context).pop();
+            _onItemSelected(item);
+          },
         ),
       ),
     );

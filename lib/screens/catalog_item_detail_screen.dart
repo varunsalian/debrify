@@ -399,10 +399,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           Navigator.of(context).pop();
           widget.onPlay();
         },
-        onBrowse: () {
-          Navigator.of(context).pop();
-          widget.onBrowse();
-        },
+        // Browse does NOT pop here: the host owns teardown so the series
+        // drill-down (EpisodesScreen) can stack on top of this detail screen
+        // and back returns here. The host pops this route for the
+        // direct/movie path. (Play still pops above — it opens a player.)
+        onBrowse: widget.onBrowse,
       ),
     );
   }

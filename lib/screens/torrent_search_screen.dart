@@ -39,6 +39,8 @@ import '../services/debrify_tv_channel_add_service.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
+import '../screens/episodes_screen.dart'
+    show kEpisodesRouteName, kCatalogDetailRouteName;
 import '../widgets/shimmer.dart';
 import '../widgets/search_loading_animation.dart';
 import '../services/debrify_tv_repository.dart';
@@ -3553,8 +3555,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Handle "Select Source" — triggers search in select-source mode.
   /// User picks a torrent → stored as bound source → plays immediately.
+  /// "Select Source → Torrent/Keyword search" can be chosen from inside the
+  /// episode drill-down route. Those handlers swap the host body to results
+  /// in place, but the full-screen [EpisodesScreen] would stay on top hiding
+  /// them. Tear that route (and any catalog detail route) down first.
+  /// Clearing the drill-down return-source also makes the back-out callback
+  /// in EpisodesScreen.dispose() a no-op so it can't revert the source we're
+  /// about to search in. No-op when not in the drill-down — those routes
+  /// aren't on the stack, so popUntil stops immediately.
+  void _leaveEpisodeDrillDownForSelectSource() {
+    Navigator.of(context).popUntil(
+      (r) =>
+          r.settings.name != kEpisodesRouteName &&
+          r.settings.name != kCatalogDetailRouteName,
+    );
+    _sourceBeforeEpisodeDrillDown = null;
+  }
+
   void _handleSelectSource(StremioMeta show) {
     debugPrint('TorrentSearchScreen: Select Source triggered for ${show.name}');
+    _leaveEpisodeDrillDownForSelectSource();
 
     setState(() {
       _isSelectSourceMode = true;
@@ -3582,6 +3602,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     debugPrint(
       'TorrentSearchScreen: Keyword Select Source triggered for ${show.name}',
     );
+    _leaveEpisodeDrillDownForSelectSource();
 
     final bool isSeries = show.type == 'series';
     final String seedQuery = isSeries
@@ -3676,7 +3697,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     });
   }
 
-  /// Called when user exits episode mode in CatalogBrowser — return to previous source if applicable.
+  /// Called when the user enters the Trakt inline episode guide — hides the
+  /// host control row. (The catalog drill-down is now a separate route and
+  /// no longer drives this flag.)
   void _onEpisodeGuideEntered() {
     if (mounted && !_inEpisodeGuide) {
       setState(() => _inEpisodeGuide = true);
@@ -3690,11 +3713,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _handleEpisodeModeExited() {
-    _onEpisodeGuideExited();
+    // Now invoked from EpisodesScreen.dispose() via a post-frame callback
+    // (was synchronous in the old inline mode). Clear the return-source
+    // unconditionally so it can't be stranded non-null if the host is torn
+    // down in that one-frame window; bail before the unguarded setState in
+    // _onSearchSourceChanged() when unmounted.
     final previousSource = _sourceBeforeEpisodeDrillDown;
-    if (previousSource == null) return;
-
     _sourceBeforeEpisodeDrillDown = null;
+    if (!mounted) return;
+    _onEpisodeGuideExited();
+    if (previousSource == null) return;
     _onSearchSourceChanged(previousSource);
   }
 
@@ -16907,7 +16935,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               policy: OrderedTraversalPolicy(),
               child: Column(
                 children: [
-                  // ── Controls ── (hidden while an episode guide is open)
+                  // ── Controls ── (hidden while the Trakt inline episode
+                  // guide is open; the catalog drill-down is a separate route)
                   if (!_inEpisodeGuide)
                     Padding(
                     padding: const EdgeInsets.symmetric(
@@ -17264,7 +17293,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                   _handleCatalogPlayRandomEpisode,
                               onSearchPacks: _handleSearchPacks,
                               onEpisodeModeExited: _handleEpisodeModeExited,
-                              onEpisodeModeEntered: _onEpisodeGuideEntered,
                             ),
                           ),
 

@@ -688,7 +688,13 @@ class TraktResultsViewState extends State<TraktResultsView> {
             _onMenuAction(item, action);
           },
           onPlay: () => _onQuickPlay(item),
-          onBrowse: () => _onItemTap(item),
+          // The shared detail screen no longer self-pops on Browse; preserve
+          // the prior pop-then-callback behaviour here (Trakt episode mode is
+          // still inline — migrated in a later slice).
+          onBrowse: () {
+            Navigator.of(context).pop();
+            _onItemTap(item);
+          },
         ),
       ),
     );
