@@ -71,6 +71,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
 
+  /// Drives the wide/TV cinematic sheet. Needed so a D-pad "up" on the top
+  /// action row can reveal the (non-focusable) eyebrow/title/meta header:
+  /// focus traversal alone stops at Play/Sources and never scrolls past it.
+  final ScrollController _wideScroll = ScrollController();
+
   bool _descriptionExpanded = false;
 
   /// "Watch Next" recommendations. null = not yet loaded / still loading;
@@ -177,6 +182,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();
+    _wideScroll.dispose();
     super.dispose();
   }
 
@@ -260,6 +266,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: SingleChildScrollView(
+            controller: _wideScroll,
             physics: const BouncingScrollPhysics(),
             // Don't clip the focus glow on Play/Sources/quick actions.
             clipBehavior: Clip.none,
@@ -545,6 +552,18 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     );
   }
 
+  /// Snap the wide/TV sheet back to the top so the (non-focusable) header
+  /// is visible again. Triggered by a D-pad "up" on the top action row,
+  /// where focus traversal would otherwise dead-end at Play/Sources.
+  void _scrollWideToTop() {
+    if (!_wideScroll.hasClients || _wideScroll.offset <= 0) return;
+    _wideScroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   /// The Play / Sources action row.
   Widget _buildActionRow(double start) {
     final item = widget.item;
@@ -560,6 +579,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         playFocus: _playFocus,
         browseFocus: _browseFocus,
         tv: widget.isTelevision,
+        // TV only: the top row is the highest focusable widget, so a D-pad
+        // "up" there reveals the header instead of dead-ending.
+        onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
         onPlay: () {
           Navigator.of(context).pop();
           widget.onPlay();
@@ -1085,6 +1107,10 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
 
+  /// D-pad "up" handler — the row is the top focusable, so this scrolls the
+  /// sheet back to the header rather than letting focus dead-end. Null off TV.
+  final VoidCallback? onArrowUp;
+
   const _ActionRow({
     required this.compact,
     required this.showQuickPlay,
@@ -1095,6 +1121,7 @@ class _ActionRow extends StatelessWidget {
     required this.tv,
     required this.onPlay,
     required this.onBrowse,
+    this.onArrowUp,
   });
 
   @override
@@ -1111,6 +1138,7 @@ class _ActionRow extends StatelessWidget {
       compact: compact,
       tv: tv,
       onTap: onBrowse,
+      onArrowUp: onArrowUp,
       tinted: hasBoundSource,
     );
 
@@ -1125,6 +1153,7 @@ class _ActionRow extends StatelessWidget {
       tv: tv,
       accent: _kNetflixRed,
       onTap: onPlay,
+      onArrowUp: onArrowUp,
     );
 
     // Narrow screens: stack a full-width Play on top of Sources so every
@@ -1416,6 +1445,10 @@ class _PrimaryButton extends StatefulWidget {
   final Color? accent;
   final VoidCallback onTap;
 
+  /// D-pad "up" handler (TV). Set on the top action row so "up" reveals the
+  /// header rather than dead-ending focus traversal.
+  final VoidCallback? onArrowUp;
+
   const _PrimaryButton({
     required this.focusNode,
     required this.icon,
@@ -1426,6 +1459,7 @@ class _PrimaryButton extends StatefulWidget {
     this.tv = false,
     this.tinted = false,
     this.accent,
+    this.onArrowUp,
   });
 
   @override
@@ -1473,12 +1507,20 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       focusNode: widget.focusNode,
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          widget.onTap();
-          return KeyEventResult.handled;
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+          // Nothing focusable sits above this row, so consume "up" and use
+          // it to bring the header back into view instead of no-op.
+          if (widget.onArrowUp != null &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            widget.onArrowUp!();
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
