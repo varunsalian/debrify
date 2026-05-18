@@ -1145,6 +1145,18 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     }
   }
 
+  /// Pop any catalog-detail route(s) currently stacked on top so a
+  /// host-mutating result (e.g. switching the host into select-source mode)
+  /// becomes visible. A no-op when no detail route is on the stack — e.g.
+  /// the long-press menu path — so it is safe to call unconditionally from
+  /// the source-picker's host-mutating branches. Mirrors the idiom used by
+  /// the Browse path (see _onItemSelected).
+  void _dismissCatalogDetail() {
+    Navigator.of(
+      context,
+    ).popUntil((r) => r.settings.name != kCatalogDetailRouteName);
+  }
+
   /// Handle select source action — show edit dialog if source exists, otherwise show picker.
   void _handleSelectSourceAction(StremioMeta item) {
     final imdbId = item.effectiveImdbId ?? item.id;
@@ -1168,15 +1180,26 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     final isMovie = item.type == 'movie';
     final supportsLocal = isMovie || item.type == 'series';
     if (!rdEnabled && !torboxEnabled && !supportsLocal) {
+      // Goes straight to the host's select-source mode, behind the detail.
+      _dismissCatalogDetail();
       widget.onSelectSource?.call(item);
       return;
     }
 
     await showAddSourcePickerDialog(
       context,
-      onTorrentSearch: () => widget.onSelectSource?.call(item),
+      // Torrent/Keyword search flip the host screen into select-source mode
+      // behind the (still-mounted) detail route, so dismiss it here — only
+      // now, after the picker dialog itself has been shown over the detail.
+      onTorrentSearch: () {
+        _dismissCatalogDetail();
+        widget.onSelectSource?.call(item);
+      },
       onKeywordSearch: widget.onKeywordSelectSource != null
-          ? () => widget.onKeywordSelectSource!.call(item)
+          ? () {
+              _dismissCatalogDetail();
+              widget.onKeywordSelectSource!.call(item);
+            }
           : null,
       onLocal: supportsLocal && !LocalBoundSourceService.isLocalBindingDisabled
           ? () => _pickAndSaveLocalSource(item, imdbId)
@@ -1923,13 +1946,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       hasBoundSource: hasBoundSource,
       traktMenuOptions: traktItems,
       onTraktAction: (action) {
-        // searchPacks/selectSource/stremioTv/random replace or leave
-        // the host screen; the detail screen is pushed on top, so
-        // close it first or the result happens invisibly behind it.
+        // searchPacks/random replace the host screen with no dialog of
+        // their own, so the detail (pushed on top) must close first or
+        // the result happens invisibly behind it. selectSource and
+        // addToStremioTv are NOT here on purpose: their pickers render
+        // above the detail via the root navigator, so popping up-front
+        // just flashes the previous screen. selectSource defers the
+        // dismiss into its host-mutating branches (_showAddSourcePicker);
+        // addToStremioTv never touches the host, so it never dismisses.
         const leaves = {
           TraktItemMenuAction.searchPacks,
-          TraktItemMenuAction.selectSource,
-          TraktItemMenuAction.addToStremioTv,
           TraktItemMenuAction.playRandomEpisode,
         };
         if (leaves.contains(action) && Navigator.of(context).canPop()) {
