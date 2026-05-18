@@ -256,11 +256,19 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget _buildWideContent(Size size) {
     // Content sheet bottom-left over the full-bleed art. TVs overscan, so
-    // keep it well off the physical bezel.
+    // keep it well off the physical bezel — including the top: when the
+    // content is tall enough to fill the sheet (expanded synopsis + quick
+    // actions + recs) the eyebrow/title reach the top edge and the TV
+    // overscan clips them, so mirror the bottom inset there.
     final tv = widget.isTelevision;
     final maxWidth = (size.width * 0.56).clamp(440.0, 760.0);
     return Padding(
-      padding: EdgeInsets.fromLTRB(tv ? 64 : 48, 0, tv ? 48 : 24, tv ? 44 : 40),
+      padding: EdgeInsets.fromLTRB(
+        tv ? 64 : 48,
+        tv ? 44 : 0,
+        tv ? 48 : 24,
+        tv ? 44 : 40,
+      ),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: ConstrainedBox(
