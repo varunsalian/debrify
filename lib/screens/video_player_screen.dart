@@ -3678,8 +3678,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     AndroidNativeDownloader.isTelevision().then((isTv) {
       if (!isTv) {
+        // Restore all orientations so the app respects device auto-rotate
+        // after the player exits (matches main.dart's _initOrientation).
+        // Locking portraitUp here forced users to flip the device back to
+        // browse lists after watching in landscape.
         SystemChrome.setPreferredOrientations(<DeviceOrientation>[
           DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
         ]);
       }
     });
