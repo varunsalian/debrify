@@ -660,6 +660,26 @@ class _BackdropState extends State<_Backdrop>
           else
             Container(color: Colors.black),
 
+          // Corner vignette — frames the art, cinema style. Painted *under*
+          // the vertical scrim so it only shows where the art is still
+          // visible up top; lower down the opaque scrim hides it, keeping
+          // the backdrop's bottom edge exactly the scaffold colour (no seam
+          // showing through the semi-transparent Sources button).
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.25),
+                radius: 1.15,
+                colors: [
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0x55000000),
+                ],
+                stops: [0.0, 0.62, 1.0],
+              ),
+            ),
+          ),
+
           // Vertical scrim — content side stays legible, art breathes up top.
           DecoratedBox(
             decoration: BoxDecoration(
@@ -676,22 +696,6 @@ class _BackdropState extends State<_Backdrop>
                 stops: isWide
                     ? const [0.0, 0.35, 0.62, 0.85, 1.0]
                     : const [0.0, 0.38, 0.7, 0.9, 1.0],
-              ),
-            ),
-          ),
-
-          // Corner vignette — frames the art, cinema style.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.25),
-                radius: 1.15,
-                colors: [
-                  Color(0x00000000),
-                  Color(0x00000000),
-                  Color(0x55000000),
-                ],
-                stops: [0.0, 0.62, 1.0],
               ),
             ),
           ),
