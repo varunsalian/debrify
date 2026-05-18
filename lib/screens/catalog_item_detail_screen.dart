@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -29,6 +30,14 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// Invoked when the user picks a Trakt action from the "More" sheet.
   final void Function(TraktItemMenuAction action)? onTraktAction;
 
+  /// Lazily loads "Watch Next" recommendations for [item]. When null (no
+  /// recommendation-capable addon, or this host doesn't support it) the
+  /// rail is omitted entirely. Resolves to an empty list to omit it too.
+  final Future<List<StremioMeta>> Function()? recommendationsLoader;
+
+  /// Invoked when the user selects a recommended title from the rail.
+  final void Function(StremioMeta recommendation)? onRecommendationTap;
+
   const CatalogItemDetailScreen({
     super.key,
     required this.item,
@@ -39,6 +48,8 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.hasBoundSource = false,
     this.traktMenuOptions = const [],
     this.onTraktAction,
+    this.recommendationsLoader,
+    this.onRecommendationTap,
   });
 
   @override
@@ -52,6 +63,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
 
   bool _descriptionExpanded = false;
+
+  /// "Watch Next" recommendations. null = not yet loaded / still loading;
+  /// empty = loaded but nothing to show (rail stays hidden either way).
+  List<StremioMeta>? _recommendations;
 
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
@@ -75,7 +90,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       if (widget.isTelevision) {
         (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
       }
+      _loadRecommendations();
     });
+  }
+
+  /// Loads recommendations after first paint so the rail never blocks the
+  /// detail screen's appearance. Fail-soft: any error leaves the rail hidden.
+  Future<void> _loadRecommendations() async {
+    final loader = widget.recommendationsLoader;
+    if (loader == null) return;
+    try {
+      final recs = await loader();
+      if (mounted) setState(() => _recommendations = recs);
+    } catch (_) {
+      // Non-critical strip — swallow and leave it hidden.
+    }
   }
 
   @override
@@ -211,6 +240,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
     final q = _secQuickActions(0.58);
     if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
+    final r = _secRecommendations(0.66);
+    if (r != null) children..add(SizedBox(height: t ? 16 : 28))..add(r);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -237,6 +268,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (d != null) children..add(const SizedBox(height: 22))..add(d);
     final q = _secQuickActions(0.58);
     if (q != null) children..add(const SizedBox(height: 26))..add(q);
+    final r = _secRecommendations(0.66);
+    if (r != null) children..add(const SizedBox(height: 28))..add(r);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -357,6 +390,73 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // its free-flowing wrap.
         phone: !_wide,
         onSelected: widget.onTraktAction!,
+      ),
+    );
+  }
+
+  /// "Watch Next" rail. Hidden until recommendations resolve and only when
+  /// the host wired a tap handler. Non-critical: never blocks the screen.
+  Widget? _secRecommendations(double start) {
+    final recs = _recommendations;
+    final onTap = widget.onRecommendationTap;
+    if (recs == null || recs.isEmpty || onTap == null) return null;
+
+    final tight = _tight;
+    final cardW = _wide ? (tight ? 104.0 : 120.0) : 112.0;
+    final posterH = cardW * 1.5;
+
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'More Like This',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.92),
+              fontSize: _wide && !tight ? 18 : 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
+              shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
+            ),
+          ),
+          SizedBox(height: tight ? 8 : 12),
+          SizedBox(
+            // poster + two-line title beneath it
+            height: posterH + 44,
+            // Built eagerly into a Row (not a lazy ListView) so every card
+            // has a focus node up front — required for D-pad/remote
+            // traversal on Android TV: directional focus can only move to
+            // already-instantiated nodes, and the list is capped at 24
+            // small cards so the cost is negligible. FocusTraversalGroup
+            // keeps it an ordered, self-contained focus region.
+            child: FocusTraversalGroup(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                clipBehavior: Clip.none,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < recs.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      _RecCard(
+                        item: recs[i],
+                        width: cardW,
+                        posterHeight: posterH,
+                        tv: widget.isTelevision,
+                        onTap: () => onTap(recs[i]),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -649,6 +749,130 @@ class _GenreChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Recommendation ("Watch Next") card ─────────────────────────────────────
+
+class _RecCard extends StatefulWidget {
+  final StremioMeta item;
+  final double width;
+  final double posterHeight;
+  final bool tv;
+  final VoidCallback onTap;
+
+  const _RecCard({
+    required this.item,
+    required this.width,
+    required this.posterHeight,
+    required this.tv,
+    required this.onTap,
+  });
+
+  @override
+  State<_RecCard> createState() => _RecCardState();
+}
+
+class _RecCardState extends State<_RecCard> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool get _active => _focused || _hovered;
+
+  @override
+  Widget build(BuildContext context) {
+    final poster = widget.item.poster;
+    return Focus(
+      onFocusChange: (f) => setState(() => _focused = f),
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space ||
+                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+          widget.onTap();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedScale(
+            duration:
+                widget.tv ? Duration.zero : const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            scale: _active ? 1.05 : 1.0,
+            child: SizedBox(
+              width: widget.width,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: widget.width,
+                      height: widget.posterHeight,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        border: Border.all(
+                          color: _active
+                              ? HomeTheme.focusGold
+                              : Colors.white.withValues(alpha: 0.10),
+                          width: _active ? 2 : 0.5,
+                        ),
+                      ),
+                      child: (poster != null && poster.isNotEmpty)
+                          ? CachedNetworkImage(
+                              imageUrl: poster,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => _posterFallback(),
+                              errorWidget: (_, __, ___) => _posterFallback(),
+                            )
+                          : _posterFallback(),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white
+                          .withValues(alpha: _active ? 1.0 : 0.82),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _posterFallback() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            widget.item.name,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
 }
 
 // ── Description with "Read more" ───────────────────────────────────────────

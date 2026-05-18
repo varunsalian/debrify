@@ -697,6 +697,11 @@ class StremioStream {
   /// Stream title/name
   final String? title;
 
+  /// The addon's raw short `name` label (kept distinct from [title], which
+  /// prefers the longer `description`). Used as the display title for
+  /// recommendation ("Watch Next") entries.
+  final String? name;
+
   /// File index within the torrent (for multi-file torrents)
   final int? fileIdx;
 
@@ -712,6 +717,7 @@ class StremioStream {
     this.url,
     this.externalUrl,
     this.title,
+    this.name,
     this.fileIdx,
     this.behaviorHints,
     required this.source,
@@ -728,6 +734,34 @@ class StremioStream {
 
   /// Whether this stream is usable (has any playable source)
   bool get isUsable => isTorrent || isDirectUrl || isExternalUrl;
+
+  /// Matches the Stremio in-app navigation deep link some addons (e.g.
+  /// "Watch Next") return as fake streams: `stremio:///detail/<type>/<id>`.
+  /// Two or three slashes after the scheme are both accepted; only the
+  /// leading title id is captured (trailing season/episode segments — e.g.
+  /// `.../series/tt123/tt123:1:1` — are ignored).
+  static final RegExp _recommendationLinkRe = RegExp(
+    r'^stremio:/{2,3}detail/([a-z]+)/(tt\d{7,10})',
+    caseSensitive: false,
+  );
+
+  /// The `(type, imdbId)` this stream navigates to when it is a Stremio
+  /// detail deep link, or null when it is a normal/playable stream.
+  ///
+  /// These entries are *not* playable media — they are recommendations
+  /// meant to be opened inside the app, so they are kept out of the
+  /// torrent/sources pipeline and surfaced as a "Watch Next" rail instead.
+  ({String type, String imdbId})? get recommendationTarget {
+    final ext = externalUrl;
+    if (ext == null || ext.isEmpty) return null;
+    final m = _recommendationLinkRe.firstMatch(ext);
+    if (m == null) return null;
+    return (type: m.group(1)!.toLowerCase(), imdbId: m.group(2)!);
+  }
+
+  /// Whether this "stream" is actually a Stremio detail deep link
+  /// (a recommendation), not a playable source.
+  bool get isRecommendationLink => recommendationTarget != null;
 
   /// Extract seeders from title if available (common pattern: "seeders: 123")
   int? get seedersFromTitle {
@@ -793,6 +827,7 @@ class StremioStream {
       url: json['url'] as String?,
       externalUrl: json['externalUrl'] as String?,
       title: title,
+      name: json['name'] as String?,
       fileIdx: json['fileIdx'] as int?,
       behaviorHints: behaviorHints,
       source: source,

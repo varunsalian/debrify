@@ -52,6 +52,17 @@ class StremioService {
   // In-memory cache of addons
   List<StremioAddon>? _addonsCache;
 
+  // Resolved "Watch Next" recommendations, keyed by '<type>:<imdbId>'.
+  // Session-lived; recommendations are stable enough not to need a TTL.
+  final Map<String, List<StremioMeta>> _recommendationsCache = {};
+
+  // Addon ids that returned streams but zero recommendation links (e.g.
+  // torrent indexers). Skipped on later recommendation queries so opening
+  // a detail doesn't re-hit every stream addon. A genuine recommendation
+  // addon is never added: its non-empty responses are *all* rec links, so
+  // it never trips the "has streams but no rec links" rule.
+  final Set<String> _nonRecommendationAddonIds = {};
+
   // Listeners for addon changes (used to refresh UI when addons are added via deep link)
   final List<VoidCallback> _addonsChangedListeners = [];
 
@@ -119,6 +130,11 @@ class StremioService {
     final jsonString = json.encode(addons.map((a) => a.toJson()).toList());
     await prefs.setString(_addonsKey, jsonString);
     _addonsCache = addons;
+    // Addon set changed — drop recommendation caches so a title viewed
+    // before installing a "Watch Next"-style addon picks it up without an
+    // app restart (and a removed addon stops contributing).
+    _recommendationsCache.clear();
+    _nonRecommendationAddonIds.clear();
     _notifyAddonsChanged();
   }
 
@@ -842,6 +858,124 @@ class StremioService {
     }
   }
 
+  // ============================================================
+  // Recommendations ("Watch Next")
+  // ============================================================
+
+  /// Fetches "Watch Next"-style recommendations for [imdbId] / [type].
+  ///
+  /// Some stream addons (e.g. the "Watch Next" addon) abuse the stream
+  /// resource to return Stremio detail deep links instead of playable
+  /// streams. We collect those across enabled stream addons and build
+  /// [StremioMeta] entries straight from each link — posters/backdrops
+  /// from Stremio's MetaHub CDN (keyed by IMDb id, no metadata-addon
+  /// dependency), name/overview from the entry itself.
+  ///
+  /// Best-effort and fail-soft: any failure (no addons, network, parse)
+  /// resolves to an empty list so the caller simply renders no rail.
+  /// A non-empty result is cached per `<type>:<imdbId>` for the session.
+  Future<List<StremioMeta>> getRecommendations({
+    required String imdbId,
+    required String type,
+  }) async {
+    if (!imdbId.startsWith('tt') || (type != 'movie' && type != 'series')) {
+      return const [];
+    }
+    final cacheKey = '$type:$imdbId';
+    final cached = _recommendationsCache[cacheKey];
+    if (cached != null) return cached;
+
+    try {
+      final addons = await getStreamingAddons();
+      final candidates = addons
+          .where(
+            (a) =>
+                (a.types.isEmpty || a.types.contains(type)) &&
+                a.supportsContentId(imdbId) &&
+                !_nonRecommendationAddonIds.contains(a.id),
+          )
+          .toList();
+      if (candidates.isEmpty) return const [];
+
+      // Query candidate addons in parallel; tolerate individual failures.
+      final perAddon = await Future.wait(
+        candidates.map((a) async {
+          try {
+            return await _fetchStreamsFromAddon(
+              a,
+              type,
+              imdbId,
+              timeout: const Duration(seconds: 8),
+            );
+          } catch (_) {
+            return <StremioStream>[];
+          }
+        }),
+      );
+
+      // Learn which candidates are not recommendation providers so later
+      // detail opens skip them. Rule: returned ≥1 stream but none were rec
+      // links ⇒ it's a normal stream addon (e.g. a torrent indexer). An
+      // empty response is inconclusive (allow a re-probe next time).
+      for (var i = 0; i < candidates.length; i++) {
+        final streams = perAddon[i];
+        if (streams.isEmpty) continue;
+        if (!streams.any((s) => s.isRecommendationLink)) {
+          _nonRecommendationAddonIds.add(candidates[i].id);
+        }
+      }
+
+      // Build recommendations directly from the addon entries. Posters /
+      // backdrops come from Stremio's MetaHub CDN keyed purely by IMDb id
+      // (no metadata addon dependency — the same source the Trakt path
+      // uses); the title and overview come from the entry itself. Unique,
+      // first-seen order, capped, excluding the title itself.
+      const maxItems = 24;
+      final seen = <String>{};
+      final recommendations = <StremioMeta>[];
+      outer:
+      for (final streams in perAddon) {
+        for (final s in streams) {
+          final t = s.recommendationTarget;
+          if (t == null || t.imdbId == imdbId) continue;
+          if (!seen.add('${t.type}:${t.imdbId}')) continue;
+          final name = s.name?.trim();
+          final overview = s.title?.trim();
+          recommendations.add(
+            StremioMeta(
+              id: t.imdbId,
+              imdbId: t.imdbId,
+              type: t.type,
+              name: (name != null && name.isNotEmpty) ? name : t.imdbId,
+              poster:
+                  'https://images.metahub.space/poster/medium/${t.imdbId}/img',
+              background:
+                  'https://images.metahub.space/background/medium/${t.imdbId}/img',
+              description:
+                  (overview != null && overview.isNotEmpty && overview != name)
+                  ? overview
+                  : null,
+            ),
+          );
+          if (recommendations.length >= maxItems) break outer;
+        }
+      }
+
+      // Cache only a non-empty result. An empty list usually means the
+      // recommendation addon cold-started past its timeout (common on free
+      // hosting) — caching that would wedge the rail "broken" for the whole
+      // session. Re-probing is cheap: the skip-list already excludes
+      // non-recommendation addons after the first probe.
+      if (recommendations.isNotEmpty) {
+        _recommendationsCache[cacheKey] = recommendations;
+      }
+      return recommendations;
+    } catch (e) {
+      debugPrint('StremioService: getRecommendations failed: $e');
+      return const [];
+    }
+  }
+
   /// Convert Stremio streams to Torrent objects
   /// Handles all stream types: torrent (infoHash), direct URL, and external URL
   List<Torrent> _convertToTorrents(List<StremioStream> streams) {
@@ -849,9 +983,19 @@ class StremioService {
     int withInfoHash = 0;
     int withDirectUrl = 0;
     int withExternalUrl = 0;
+    int recommendationLinks = 0;
     int skipped = 0;
 
     for (final stream in streams) {
+      // Drop Stremio detail deep links (e.g. the "Watch Next" addon). These
+      // are recommendations, not playable sources — surfaced as a separate
+      // detail-screen rail (see StremioService.getRecommendations), never as
+      // torrent/source rows.
+      if (stream.isRecommendationLink) {
+        recommendationLinks++;
+        continue;
+      }
+
       // Determine stream type and get unique key
       String? uniqueKey;
       StreamType streamType;
@@ -955,7 +1099,8 @@ class StremioService {
     );
     debugPrint(
       'StremioService: Stream breakdown - torrents: $withInfoHash, '
-      'directUrl: $withDirectUrl, externalUrl: $withExternalUrl, skipped: $skipped',
+      'directUrl: $withDirectUrl, externalUrl: $withExternalUrl, '
+      'recommendationLinks: $recommendationLinks, skipped: $skipped',
     );
 
     // Log a few samples for debugging

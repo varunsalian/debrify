@@ -1901,6 +1901,12 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     final hasBoundSource =
         _boundSources.containsKey(item.effectiveImdbId ?? item.id);
 
+    // Recommendations need an IMDb id and a movie/series type.
+    final recImdbId =
+        (item.type == 'movie' || item.type == 'series')
+        ? item.effectiveImdbId
+        : null;
+
     final traktItems = hasTrakt
         ? buildTraktAddOnlyMenuOptions(
             isSeries: item.type == 'series',
@@ -1944,6 +1950,18 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       },
       onPlay: () => _onQuickPlay(item),
       onBrowse: () => _onItemTap(item),
+      // "Watch Next" rail: only for IMDb-backed movie/series. Tapping a
+      // recommendation reuses _openItemDetail so the new screen gets the
+      // full Play/Sources/Trakt wiring (and its own recommendations).
+      recommendationsLoader: recImdbId != null
+          ? () => _stremioService.getRecommendations(
+                imdbId: recImdbId,
+                type: item.type,
+              )
+          : null,
+      onRecommendationTap: recImdbId != null
+          ? (rec) => _openItemDetail(rec)
+          : null,
     );
 
     // Only the back-restore (reEnterItemDetail) uses an instant route — same
@@ -1963,10 +1981,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             builder: (_) => screen,
           );
 
-    try {
-      await Navigator.of(context).push(route);
-    } finally {
+    final pushed = Navigator.of(context).push(route);
+    // The guard only debounces a synchronous double-activation while this
+    // route mounts. Clearing it on pop (the old behavior) kept it true for
+    // the whole time the detail was on screen, which blocked opening a
+    // *second* detail from within the first — breaking recommendation taps
+    // beyond one level and the reEnterItemDetail back-restore for a
+    // recommended item. Clear it once the new route is on the stack.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _pushingDetail = false;
-    }
+    });
+    await pushed;
   }
 }
