@@ -26,18 +26,23 @@ Future<void> showAddSourcePickerDialog(
     context: context,
     barrierDismissible: true,
     builder: (dialogContext) {
+      // Cap the dialog to the viewport so a tall option list (TV's short
+      // height especially) scrolls instead of overflowing. The scroll view
+      // also gives D-pad focus traversal a Scrollable to ensureVisible
+      // against, so off-screen options become reachable.
+      final maxHeight = MediaQuery.of(dialogContext).size.height * 0.9;
       return Dialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
+          constraints: BoxConstraints(maxWidth: 420, maxHeight: maxHeight),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                // Header (pinned)
                 Row(
                   children: const [
                     Icon(
@@ -58,95 +63,108 @@ Future<void> showAddSourcePickerDialog(
                 ),
                 const SizedBox(height: 16),
 
-                // SEARCH section
-                const _SectionHeader(
-                  title: 'SEARCH',
-                  subtitle: 'Find new torrents from scrapers',
-                ),
-                const SizedBox(height: 8),
-                _SourceOption(
-                  icon: Icons.search_rounded,
-                  iconColor: const Color(0xFFFBBF24),
-                  label: 'Torrent Search (IMDb)',
-                  subtitle:
-                      'Exact match via IMDb · Stremio addons + IMDb-capable scrapers',
-                  autofocus: true,
-                  onTap: () {
-                    Navigator.of(dialogContext).pop();
-                    onTorrentSearch();
-                  },
-                ),
-                if (onKeywordSearch != null) ...[
-                  const SizedBox(height: 8),
-                  _SourceOption(
-                    icon: Icons.travel_explore_rounded,
-                    iconColor: const Color(0xFFFB923C),
-                    label: 'Keyword Search',
-                    subtitle:
-                        'Free-text title search · uses all keyword scrapers (Nyaa, Knaben, etc.)',
-                    onTap: () {
-                      Navigator.of(dialogContext).pop();
-                      onKeywordSearch();
-                    },
-                  ),
-                ],
-
-                if (onLocal != null || localDisabledReason != null) ...[
-                  const SizedBox(height: 16),
-                  const _SectionHeader(
-                    title: 'LOCAL',
-                    subtitle: 'Use files on this device',
-                  ),
-                  const SizedBox(height: 8),
-                  _SourceOption(
-                    icon: Icons.folder_open_rounded,
-                    iconColor: const Color(0xFF60A5FA),
-                    label: 'Local File or Folder',
-                    subtitle: localDisabledReason,
-                    onTap: onLocal == null
-                        ? null
-                        : () {
+                // Options (scrollable — loose Flexible keeps the dialog
+                // compact when the list is short, e.g. on phones).
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // SEARCH section
+                        const _SectionHeader(
+                          title: 'SEARCH',
+                          subtitle: 'Find new torrents from scrapers',
+                        ),
+                        const SizedBox(height: 8),
+                        _SourceOption(
+                          icon: Icons.search_rounded,
+                          iconColor: const Color(0xFFFBBF24),
+                          label: 'Torrent Search (IMDb)',
+                          subtitle:
+                              'Exact match via IMDb · Stremio addons + IMDb-capable scrapers',
+                          autofocus: true,
+                          onTap: () {
                             Navigator.of(dialogContext).pop();
-                            onLocal();
+                            onTorrentSearch();
                           },
-                  ),
-                ],
+                        ),
+                        if (onKeywordSearch != null) ...[
+                          const SizedBox(height: 8),
+                          _SourceOption(
+                            icon: Icons.travel_explore_rounded,
+                            iconColor: const Color(0xFFFB923C),
+                            label: 'Keyword Search',
+                            subtitle:
+                                'Free-text title search · uses all keyword scrapers (Nyaa, Knaben, etc.)',
+                            onTap: () {
+                              Navigator.of(dialogContext).pop();
+                              onKeywordSearch();
+                            },
+                          ),
+                        ],
 
-                // CLOUD section (only if at least one provider enabled)
-                if (onRealDebrid != null || onTorbox != null) ...[
-                  const SizedBox(height: 16),
-                  const _SectionHeader(
-                    title: 'CLOUD',
-                    subtitle:
-                        'Pick an already downloaded source from your cloud',
+                        if (onLocal != null ||
+                            localDisabledReason != null) ...[
+                          const SizedBox(height: 16),
+                          const _SectionHeader(
+                            title: 'LOCAL',
+                            subtitle: 'Use files on this device',
+                          ),
+                          const SizedBox(height: 8),
+                          _SourceOption(
+                            icon: Icons.folder_open_rounded,
+                            iconColor: const Color(0xFF60A5FA),
+                            label: 'Local File or Folder',
+                            subtitle: localDisabledReason,
+                            onTap: onLocal == null
+                                ? null
+                                : () {
+                                    Navigator.of(dialogContext).pop();
+                                    onLocal();
+                                  },
+                          ),
+                        ],
+
+                        // CLOUD section (only if a provider is enabled)
+                        if (onRealDebrid != null || onTorbox != null) ...[
+                          const SizedBox(height: 16),
+                          const _SectionHeader(
+                            title: 'CLOUD',
+                            subtitle:
+                                'Pick an already downloaded source from your cloud',
+                          ),
+                          const SizedBox(height: 8),
+                          if (onRealDebrid != null)
+                            _SourceOption(
+                              icon: Icons.cloud,
+                              iconColor: const Color(0xFF22C55E),
+                              label: 'Real-Debrid',
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                onRealDebrid();
+                              },
+                            ),
+                          if (onTorbox != null) ...[
+                            const SizedBox(height: 8),
+                            _SourceOption(
+                              icon: Icons.cloud,
+                              iconColor: const Color(0xFF7C3AED),
+                              label: 'TorBox',
+                              onTap: () {
+                                Navigator.of(dialogContext).pop();
+                                onTorbox();
+                              },
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  if (onRealDebrid != null)
-                    _SourceOption(
-                      icon: Icons.cloud,
-                      iconColor: const Color(0xFF22C55E),
-                      label: 'Real-Debrid',
-                      onTap: () {
-                        Navigator.of(dialogContext).pop();
-                        onRealDebrid();
-                      },
-                    ),
-                  if (onTorbox != null) ...[
-                    const SizedBox(height: 8),
-                    _SourceOption(
-                      icon: Icons.cloud,
-                      iconColor: const Color(0xFF7C3AED),
-                      label: 'TorBox',
-                      onTap: () {
-                        Navigator.of(dialogContext).pop();
-                        onTorbox();
-                      },
-                    ),
-                  ],
-                ],
+                ),
 
                 const SizedBox(height: 12),
-                // Cancel button
+                // Cancel button (pinned)
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
