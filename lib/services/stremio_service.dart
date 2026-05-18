@@ -56,6 +56,11 @@ class StremioService {
   // Session-lived; recommendations are stable enough not to need a TTL.
   final Map<String, List<StremioMeta>> _recommendationsCache = {};
 
+  // Enriched catalog-quality metadata, keyed by '<type>:<imdbId>'. Lets
+  // sparse items (e.g. "Watch Next" recommendations) borrow a full
+  // Cinemeta meta so their detail screen matches a normal catalog open.
+  final Map<String, StremioMeta> _metaDetailsCache = {};
+
   // Addon ids that returned streams but zero recommendation links (e.g.
   // torrent indexers). Skipped on later recommendation queries so opening
   // a detail doesn't re-hit every stream addon. A genuine recommendation
@@ -134,6 +139,7 @@ class StremioService {
     // before installing a "Watch Next"-style addon picks it up without an
     // app restart (and a removed addon stops contributing).
     _recommendationsCache.clear();
+    _metaDetailsCache.clear();
     _nonRecommendationAddonIds.clear();
     _notifyAddonsChanged();
   }
@@ -973,6 +979,97 @@ class StremioService {
     } catch (e) {
       debugPrint('StremioService: getRecommendations failed: $e');
       return const [];
+    }
+  }
+
+  /// Fetch full catalog-quality metadata (year, IMDb rating, genres, a
+  /// clean overview, and art) for a movie/series by IMDb id.
+  ///
+  /// Used to enrich sparse items — chiefly "Watch Next" recommendations,
+  /// which are built straight from an addon's stream entry and so lack the
+  /// structured fields a Cinemeta catalog item carries. Returns null when
+  /// no meta-capable addon resolves it (the caller keeps what it had).
+  Future<StremioMeta?> fetchMetaDetails({
+    required String imdbId,
+    required String type,
+  }) async {
+    if (!imdbId.startsWith('tt') || (type != 'movie' && type != 'series')) {
+      return null;
+    }
+    final cacheKey = '$type:$imdbId';
+    final cached = _metaDetailsCache[cacheKey];
+    if (cached != null) return cached;
+
+    try {
+      final addons = await getEnabledAddons();
+      final candidates = addons
+          .where(
+            (a) =>
+                a.resources.contains('meta') &&
+                a.baseUrl.isNotEmpty &&
+                (a.types.isEmpty || a.types.contains(type)) &&
+                a.supportsContentId(imdbId),
+          )
+          .toList();
+      if (candidates.isEmpty) return null;
+
+      // Probe candidates in parallel; tolerate individual failures. A short
+      // timeout keeps one slow/dead meta addon from holding up enrichment.
+      // Future.wait preserves order, so results stay in addon priority.
+      final results = await Future.wait(
+        candidates.map((addon) async {
+          final url =
+              '${addon.baseUrl}/meta/$type/${Uri.encodeComponent(imdbId)}.json';
+          final client = http.Client();
+          try {
+            final request = http.Request('GET', Uri.parse(url));
+            request.followRedirects = true;
+            request.maxRedirects = 5;
+            final streamed = await client
+                .send(request)
+                .timeout(const Duration(seconds: 8));
+            final response = await http.Response.fromStream(streamed);
+            if (response.statusCode != 200) return null;
+            final data = json.decode(response.body) as Map<String, dynamic>?;
+            final metaJson = data?['meta'] as Map<String, dynamic>?;
+            if (metaJson == null) return null;
+            return StremioMeta.fromJson(metaJson);
+          } catch (_) {
+            return null; // addon-specific failure
+          } finally {
+            client.close();
+          }
+        }),
+      );
+
+      // Prefer the first result (by addon priority) that carries real
+      // structured metadata. Only fall back to a description-only result
+      // if nothing richer came back — otherwise a weaker source ordered
+      // first would mask a better one.
+      StremioMeta? descriptionOnly;
+      for (final meta in results) {
+        if (meta == null) continue;
+        final hasStructured =
+            meta.year != null ||
+            meta.imdbRating != null ||
+            (meta.genres?.isNotEmpty ?? false);
+        if (hasStructured) {
+          _metaDetailsCache[cacheKey] = meta;
+          return meta;
+        }
+        if (descriptionOnly == null &&
+            (meta.description?.isNotEmpty ?? false)) {
+          descriptionOnly = meta;
+        }
+      }
+      if (descriptionOnly != null) {
+        _metaDetailsCache[cacheKey] = descriptionOnly;
+        return descriptionOnly;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('StremioService: fetchMetaDetails failed: $e');
+      return null;
     }
   }
 

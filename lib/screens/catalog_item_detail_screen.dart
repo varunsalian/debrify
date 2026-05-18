@@ -38,6 +38,14 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// Invoked when the user selects a recommended title from the rail.
   final void Function(StremioMeta recommendation)? onRecommendationTap;
 
+  /// Lazily fetches catalog-quality metadata for [item] by IMDb id. Used to
+  /// enrich sparse items (e.g. a tapped "Watch Next" recommendation, which
+  /// arrives without year/rating/genres and a raw addon-formatted overview)
+  /// so the screen renders identically to a normal catalog open. Null skips
+  /// enrichment; resolving to null leaves the original item untouched.
+  final Future<StremioMeta?> Function(String imdbId, String type)?
+  metaEnricher;
+
   const CatalogItemDetailScreen({
     super.key,
     required this.item,
@@ -50,6 +58,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.onTraktAction,
     this.recommendationsLoader,
     this.onRecommendationTap,
+    this.metaEnricher,
   });
 
   @override
@@ -67,6 +76,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// "Watch Next" recommendations. null = not yet loaded / still loading;
   /// empty = loaded but nothing to show (rail stays hidden either way).
   List<StremioMeta>? _recommendations;
+
+  /// Catalog-quality metadata fetched after first paint for a sparse item
+  /// (a tapped recommendation). null until/unless enrichment succeeds.
+  StremioMeta? _enriched;
+
+  /// The item the screen renders — the enriched copy once available,
+  /// otherwise whatever the host handed us.
+  StremioMeta get _item => _enriched ?? widget.item;
 
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
@@ -91,7 +108,55 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
       }
       _loadRecommendations();
+      _loadEnrichedMeta();
     });
+  }
+
+  /// When the item arrived sparse — no year, rating, or genres, the
+  /// signature of a "Watch Next" recommendation built straight from an
+  /// addon stream entry — fetch full Cinemeta-grade metadata after first
+  /// paint and merge it in, so the screen ends up identical to a normal
+  /// catalog open. Fail-soft: any failure leaves the original item as-is.
+  Future<void> _loadEnrichedMeta() async {
+    final enrich = widget.metaEnricher;
+    final item = widget.item;
+    final imdbId = item.effectiveImdbId;
+    if (enrich == null || imdbId == null) return;
+
+    final alreadyRich =
+        (item.year != null && item.year!.isNotEmpty) ||
+        item.imdbRating != null ||
+        (item.genres?.isNotEmpty ?? false);
+    if (alreadyRich) return; // a normal catalog item — nothing to add
+
+    try {
+      final full = await enrich(imdbId, item.type);
+      if (full == null || !mounted) return;
+      setState(() {
+        // Keep identity/source from the tapped item; take the structured
+        // fields and clean overview from the fetched meta, but never let a
+        // missing field blank out something we already had.
+        _enriched = StremioMeta(
+          id: item.id,
+          imdbId: item.imdbId,
+          type: item.type,
+          name: full.name.isNotEmpty ? full.name : item.name,
+          poster: full.poster ?? item.poster,
+          background: full.background ?? item.background,
+          description: (full.description?.isNotEmpty ?? false)
+              ? full.description
+              : item.description,
+          year: full.year ?? item.year,
+          imdbRating: full.imdbRating ?? item.imdbRating,
+          genres: (full.genres?.isNotEmpty ?? false)
+              ? full.genres
+              : item.genres,
+          sourceAddon: item.sourceAddon,
+        );
+      });
+    } catch (_) {
+      // Non-critical enrichment — swallow and keep the original item.
+    }
   }
 
   /// Loads recommendations after first paint so the rail never blocks the
@@ -119,7 +184,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isWide = _wide;
-    final backdropUrl = widget.item.background ?? widget.item.poster;
+    final backdropUrl = _item.background ?? _item.poster;
 
     return Scaffold(
       backgroundColor: const Color(0xFF050507),
@@ -300,7 +365,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         parent: _revealCtrl,
         start: start,
         child: Text(
-          widget.item.name,
+          _item.name,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -321,7 +386,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       );
 
   Widget _secMeta(double start) {
-    final item = widget.item;
+    final item = _item;
     final rating = item.imdbRating;
     final hasYear = item.year != null && item.year!.isNotEmpty;
     return _Reveal(
@@ -363,7 +428,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget? _secGenres(double start) {
-    final genres = widget.item.genres ?? const [];
+    final genres = _item.genres ?? const [];
     if (genres.isEmpty) return null;
     return _Reveal(
       parent: _revealCtrl,
@@ -462,7 +527,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget? _secDescription(double start) {
-    final description = widget.item.description ?? '';
+    final description = _item.description ?? '';
     if (description.isEmpty) return null;
     return _Reveal(
       parent: _revealCtrl,

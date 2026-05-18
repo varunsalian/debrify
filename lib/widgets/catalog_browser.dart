@@ -1962,6 +1962,16 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       onRecommendationTap: recImdbId != null
           ? (rec) => _openItemDetail(rec)
           : null,
+      // Sparse items (a tapped "Watch Next" recommendation) get backfilled
+      // with full Cinemeta-grade metadata so the screen matches a normal
+      // catalog open. The screen only invokes this when the item lacks
+      // structured fields, so a normal open costs nothing.
+      metaEnricher: recImdbId != null
+          ? (imdbId, type) => _stremioService.fetchMetaDetails(
+                imdbId: imdbId,
+                type: type,
+              )
+          : null,
     );
 
     // Only the back-restore (reEnterItemDetail) uses an instant route — same
