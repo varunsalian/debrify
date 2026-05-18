@@ -167,7 +167,7 @@ class _TorrentSearchPreservedState {
 final _preservedState = _TorrentSearchPreservedState();
 
 class _TorrentSearchScreenState extends State<TorrentSearchScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _resultsScrollController = ScrollController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -297,6 +297,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // (a different path) and is unaffected by this mask.
   bool _quickPlayMovieMasking = false;
   String? _quickPlayMovieMaskTitle;
+  // Set when an external player activity (Android TV native / DeoVR /
+  // external app) was launched while the mask was up. The mask is then kept
+  // up (invisibly behind that activity) and torn down on app resume instead
+  // of immediately — otherwise the bare search UI flashes for the duration
+  // of the external activity's launch transition. A timer is the safety net
+  // if no resume arrives (launch silently failed after the signal).
+  bool _maskClearDeferredForExternal = false;
+  Timer? _deferredMaskClearTimer;
   // Epoch for the active masked Quick Play attempt. Bumped when a new
   // attempt starts or the user cancels, so a long pre-search phase (e.g.
   // the series IMDb metadata probe) can detect it was superseded/cancelled
@@ -1119,6 +1127,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   @override
   void initState() {
     super.initState();
+
+    // Observe app lifecycle so a Quick Play mask deferred for an external
+    // player launch is torn down when the user returns to the app.
+    WidgetsBinding.instance.addObserver(this);
+    MainPageBridge.onExternalPlayerLaunched = () {
+      // Only relevant while a Quick Play mask is actually showing; keep it
+      // up through the external activity's launch transition.
+      if (mounted && _quickPlayMovieMasking) {
+        _maskClearDeferredForExternal = true;
+      }
+    };
 
     // Initialize home screen DPAD navigation controller
     _homeFocusController = HomeFocusController();
@@ -2533,6 +2552,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     MainPageBridge.handlePikPakResult = null;
     MainPageBridge.watchContinueWatchingItem = null;
     MainPageBridge.watchAdvancedSearchSelection = null;
+    MainPageBridge.onExternalPlayerLaunched = null;
+    WidgetsBinding.instance.removeObserver(this);
+    _deferredMaskClearTimer?.cancel();
     _listAnimationController.dispose();
     super.dispose();
   }
@@ -4232,6 +4254,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // Play (e.g. next-episode auto-advance) — during the pre-search phase
     // invalidates this attempt before it can auto-play.
     _quickPlayMaskGeneration++;
+    // Fresh attempt: drop any stale external-launch deferral/timer.
+    _maskClearDeferredForExternal = false;
+    _deferredMaskClearTimer?.cancel();
+    _deferredMaskClearTimer = null;
     setState(() {
       _quickPlayPending = true;
       _quickPlaySelection = selection;
@@ -12191,8 +12217,26 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Tears down the movie Quick Play mask, revealing the underlying
   /// search UI as a graceful fallback. Idempotent and safe on any path
   /// (including when unmounted).
-  void _clearQuickPlayMovieMask() {
+  ///
+  /// When [force] is false and an external player activity was just
+  /// launched, the teardown is *deferred*: the mask stays up (invisibly
+  /// behind that activity) and is cleared on app resume — see
+  /// [didChangeAppLifecycleState] — so the bare search UI doesn't flash
+  /// during the external activity's launch transition. A timer is the
+  /// safety net if no resume ever arrives.
+  void _clearQuickPlayMovieMask({bool force = false}) {
     if (!_quickPlayMovieMasking) return;
+    if (!force && _maskClearDeferredForExternal) {
+      _deferredMaskClearTimer?.cancel();
+      _deferredMaskClearTimer = Timer(
+        const Duration(seconds: 6),
+        () => _clearQuickPlayMovieMask(force: true),
+      );
+      return;
+    }
+    _maskClearDeferredForExternal = false;
+    _deferredMaskClearTimer?.cancel();
+    _deferredMaskClearTimer = null;
     if (!mounted) {
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
@@ -12202,6 +12246,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Returning from an external player activity: now safe to drop a mask
+    // whose teardown was deferred for the launch transition.
+    if (state == AppLifecycleState.resumed &&
+        _maskClearDeferredForExternal) {
+      _clearQuickPlayMovieMask(force: true);
+    }
   }
 
   /// User backed out of / cancelled a movie Quick Play before it resolved.
@@ -12215,6 +12270,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // the series metadata probe in _handleCatalogItemSelected) bails out
     // instead of proceeding to auto-play after the user cancelled.
     _quickPlayMaskGeneration++;
+    // Explicit user cancel — drop any pending external-launch deferral too.
+    _maskClearDeferredForExternal = false;
+    _deferredMaskClearTimer?.cancel();
+    _deferredMaskClearTimer = null;
     if (!mounted) {
       _quickPlayPending = false;
       _quickPlayMovieMasking = false;
@@ -12237,10 +12296,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _quickPlayPending = false;
       _quickPlayTorrentsList = [];
       _quickPlayCurrentIndex = 0;
-      // Catch-all: any terminal Quick Play path drops the movie mask.
-      _quickPlayMovieMasking = false;
-      _quickPlayMovieMaskTitle = null;
     });
+    // Catch-all: any terminal Quick Play path drops the movie mask — but
+    // honor the external-launch deferral so it doesn't flash the search UI
+    // before the player activity is on screen (cleared on resume instead).
+    _clearQuickPlayMovieMask();
   }
 
   /// Checks if a torrent name matches the search title using word-based matching.

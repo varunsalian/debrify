@@ -491,6 +491,7 @@ class VideoPlayerLauncher {
     if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
       final launched = await _launchWithExternalPlayer(context, args);
       if (launched) {
+        MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
       // If external player failed, fall through to in-app player
@@ -499,6 +500,7 @@ class VideoPlayerLauncher {
         Platform.isAndroid) {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
+        MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
       // If DeoVR failed, fall through to in-app player
@@ -511,6 +513,7 @@ class VideoPlayerLauncher {
         onQuickPlayNextEpisode: onQuickPlayNextEpisode,
       );
       if (launched) {
+        MainPageBridge.notifyExternalPlayerLaunched();
         return;
       }
     }

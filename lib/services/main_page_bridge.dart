@@ -25,6 +25,14 @@ class MainPageBridge {
   static Future<void> Function(String fileId, String fileName)?
   handlePikPakResult;
   static VoidCallback? hideAutoLaunchOverlay;
+
+  /// Fired only when playback was handed off to a *separate external
+  /// activity* (Android TV native player, DeoVR, or an external player app)
+  /// — i.e. control returns to Flutter immediately while that activity is
+  /// still launching. NOT fired for the in-app player route. Lets a screen
+  /// keep a launch mask up until app resume so the bare UI doesn't flash
+  /// during the external activity's launch transition.
+  static VoidCallback? onExternalPlayerLaunched;
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
   static Future<void> Function(String channelId)? watchStremioTvChannel;
   static Future<void> Function(Map<String, dynamic> item)?
@@ -142,6 +150,12 @@ class MainPageBridge {
 
   static void notifyPlayerLaunching() {
     hideAutoLaunchOverlay?.call();
+  }
+
+  /// Call right before returning from an external-activity playback launch
+  /// (see [onExternalPlayerLaunched]).
+  static void notifyExternalPlayerLaunched() {
+    onExternalPlayerLaunched?.call();
   }
 
   static void notifyAutoLaunchFailed([String? reason]) {
