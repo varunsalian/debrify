@@ -12,6 +12,15 @@ class AppMigrationService {
   static const String _lastVersionKey = 'app_last_version';
   static const String _lastBuildNumberKey = 'app_last_build_number';
 
+  /// Set once an essential addon has been confirmed present at least once
+  /// (either we added it, or the user already had it). After that we never
+  /// auto-add it again, so a deliberate removal by the user is respected.
+  /// Until then we keep retrying every launch — this self-heals the case
+  /// where the very first launch was offline / the addon was unreachable.
+  static const String _cinemetaSeededKey = 'essential_addon_cinemeta_seeded';
+  static const String _openSubtitlesSeededKey =
+      'essential_addon_opensubtitles_seeded';
+
   /// Cinemeta addon manifest URL - provides metadata for movies and shows
   static const String cinemetaManifestUrl =
       'https://v3-cinemeta.strem.io/manifest.json';
@@ -23,10 +32,18 @@ class AppMigrationService {
   /// Run all necessary migrations based on version change.
   ///
   /// Call this during app initialization, before showing the main UI.
-  /// Returns true if migrations were run, false if already up to date.
+  /// Returns true if version-gated migrations were run, false otherwise.
   static Future<bool> runMigrations() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // Essential addons are seeded independently of the version gate: a
+      // user whose first launch was offline must still get Cinemeta once
+      // they're back online, even though the version hasn't changed. The
+      // per-addon "seeded" flag (set only once the addon is confirmed
+      // present) stops us from ever re-adding one the user removed.
+      await _ensureEssentialAddons(prefs);
+
       final packageInfo = await PackageInfo.fromPlatform();
 
       final currentVersion = packageInfo.version;
@@ -46,7 +63,7 @@ class AppMigrationService {
           lastBuildNumber != currentBuildNumber;
 
       if (!isFreshInstall && !isVersionChange) {
-        debugPrint('AppMigrationService: No migration needed');
+        debugPrint('AppMigrationService: No version-gated migration needed');
         return false;
       }
 
@@ -55,7 +72,7 @@ class AppMigrationService {
         '(freshInstall: $isFreshInstall, versionChange: $isVersionChange)',
       );
 
-      // Run migrations
+      // Run version-gated migrations
       await _runAllMigrations(isFreshInstall: isFreshInstall);
 
       // Update stored version
@@ -70,18 +87,28 @@ class AppMigrationService {
     }
   }
 
-  /// Run all migration tasks
+  /// Run version-gated migration tasks (one-time data migrations tied to an
+  /// app update). Essential-addon seeding is intentionally NOT here — it runs
+  /// every launch via [_ensureEssentialAddons] until it succeeds once.
   static Future<void> _runAllMigrations({required bool isFreshInstall}) async {
-    // Migration 1: Auto-add essential addons
-    await _ensureCinemetaAddon();
-    await _ensureOpenSubtitlesAddon();
+    // No version-gated migrations at present.
+  }
+
+  /// Seed the essential addons that the app needs to function. Runs on every
+  /// launch but is a cheap no-op once each addon has been seeded once.
+  static Future<void> _ensureEssentialAddons(SharedPreferences prefs) async {
+    await _ensureCinemetaAddon(prefs);
+    await _ensureOpenSubtitlesAddon(prefs);
   }
 
   /// Ensure Cinemeta addon is installed.
   ///
   /// Cinemeta provides metadata (posters, descriptions, cast info) for
   /// movies and TV shows. It's essential for the app to function properly.
-  static Future<void> _ensureCinemetaAddon() async {
+  static Future<void> _ensureCinemetaAddon(SharedPreferences prefs) async {
+    // Already seeded once — never auto-add again (respects user removal).
+    if (prefs.getBool(_cinemetaSeededKey) ?? false) return;
+
     try {
       final stremioService = StremioService.instance;
       final addons = await stremioService.getAddons();
@@ -94,6 +121,7 @@ class AppMigrationService {
 
       if (hasCinemeta) {
         debugPrint('AppMigrationService: Cinemeta addon already installed');
+        await prefs.setBool(_cinemetaSeededKey, true);
         return;
       }
 
@@ -101,8 +129,13 @@ class AppMigrationService {
       debugPrint('AppMigrationService: Adding Cinemeta addon...');
       final addon = await stremioService.addAddon(cinemetaManifestUrl);
       debugPrint('AppMigrationService: Cinemeta addon added: ${addon.name}');
+      // Only mark seeded on a confirmed success, so an offline/unreachable
+      // first launch is retried on the next launch instead of silently
+      // leaving the user without metadata until the next app update.
+      await prefs.setBool(_cinemetaSeededKey, true);
     } catch (e) {
-      // Don't fail migration if addon can't be added (network issues, etc.)
+      // Don't fail migration if addon can't be added (network issues, etc.).
+      // Leave the seeded flag unset so we retry next launch.
       debugPrint('AppMigrationService: Failed to add Cinemeta addon: $e');
     }
   }
@@ -110,7 +143,10 @@ class AppMigrationService {
   /// Ensure OpenSubtitles addon is installed.
   ///
   /// OpenSubtitles provides subtitles for movies and TV shows.
-  static Future<void> _ensureOpenSubtitlesAddon() async {
+  static Future<void> _ensureOpenSubtitlesAddon(SharedPreferences prefs) async {
+    // Already seeded once — never auto-add again (respects user removal).
+    if (prefs.getBool(_openSubtitlesSeededKey) ?? false) return;
+
     try {
       final stremioService = StremioService.instance;
       final addons = await stremioService.getAddons();
@@ -122,6 +158,7 @@ class AppMigrationService {
 
       if (hasOpenSubtitles) {
         debugPrint('AppMigrationService: OpenSubtitles addon already installed');
+        await prefs.setBool(_openSubtitlesSeededKey, true);
         return;
       }
 
@@ -129,8 +166,10 @@ class AppMigrationService {
       debugPrint('AppMigrationService: Adding OpenSubtitles addon...');
       final addon = await stremioService.addAddon(openSubtitlesManifestUrl);
       debugPrint('AppMigrationService: OpenSubtitles addon added: ${addon.name}');
+      await prefs.setBool(_openSubtitlesSeededKey, true);
     } catch (e) {
-      // Don't fail migration if addon can't be added (network issues, etc.)
+      // Don't fail migration if addon can't be added (network issues, etc.).
+      // Leave the seeded flag unset so we retry next launch.
       debugPrint('AppMigrationService: Failed to add OpenSubtitles addon: $e');
     }
   }
