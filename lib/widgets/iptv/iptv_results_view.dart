@@ -58,7 +58,14 @@ class IptvResultsViewState extends State<IptvResultsView> {
   final FocusNode _playlistFilterFocusNode = FocusNode(debugLabel: 'iptv-playlist-filter');
   final FocusNode _categoryFilterFocusNode = FocusNode(debugLabel: 'iptv-category-filter');
   final FocusNode _contentTypeFocusNode = FocusNode(debugLabel: 'iptv-content-type-filter');
-  final List<FocusNode> _cardFocusNodes = [];
+  // Keyed by channel URL (stable identity) rather than list position, so
+  // focus survives category/search filtering of the grid.
+  final Map<String, FocusNode> _cardFocusNodes = {};
+
+  FocusNode _focusNodeFor(IptvChannel channel) => _cardFocusNodes.putIfAbsent(
+    channel.url,
+    () => FocusNode(debugLabel: 'iptv-card-${channel.url}'),
+  );
 
   String _lastSearchQuery = '';
 
@@ -163,7 +170,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
     _playlistFilterFocusNode.dispose();
     _categoryFilterFocusNode.dispose();
     _contentTypeFocusNode.dispose();
-    for (final node in _cardFocusNodes) {
+    for (final node in _cardFocusNodes.values) {
       node.dispose();
     }
     super.dispose();
@@ -180,7 +187,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
     });
 
     // Dispose old focus nodes
-    for (final node in _cardFocusNodes) {
+    for (final node in _cardFocusNodes.values) {
       node.dispose();
     }
     _cardFocusNodes.clear();
@@ -210,10 +217,8 @@ class IptvResultsViewState extends State<IptvResultsView> {
       return;
     }
 
-    // Create focus nodes for cards
-    for (int i = 0; i < result.channels.length; i++) {
-      _cardFocusNodes.add(FocusNode(debugLabel: 'iptv-card-$i'));
-    }
+    // Focus nodes are created lazily per channel (keyed by URL) in the
+    // grid's itemBuilder via _focusNodeFor.
 
     setState(() {
       _isLoading = false;
@@ -305,9 +310,9 @@ class IptvResultsViewState extends State<IptvResultsView> {
 
   /// Focus the first channel card (for DPAD navigation from filters)
   void _focusFirstChannel() {
-    // Only focus if we have filtered channels and focus nodes
-    if (_filteredChannels.isNotEmpty && _cardFocusNodes.isNotEmpty) {
-      _cardFocusNodes[0].requestFocus();
+    // Only focus if we have filtered channels
+    if (_filteredChannels.isNotEmpty) {
+      _focusNodeFor(_filteredChannels.first).requestFocus();
     }
   }
 
@@ -449,33 +454,34 @@ class IptvResultsViewState extends State<IptvResultsView> {
     final hPadding = w >= 900 ? 32.0 : 16.0;
 
     return TvFocusScrollWrapper(
-      child: GridView.builder(
-        controller: _scrollController,
-        padding: EdgeInsets.fromLTRB(hPadding, 12, hPadding, 24),
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+      child: FocusTraversalGroup(
+        child: GridView.builder(
+          controller: _scrollController,
+          padding: EdgeInsets.fromLTRB(hPadding, 12, hPadding, 24),
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 1.2,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 14,
+          ),
+          itemCount: _filteredChannels.length,
+          itemBuilder: (context, index) {
+            final channel = _filteredChannels[index];
+            return IptvChannelTile(
+              key: ValueKey(channel.url),
+              channel: channel,
+              isTelevision: widget.isTelevision,
+              onTap: () => _playChannel(channel),
+              focusNode: _focusNodeFor(channel),
+              isFavorited: _favoriteUrls.contains(channel.url),
+              onFavoriteToggle: (isFavorited) =>
+                  _toggleFavorite(channel, isFavorited),
+            );
+          },
         ),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: 1.2,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 14,
-        ),
-        itemCount: _filteredChannels.length,
-        itemBuilder: (context, index) {
-          final channel = _filteredChannels[index];
-          return IptvChannelTile(
-            channel: channel,
-            isTelevision: widget.isTelevision,
-            onTap: () => _playChannel(channel),
-            focusNode: index < _cardFocusNodes.length
-                ? _cardFocusNodes[index]
-                : null,
-            isFavorited: _favoriteUrls.contains(channel.url),
-            onFavoriteToggle: (isFavorited) =>
-                _toggleFavorite(channel, isFavorited),
-          );
-        },
       ),
     );
   }

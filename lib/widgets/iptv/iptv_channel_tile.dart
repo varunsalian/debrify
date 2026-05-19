@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +36,17 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
   bool _focused = false;
   bool _hovered = false;
   bool get _active => _focused || _hovered;
+
+  // Long-press OK on TV toggles favorite; a short press still plays.
+  static const _favHoldDuration = Duration(milliseconds: 500);
+  Timer? _favHoldTimer;
+  bool _favHoldFired = false;
+
+  @override
+  void dispose() {
+    _favHoldTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +160,16 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
                 Positioned(
                   top: 4,
                   left: 4,
-                  child: _FavButton(
-                    favorited: widget.isFavorited,
-                    onTap: () =>
-                        widget.onFavoriteToggle!(!widget.isFavorited),
+                  // On TV the heart is a pure indicator — keeping it
+                  // focusable makes D-pad navigation snag on it between
+                  // channels. Favorite is toggled via long-press OK instead.
+                  child: ExcludeFocus(
+                    excluding: widget.isTelevision,
+                    child: _FavButton(
+                      favorited: widget.isFavorited,
+                      onTap: () =>
+                          widget.onFavoriteToggle!(!widget.isFavorited),
+                    ),
                   ),
                 ),
 
@@ -194,15 +213,44 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space ||
-                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
-          widget.onTap();
+        final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space ||
+            event.logicalKey == LogicalKeyboardKey.gameButtonA;
+        if (!isSelect) return KeyEventResult.ignored;
+
+        // Without a favorite action (or off-TV), keep the original
+        // press-to-play behaviour.
+        final canHoldToFavorite =
+            widget.isTelevision && widget.onFavoriteToggle != null;
+        if (!canHoldToFavorite) {
+          if (event is KeyDownEvent) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        }
+
+        if (event is KeyDownEvent) {
+          _favHoldFired = false;
+          _favHoldTimer?.cancel();
+          _favHoldTimer = Timer(_favHoldDuration, () {
+            if (!mounted) return;
+            _favHoldFired = true;
+            widget.onFavoriteToggle!(!widget.isFavorited);
+          });
           return KeyEventResult.handled;
         }
-        return KeyEventResult.ignored;
+        if (event is KeyUpEvent) {
+          _favHoldTimer?.cancel();
+          _favHoldTimer = null;
+          // A long press already toggled favorite — swallow the release.
+          if (!_favHoldFired) widget.onTap();
+          _favHoldFired = false;
+          return KeyEventResult.handled;
+        }
+        // Swallow auto-repeat while the key is held.
+        return KeyEventResult.handled;
       },
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
