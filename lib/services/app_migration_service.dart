@@ -20,6 +20,8 @@ class AppMigrationService {
   static const String _cinemetaSeededKey = 'essential_addon_cinemeta_seeded';
   static const String _openSubtitlesSeededKey =
       'essential_addon_opensubtitles_seeded';
+  static const String _watchNextSeededKey =
+      'essential_addon_watch_next_seeded';
 
   /// Cinemeta addon manifest URL - provides metadata for movies and shows
   static const String cinemetaManifestUrl =
@@ -28,6 +30,10 @@ class AppMigrationService {
   /// OpenSubtitles addon manifest URL - provides subtitles for movies and shows
   static const String openSubtitlesManifestUrl =
       'https://opensubtitlesv3-pro.dexter21767.com/eyJsYW5ncyI6WyJlbmdsaXNoIl0sInNvdXJjZSI6ImFsbCIsImFpVHJhbnNsYXRlZCI6dHJ1ZSwiYXV0b0FkanVzdG1lbnQiOmZhbHNlfQ==/manifest.json';
+
+  /// Watch Next addon manifest URL - provides "watch next" recommendations
+  static const String watchNextManifestUrl =
+      'https://099757617587-watch-next.baby-beamup.club/manifest.json';
 
   /// Run all necessary migrations based on version change.
   ///
@@ -99,6 +105,7 @@ class AppMigrationService {
   static Future<void> _ensureEssentialAddons(SharedPreferences prefs) async {
     await _ensureCinemetaAddon(prefs);
     await _ensureOpenSubtitlesAddon(prefs);
+    await _ensureWatchNextAddon(prefs);
   }
 
   /// Ensure Cinemeta addon is installed.
@@ -171,6 +178,40 @@ class AppMigrationService {
       // Don't fail migration if addon can't be added (network issues, etc.).
       // Leave the seeded flag unset so we retry next launch.
       debugPrint('AppMigrationService: Failed to add OpenSubtitles addon: $e');
+    }
+  }
+
+  /// Ensure the Watch Next addon is installed.
+  ///
+  /// Provides "watch next" recommendations on the detail screen.
+  static Future<void> _ensureWatchNextAddon(SharedPreferences prefs) async {
+    // Already seeded once — never auto-add again (respects user removal).
+    if (prefs.getBool(_watchNextSeededKey) ?? false) return;
+
+    try {
+      final stremioService = StremioService.instance;
+      final addons = await stremioService.getAddons();
+
+      // Check if Watch Next is already installed (by manifest URL or ID)
+      final hasWatchNext = addons.any((addon) =>
+          addon.manifestUrl == watchNextManifestUrl ||
+          addon.id == 'community.watch.next');
+
+      if (hasWatchNext) {
+        debugPrint('AppMigrationService: Watch Next addon already installed');
+        await prefs.setBool(_watchNextSeededKey, true);
+        return;
+      }
+
+      // Add Watch Next addon
+      debugPrint('AppMigrationService: Adding Watch Next addon...');
+      final addon = await stremioService.addAddon(watchNextManifestUrl);
+      debugPrint('AppMigrationService: Watch Next addon added: ${addon.name}');
+      await prefs.setBool(_watchNextSeededKey, true);
+    } catch (e) {
+      // Don't fail migration if addon can't be added (network issues, etc.).
+      // Leave the seeded flag unset so we retry next launch.
+      debugPrint('AppMigrationService: Failed to add Watch Next addon: $e');
     }
   }
 }
