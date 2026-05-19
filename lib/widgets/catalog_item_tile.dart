@@ -7,14 +7,18 @@ import 'home/home_theme.dart';
 
 /// Poster-first grid tile for catalog and search results.
 ///
-/// Tap (or D-pad SELECT) calls [onOpen]. Description, year, genres and
-/// per-item actions live on the detail screen — the grid stays clean.
+/// Tap (or D-pad SELECT) calls [onOpen]. A long-press calls [onLongPress]
+/// (used to Quick Play straight from the grid). Description, year, genres
+/// and per-item actions live on the detail screen — the grid stays clean.
 class CatalogItemTile extends StatefulWidget {
   final StremioMeta item;
   final bool isTelevision;
   final FocusNode? focusNode;
   final bool hasBoundSource;
   final VoidCallback onOpen;
+
+  /// Optional long-press action (Quick Play). When null, long-press is a no-op.
+  final VoidCallback? onLongPress;
 
   /// Optional watch progress (0..1). When > 0 a slim bar is pinned to the
   /// bottom of the poster — used by the Trakt "continue watching" grid.
@@ -27,6 +31,7 @@ class CatalogItemTile extends StatefulWidget {
     required this.focusNode,
     required this.hasBoundSource,
     required this.onOpen,
+    this.onLongPress,
     this.progress,
   });
 
@@ -257,6 +262,12 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onOpen,
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
           behavior: HitTestBehavior.opaque,
           child: card,
         ),

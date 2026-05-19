@@ -1907,6 +1907,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             item.effectiveImdbId ?? item.id,
           ),
           onOpen: () => _openItemDetail(item),
+          onLongPress: widget.showQuickPlay ? () => _onQuickPlay(item) : null,
         );
       },
     );

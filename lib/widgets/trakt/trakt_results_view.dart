@@ -2493,6 +2493,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ),
             progress: (pct != null && pct > 0) ? pct / 100.0 : null,
             onOpen: () => _openItemDetail(item),
+            onLongPress: widget.showQuickPlay
+                ? () => _onQuickPlay(item)
+                : null,
           );
         },
       ),

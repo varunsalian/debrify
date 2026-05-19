@@ -1282,6 +1282,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                       item.effectiveImdbId ?? item.id,
                     ),
                     onOpen: () => _openItemDetail(item),
+                    onLongPress: widget.showQuickPlay
+                        ? () => _onQuickPlay(item)
+                        : null,
                   ),
                 );
               }, childCount: _results.length),
