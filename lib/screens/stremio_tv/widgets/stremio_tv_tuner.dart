@@ -707,6 +707,16 @@ class _Stage extends StatelessWidget {
     final bg = item?.background ?? item?.poster;
     final blurArt = hideNowPlaying;
 
+    // Only the mobile pager passes onOpenList. There the content sits at
+    // the very bottom of a full-screen page, so it must clear the nav bar
+    // *and* any floating system button (e.g. Samsung's assistant/Menu
+    // pill). The wide TV Stage keeps the slim inset so it doesn't steal
+    // height from the Dial below it.
+    final isNarrow = onOpenList != null;
+    final bottomInset = isNarrow
+        ? 30.0 + MediaQuery.of(context).padding.bottom + 72.0
+        : 30.0;
+
     return DecoratedBox(
       decoration: const BoxDecoration(color: Color(0xFF09090F)),
       child: Stack(
@@ -763,7 +773,7 @@ class _Stage extends StatelessWidget {
           ),
           // Content.
           Padding(
-            padding: const EdgeInsets.fromLTRB(40, 28, 40, 30),
+            padding: EdgeInsets.fromLTRB(40, 28, 40, bottomInset),
             child: LayoutBuilder(
               builder: (context, c) => Align(
                 alignment: Alignment.bottomLeft,
@@ -810,15 +820,15 @@ class _Stage extends StatelessWidget {
                   if (item.description != null &&
                       item.description!.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      item.description!.trim(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
-                        fontSize: 14.5,
-                        height: 1.35,
-                      ),
+                    _StageDescription(
+                      text: item.description!.trim(),
+                      title: item.name,
+                      ident: ident,
+                      // Only the mobile pager can tap "Read more"; the TV
+                      // Stage isn't focusable (details live in the Dial
+                      // long-press sheet), so it keeps the slim 2-line
+                      // synopsis and no dead affordance.
+                      interactive: isNarrow,
                     ),
                   ],
                   const SizedBox(height: 18),
@@ -1111,6 +1121,165 @@ class _Stage extends StatelessWidget {
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700)),
       ]),
+    );
+  }
+}
+
+/// Stage synopsis: shows up to 4 lines and, only when the text actually
+/// overflows that, a "Read more" that opens the full synopsis in a sheet.
+/// A sheet (not inline expand) because the Stage body lives inside a
+/// scale-down FittedBox — expanding inline would just shrink everything.
+class _StageDescription extends StatelessWidget {
+  final String text;
+  final String title;
+  final Color ident;
+
+  /// Mobile pager only: render more lines and a tappable "Read more".
+  /// On TV this is false → slim 2-line synopsis, no affordance.
+  final bool interactive;
+
+  const _StageDescription({
+    required this.text,
+    required this.title,
+    required this.ident,
+    required this.interactive,
+  });
+
+  static const _style = TextStyle(
+    color: Color(0xB8FFFFFF), // white @ ~0.72
+    fontSize: 14.5,
+    height: 1.35,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    // TV: slim 2-line synopsis, no affordance. Return early so the Stage's
+    // frequent rebuilds (15s tick + every surf) don't lay out a throwaway
+    // TextPainter whose overflow result is never used here.
+    if (!interactive) {
+      return Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: _style,
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, c) {
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: _style),
+          maxLines: 4,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: c.maxWidth);
+        final overflows = tp.didExceedMaxLines;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              text,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: _style,
+            ),
+            if (overflows) ...[
+              const SizedBox(height: 6),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _showFull(context),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Read more',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(Icons.expand_more_rounded,
+                        size: 18,
+                        color: Colors.white.withValues(alpha: 0.95)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  void _showFull(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF101015),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.35,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (ctx, scrollCtrl) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Row(children: [
+                Container(
+                  width: 4,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: ident,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontSize: 15,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
