@@ -21,9 +21,10 @@ import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
 import '../../services/torrent_service.dart';
+import '../catalog_item_detail_screen.dart';
 import '../settings/stremio_tv_settings_page.dart';
 import 'stremio_tv_service.dart';
-import 'widgets/stremio_tv_channel_row.dart';
+import 'widgets/stremio_tv_tuner.dart';
 import 'widgets/stremio_tv_empty_state.dart';
 import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
@@ -2216,6 +2217,87 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   // ============================================================================
+  // Channel Detail (cinematic "tune-in")
+  // ============================================================================
+
+  bool _pushingChannelDetail = false;
+
+  /// Tune in: opens the reused [CatalogItemDetailScreen] for the channel's
+  /// now-playing item with a fast zoom/fade so selecting a channel feels
+  /// like committing to it rather than a stock page push.
+  Future<void> _openChannelDetail(StremioTvChannel channel) async {
+    if (_pushingChannelDetail) return;
+    _pushingChannelDetail = true;
+    try {
+      await _pushChannelDetail(channel);
+    } finally {
+      _pushingChannelDetail = false;
+    }
+  }
+
+  Future<void> _pushChannelDetail(StremioTvChannel channel) async {
+    if (!channel.hasItems) {
+      await _ensureChannelItemsLoaded(channel);
+      // _ensureChannelItemsLoaded early-returns when a load is already in
+      // flight (the Tuner kicks one off on focus), so the await above may
+      // not have actually waited. Poll the in-flight load to settle before
+      // deciding there's nothing to show — otherwise "View details" on a
+      // still-tuning channel wrongly reports "No items available".
+      var waitedMs = 0;
+      while (mounted &&
+          !channel.hasItems &&
+          _loadingChannelIds.contains(channel.id) &&
+          waitedMs < 8000) {
+        await Future.delayed(const Duration(milliseconds: 120));
+        waitedMs += 120;
+      }
+      if (!mounted) return;
+    }
+    final nowPlaying = _service.getNowPlaying(
+      channel,
+      rotationMinutes: _rotationFor(channel),
+      salt: _mixSalt,
+    );
+    if (nowPlaying == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No items available for this channel'),
+          ),
+        );
+      }
+      return;
+    }
+    final isWide = MediaQuery.of(context).size.width >= 900;
+    final screen = CatalogItemDetailScreen(
+      item: nowPlaying.item,
+      isTelevision: isWide,
+      onPlay: () => _playChannel(channel),
+      onBrowse: () => _playChannel(channel),
+    );
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 260),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, __, ___) => screen,
+        transitionsBuilder: (_, anim, __, child) {
+          final curved = CurvedAnimation(
+            parent: anim,
+            curve: Curves.easeOutCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween(begin: 1.08, end: 1.0).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ============================================================================
   // Channel Guide
   // ============================================================================
 
@@ -2391,6 +2473,27 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return _channels[_focusedIndex].id;
     }
     return null;
+  }
+
+  /// Returns focus from the header back into the Dial. Targets the card the
+  /// user last had focused (so it works after surfing right) rather than
+  /// always the first channel — whose card is scrolled off-screen and
+  /// focus-detached, which is why down-arrow silently did nothing.
+  void _focusDialFromHeader() {
+    if (_rowFocusNodes.isEmpty) return;
+    final filtered = _filteredChannels;
+    if (filtered.isEmpty) return;
+    if (_focusedIndex >= 0 &&
+        _focusedIndex < _rowFocusNodes.length &&
+        _focusedIndex < _channels.length &&
+        filtered.contains(_channels[_focusedIndex])) {
+      _rowFocusNodes[_focusedIndex].requestFocus();
+      return;
+    }
+    final firstIdx = _channels.indexOf(filtered.first);
+    if (firstIdx >= 0 && firstIdx < _rowFocusNodes.length) {
+      _rowFocusNodes[firstIdx].requestFocus();
+    }
   }
 
   void _reorderRowFocusNodes(
@@ -2593,17 +2696,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               }
                               if (event.logicalKey ==
                                   LogicalKeyboardKey.arrowDown) {
-                                final filtered = _filteredChannels;
-                                if (filtered.isNotEmpty &&
-                                    _rowFocusNodes.isNotEmpty) {
-                                  final firstIdx = _channels.indexOf(
-                                    filtered.first,
-                                  );
-                                  if (firstIdx >= 0 &&
-                                      firstIdx < _rowFocusNodes.length) {
-                                    _rowFocusNodes[firstIdx].requestFocus();
-                                  }
-                                }
+                                _focusDialFromHeader();
                                 return KeyEventResult.handled;
                               }
                               if (event.logicalKey ==
@@ -2710,17 +2803,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               }
                               if (event.logicalKey ==
                                   LogicalKeyboardKey.arrowDown) {
-                                final filtered = _filteredChannels;
-                                if (filtered.isNotEmpty &&
-                                    _rowFocusNodes.isNotEmpty) {
-                                  final firstIdx = _channels.indexOf(
-                                    filtered.first,
-                                  );
-                                  if (firstIdx >= 0 &&
-                                      firstIdx < _rowFocusNodes.length) {
-                                    _rowFocusNodes[firstIdx].requestFocus();
-                                  }
-                                }
+                                _focusDialFromHeader();
                                 return KeyEventResult.handled;
                               }
                               if (event.logicalKey ==
@@ -2895,17 +2978,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 }
                                 if (event.logicalKey ==
                                     LogicalKeyboardKey.arrowDown) {
-                                  final filtered = _filteredChannels;
-                                  if (filtered.isNotEmpty &&
-                                      _rowFocusNodes.isNotEmpty) {
-                                    final firstIdx = _channels.indexOf(
-                                      filtered.first,
-                                    );
-                                    if (firstIdx >= 0 &&
-                                        firstIdx < _rowFocusNodes.length) {
-                                      _rowFocusNodes[firstIdx].requestFocus();
-                                    }
-                                  }
+                                  _focusDialFromHeader();
                                   return KeyEventResult.handled;
                                 }
                                 if (event.logicalKey ==
@@ -3027,87 +3100,48 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                           ),
                         );
                       }
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(top: 8, bottom: 16),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final channel = filtered[index];
-                          final realIndex = _channels.indexOf(channel);
-
-                          // Trigger lazy load for visible channels
+                      return StremioTvTuner(
+                        channels: filtered,
+                        allChannels: _channels,
+                        rowFocusNodes: _rowFocusNodes,
+                        service: _service,
+                        rotationFor: _rotationFor,
+                        mixSalt: _mixSalt,
+                        hideNowPlaying: _hideNowPlaying,
+                        loadingChannelIds: _loadingChannelIds,
+                        ensureLoaded: (channel) {
                           if (!channel.hasItems &&
                               !_loadingChannelIds.contains(channel.id)) {
                             _ensureChannelItemsLoaded(channel);
                           }
-
-                          final nowPlaying = _service.getNowPlaying(
-                            channel,
-                            rotationMinutes: _rotationFor(channel),
-                            salt: _mixSalt,
-                          );
-                          // Compute display progress (capped/randomized per settings)
-                          double? cappedProgress;
-                          if (nowPlaying != null) {
-                            if (_maxStartPercent == 0) {
-                              cappedProgress = 0.0;
-                            } else {
-                              cappedProgress = _computeStartProgress(
+                        },
+                        onOpenDetail: _openChannelDetail,
+                        onPlay: _playChannel,
+                        // Restore the "max start %" cap on the *displayed*
+                        // progress so the bar matches where playback will
+                        // actually join (matches the old row's
+                        // displayProgress semantics exactly).
+                        displayProgress: (channel, rawProgress) {
+                          if (_maxStartPercent == 0) return 0.0;
+                          return _computeStartProgress(
                                 channel.id,
-                                nowPlaying.progress,
-                              );
-                            }
-                          }
-                          final isLoading = _loadingChannelIds.contains(
-                            channel.id,
-                          );
-                          final focusNode = realIndex < _rowFocusNodes.length
-                              ? _rowFocusNodes[realIndex]
-                              : FocusNode();
-
-                          return ListenableBuilder(
-                            listenable: focusNode,
-                            builder: (context, _) {
-                              if (focusNode.hasFocus &&
-                                  _focusedIndex != realIndex) {
-                                WidgetsBinding.instance.addPostFrameCallback((
-                                  _,
-                                ) {
-                                  if (mounted) {
-                                    setState(() => _focusedIndex = realIndex);
-                                  }
-                                });
-                              }
-                              return StremioTvChannelRow(
-                                key: ValueKey(channel.id),
-                                channel: channel,
-                                nowPlaying: nowPlaying,
-                                isLoading: isLoading,
-                                isFocused: focusNode.hasFocus,
-                                focusNode: focusNode,
-                                hideNowPlaying: _hideNowPlaying,
-                                onTap: () => _playChannel(channel),
-                                onLongPress: () => _toggleFavorite(channel),
-                                onFavoritePressed: () =>
-                                    _toggleFavorite(channel),
-                                onEditPressed: channel.isLocal
-                                    ? () => _editLocalCatalog(channel)
-                                    : null,
-                                onExportPressed: channel.isLocal
-                                    ? () => _copyLocalCatalogJson(channel)
-                                    : null,
-                                onGuidePressed: _hideNowPlaying
-                                    ? null
-                                    : () => _showGuide(channel),
-                                onLeftPress: MainPageBridge.focusTvSidebar,
-                                onUpPress: index == 0
-                                    ? () {
-                                        _searchBtnFocusNode.requestFocus();
-                                      }
-                                    : null,
-                                displayProgress: cappedProgress,
-                              );
-                            },
-                          );
+                                rawProgress,
+                              ) ??
+                              rawProgress;
+                        },
+                        onToggleFavorite: _toggleFavorite,
+                        onShowGuide: _showGuide,
+                        onEditLocal: _editLocalCatalog,
+                        onExportLocal: _copyLocalCatalogJson,
+                        onFocusSidebar: () =>
+                            MainPageBridge.focusTvSidebar?.call(),
+                        onFocusHeader: () =>
+                            _searchBtnFocusNode.requestFocus(),
+                        onFocusedIndexChanged: (realIndex) {
+                          // Bookkeeping only — never read in build(), so no
+                          // setState (keeps surfing lag-free) and it stays
+                          // current for header↕ navigation even mid-surf.
+                          _focusedIndex = realIndex;
                         },
                       );
                     },
