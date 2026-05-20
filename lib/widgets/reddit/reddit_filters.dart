@@ -29,9 +29,12 @@ class RedditFiltersBar extends StatelessWidget {
   final ValueChanged<String?> onSubredditChanged;
   final ValueChanged<RedditSort> onSortChanged;
   final ValueChanged<RedditTimeFilter> onTimeFilterChanged;
+  final VoidCallback? onRandomPressed;
+  final bool isRandomLoading;
   final FocusNode? subredditFocusNode;
   final FocusNode? sortFocusNode;
   final FocusNode? timeFocusNode;
+  final FocusNode? randomFocusNode;
 
   const RedditFiltersBar({
     super.key,
@@ -43,9 +46,12 @@ class RedditFiltersBar extends StatelessWidget {
     required this.onSubredditChanged,
     required this.onSortChanged,
     required this.onTimeFilterChanged,
+    this.onRandomPressed,
+    this.isRandomLoading = false,
     this.subredditFocusNode,
     this.sortFocusNode,
     this.timeFocusNode,
+    this.randomFocusNode,
   });
 
   bool get _showTimeFilter =>
@@ -87,6 +93,17 @@ class RedditFiltersBar extends StatelessWidget {
           ],
 
           const Spacer(),
+
+          // Random button (only when a subreddit is selected)
+          if (selectedSubreddit != null && onRandomPressed != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _RandomButton(
+                onPressed: onRandomPressed!,
+                isLoading: isRandomLoading,
+                focusNode: randomFocusNode,
+              ),
+            ),
 
           // Result count
           Text(
@@ -1457,6 +1474,112 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
               ),
             ),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RandomButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final bool isLoading;
+  final FocusNode? focusNode;
+
+  const _RandomButton({
+    required this.onPressed,
+    required this.isLoading,
+    this.focusNode,
+  });
+
+  @override
+  State<_RandomButton> createState() => _RandomButtonState();
+}
+
+class _RandomButtonState extends State<_RandomButton> {
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() => _isFocused = widget.focusNode?.hasFocus ?? false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+             event.logicalKey == LogicalKeyboardKey.enter)) {
+          if (!widget.isLoading) widget.onPressed();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: GestureDetector(
+        onTap: widget.isLoading ? null : widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: _isFocused
+                ? colorScheme.primary
+                : colorScheme.tertiaryContainer,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _isFocused
+                  ? colorScheme.primary
+                  : colorScheme.outline.withValues(alpha: 0.3),
+              width: _isFocused ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.isLoading)
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _isFocused
+                        ? colorScheme.onPrimary
+                        : colorScheme.onTertiaryContainer,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.shuffle_rounded,
+                  size: 16,
+                  color: _isFocused
+                      ? colorScheme.onPrimary
+                      : colorScheme.onTertiaryContainer,
+                ),
+              const SizedBox(width: 4),
+              Text(
+                'Random',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: _isFocused
+                      ? colorScheme.onPrimary
+                      : colorScheme.onTertiaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -42,16 +42,17 @@ class RedditResultsViewState extends State<RedditResultsView> {
   bool _allowNsfw = false;
   bool _settingsLoaded = false;
 
+  bool _isRandomLoading = false;
+
   // Focus nodes for DPAD
   final FocusNode _subredditFilterFocusNode = FocusNode(debugLabel: 'reddit-subreddit-filter');
   final FocusNode _sortFilterFocusNode = FocusNode(debugLabel: 'reddit-sort-filter');
   final FocusNode _timeFilterFocusNode = FocusNode(debugLabel: 'reddit-time-filter');
+  final FocusNode _randomButtonFocusNode = FocusNode(debugLabel: 'reddit-random-button');
   final List<FocusNode> _cardFocusNodes = [];
 
   String _lastSearchQuery = '';
-
-  // Auto-load counter to prevent rate limiting (max 3 auto-loads per search)
-  int _autoLoadCount = 0;
+  int _searchGeneration = 0;
 
   @override
   void initState() {
@@ -96,6 +97,7 @@ class RedditResultsViewState extends State<RedditResultsView> {
     _subredditFilterFocusNode.dispose();
     _sortFilterFocusNode.dispose();
     _timeFilterFocusNode.dispose();
+    _randomButtonFocusNode.dispose();
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -109,28 +111,14 @@ class RedditResultsViewState extends State<RedditResultsView> {
     }
   }
 
-  /// Check if we need to auto-load more content (when list isn't scrollable)
-  void _checkAutoLoad() {
-    if (!mounted || !_hasMore || _autoLoadCount >= 3 || _isLoadingMore) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-
-      // If list isn't scrollable (content doesn't fill screen), load more
-      if (_scrollController.position.maxScrollExtent <= 0 && _hasMore && _autoLoadCount < 3) {
-        _autoLoadCount++;
-        debugPrint('RedditResultsView: Auto-loading more (attempt $_autoLoadCount/3)');
-        _loadMore();
-      }
-    });
-  }
-
   bool get _isSearching => widget.searchQuery.isNotEmpty;
 
   bool get _canLoad => _isSearching || _selectedSubreddit != null;
 
   Future<void> _performSearch() async {
     debugPrint('RedditResultsView: _performSearch called, _canLoad=$_canLoad, _isSearching=$_isSearching, subreddit=$_selectedSubreddit');
+
+    final generation = ++_searchGeneration;
 
     if (!_canLoad) {
       setState(() {
@@ -146,7 +134,6 @@ class RedditResultsViewState extends State<RedditResultsView> {
       _posts.clear();
       _afterCursor = null;
       _hasMore = true;
-      _autoLoadCount = 0;
     });
 
     // Dispose old focus nodes
@@ -159,36 +146,30 @@ class RedditResultsViewState extends State<RedditResultsView> {
       RedditListingResult result;
 
       if (_isSearching && _selectedSubreddit == null) {
-        // Global search
-        result = await RedditService.searchAllVideos(
+        result = await RedditService.fetchGlobalSearchVideos(
           query: widget.searchQuery,
           sort: _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           allowNsfw: _allowNsfw,
         );
       } else if (_isSearching && _selectedSubreddit != null) {
-        // Search within subreddit
-        result = await RedditService.searchSubredditVideos(
+        result = await RedditService.fetchSubredditSearchVideos(
           subreddit: _selectedSubreddit!,
           query: widget.searchQuery,
           sort: _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           allowNsfw: _allowNsfw,
         );
       } else {
-        // Browse subreddit
-        result = await RedditService.getSubredditVideos(
+        result = await RedditService.fetchSubredditVideos(
           subreddit: _selectedSubreddit!,
           sort: _selectedSort == RedditSort.relevance ? RedditSort.hot : _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           allowNsfw: _allowNsfw,
         );
       }
 
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
 
       debugPrint('RedditResultsView: Got ${result.posts.length} posts, hasMore=${result.hasMore}');
 
@@ -203,11 +184,8 @@ class RedditResultsViewState extends State<RedditResultsView> {
         _afterCursor = result.after;
         _hasMore = result.hasMore;
       });
-
-      // Check if we need to auto-load more
-      _checkAutoLoad();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       debugPrint('RedditResultsView: Error - $e');
       setState(() {
         _isLoading = false;
@@ -219,42 +197,41 @@ class RedditResultsViewState extends State<RedditResultsView> {
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore || !_canLoad) return;
 
+    final generation = _searchGeneration;
+
     setState(() => _isLoadingMore = true);
 
     try {
       RedditListingResult result;
 
       if (_isSearching && _selectedSubreddit == null) {
-        result = await RedditService.searchAllVideos(
+        result = await RedditService.fetchGlobalSearchVideos(
           query: widget.searchQuery,
           sort: _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           after: _afterCursor,
           allowNsfw: _allowNsfw,
         );
       } else if (_isSearching && _selectedSubreddit != null) {
-        result = await RedditService.searchSubredditVideos(
+        result = await RedditService.fetchSubredditSearchVideos(
           subreddit: _selectedSubreddit!,
           query: widget.searchQuery,
           sort: _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           after: _afterCursor,
           allowNsfw: _allowNsfw,
         );
       } else {
-        result = await RedditService.getSubredditVideos(
+        result = await RedditService.fetchSubredditVideos(
           subreddit: _selectedSubreddit!,
           sort: _selectedSort == RedditSort.relevance ? RedditSort.hot : _selectedSort,
           timeFilter: _selectedTimeFilter,
-          limit: 100,
           after: _afterCursor,
           allowNsfw: _allowNsfw,
         );
       }
 
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
 
       // Create focus nodes for new cards
       final startIndex = _cardFocusNodes.length;
@@ -268,11 +245,8 @@ class RedditResultsViewState extends State<RedditResultsView> {
         _afterCursor = result.after;
         _hasMore = result.hasMore;
       });
-
-      // Check if we need to auto-load more
-      _checkAutoLoad();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _isLoadingMore = false);
     }
   }
@@ -296,6 +270,37 @@ class RedditResultsViewState extends State<RedditResultsView> {
   void _onTimeFilterChanged(RedditTimeFilter filter) {
     setState(() => _selectedTimeFilter = filter);
     _performSearch();
+  }
+
+  Future<void> _playRandomVideo() async {
+    if (_isRandomLoading || _selectedSubreddit == null) return;
+
+    setState(() => _isRandomLoading = true);
+
+    try {
+      final post = await RedditService.getRandomVideo(
+        subreddit: _selectedSubreddit!,
+        allowNsfw: _allowNsfw,
+      );
+
+      if (!mounted) return;
+
+      if (post == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No random video found — try again')),
+        );
+        return;
+      }
+
+      await _playVideo(post);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Random failed: ${e.toString().replaceAll('Exception: ', '')}')),
+      );
+    } finally {
+      if (mounted) setState(() => _isRandomLoading = false);
+    }
   }
 
   Future<void> _playVideo(RedditVideoPost post) async {
@@ -352,8 +357,7 @@ class RedditResultsViewState extends State<RedditResultsView> {
   }
 
   Future<void> _downloadVideo(RedditVideoPost post) async {
-    // Prefer fallbackUrl (direct MP4) for downloads
-    String? downloadUrl = post.fallbackUrl ?? post.dashPlaylistUrl;
+    String? downloadUrl = post.fallbackUrl ?? post.directVideoUrl ?? post.dashPlaylistUrl;
 
     // Handle Redgifs posts - fetch actual video URL
     if (downloadUrl == null && post.isRedgifs) {
@@ -436,9 +440,12 @@ class RedditResultsViewState extends State<RedditResultsView> {
             onSubredditChanged: _onSubredditChanged,
             onSortChanged: _onSortChanged,
             onTimeFilterChanged: _onTimeFilterChanged,
+            onRandomPressed: _playRandomVideo,
+            isRandomLoading: _isRandomLoading,
             subredditFocusNode: _subredditFilterFocusNode,
             sortFocusNode: _sortFilterFocusNode,
             timeFocusNode: _timeFilterFocusNode,
+            randomFocusNode: _randomButtonFocusNode,
           ),
 
         // Download hint
