@@ -272,6 +272,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
   bool _realDebridIntegrationEnabled = true;
+  bool _rdSkipBlockedTorrents = false;
   bool _torboxIntegrationEnabled = true;
   bool _pikpakEnabled = false;
   String _defaultTorrentProvider = 'none';
@@ -2146,6 +2147,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
+    final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
@@ -2154,6 +2156,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _apiKey = rdKey;
       _torboxApiKey = torboxKey;
       _realDebridIntegrationEnabled = rdEnabled;
+      _rdSkipBlockedTorrents = rdSkipBlocked;
       _torboxIntegrationEnabled = torboxEnabled;
       _pikpakEnabled = pikpakEnabled;
       _defaultTorrentProvider = defaultProvider;
@@ -2649,6 +2652,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       StorageService.getTorboxIntegrationEnabled(),
       StorageService.getApiKey(),
       StorageService.getPikPakEnabled(),
+      StorageService.getRdSkipBlockedTorrents(),
     ]);
     final bool cacheCheckPreference = results[0] as bool;
     final String? torboxKey = results[1] as String?;
@@ -2656,11 +2660,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final bool torboxEnabled = results[3] as bool;
     final String? rdKey = results[4] as String?;
     final bool pikpakEnabled = results[5] as bool;
+    final bool rdSkipBlocked = results[6] as bool;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
         _torboxApiKey = torboxKey;
         _realDebridIntegrationEnabled = rdEnabled;
+        _rdSkipBlockedTorrents = rdSkipBlocked;
         _torboxIntegrationEnabled = torboxEnabled;
         _apiKey = rdKey;
         _pikpakEnabled = pikpakEnabled;
@@ -5880,6 +5886,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             'TorrentSearchScreen: Quick Play - filtered to ${cachedOnly.length} cached Torbox torrents',
           );
         }
+      }
+    }
+
+    // For Real-Debrid: filter out torrents with keywords known to be blocked
+    final bool willUseRd = _defaultTorrentProvider == 'debrid' ||
+        (_defaultTorrentProvider == 'none' &&
+            _realDebridIntegrationEnabled &&
+            _apiKey != null &&
+            _apiKey!.isNotEmpty);
+    if (_rdSkipBlockedTorrents && willUseRd) {
+      final filtered = torrentsForQuickPlay
+          .where((t) => !_isRdBlockedTorrent(t.name))
+          .toList();
+      if (filtered.isNotEmpty) {
+        debugPrint(
+          'TorrentSearchScreen: Quick Play - filtered ${torrentsForQuickPlay.length - filtered.length} RD-blocked torrents',
+        );
+        torrentsForQuickPlay = filtered;
       }
     }
 
@@ -11549,10 +11573,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
+      debugPrint(
+        'TorrentSearchScreen: RD catch block hit — forcePlay=$forcePlay, '
+        'error=${e.toString()}, '
+        'tryMultiple=$_quickPlayTryMultiple, '
+        'index=$_quickPlayCurrentIndex, '
+        'maxRetries=$_quickPlayMaxRetries, '
+        'listLen=${_quickPlayTorrentsList.length}',
+      );
+
       // Quick Play retry — any error means this torrent can't be played, try next
       if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) {
         return; // Next torrent is being tried
       }
+
+      debugPrint(
+        'TorrentSearchScreen: RD retry skipped or failed — resetting quick play',
+      );
 
       if (forcePlay) {
         _resetQuickPlayState();
@@ -12148,8 +12185,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Tries the next torrent in Quick Play mode when current one fails cache check.
   /// Returns true if there's a next torrent to try, false if exhausted.
   bool _tryNextQuickPlayTorrent({required String provider}) {
-    if (!_quickPlayTryMultiple) return false;
-    if (_quickPlayTorrentsList.isEmpty) return false;
+    debugPrint(
+      'TorrentSearchScreen: _tryNextQuickPlayTorrent called — '
+      'provider=$provider, '
+      'tryMultiple=$_quickPlayTryMultiple, '
+      'listLen=${_quickPlayTorrentsList.length}, '
+      'currentIndex=$_quickPlayCurrentIndex, '
+      'maxRetries=$_quickPlayMaxRetries',
+    );
+    if (!_quickPlayTryMultiple) {
+      debugPrint('TorrentSearchScreen: _tryNext returning false — tryMultiple is disabled');
+      return false;
+    }
+    if (_quickPlayTorrentsList.isEmpty) {
+      debugPrint('TorrentSearchScreen: _tryNext returning false — torrent list is empty');
+      return false;
+    }
 
     _quickPlayCurrentIndex++;
 
@@ -12212,6 +12263,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     return true;
+  }
+
+  // Based on Debrid Media Manager's empirical mapping of thousands of releases:
+  // Rule 1: substring matches (case-insensitive)
+  // Rule 2: dot-adjacent codec combos (e.g. BluRay.x264)
+  static final _rdBlockedPattern = RegExp(
+    r'web-dl|webrip|bdrip|hdrip|dvdrip'
+    r'|BluRay\.x264|HDTV\.x264|HDTV\.XviD|WEB\.x264|WEB\.h264',
+    caseSensitive: false,
+  );
+
+  static bool _isRdBlockedTorrent(String name) {
+    return _rdBlockedPattern.hasMatch(name);
   }
 
   /// Tears down the movie Quick Play mask, revealing the underlying

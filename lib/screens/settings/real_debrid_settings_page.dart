@@ -27,6 +27,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   bool _loading = true;
   bool _integrationEnabled = true;
   bool _hiddenFromNav = false;
+  bool _skipBlockedTorrents = false;
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     final integrationEnabled =
         await StorageService.getRealDebridIntegrationEnabled();
     final hiddenFromNav = await StorageService.getRealDebridHiddenFromNav();
+    final skipBlocked = await StorageService.getRdSkipBlockedTorrents();
     setState(() {
       _savedApiKey = apiKey;
       _fileSelection = selection;
@@ -54,6 +56,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       _loading = false;
       _integrationEnabled = integrationEnabled;
       _hiddenFromNav = hiddenFromNav;
+      _skipBlockedTorrents = skipBlocked;
     });
 
     // Refresh user info if API key exists and integration is enabled
@@ -820,6 +823,57 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                               groupValue: _postTorrentAction,
                               onChanged: (v) =>
                                   v == null ? null : _savePostAction(v),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.shield_outlined,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Content Filter Bypass',
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Real-Debrid blocks torrents with certain filename patterns (WEB-DL, WEBRip, BDRip, HDRip, etc.). '
+                              'When enabled, Quick Play will skip torrents likely to be blocked, '
+                              'trying only ones that should work.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Colors.grey[600]),
+                            ),
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              title: const Text('Skip blocked torrents'),
+                              subtitle: const Text(
+                                'Filter out WEB-DL, WEBRip, BDRip, HDRip, DVDRip and similar tags during Quick Play',
+                              ),
+                              value: _skipBlockedTorrents,
+                              onChanged: (v) async {
+                                setState(() => _skipBlockedTorrents = v);
+                                await StorageService.setRdSkipBlockedTorrents(v);
+                              },
                               contentPadding: EdgeInsets.zero,
                             ),
                           ],

@@ -18,6 +18,8 @@ class StorageService {
       'real_debrid_integration_enabled';
   static const String _realDebridHiddenFromNavKey =
       'real_debrid_hidden_from_nav';
+  static const String _rdSkipBlockedTorrentsKey =
+      'rd_skip_blocked_torrents';
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
   static const String _torboxHiddenFromNavKey = 'torbox_hidden_from_nav';
@@ -339,6 +341,16 @@ class StorageService {
   static Future<void> clearRealDebridHiddenFromNav() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_realDebridHiddenFromNavKey);
+  }
+
+  static Future<bool> getRdSkipBlockedTorrents() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_rdSkipBlockedTorrentsKey) ?? true;
+  }
+
+  static Future<void> setRdSkipBlockedTorrents(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rdSkipBlockedTorrentsKey, enabled);
   }
 
   static Future<bool> getTorboxIntegrationEnabled() async {
@@ -3889,10 +3901,10 @@ class StorageService {
   // Quick Play Cache Fallback Settings methods
 
   /// Get whether to try multiple torrents if first is not cached
-  /// Default: false (stop on first uncached - current behavior)
+  /// Default: true (try next torrent on failure)
   static Future<bool> getQuickPlayTryMultipleTorrents() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? false;
+    return prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? true;
   }
 
   static Future<void> setQuickPlayTryMultipleTorrents(bool tryMultiple) async {
@@ -3901,10 +3913,10 @@ class StorageService {
   }
 
   /// Get max number of torrents to try before giving up
-  /// Default: 3, Range: 2-10
+  /// Default: 5, Range: 2-10
   static Future<int> getQuickPlayMaxRetries() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_quickPlayMaxRetriesKey) ?? 3;
+    return prefs.getInt(_quickPlayMaxRetriesKey) ?? 5;
   }
 
   static Future<void> setQuickPlayMaxRetries(int maxRetries) async {

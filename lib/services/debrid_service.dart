@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/debrid_download.dart';
 import '../models/rd_torrent.dart';
@@ -426,6 +427,10 @@ class DebridService {
         body: {'link': link},
       );
 
+      debugPrint(
+        'DebridService: unrestrictLink response — '
+        'statusCode=${response.statusCode}, body=${response.body}',
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
