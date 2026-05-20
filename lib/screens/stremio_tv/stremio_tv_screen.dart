@@ -56,6 +56,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
+  bool _rdSkipBlockedTorrents = false;
   List<MapEntry<String, String>> _availableProviders = [];
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   bool _hideNowPlaying = false;
@@ -186,6 +187,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     } else {
       _debridProvider = debridProvider;
     }
+    _rdSkipBlockedTorrents = await StorageService.getRdSkipBlockedTorrents();
     _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
     _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
   }
@@ -903,6 +905,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // If no direct stream worked, try torrents via debrid
       if (firstPlayableUrl == null) {
+        // Filter out RD-blocked torrents when Real-Debrid will be used
+        final bool willUseRd = _debridProvider == 'realdebrid' ||
+            (_debridProvider == 'auto' &&
+                _availableProviders.any((p) => p.key == 'realdebrid'));
+        if (_rdSkipBlockedTorrents && willUseRd) {
+          final before = playableSources.length;
+          playableSources = playableSources
+              .where(
+                (t) =>
+                    t.streamType != StreamType.torrent ||
+                    !_isRdBlockedTorrent(t.name),
+              )
+              .toList();
+          debugPrint(
+            'StremioTV: Filtered ${before - playableSources.length} RD-blocked torrents',
+          );
+        }
+
         // TorBox torrents are already filtered to cached-only in playableSources
         final torrentStreams = _sortStreamsByQuality(
           playableSources
@@ -3150,6 +3170,16 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               ],
             ),
     );
+  }
+
+  static final _rdBlockedPattern = RegExp(
+    r'web-dl|webrip|bdrip|hdrip|dvdrip'
+    r'|BluRay\.x264|HDTV\.x264|HDTV\.XviD|WEB\.x264|WEB\.h264',
+    caseSensitive: false,
+  );
+
+  static bool _isRdBlockedTorrent(String name) {
+    return _rdBlockedPattern.hasMatch(name);
   }
 }
 
