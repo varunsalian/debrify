@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:convert';
@@ -299,6 +300,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // (a different path) and is unaffected by this mask.
   bool _quickPlayMovieMasking = false;
   String? _quickPlayMovieMaskTitle;
+  String? _quickPlayMovieMaskPoster;
   // Set when an external player activity (Android TV native / DeoVR /
   // external app) was launched while the mask was up. The mask is then kept
   // up (invisibly behind that activity) and torn down on app resume instead
@@ -3059,6 +3061,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _quickPlayPending = false;
         _quickPlayMovieMasking = false;
         _quickPlayMovieMaskTitle = null;
+        _quickPlayMovieMaskPoster = null;
       });
     }
   }
@@ -4270,6 +4273,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _quickPlaySelection = selection;
       _quickPlayMovieMasking = true;
       _quickPlayMovieMaskTitle = selection.title;
+      _quickPlayMovieMaskPoster = selection.posterUrl;
     });
 
     // Trigger the same flow as regular catalog selection
@@ -12265,11 +12269,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (!mounted) {
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
+      _quickPlayMovieMaskPoster = null;
       return;
     }
     setState(() {
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
+      _quickPlayMovieMaskPoster = null;
     });
   }
 
@@ -12303,6 +12309,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _quickPlayPending = false;
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
+      _quickPlayMovieMaskPoster = null;
       return;
     }
     setState(() {
@@ -12310,6 +12317,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _quickPlaySelection = null;
       _quickPlayMovieMasking = false;
       _quickPlayMovieMaskTitle = null;
+      _quickPlayMovieMaskPoster = null;
       _isLoading = false;
       _searchPhase = SearchPhase.idle;
     });
@@ -18658,67 +18666,155 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  static final _amazonResizeRe = RegExp(r'\._V1_.*\.jpg', caseSensitive: false);
+
+  static String? _upgradeToHiResPoster(String? url) {
+    if (url == null || url.isEmpty) return url;
+    // MetaHub: swap small/medium to large
+    if (url.contains('images.metahub.space/poster/')) {
+      final upgraded = url
+          .replaceFirst('/poster/small/', '/poster/large/')
+          .replaceFirst('/poster/medium/', '/poster/large/');
+      debugPrint('[QuickPlayMask] MetaHub poster upgraded: $url -> $upgraded');
+      return upgraded;
+    }
+    // Amazon/IMDb: replace resize suffix with high-res
+    if (url.contains('m.media-amazon.com/') && _amazonResizeRe.hasMatch(url)) {
+      final upgraded = url.replaceAll(_amazonResizeRe, '._V1_SX1000.jpg');
+      debugPrint('[QuickPlayMask] Amazon poster upgraded: $url -> $upgraded');
+      return upgraded;
+    }
+    debugPrint('[QuickPlayMask] Poster URL unchanged: $url');
+    return url;
+  }
+
   /// Full-screen opaque loading panel shown over the search UI during a
   /// movie Quick Play, so the search screen is never visible to the user.
   Widget _buildQuickPlayMovieMask() {
     const accent = Color(0xFF6366F1);
+    final posterUrl = _upgradeToHiResPoster(_quickPlayMovieMaskPoster);
+    final hasPoster = posterUrl != null && posterUrl.isNotEmpty;
     return PopScope(
-      // Block the route pop, but treat Back as "cancel this Quick Play"
-      // so the user is never trapped on the loading panel.
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (!didPop) _cancelQuickPlayMovieMask();
       },
       child: GestureDetector(
-        // Opaque sink: swallow stray taps so controls hidden behind the
-        // mask can't be triggered. Child buttons are hit-tested first.
         behavior: HitTestBehavior.opaque,
         onTap: () {},
         child: Container(
           color: const Color(0xFF07070A),
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              const SizedBox(
-                width: 40,
-                height: 40,
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation<Color>(accent),
+              // Full-screen poster background
+              if (hasPoster)
+                CachedNetworkImage(
+                  imageUrl: posterUrl,
+                  fit: BoxFit.cover,
+                  fadeInDuration: const Duration(milliseconds: 600),
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                _quickPlayMovieMaskTitle?.isNotEmpty == true
-                    ? _quickPlayMovieMaskTitle!
-                    : 'Starting playback',
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Finding the best source…',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 24),
-              TextButton(
-                onPressed: _cancelQuickPlayMovieMask,
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 14,
+              // Heavy gradient from bottom so text is readable
+              if (hasPoster)
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        const Color(0xFF07070A).withValues(alpha: 0.3),
+                        const Color(0xFF07070A).withValues(alpha: 0.85),
+                        const Color(0xFF07070A),
+                      ],
+                      stops: const [0.0, 0.4, 0.75, 1.0],
+                    ),
                   ),
+                ),
+              // Subtle vignette on sides
+              if (hasPoster)
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 1.2,
+                      colors: [
+                        Colors.transparent,
+                        const Color(0xFF07070A).withValues(alpha: 0.6),
+                      ],
+                    ),
+                  ),
+                ),
+              // Bottom-anchored title + status + spinner + cancel
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: hasPoster ? 60 : 0,
+                top: hasPoster ? null : 0,
+                child: Column(
+                  mainAxisSize: hasPoster ? MainAxisSize.min : MainAxisSize.max,
+                  mainAxisAlignment: hasPoster
+                      ? MainAxisAlignment.end
+                      : MainAxisAlignment.center,
+                  children: [
+                    if (!hasPoster) ...[
+                      const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(accent),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    Text(
+                      _quickPlayMovieMaskTitle?.isNotEmpty == true
+                          ? _quickPlayMovieMaskTitle!
+                          : 'Starting playback',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: hasPoster ? 24 : 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Finding the best source…',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: hasPoster ? 14 : 13,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          accent.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: _cancelQuickPlayMovieMask,
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -22565,3 +22661,4 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
     );
   }
 }
+
