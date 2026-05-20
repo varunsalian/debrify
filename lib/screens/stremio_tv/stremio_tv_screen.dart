@@ -911,17 +911,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             (_debridProvider == 'auto' &&
                 _availableProviders.any((p) => p.key == 'realdebrid'));
         if (_rdSkipBlockedTorrents && willUseRd) {
-          final before = playableSources.length;
-          playableSources = playableSources
+          final filtered = playableSources
               .where(
                 (t) =>
                     t.streamType != StreamType.torrent ||
                     !isRdBlockedTorrent(t.name),
               )
               .toList();
-          debugPrint(
-            'StremioTV: Filtered ${before - playableSources.length} RD-blocked torrents',
-          );
+          if (filtered.isNotEmpty) {
+            debugPrint(
+              'StremioTV: Filtered ${playableSources.length - filtered.length} RD-blocked torrents',
+            );
+            playableSources = filtered;
+          }
         }
 
         // TorBox torrents are already filtered to cached-only in playableSources
