@@ -18,6 +18,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   int _maxStartPercent = -1; // -1 = no limit, 0 = beginning, 10/20/30/50 = cap
   bool _hideNowPlaying = false;
   bool _randomEpisodes = false;
+  bool _torrentsFirst = true;
   List<MapEntry<String, String>> _availableProviders = [];
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
           await StorageService.getStremioTvMaxStartPercent();
       final hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
       final randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
+      final torrentsFirst = await StorageService.getStremioTvTorrentsFirst();
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
@@ -66,6 +68,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         _maxStartPercent = maxStartPercent;
         _hideNowPlaying = hideNowPlaying;
         _randomEpisodes = randomEpisodes;
+        _torrentsFirst = torrentsFirst;
         _availableProviders = providers;
         // Reset to auto if saved provider is no longer configured
         if (_debridProvider != 'auto' &&
@@ -564,6 +567,25 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             ),
                           ],
                         ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Stream priority
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: SwitchListTile(
+                        title: const Text('Try torrents first'),
+                        subtitle: const Text(
+                          'Resolve torrents via debrid before trying direct streams',
+                        ),
+                        value: _torrentsFirst,
+                        onChanged: (v) async {
+                          setState(() => _torrentsFirst = v);
+                          await StorageService.setStremioTvTorrentsFirst(v);
+                        },
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ),
                   ),

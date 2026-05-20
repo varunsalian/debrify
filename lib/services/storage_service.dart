@@ -199,6 +199,8 @@ class StorageService {
       'stremio_tv_catalog_repo_urls_v1';
   static const String _stremioTvHideNowPlayingKey =
       'stremio_tv_hide_now_playing';
+  static const String _stremioTvTorrentsFirstKey =
+      'stremio_tv_torrents_first';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -4423,6 +4425,16 @@ class StorageService {
   static Future<void> setStremioTvHideNowPlaying(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_stremioTvHideNowPlayingKey, value);
+  }
+
+  static Future<bool> getStremioTvTorrentsFirst() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_stremioTvTorrentsFirstKey) ?? true;
+  }
+
+  static Future<void> setStremioTvTorrentsFirst(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_stremioTvTorrentsFirstKey, value);
   }
 
   /// Get preferred quality for Stremio TV streams (default: 'auto')

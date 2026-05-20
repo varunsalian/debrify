@@ -58,6 +58,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   String _preferredQuality = 'auto';
   String _debridProvider = 'auto';
   bool _rdSkipBlockedTorrents = false;
+  bool _torrentsFirst = true;
   List<MapEntry<String, String>> _availableProviders = [];
   int _maxStartPercent = -1; // -1 = no limit (slot progress), 0 = beginning
   bool _hideNowPlaying = false;
@@ -189,6 +190,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       _debridProvider = debridProvider;
     }
     _rdSkipBlockedTorrents = await StorageService.getRdSkipBlockedTorrents();
+    _torrentsFirst = await StorageService.getStremioTvTorrentsFirst();
     _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
     _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
   }
@@ -557,6 +559,71 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Sort streams so those matching [_preferredQuality] come first.
   /// Within same-quality group, preserves original order.
+  Future<({String url, int index})?> _tryDirectStreams(
+    List<Torrent> playableSources,
+    int myGeneration,
+  ) async {
+    final directStreams = _sortStreamsByQuality(
+      playableSources.where((t) => t.isDirectStream).toList(),
+    );
+    final maxDirectAttempts = directStreams.length.clamp(0, 20);
+    for (int d = 0; d < maxDirectAttempts; d++) {
+      final stream = directStreams[d];
+      if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
+      if (!mounted || _playGeneration != myGeneration) return null;
+      final valid = await _isValidStreamUrl(stream.directUrl!);
+      if (!mounted || _playGeneration != myGeneration) return null;
+      if (valid) {
+        final index = playableSources.indexWhere(
+          (t) => t.directUrl == stream.directUrl && t.name == stream.name,
+        );
+        return (url: stream.directUrl!, index: index < 0 ? 0 : index);
+      }
+      debugPrint(
+        'StremioTV: Skipping invalid direct stream: ${stream.source}',
+      );
+    }
+    return null;
+  }
+
+  Future<({String url, int index})?> _tryTorrentsViaDebrid(
+    List<Torrent> playableSources,
+    StremioMeta item,
+    int myGeneration, {
+    int? season,
+    int? episode,
+  }) async {
+    final torrentStreams = _sortStreamsByQuality(
+      playableSources
+          .where((t) => t.streamType == StreamType.torrent)
+          .toList(),
+    );
+    final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
+    for (int i = 0; i < maxTorrentAttempts; i++) {
+      if (!mounted || _playGeneration != myGeneration) return null;
+      final url = await _resolveTorrentUrl(
+        torrentStreams[i],
+        item,
+        _debridProvider,
+        season: season,
+        episode: episode,
+      );
+      if (url != null && url.isNotEmpty) {
+        final index = playableSources.indexWhere(
+          (t) =>
+              t.infohash == torrentStreams[i].infohash &&
+              t.name == torrentStreams[i].name,
+        );
+        return (url: url, index: index < 0 ? 0 : index);
+      }
+      debugPrint(
+        'StremioTV: Torrent ${i + 1}/$maxTorrentAttempts failed, '
+        '${i + 1 < maxTorrentAttempts ? "trying next..." : "giving up."}',
+      );
+    }
+    return null;
+  }
+
   List<Torrent> _sortStreamsByQuality(List<Torrent> streams) {
     if (_preferredQuality == 'auto') return streams;
     final sorted = List<Torrent>.from(streams);
@@ -873,91 +940,49 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
 
       // Try to find the best stream to auto-play
-      // Priority: direct URL streams first (validated, sorted by quality), then torrents via debrid
       if (_preferredQuality != 'auto') {
         debugPrint('StremioTV: Preferred quality: $_preferredQuality');
+      }
+
+      // Filter out RD-blocked torrents when Real-Debrid will be used
+      final bool willUseRd = _debridProvider == 'realdebrid' ||
+          (_debridProvider == 'auto' &&
+              _availableProviders.any((p) => p.key == 'realdebrid'));
+      if (_rdSkipBlockedTorrents && willUseRd) {
+        final filtered = playableSources
+            .where(
+              (t) =>
+                  t.streamType != StreamType.torrent ||
+                  !isRdBlockedTorrent(t.name),
+            )
+            .toList();
+        if (filtered.isNotEmpty) {
+          debugPrint(
+            'StremioTV: Filtered ${playableSources.length - filtered.length} RD-blocked torrents',
+          );
+          playableSources = filtered;
+        }
       }
 
       String? firstPlayableUrl;
       int firstPlayableIndex = 0;
 
-      final directStreams = _sortStreamsByQuality(
-        playableSources.where((t) => t.isDirectStream).toList(),
-      );
-      final maxDirectAttempts = directStreams.length.clamp(0, 20);
-      for (int d = 0; d < maxDirectAttempts; d++) {
-        final stream = directStreams[d];
-        if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
-        if (!mounted || _playGeneration != myGeneration) return;
-        final valid = await _isValidStreamUrl(stream.directUrl!);
-        if (!mounted || _playGeneration != myGeneration) return;
-        if (valid) {
-          firstPlayableUrl = stream.directUrl!;
-          firstPlayableIndex = playableSources.indexWhere(
-            (t) => t.directUrl == stream.directUrl && t.name == stream.name,
-          );
-          if (firstPlayableIndex < 0) firstPlayableIndex = 0;
-          break;
-        }
-        debugPrint(
-          'StremioTV: Skipping invalid direct stream: ${stream.source}',
+      // Try torrents or direct streams based on setting, fall back to the other
+      ({String url, int index})? resolved;
+      if (_torrentsFirst) {
+        resolved = await _tryTorrentsViaDebrid(
+          playableSources, item, myGeneration, season: season, episode: episode,
+        );
+        resolved ??= await _tryDirectStreams(playableSources, myGeneration);
+      } else {
+        resolved = await _tryDirectStreams(playableSources, myGeneration);
+        resolved ??= await _tryTorrentsViaDebrid(
+          playableSources, item, myGeneration, season: season, episode: episode,
         );
       }
-
-      // If no direct stream worked, try torrents via debrid
-      if (firstPlayableUrl == null) {
-        // Filter out RD-blocked torrents when Real-Debrid will be used
-        final bool willUseRd = _debridProvider == 'realdebrid' ||
-            (_debridProvider == 'auto' &&
-                _availableProviders.any((p) => p.key == 'realdebrid'));
-        if (_rdSkipBlockedTorrents && willUseRd) {
-          final filtered = playableSources
-              .where(
-                (t) =>
-                    t.streamType != StreamType.torrent ||
-                    !isRdBlockedTorrent(t.name),
-              )
-              .toList();
-          if (filtered.isNotEmpty) {
-            debugPrint(
-              'StremioTV: Filtered ${playableSources.length - filtered.length} RD-blocked torrents',
-            );
-            playableSources = filtered;
-          }
-        }
-
-        // TorBox torrents are already filtered to cached-only in playableSources
-        final torrentStreams = _sortStreamsByQuality(
-          playableSources
-              .where((t) => t.streamType == StreamType.torrent)
-              .toList(),
-        );
-
-        final maxTorrentAttempts = torrentStreams.length.clamp(0, 20);
-        for (int i = 0; i < maxTorrentAttempts; i++) {
-          if (!mounted || _playGeneration != myGeneration) return;
-          final url = await _resolveTorrentUrl(
-            torrentStreams[i],
-            item,
-            _debridProvider,
-            season: season,
-            episode: episode,
-          );
-          if (url != null && url.isNotEmpty) {
-            firstPlayableUrl = url;
-            firstPlayableIndex = playableSources.indexWhere(
-              (t) =>
-                  t.infohash == torrentStreams[i].infohash &&
-                  t.name == torrentStreams[i].name,
-            );
-            if (firstPlayableIndex < 0) firstPlayableIndex = 0;
-            break;
-          }
-          debugPrint(
-            'StremioTV: Torrent ${i + 1}/$maxTorrentAttempts failed, '
-            '${i + 1 < maxTorrentAttempts ? "trying next..." : "giving up."}',
-          );
-        }
+      if (resolved != null) {
+        firstPlayableUrl = resolved.url;
+        firstPlayableIndex = resolved.index;
       }
 
       if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) {
@@ -1195,57 +1220,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     if (playableSources.isEmpty) return null;
 
-    // Auto-play best stream
-    String? firstPlayableUrl;
-    int firstPlayableIndex = 0;
-
-    // Try direct streams
-    final directStreams = _sortStreamsByQuality(
-      playableSources.where((t) => t.isDirectStream).toList(),
-    );
-    for (int d = 0; d < directStreams.length.clamp(0, 20); d++) {
-      final stream = directStreams[d];
-      if (stream.directUrl == null || stream.directUrl!.isEmpty) continue;
-      final valid = await _isValidStreamUrl(stream.directUrl!);
-      if (valid) {
-        firstPlayableUrl = stream.directUrl!;
-        firstPlayableIndex = playableSources.indexWhere(
-          (t) => t.directUrl == stream.directUrl && t.name == stream.name,
-        );
-        if (firstPlayableIndex < 0) firstPlayableIndex = 0;
-        break;
-      }
-    }
-
-    // Try torrents via debrid
-    if (firstPlayableUrl == null) {
-      final torrentStreams = _sortStreamsByQuality(
-        playableSources
-            .where((t) => t.streamType == StreamType.torrent)
-            .toList(),
+    // Auto-play best stream (respects torrents-first setting)
+    final gen = _playGeneration;
+    ({String url, int index})? resolved;
+    if (_torrentsFirst) {
+      resolved = await _tryTorrentsViaDebrid(
+        playableSources, item, gen, season: season, episode: episode,
       );
-      for (int i = 0; i < torrentStreams.length.clamp(0, 20); i++) {
-        final url = await _resolveTorrentUrl(
-          torrentStreams[i],
-          item,
-          _debridProvider,
-          season: season,
-          episode: episode,
-        );
-        if (url != null && url.isNotEmpty) {
-          firstPlayableUrl = url;
-          firstPlayableIndex = playableSources.indexWhere(
-            (t) =>
-                t.infohash == torrentStreams[i].infohash &&
-                t.name == torrentStreams[i].name,
-          );
-          if (firstPlayableIndex < 0) firstPlayableIndex = 0;
-          break;
-        }
-      }
+      resolved ??= await _tryDirectStreams(playableSources, gen);
+    } else {
+      resolved = await _tryDirectStreams(playableSources, gen);
+      resolved ??= await _tryTorrentsViaDebrid(
+        playableSources, item, gen, season: season, episode: episode,
+      );
     }
 
-    if (firstPlayableUrl == null || firstPlayableUrl.isEmpty) return null;
+    if (resolved == null) return null;
+
+    final firstPlayableUrl = resolved.url;
+    final firstPlayableIndex = resolved.index;
 
     final title = season != null
         ? '${item.name} (S${season}E$episode)'
