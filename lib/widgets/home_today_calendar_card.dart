@@ -39,7 +39,11 @@ class HomeTodayCalendarCard extends StatefulWidget {
   State<HomeTodayCalendarCard> createState() => _HomeTodayCalendarCardState();
 }
 
-class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
+class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isAuth = false;
   bool _isLoading = true;
   bool _initialLoadSettled = false;
@@ -179,6 +183,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (!_isAuth) return const SizedBox.shrink();
 
     // Hide entirely when there's an active scrobble — the Now Playing card

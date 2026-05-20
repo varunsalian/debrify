@@ -32,7 +32,11 @@ class HomePlaylistSection extends StatefulWidget {
   State<HomePlaylistSection> createState() => HomePlaylistSectionState();
 }
 
-class HomePlaylistSectionState extends State<HomePlaylistSection> {
+class HomePlaylistSectionState extends State<HomePlaylistSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Map<String, dynamic>> _items = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
   Set<String> _favoriteKeys = {};
@@ -372,6 +376,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _items.isEmpty) {
       return const SizedBox.shrink();
     }

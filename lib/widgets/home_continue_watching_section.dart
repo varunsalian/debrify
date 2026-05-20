@@ -66,7 +66,11 @@ class HomeContinueWatchingSection extends StatefulWidget {
 }
 
 class _HomeContinueWatchingSectionState
-    extends State<HomeContinueWatchingSection> {
+    extends State<HomeContinueWatchingSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Map<String, dynamic>> _items = [];
   Map<String, double> _progressMap = {};
   Map<String, ({int season, int episode})> _episodeInfoMap = {};
@@ -876,6 +880,7 @@ class _HomeContinueWatchingSectionState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _items.isEmpty) return const SizedBox.shrink();
 
     return Column(

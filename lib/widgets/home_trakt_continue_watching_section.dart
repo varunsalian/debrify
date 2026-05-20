@@ -59,7 +59,11 @@ class HomeTraktContinueWatchingSection extends StatefulWidget {
 }
 
 class _HomeTraktContinueWatchingSectionState
-    extends State<HomeTraktContinueWatchingSection> {
+    extends State<HomeTraktContinueWatchingSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final TraktService _traktService = TraktService.instance;
   List<StremioMeta> _items = [];
   Map<String, double> _progressMap = {};
@@ -1120,6 +1124,7 @@ class _HomeTraktContinueWatchingSectionState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isMovies = widget.contentType == 'movies';
     final title = isMovies ? 'Trakt Movies' : 'Trakt Shows';
 

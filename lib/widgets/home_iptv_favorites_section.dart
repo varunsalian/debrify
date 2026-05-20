@@ -28,7 +28,11 @@ class HomeIptvFavoritesSection extends StatefulWidget {
       _HomeIptvFavoritesSectionState();
 }
 
-class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
+class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<IptvChannel> _favoriteChannels = [];
   bool _isLoading = true;
 
@@ -188,6 +192,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     // Don't show anything if loading or no favorites
     if (_isLoading) {
       return const SizedBox.shrink();

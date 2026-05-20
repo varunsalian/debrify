@@ -33,7 +33,11 @@ class HomeStremioTvFavoritesSection extends StatefulWidget {
 }
 
 class _HomeStremioTvFavoritesSectionState
-    extends State<HomeStremioTvFavoritesSection> {
+    extends State<HomeStremioTvFavoritesSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<StremioTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
   int _rotationMinutes = 90;
@@ -195,6 +199,7 @@ class _HomeStremioTvFavoritesSectionState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _favoriteChannels.isEmpty) {
       return const SizedBox.shrink();
     }

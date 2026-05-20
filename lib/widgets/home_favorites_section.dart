@@ -31,7 +31,11 @@ class HomeFavoritesSection extends StatefulWidget {
   State<HomeFavoritesSection> createState() => HomeFavoritesSectionState();
 }
 
-class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
+class HomeFavoritesSectionState extends State<HomeFavoritesSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Map<String, dynamic>> _favoriteItems = [];
   Map<String, Map<String, dynamic>> _progressMap = {};
   bool _isLoading = true;
@@ -322,6 +326,7 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _favoriteItems.isEmpty) {
       return const SizedBox.shrink();
     }

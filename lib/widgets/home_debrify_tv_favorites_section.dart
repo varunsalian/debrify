@@ -30,7 +30,11 @@ class HomeDebrifyTvFavoritesSection extends StatefulWidget {
 }
 
 class _HomeDebrifyTvFavoritesSectionState
-    extends State<HomeDebrifyTvFavoritesSection> {
+    extends State<HomeDebrifyTvFavoritesSection>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<DebrifyTvChannel> _favoriteChannels = [];
   bool _isLoading = true;
 
@@ -185,6 +189,7 @@ class _HomeDebrifyTvFavoritesSectionState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _favoriteChannels.isEmpty) {
       return const SizedBox.shrink();
     }

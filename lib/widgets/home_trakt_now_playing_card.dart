@@ -45,7 +45,11 @@ class HomeTraktNowPlayingCard extends StatefulWidget {
       HomeTraktNowPlayingCardState();
 }
 
-class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
+class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   _NowPlayingData? _data;
   bool _isLoading = true;
   bool _initialLoadSettled = false;
@@ -244,6 +248,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading || _data == null) return const SizedBox.shrink();
     return _buildBar(_data!);
   }
