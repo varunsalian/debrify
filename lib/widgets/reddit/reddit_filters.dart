@@ -64,55 +64,57 @@ class RedditFiltersBar extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          // Subreddit dropdown
-          _SubredditDropdown(
-            selectedSubreddit: selectedSubreddit,
-            onChanged: onSubredditChanged,
-            focusNode: subredditFocusNode,
-          ),
-          const SizedBox(width: 8),
-
-          // Sort dropdown
-          _SortDropdown(
-            selectedSort: selectedSort,
-            isSearching: isSearching,
-            onChanged: onSortChanged,
-            focusNode: sortFocusNode,
-          ),
-
-          // Time filter (conditional)
-          if (_showTimeFilter) ...[
-            const SizedBox(width: 8),
-            _TimeFilterDropdown(
-              selectedTimeFilter: selectedTimeFilter,
-              onChanged: onTimeFilterChanged,
-              focusNode: timeFocusNode,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Subreddit dropdown
+            _SubredditDropdown(
+              selectedSubreddit: selectedSubreddit,
+              onChanged: onSubredditChanged,
+              focusNode: subredditFocusNode,
             ),
-          ],
+            const SizedBox(width: 8),
 
-          const Spacer(),
+            // Sort dropdown
+            _SortDropdown(
+              selectedSort: selectedSort,
+              isSearching: isSearching,
+              onChanged: onSortChanged,
+              focusNode: sortFocusNode,
+            ),
 
-          // Random button (only when a subreddit is selected)
-          if (selectedSubreddit != null && onRandomPressed != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _RandomButton(
+            // Time filter (conditional)
+            if (_showTimeFilter) ...[
+              const SizedBox(width: 8),
+              _TimeFilterDropdown(
+                selectedTimeFilter: selectedTimeFilter,
+                onChanged: onTimeFilterChanged,
+                focusNode: timeFocusNode,
+              ),
+            ],
+
+            // Random button (only when a subreddit is selected)
+            if (selectedSubreddit != null && onRandomPressed != null) ...[
+              const SizedBox(width: 8),
+              _RandomButton(
                 onPressed: onRandomPressed!,
                 isLoading: isRandomLoading,
                 focusNode: randomFocusNode,
               ),
-            ),
+            ],
 
-          // Result count
-          Text(
-            '$resultCount video${resultCount != 1 ? 's' : ''}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            const SizedBox(width: 8),
+
+            // Result count
+            Text(
+              '$resultCount video${resultCount != 1 ? 's' : ''}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
