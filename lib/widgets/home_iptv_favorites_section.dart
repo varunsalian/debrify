@@ -583,7 +583,6 @@ class _ChannelCardWithFocus extends StatefulWidget {
 class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
-  bool _longPressFired = false;
   final GlobalKey _cardKey = GlobalKey();
 
   void _onFocusChange(bool focused) {
@@ -606,37 +605,16 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
     }
   }
 
-  bool _isSelectKey(KeyEvent event) =>
-      event.logicalKey == LogicalKeyboardKey.select ||
-      event.logicalKey == LogicalKeyboardKey.enter ||
-      event.logicalKey == LogicalKeyboardKey.gameButtonA;
-
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    // D-pad OK: short press = onTap, hold (first KeyRepeatEvent) = onLongPress.
-    if (_isSelectKey(event)) {
-      if (event is KeyDownEvent) {
-        _longPressFired = false;
-        return KeyEventResult.handled;
-      }
-      if (event is KeyRepeatEvent) {
-        if (!_longPressFired) {
-          _longPressFired = true;
-          if (widget.onLongPress != null) {
-            HapticFeedback.mediumImpact();
-            widget.onLongPress!();
-          }
-        }
-        return KeyEventResult.handled;
-      }
-      if (event is KeyUpEvent) {
-        if (!_longPressFired) {
-          widget.onTap?.call();
-        }
-        _longPressFired = false;
-        return KeyEventResult.handled;
-      }
-    }
     if (event is KeyDownEvent) {
+      // Select/Enter/GameButtonA - activate the card
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+
       // Arrow Up - go to previous section
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
@@ -686,12 +664,7 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
-          onLongPress: widget.onLongPress == null
-              ? null
-              : () {
-                  HapticFeedback.mediumImpact();
-                  widget.onLongPress!();
-                },
+          onLongPress: widget.onLongPress,
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),
