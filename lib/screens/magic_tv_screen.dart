@@ -39,6 +39,7 @@ import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
+import '../utils/rd_blocked_filter.dart';
 import '../utils/series_parser.dart';
 import 'video_player_screen.dart';
 import '../main.dart';
@@ -210,6 +211,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickHideOptions = false;
   bool _quickHideBackButton = false;
   bool _quickAvoidNsfw = true;
+  bool _rdSkipBlockedTorrents = true;
   String _quickProvider = _providerRealDebrid;
 
   bool _rdAvailable = false;
@@ -600,6 +602,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
     // hideBackButton is hardcoded to false - no longer loading from storage
     final avoidNsfw = await _settingsManager.getGlobalAvoidNsfw(true);
+    final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
     final rdIntegrationEnabled =
@@ -695,6 +698,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _quickHideOptions = false; // Hardcoded to false
         _quickHideBackButton = false; // Hardcoded to false
         _quickAvoidNsfw = avoidNsfw;
+        _rdSkipBlockedTorrents = rdSkipBlocked;
         _quickProvider = defaultProvider;
 
         // Update search settings
@@ -4236,6 +4240,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             }
           }
 
+          // Filter out RD-blocked torrents
+          if (_rdSkipBlockedTorrents) {
+            torrentsToProcess = torrentsToProcess
+                .where((t) => !isRdBlockedTorrent(t.name))
+                .toList();
+          }
+
           int added = 0;
           for (final t in torrentsToProcess) {
             if (!dedupByInfohash.containsKey(t.infohash)) {
@@ -5410,6 +5421,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
 
+    // Filter out RD-blocked torrents
+    if (_rdSkipBlockedTorrents) {
+      final beforeCount = torrentsToUse.length;
+      torrentsToUse = torrentsToUse
+          .where((t) => !isRdBlockedTorrent(t.name))
+          .toList();
+      if (beforeCount != torrentsToUse.length) {
+        debugPrint(
+          'DebrifyTV: RD-blocked filter on cached: $beforeCount → ${torrentsToUse.length} torrents',
+        );
+      }
+    }
+
     _queue
       ..clear()
       ..addAll(List<Torrent>.from(torrentsToUse)..shuffle(Random()));
@@ -5900,6 +5924,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Real-Debrid API key configured');
           return null;
+        }
+
+        if (_rdSkipBlockedTorrents) {
+          filteredTorrents = filteredTorrents
+              .where((t) => !isRdBlockedTorrent(t.name))
+              .toList();
         }
 
         for (var index = 0; index < filteredTorrents.length; index++) {
