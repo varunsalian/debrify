@@ -1959,8 +1959,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
           TraktItemMenuAction.searchPacks,
           TraktItemMenuAction.playRandomEpisode,
         };
-        if (leaves.contains(action) && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        if (leaves.contains(action)) {
+          Navigator.of(context).popUntil(
+            (r) => r.settings.name != kCatalogDetailRouteName,
+          );
         }
         handleTraktMenuAction(
           context,

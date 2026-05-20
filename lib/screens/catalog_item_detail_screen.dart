@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/stremio_addon.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
 /// Cinematic detail screen for a catalog item.
 ///
@@ -172,6 +173,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     try {
       final recs = await loader();
       if (mounted) setState(() => _recommendations = recs);
+      // Prefetch enriched metadata for the first few recommendations so
+      // tapping one opens the detail screen with cached meta instantly.
+      final enrich = widget.metaEnricher;
+      if (enrich != null) {
+        for (final rec in recs.take(8)) {
+          final id = rec.effectiveImdbId;
+          if (id != null) enrich(id, rec.type);
+        }
+      }
     } catch (_) {
       // Non-critical strip — swallow and leave it hidden.
     }
@@ -273,12 +283,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         alignment: Alignment.bottomLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
-          child: SingleChildScrollView(
-            controller: _wideScroll,
-            physics: const BouncingScrollPhysics(),
-            // Don't clip the focus glow on Play/Sources/quick actions.
-            clipBehavior: Clip.none,
-            child: _buildContentColumn(),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              scrollbars: false,
+            ),
+            child: SingleChildScrollView(
+              controller: _wideScroll,
+              physics: const BouncingScrollPhysics(),
+              // Don't clip the focus glow on Play/Sources/quick actions.
+              clipBehavior: Clip.none,
+              child: _buildContentColumn(),
+            ),
           ),
         ),
       ),
@@ -591,7 +606,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
         onPlay: () {
-          Navigator.of(context).pop();
+          final nav = Navigator.of(context);
+          nav.pop();
+          nav.popUntil(
+            (r) => r.settings.name != kCatalogDetailRouteName,
+          );
           widget.onPlay();
         },
         // Browse does NOT pop here: the host owns teardown so the series
