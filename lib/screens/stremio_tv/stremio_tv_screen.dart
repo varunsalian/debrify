@@ -18,6 +18,7 @@ import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../utils/file_utils.dart';
+import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
 import '../../services/torrent_service.dart';
@@ -915,7 +916,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
               .where(
                 (t) =>
                     t.streamType != StreamType.torrent ||
-                    !_isRdBlockedTorrent(t.name),
+                    !isRdBlockedTorrent(t.name),
               )
               .toList();
           debugPrint(
@@ -3172,15 +3173,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
   }
 
-  static final _rdBlockedPattern = RegExp(
-    r'web-dl|webrip|bdrip|hdrip|dvdrip'
-    r'|BluRay\.x264|HDTV\.x264|HDTV\.XviD|WEB\.x264|WEB\.h264',
-    caseSensitive: false,
-  );
-
-  static bool _isRdBlockedTorrent(String name) {
-    return _rdBlockedPattern.hasMatch(name);
-  }
 }
 
 // ─── Manual Source Picker (shown when auto-play fails) ────────────────────

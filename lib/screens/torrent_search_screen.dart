@@ -26,6 +26,7 @@ import '../services/android_native_downloader.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
+import '../utils/rd_blocked_filter.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../widgets/stat_chip.dart';
@@ -5897,7 +5898,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _apiKey!.isNotEmpty);
     if (_rdSkipBlockedTorrents && willUseRd) {
       final filtered = torrentsForQuickPlay
-          .where((t) => !_isRdBlockedTorrent(t.name))
+          .where((t) => !isRdBlockedTorrent(t.name))
           .toList();
       if (filtered.isNotEmpty) {
         debugPrint(
@@ -12263,19 +12264,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     return true;
-  }
-
-  // Based on Debrid Media Manager's empirical mapping of thousands of releases:
-  // Rule 1: substring matches (case-insensitive)
-  // Rule 2: dot-adjacent codec combos (e.g. BluRay.x264)
-  static final _rdBlockedPattern = RegExp(
-    r'web-dl|webrip|bdrip|hdrip|dvdrip'
-    r'|BluRay\.x264|HDTV\.x264|HDTV\.XviD|WEB\.x264|WEB\.h264',
-    caseSensitive: false,
-  );
-
-  static bool _isRdBlockedTorrent(String name) {
-    return _rdBlockedPattern.hasMatch(name);
   }
 
   /// Tears down the movie Quick Play mask, revealing the underlying
