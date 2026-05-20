@@ -11574,23 +11574,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       // Close loading dialog
       Navigator.of(context).pop();
 
-      debugPrint(
-        'TorrentSearchScreen: RD catch block hit — forcePlay=$forcePlay, '
-        'error=${e.toString()}, '
-        'tryMultiple=$_quickPlayTryMultiple, '
-        'index=$_quickPlayCurrentIndex, '
-        'maxRetries=$_quickPlayMaxRetries, '
-        'listLen=${_quickPlayTorrentsList.length}',
-      );
-
       // Quick Play retry — any error means this torrent can't be played, try next
       if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) {
         return; // Next torrent is being tried
       }
-
-      debugPrint(
-        'TorrentSearchScreen: RD retry skipped or failed — resetting quick play',
-      );
 
       if (forcePlay) {
         _resetQuickPlayState();
@@ -12186,22 +12173,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Tries the next torrent in Quick Play mode when current one fails cache check.
   /// Returns true if there's a next torrent to try, false if exhausted.
   bool _tryNextQuickPlayTorrent({required String provider}) {
-    debugPrint(
-      'TorrentSearchScreen: _tryNextQuickPlayTorrent called — '
-      'provider=$provider, '
-      'tryMultiple=$_quickPlayTryMultiple, '
-      'listLen=${_quickPlayTorrentsList.length}, '
-      'currentIndex=$_quickPlayCurrentIndex, '
-      'maxRetries=$_quickPlayMaxRetries',
-    );
-    if (!_quickPlayTryMultiple) {
-      debugPrint('TorrentSearchScreen: _tryNext returning false — tryMultiple is disabled');
-      return false;
-    }
-    if (_quickPlayTorrentsList.isEmpty) {
-      debugPrint('TorrentSearchScreen: _tryNext returning false — torrent list is empty');
-      return false;
-    }
+    if (!_quickPlayTryMultiple) return false;
+    if (_quickPlayTorrentsList.isEmpty) return false;
 
     _quickPlayCurrentIndex++;
 
