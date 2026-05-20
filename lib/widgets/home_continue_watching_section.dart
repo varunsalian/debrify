@@ -223,6 +223,88 @@ class _HomeContinueWatchingSectionState
     widget.onInitialLoadStateChanged?.call(false);
   }
 
+  /// Resolves the next episode (for series) and dispatches Quick Play.
+  /// Used both by the tap menu's "Play" entry and by long-press on the card.
+  Future<void> _quickPlayItem(
+    Map<String, dynamic> item,
+    AdvancedSearchSelection selection,
+  ) async {
+    if (!selection.isSeries) {
+      (widget.onQuickPlay ?? widget.onItemSelected)?.call(selection);
+      return;
+    }
+
+    final cachedEp = _episodeInfoMap[selection.imdbId];
+    if (cachedEp != null) {
+      int season = cachedEp.season;
+      int episode = cachedEp.episode;
+      // If episode is near-complete (>=90%) or finished, find the real next
+      // episode from the catalog.
+      final progress = _progressMap[selection.imdbId] ?? 0.0; // 0-100
+      debugPrint(
+        'HomeContinueWatching: Quick Play S${season}E$episode progress=$progress',
+      );
+      if (progress >= 90) {
+        final nextEp = await _findNextEpisode(
+          selection.imdbId,
+          season,
+          episode,
+          item['addonId'] as String?,
+        );
+        if (!mounted) return;
+        if (nextEp != null) {
+          season = nextEp.season;
+          episode = nextEp.episode;
+        } else {
+          // No next episode found — fall through to browse.
+          widget.onItemSelected?.call(selection);
+          return;
+        }
+      }
+      final withEpisode = AdvancedSearchSelection(
+        imdbId: selection.imdbId,
+        isSeries: true,
+        title: selection.title,
+        year: selection.year,
+        contentType: selection.contentType,
+        posterUrl: selection.posterUrl,
+        season: season,
+        episode: episode,
+      );
+      (widget.onQuickPlay ?? widget.onItemSelected)?.call(withEpisode);
+      return;
+    }
+
+    // No episode from IMDB lookup — try title-based fallback.
+    int fallbackSeason = 1;
+    int fallbackEpisode = 1;
+    final titleLastEp = await StorageService.getLastPlayedEpisode(
+      seriesTitle: selection.title,
+    );
+    if (!mounted) return;
+    if (titleLastEp != null) {
+      fallbackSeason = titleLastEp['season'] as int? ?? 1;
+      fallbackEpisode = titleLastEp['episode'] as int? ?? 1;
+    }
+    final withEpisode = AdvancedSearchSelection(
+      imdbId: selection.imdbId,
+      isSeries: true,
+      title: selection.title,
+      year: selection.year,
+      contentType: selection.contentType,
+      posterUrl: selection.posterUrl,
+      season: fallbackSeason,
+      episode: fallbackEpisode,
+    );
+    (widget.onQuickPlay ?? widget.onItemSelected)?.call(withEpisode);
+  }
+
+  Future<void> _quickPlayFromMap(Map<String, dynamic> item) async {
+    final selection = _selectionFromItem(item);
+    if (selection == null) return;
+    await _quickPlayItem(item, selection);
+  }
+
   void _onItemTap(Map<String, dynamic> item) async {
     final title = item['title'] as String? ?? '';
     final contentType = item['contentType'] as String? ?? 'movie';
@@ -375,83 +457,7 @@ class _HomeContinueWatchingSectionState
     if (selection == null) return;
 
     if (choice == 'quick_play') {
-      if (selection.isSeries) {
-        // Use cached episode info from _loadItems
-        final cachedEp = _episodeInfoMap[selection.imdbId];
-        if (cachedEp != null) {
-          int season = cachedEp.season;
-          int episode = cachedEp.episode;
-          // If episode is near-complete (>=90%) or finished, find the real next episode from the catalog
-          final progress = _progressMap[selection.imdbId] ?? 0.0; // 0-100
-          debugPrint(
-            'HomeContinueWatching: Quick Play S${season}E$episode progress=$progress',
-          );
-          if (progress >= 90) {
-            final nextEp = await _findNextEpisode(
-              selection.imdbId,
-              season,
-              episode,
-              item['addonId'] as String?,
-            );
-            if (!mounted) return;
-            if (nextEp != null) {
-              season = nextEp.season;
-              episode = nextEp.episode;
-            } else {
-              // No next episode found — fall through to browse
-              widget.onItemSelected?.call(selection);
-              return;
-            }
-          }
-          final withEpisode = AdvancedSearchSelection(
-            imdbId: selection.imdbId,
-            isSeries: true,
-            title: selection.title,
-            year: selection.year,
-            contentType: selection.contentType,
-            posterUrl: selection.posterUrl,
-            season: season,
-            episode: episode,
-          );
-          if (widget.onQuickPlay != null) {
-            widget.onQuickPlay!(withEpisode);
-          } else {
-            widget.onItemSelected?.call(withEpisode);
-          }
-        } else {
-          // No episode from IMDB lookup — try title-based fallback
-          int fallbackSeason = 1;
-          int fallbackEpisode = 1;
-          final titleLastEp = await StorageService.getLastPlayedEpisode(
-            seriesTitle: selection.title,
-          );
-          if (titleLastEp != null) {
-            fallbackSeason = titleLastEp['season'] as int? ?? 1;
-            fallbackEpisode = titleLastEp['episode'] as int? ?? 1;
-          }
-          final withEpisode = AdvancedSearchSelection(
-            imdbId: selection.imdbId,
-            isSeries: true,
-            title: selection.title,
-            year: selection.year,
-            contentType: selection.contentType,
-            posterUrl: selection.posterUrl,
-            season: fallbackSeason,
-            episode: fallbackEpisode,
-          );
-          if (widget.onQuickPlay != null) {
-            widget.onQuickPlay!(withEpisode);
-          } else {
-            widget.onItemSelected?.call(withEpisode);
-          }
-        }
-      } else {
-        if (widget.onQuickPlay != null) {
-          widget.onQuickPlay!(selection);
-        } else {
-          widget.onItemSelected?.call(selection);
-        }
-      }
+      await _quickPlayItem(item, selection);
     } else if (choice == 'random_episode') {
       final addonId = item['addonId'] as String?;
       final cachedEp = _episodeInfoMap[selection.imdbId];
@@ -940,7 +946,8 @@ class _HomeContinueWatchingSectionState
     FocusNode? focusNode,
   }) {
     return _CardWithFocus(
-      onTap: () => _onItemTap(item),
+      onTap: () => _quickPlayFromMap(item),
+      onLongPress: () => _onItemTap(item),
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -1302,6 +1309,7 @@ class _HomeContinueWatchingSectionState
 
 class _CardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -1316,6 +1324,7 @@ class _CardWithFocus extends StatefulWidget {
   const _CardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -1334,6 +1343,7 @@ class _CardWithFocus extends StatefulWidget {
 class _CardWithFocusState extends State<_CardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
+  bool _longPressFired = false;
   final GlobalKey _cardKey = GlobalKey();
 
   void _onFocusChange(bool focused) {
@@ -1357,14 +1367,37 @@ class _CardWithFocusState extends State<_CardWithFocus> {
     }
   }
 
+  bool _isSelectKey(KeyEvent event) =>
+      event.logicalKey == LogicalKeyboardKey.select ||
+      event.logicalKey == LogicalKeyboardKey.enter ||
+      event.logicalKey == LogicalKeyboardKey.gameButtonA;
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
-        widget.onTap?.call();
+    // D-pad OK: short press = onTap, hold (first KeyRepeatEvent) = onLongPress.
+    if (_isSelectKey(event)) {
+      if (event is KeyDownEvent) {
+        _longPressFired = false;
         return KeyEventResult.handled;
       }
+      if (event is KeyRepeatEvent) {
+        if (!_longPressFired) {
+          _longPressFired = true;
+          if (widget.onLongPress != null) {
+            HapticFeedback.mediumImpact();
+            widget.onLongPress!();
+          }
+        }
+        return KeyEventResult.handled;
+      }
+      if (event is KeyUpEvent) {
+        if (!_longPressFired) {
+          widget.onTap?.call();
+        }
+        _longPressFired = false;
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;
@@ -1408,6 +1441,12 @@ class _CardWithFocusState extends State<_CardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),

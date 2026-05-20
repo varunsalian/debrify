@@ -1358,7 +1358,8 @@ class _HomeTraktContinueWatchingSectionState
     FocusNode? focusNode,
   }) {
     return _TraktCardWithFocus(
-      onTap: () => _onItemTap(item),
+      onTap: () => _quickPlayItem(item),
+      onLongPress: () => _onItemTap(item),
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -1814,6 +1815,7 @@ class _GlassPill extends StatelessWidget {
 
 class _TraktCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -1828,6 +1830,7 @@ class _TraktCardWithFocus extends StatefulWidget {
   const _TraktCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -1846,6 +1849,7 @@ class _TraktCardWithFocus extends StatefulWidget {
 class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
+  bool _longPressFired = false;
   final GlobalKey _cardKey = GlobalKey();
 
   void _onFocusChange(bool focused) {
@@ -1869,14 +1873,37 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
     }
   }
 
+  bool _isSelectKey(KeyEvent event) =>
+      event.logicalKey == LogicalKeyboardKey.select ||
+      event.logicalKey == LogicalKeyboardKey.enter ||
+      event.logicalKey == LogicalKeyboardKey.gameButtonA;
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
-        widget.onTap?.call();
+    // D-pad OK: short press = onTap, hold (first KeyRepeatEvent) = onLongPress.
+    if (_isSelectKey(event)) {
+      if (event is KeyDownEvent) {
+        _longPressFired = false;
         return KeyEventResult.handled;
       }
+      if (event is KeyRepeatEvent) {
+        if (!_longPressFired) {
+          _longPressFired = true;
+          if (widget.onLongPress != null) {
+            HapticFeedback.mediumImpact();
+            widget.onLongPress!();
+          }
+        }
+        return KeyEventResult.handled;
+      }
+      if (event is KeyUpEvent) {
+        if (!_longPressFired) {
+          widget.onTap?.call();
+        }
+        _longPressFired = false;
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;
@@ -1920,6 +1947,12 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),

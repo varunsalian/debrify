@@ -512,7 +512,8 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
     }
 
     return _PlaylistCardWithFocus(
-      onTap: isPlaying ? null : onTap,
+      onTap: isPlaying ? null : () => _playItem(item),
+      onLongPress: isPlaying ? null : onTap,
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -910,6 +911,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
 
 class _PlaylistCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -924,6 +926,7 @@ class _PlaylistCardWithFocus extends StatefulWidget {
   const _PlaylistCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -942,6 +945,7 @@ class _PlaylistCardWithFocus extends StatefulWidget {
 class _PlaylistCardWithFocusState extends State<_PlaylistCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
+  bool _longPressFired = false;
   final GlobalKey _cardKey = GlobalKey();
 
   void _onFocusChange(bool focused) {
@@ -965,14 +969,37 @@ class _PlaylistCardWithFocusState extends State<_PlaylistCardWithFocus> {
     }
   }
 
+  bool _isSelectKey(KeyEvent event) =>
+      event.logicalKey == LogicalKeyboardKey.select ||
+      event.logicalKey == LogicalKeyboardKey.enter ||
+      event.logicalKey == LogicalKeyboardKey.gameButtonA;
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
-        widget.onTap?.call();
+    // D-pad OK: short press = onTap, hold (first KeyRepeatEvent) = onLongPress.
+    if (_isSelectKey(event)) {
+      if (event is KeyDownEvent) {
+        _longPressFired = false;
         return KeyEventResult.handled;
       }
+      if (event is KeyRepeatEvent) {
+        if (!_longPressFired) {
+          _longPressFired = true;
+          if (widget.onLongPress != null) {
+            HapticFeedback.mediumImpact();
+            widget.onLongPress!();
+          }
+        }
+        return KeyEventResult.handled;
+      }
+      if (event is KeyUpEvent) {
+        if (!_longPressFired) {
+          widget.onTap?.call();
+        }
+        _longPressFired = false;
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;
@@ -1014,18 +1041,19 @@ class _PlaylistCardWithFocusState extends State<_PlaylistCardWithFocus> {
         focusNode: widget.focusNode,
         onFocusChange: _onFocusChange,
         onKeyEvent: _handleKeyEvent,
-        child: widget.isTelevision
-            ? KeyedSubtree(
-                key: _cardKey,
-                child: widget.child(_isFocused, _isHovered),
-              )
-            : GestureDetector(
-                onTap: widget.onTap,
-                child: KeyedSubtree(
-                  key: _cardKey,
-                  child: widget.child(_isFocused, _isHovered),
-                ),
-              ),
+        child: GestureDetector(
+          onTap: widget.isTelevision ? null : widget.onTap,
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
+          child: KeyedSubtree(
+            key: _cardKey,
+            child: widget.child(_isFocused, _isHovered),
+          ),
+        ),
       ),
     );
   }
