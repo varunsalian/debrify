@@ -217,28 +217,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Subtitle Settings Panel
     private var subtitleSettingsRoot: View? = null
     private var subtitleSettingsVisible = false
-    private var subtitleColumnTrack: View? = null
-    private var subtitleColumnSize: View? = null
-    private var subtitleColumnStyle: View? = null
-    private var subtitleColumnColor: View? = null
-    private var subtitleColumnBg: View? = null
-    private var subtitleColumnFont: View? = null
-    private var subtitleResetButton: View? = null
-    private var subtitleValueTrack: TextView? = null
-    private var subtitleValueSize: TextView? = null
-    private var subtitleValueStyle: TextView? = null
-    private var subtitleValueColor: TextView? = null
-    private var subtitleValueBg: TextView? = null
-    private var subtitleValueFont: TextView? = null
-    private var subtitleColorSwatch: View? = null
-    private var subtitleColumnOutline: View? = null
-    private var subtitleValueOutline: TextView? = null
-    private var subtitleOutlineSwatch: View? = null
-    private var subtitleColumnElevation: View? = null
-    private var subtitleValueElevation: TextView? = null
-    private var subtitlePreviewText: TextView? = null
-    private var subtitleSearchButton: View? = null
-    private var subtitleIdentityLabel: TextView? = null
+    private var subtitlePanel: SubtitlePanelController? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
 
@@ -255,7 +234,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSubtitleSeason: Int? = null
     private var manualSubtitleEpisode: Int? = null
     private var manualSubtitleDisplayLabel: String? = null
-    private var subtitleTrackDialog: AlertDialog? = null  // Reference for auto-refresh when subtitles load
     private val subtitleScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Focus navigation state - prevents focus recovery from interfering with active navigation
@@ -699,30 +677,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Subtitle Settings Panel
         subtitleSettingsRoot = findViewById(R.id.subtitle_settings_root)
-        subtitleColumnTrack = findViewById(R.id.subtitle_column_track)
-        subtitleColumnSize = findViewById(R.id.subtitle_column_size)
-        subtitleColumnStyle = findViewById(R.id.subtitle_column_style)
-        subtitleColumnColor = findViewById(R.id.subtitle_column_color)
-        subtitleColumnBg = findViewById(R.id.subtitle_column_bg)
-        subtitleColumnFont = findViewById(R.id.subtitle_column_font)
-        subtitleValueTrack = findViewById(R.id.subtitle_value_track)
-        subtitleValueSize = findViewById(R.id.subtitle_value_size)
-        subtitleValueStyle = findViewById(R.id.subtitle_value_style)
-        subtitleValueColor = findViewById(R.id.subtitle_value_color)
-        subtitleValueBg = findViewById(R.id.subtitle_value_bg)
-        subtitleValueFont = findViewById(R.id.subtitle_value_font)
-        subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch)
-        subtitleColumnOutline = findViewById(R.id.subtitle_column_outline)
-        subtitleValueOutline = findViewById(R.id.subtitle_value_outline)
-        subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch)
-        subtitleColumnElevation = findViewById(R.id.subtitle_column_elevation)
-        subtitleValueElevation = findViewById(R.id.subtitle_value_elevation)
-        subtitlePreviewText = findViewById(R.id.subtitle_preview_text)
-        subtitleResetButton = findViewById(R.id.subtitle_reset_button)
-        subtitleSearchButton = findViewById(R.id.subtitle_search_button)
-        subtitleIdentityLabel = findViewById(R.id.subtitle_identity_label)
-        subtitleSearchButton?.setOnClickListener {
-            showSearchSubtitleDialog()
+        subtitlePanel = subtitleSettingsRoot?.let { root ->
+            SubtitlePanelController(
+                activity = this,
+                root = root,
+                categoriesContainer = findViewById(R.id.subtitle_categories_container),
+                optionsContainer = findViewById(R.id.subtitle_options_container),
+                categoriesScroll = findViewById(R.id.subtitle_categories_scroll),
+                optionsScroll = findViewById(R.id.subtitle_options_scroll),
+                previewText = findViewById(R.id.subtitle_preview_text),
+                identityLabel = findViewById(R.id.subtitle_identity_label),
+                searchButton = findViewById(R.id.subtitle_search_button),
+                callbacks = subtitlePanelCallbacks
+            )
         }
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
         pikPakReactivationIndicator = findViewById(R.id.android_tv_pikpak_reactivation_indicator)
@@ -3114,29 +3081,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val keyCode = event.keyCode
 
         // Handle subtitle settings panel
-        if (subtitleSettingsVisible) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                when (keyCode) {
-                    KeyEvent.KEYCODE_BACK -> {
-                        hideSubtitleSettingsPanel()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        cycleSubtitleValueUp()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        cycleSubtitleValueDown()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                        handleSubtitlePanelSelect()
-                        return true
-                    }
-                }
-            }
-            // Let left/right navigation work normally for focus
-            return super.dispatchKeyEvent(event)
+        if (subtitlePanel?.isVisible == true) {
+            return subtitlePanel?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
         }
 
         // Handle IPTV guide overlay
@@ -4661,25 +4607,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private val subtitlePanelCallbacks = object : SubtitlePanelController.Callbacks {
+        override fun getTrackLabels(): List<String> = subtitleTracks.map { it.first }
+        override fun getCurrentTrackIndex(): Int = currentSubtitleTrackIndex
+        override fun selectTrack(index: Int) {
+            val label = subtitleTracks.getOrNull(index)?.first ?: return
+            if (isLoadingSubtitleOption(label)) return
+            if (isSearchSubtitleOption(label)) {
+                showSearchSubtitleDialog()
+                return
+            }
+            currentSubtitleTrackIndex = index
+            userManuallySelectedSubtitle = true
+            applySelectedSubtitleTrack()
+        }
+        override fun onSearchSubtitle() { showSearchSubtitleDialog() }
+        override fun getIdentityLabel(): String = currentSubtitleIdentityLabel()
+        override fun onSettingsChanged() { applySubtitleSettings() }
+        override fun onHidden() {
+            subtitleSettingsVisible = false
+            if (::playerView.isInitialized) playerView.requestFocus()
+        }
+    }
+
     private fun showSubtitleSettingsPanel() {
         rebuildSubtitleTrackList()
-        // Update UI values
-        updateSubtitlePanelValues()
-
-        // Show panel
-        subtitleSettingsRoot?.visibility = View.VISIBLE
+        subtitlePanel?.show()
         subtitleSettingsVisible = true
-
-        // Focus the online search action first so it is discoverable.
-        subtitleSearchButton?.requestFocus() ?: subtitleColumnTrack?.requestFocus()
     }
 
     private fun hideSubtitleSettingsPanel() {
-        subtitleSettingsRoot?.visibility = View.GONE
-        subtitleSettingsVisible = false
-        if (::playerView.isInitialized) {
-            playerView.requestFocus()
-        }
+        subtitlePanel?.hide() ?: run { subtitleSettingsVisible = false }
     }
 
     /**
@@ -4688,205 +4646,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun refreshSubtitlePanelForLoading() {
         rebuildSubtitleTrackList()
-        // Update UI values only (don't change visibility or focus)
-        updateSubtitlePanelValues()
-
-        // If track selection dialog is open, refresh it to show updated list
-        subtitleTrackDialog?.let { dialog ->
-            if (dialog.isShowing) {
-                dialog.dismiss()
-                showSubtitleTrackSelectionDialog()
-            }
-        }
-    }
-
-    private fun updateSubtitlePanelValues() {
-        subtitleIdentityLabel?.text = currentSubtitleIdentityLabel()
-
-        // Track
-        subtitleValueTrack?.text = if (subtitleTracks.isNotEmpty() && currentSubtitleTrackIndex < subtitleTracks.size) {
-            subtitleTracks[currentSubtitleTrackIndex].first
-        } else {
-            "Off"
-        }
-
-        // Size
-        subtitleValueSize?.text = SubtitleSettings.getCurrentSize(this).label
-
-        // Style
-        subtitleValueStyle?.text = SubtitleSettings.getCurrentStyle(this).label
-
-        // Color
-        val colorOption = SubtitleSettings.getCurrentColor(this)
-        subtitleValueColor?.text = colorOption.label
-        subtitleColorSwatch?.backgroundTintList = android.content.res.ColorStateList.valueOf(colorOption.color)
-
-        // Outline Color
-        val outlineOption = SubtitleSettings.getCurrentOutlineColor(this)
-        subtitleValueOutline?.text = outlineOption.label
-        if (outlineOption.color != null) {
-            subtitleOutlineSwatch?.backgroundTintList = android.content.res.ColorStateList.valueOf(outlineOption.color)
-            subtitleOutlineSwatch?.visibility = View.VISIBLE
-        } else {
-            subtitleOutlineSwatch?.visibility = View.INVISIBLE
-        }
-
-        // Background
-        subtitleValueBg?.text = SubtitleSettings.getCurrentBg(this).label
-
-        // Font
-        subtitleValueFont?.text = SubtitleFontManager.getCurrentFontLabel(this)
-
-        // Elevation
-        subtitleValueElevation?.text = SubtitleSettings.getCurrentElevation(this).label
-
-        // Update preview
-        updateSubtitlePreview()
-    }
-
-    private fun updateSubtitlePreview() {
-        val colorOption = SubtitleSettings.getCurrentColor(this)
-        val styleOption = SubtitleSettings.getCurrentStyle(this)
-        val sizeOption = SubtitleSettings.getCurrentSize(this)
-        val bgOption = SubtitleSettings.getCurrentBg(this)
-        val outlineOption = SubtitleSettings.getCurrentOutlineColor(this)
-        val typeface = SubtitleFontManager.getTypeface(this)
-
-        // Resolve outline/edge color for preview
-        val previewEdgeColor = if (outlineOption.isAuto || outlineOption.color == null) {
-            Color.BLACK
-        } else {
-            outlineOption.color
-        }
-
-        subtitlePreviewText?.apply {
-            setTextColor(colorOption.color)
-            textSize = sizeOption.sizeSp
-            setTypeface(typeface)
-
-            // Apply shadow based on edge style
-            when (styleOption.edgeType) {
-                CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> {
-                    setShadowLayer(4f, 2f, 2f, previewEdgeColor)
-                }
-                CaptionStyleCompat.EDGE_TYPE_OUTLINE -> {
-                    setShadowLayer(2f, 1f, 1f, previewEdgeColor)
-                }
-                else -> {
-                    setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
-                }
-            }
-
-            // Background
-            if (bgOption.color != Color.TRANSPARENT) {
-                setBackgroundColor(bgOption.color)
-                setPadding(8, 4, 8, 4)
-            } else {
-                setBackgroundColor(Color.TRANSPARENT)
-                setPadding(0, 0, 0, 0)
-            }
-        }
-    }
-
-    private fun cycleSubtitleValueUp() {
-        val focusedView = currentFocus ?: return
-
-        when (focusedView.id) {
-            R.id.subtitle_search_button -> {
-                return
-            }
-            R.id.subtitle_column_track -> {
-                subtitleSearchButton?.requestFocus()
-                return
-            }
-            R.id.subtitle_column_size -> {
-                SubtitleSettings.cycleSizeUp(this)
-            }
-            R.id.subtitle_column_style -> {
-                SubtitleSettings.cycleStyleUp(this)
-            }
-            R.id.subtitle_column_color -> {
-                SubtitleSettings.cycleColorUp(this)
-            }
-            R.id.subtitle_column_outline -> {
-                SubtitleSettings.cycleOutlineColorUp(this)
-            }
-            R.id.subtitle_column_bg -> {
-                SubtitleSettings.cycleBgUp(this)
-            }
-            R.id.subtitle_column_elevation -> {
-                SubtitleSettings.cycleElevationUp(this)
-            }
-            R.id.subtitle_column_font -> {
-                SubtitleFontManager.cycleFontUp(this)
-            }
-            R.id.subtitle_reset_button -> {
-                // Reset button doesn't cycle
-                return
-            }
-        }
-
-        updateSubtitlePanelValues()
-        applySubtitleSettings()
-    }
-
-    private fun cycleSubtitleValueDown() {
-        val focusedView = currentFocus ?: return
-
-        when (focusedView.id) {
-            R.id.subtitle_search_button -> {
-                subtitleColumnTrack?.requestFocus()
-                return
-            }
-            R.id.subtitle_column_track -> {
-                // Track uses dialog, no cycling
-                return
-            }
-            R.id.subtitle_column_size -> {
-                SubtitleSettings.cycleSizeDown(this)
-            }
-            R.id.subtitle_column_style -> {
-                SubtitleSettings.cycleStyleDown(this)
-            }
-            R.id.subtitle_column_color -> {
-                SubtitleSettings.cycleColorDown(this)
-            }
-            R.id.subtitle_column_outline -> {
-                SubtitleSettings.cycleOutlineColorDown(this)
-            }
-            R.id.subtitle_column_bg -> {
-                SubtitleSettings.cycleBgDown(this)
-            }
-            R.id.subtitle_column_elevation -> {
-                SubtitleSettings.cycleElevationDown(this)
-            }
-            R.id.subtitle_column_font -> {
-                SubtitleFontManager.cycleFontDown(this)
-            }
-            R.id.subtitle_reset_button -> {
-                // Reset button doesn't cycle
-                return
-            }
-        }
-
-        updateSubtitlePanelValues()
-        applySubtitleSettings()
-    }
-
-    private fun handleSubtitlePanelSelect() {
-        val focusedView = currentFocus ?: return
-
-        when (focusedView.id) {
-            R.id.subtitle_search_button -> {
-                showSearchSubtitleDialog()
-            }
-            R.id.subtitle_column_track -> {
-                showSubtitleTrackSelectionDialog()
-            }
-            R.id.subtitle_reset_button -> {
-                resetSubtitleSettings()
-            }
-        }
+        subtitlePanel?.refresh()
     }
 
     private fun isSearchSubtitleOption(label: String): Boolean {
@@ -4899,48 +4659,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun isExternalSubtitleOption(label: String): Boolean {
         return label.startsWith(EXTERNAL_SUBTITLE_PREFIX)
-    }
-
-    private fun showSubtitleTrackSelectionDialog() {
-        if (subtitleTracks.isEmpty()) {
-            Toast.makeText(this, "No subtitle tracks available", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val labels = subtitleTracks.map { it.first }.toTypedArray()
-        subtitleTrackDialog = AlertDialog.Builder(this)
-            .setTitle("Select Subtitle Track")
-            .setSingleChoiceItems(labels, currentSubtitleTrackIndex) { dialog, which ->
-                // Ignore clicks on loading indicator
-                val selectedLabel = subtitleTracks.getOrNull(which)?.first ?: ""
-                if (isLoadingSubtitleOption(selectedLabel)) {
-                    // Loading indicator - ignore click
-                    return@setSingleChoiceItems
-                }
-
-                if (isSearchSubtitleOption(selectedLabel)) {
-                    dialog.dismiss()
-                    showSearchSubtitleDialog()
-                    return@setSingleChoiceItems
-                }
-
-                currentSubtitleTrackIndex = which
-                userManuallySelectedSubtitle = true
-                applySelectedSubtitleTrack()
-                updateSubtitlePanelValues()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .setOnDismissListener { subtitleTrackDialog = null }
-            .show()
-    }
-
-    private fun resetSubtitleSettings() {
-        SubtitleSettings.resetToDefaults(this)
-        SubtitleFontManager.resetToDefault(this)
-        updateSubtitlePanelValues()
-        applySubtitleSettings()
-        Toast.makeText(this, "Subtitle settings reset to defaults", Toast.LENGTH_SHORT).show()
     }
 
     private fun applySelectedSubtitleTrack() {

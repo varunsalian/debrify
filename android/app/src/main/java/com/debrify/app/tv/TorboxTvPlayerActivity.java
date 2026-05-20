@@ -286,26 +286,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     // Subtitle Settings Panel
     private View subtitleSettingsRoot;
     private boolean subtitleSettingsVisible = false;
-    private View subtitleColumnTrack;
-    private View subtitleColumnSize;
-    private View subtitleColumnStyle;
-    private View subtitleColumnColor;
-    private View subtitleColumnBg;
-    private View subtitleColumnFont;
-    private View subtitleResetButton;
-    private TextView subtitleValueTrack;
-    private TextView subtitleValueSize;
-    private TextView subtitleValueStyle;
-    private TextView subtitleValueColor;
-    private TextView subtitleValueBg;
-    private TextView subtitleValueFont;
-    private View subtitleColorSwatch;
-    private View subtitleColumnOutline;
-    private TextView subtitleValueOutline;
-    private View subtitleOutlineSwatch;
-    private View subtitleColumnElevation;
-    private TextView subtitleValueElevation;
-    private TextView subtitlePreviewText;
+    private SubtitlePanelController subtitlePanel;
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
 
@@ -316,7 +297,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean isLoadingStremioSubtitles = false;  // Loading state for UI indicator
     private boolean embeddedSubtitleSelected = false;  // Track if embedded subtitle was auto-selected
     private int addonSubtitleFetchToken = 0;  // Guard against stale async fetches on content switch
-    private AlertDialog subtitleTrackDialog;  // Reference for auto-refresh when subtitles load
     private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
 
     private final Random random = new Random();
@@ -423,26 +403,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Initialize Subtitle Settings Panel Views
         subtitleSettingsRoot = findViewById(R.id.subtitle_settings_root);
-        subtitleColumnTrack = findViewById(R.id.subtitle_column_track);
-        subtitleColumnSize = findViewById(R.id.subtitle_column_size);
-        subtitleColumnStyle = findViewById(R.id.subtitle_column_style);
-        subtitleColumnColor = findViewById(R.id.subtitle_column_color);
-        subtitleColumnBg = findViewById(R.id.subtitle_column_bg);
-        subtitleColumnFont = findViewById(R.id.subtitle_column_font);
-        subtitleValueTrack = findViewById(R.id.subtitle_value_track);
-        subtitleValueSize = findViewById(R.id.subtitle_value_size);
-        subtitleValueStyle = findViewById(R.id.subtitle_value_style);
-        subtitleValueColor = findViewById(R.id.subtitle_value_color);
-        subtitleValueBg = findViewById(R.id.subtitle_value_bg);
-        subtitleValueFont = findViewById(R.id.subtitle_value_font);
-        subtitleColorSwatch = findViewById(R.id.subtitle_color_swatch);
-        subtitleColumnOutline = findViewById(R.id.subtitle_column_outline);
-        subtitleValueOutline = findViewById(R.id.subtitle_value_outline);
-        subtitleOutlineSwatch = findViewById(R.id.subtitle_outline_swatch);
-        subtitleColumnElevation = findViewById(R.id.subtitle_column_elevation);
-        subtitleValueElevation = findViewById(R.id.subtitle_value_elevation);
-        subtitlePreviewText = findViewById(R.id.subtitle_preview_text);
-        subtitleResetButton = findViewById(R.id.subtitle_reset_button);
+        if (subtitleSettingsRoot != null) {
+            subtitlePanel = new SubtitlePanelController(
+                    this,
+                    subtitleSettingsRoot,
+                    findViewById(R.id.subtitle_categories_container),
+                    findViewById(R.id.subtitle_options_container),
+                    findViewById(R.id.subtitle_categories_scroll),
+                    findViewById(R.id.subtitle_options_scroll),
+                    findViewById(R.id.subtitle_preview_text),
+                    findViewById(R.id.subtitle_identity_label),
+                    findViewById(R.id.subtitle_search_button),
+                    buildSubtitlePanelCallbacks()
+            );
+        }
 
         Intent intent = getIntent();
         
@@ -3157,15 +3131,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     // SUBTITLE SETTINGS PANEL
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void showSubtitleSettingsPanel() {
-        // Collect available subtitle tracks
+    private void rebuildSubtitleTrackOptions() {
         subtitleTrackOptions.clear();
         currentSubtitleTrackIndex = 0;
 
         List<TrackOption> tracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
         subtitleTrackOptions.addAll(tracks);
 
-        // Determine currently selected embedded track index
         boolean hasSelectedSubtitle = false;
         if (!tracks.isEmpty()) {
             Tracks currentTracks = player != null ? player.getCurrentTracks() : null;
@@ -3181,54 +3153,105 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
         }
 
-        // Add Stremio external subtitles to the track list
-        // These are marked with "⬇" prefix to indicate they're external/downloadable
         int embeddedTrackCount = subtitleTrackOptions.size();
         for (int i = 0; i < stremioSubtitles.size(); i++) {
             StremioSubtitle sub = stremioSubtitles.get(i);
             String label = "⬇ " + sub.getDisplayName() + " (" + sub.getSource() + ")";
-            // Use null group to indicate this is an external subtitle
             subtitleTrackOptions.add(new TrackOption(null, -1, label));
-
-            // Check if this Stremio subtitle is currently selected
             if (currentStremioSubtitleIndex == i) {
                 currentSubtitleTrackIndex = embeddedTrackCount + i;
                 hasSelectedSubtitle = true;
             }
         }
 
-        // Add loading indicator if still fetching Stremio subtitles
         if (isLoadingStremioSubtitles) {
             subtitleTrackOptions.add(new TrackOption(null, -2, "⏳ Loading external subtitles..."));
         }
 
-        // If no track selected, set to -1 (Off)
         if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
             currentSubtitleTrackIndex = -1;
         }
+    }
 
-        // Update UI values
-        updateSubtitlePanelValues();
+    private SubtitlePanelController.Callbacks buildSubtitlePanelCallbacks() {
+        return new SubtitlePanelController.Callbacks() {
+            @NonNull
+            @Override
+            public List<String> getTrackLabels() {
+                List<String> labels = new ArrayList<>();
+                labels.add("Off");
+                for (TrackOption opt : subtitleTrackOptions) {
+                    labels.add(opt.label);
+                }
+                return labels;
+            }
 
-        // Show panel
-        if (subtitleSettingsRoot != null) {
-            subtitleSettingsRoot.setVisibility(View.VISIBLE);
+            @Override
+            public int getCurrentTrackIndex() {
+                if (currentSubtitleTrackIndex < 0) return 0;
+                return currentSubtitleTrackIndex + 1;
+            }
+
+            @Override
+            public void selectTrack(int index) {
+                if (index == 0) {
+                    currentSubtitleTrackIndex = -1;
+                    currentStremioSubtitleIndex = -1;
+                    applySubtitleTrack(null);
+                    return;
+                }
+                int trackIdx = index - 1;
+                if (trackIdx < 0 || trackIdx >= subtitleTrackOptions.size()) return;
+                TrackOption opt = subtitleTrackOptions.get(trackIdx);
+                if (opt.trackIndex == -2) return; // loading placeholder
+                currentSubtitleTrackIndex = trackIdx;
+                applySelectedSubtitleTrackFromPanel();
+            }
+
+            @Override
+            public void onSearchSubtitle() {
+                // Torbox player has no online search flow yet
+            }
+
+            @NonNull
+            @Override
+            public String getIdentityLabel() {
+                return "Detected title unavailable";
+            }
+
+            @Override
+            public void onSettingsChanged() {
+                applySubtitleSettings();
+            }
+
+            @Override
+            public void onHidden() {
+                subtitleSettingsVisible = false;
+                if (playerView != null) {
+                    playerView.requestFocus();
+                }
+            }
+
+            @Override
+            public boolean supportsSearch() {
+                return false;
+            }
+        };
+    }
+
+    private void showSubtitleSettingsPanel() {
+        rebuildSubtitleTrackOptions();
+        if (subtitlePanel != null) {
+            subtitlePanel.show();
         }
         subtitleSettingsVisible = true;
-
-        // Focus first column
-        if (subtitleColumnTrack != null) {
-            subtitleColumnTrack.requestFocus();
-        }
     }
 
     private void hideSubtitleSettingsPanel() {
-        if (subtitleSettingsRoot != null) {
-            subtitleSettingsRoot.setVisibility(View.GONE);
-        }
-        subtitleSettingsVisible = false;
-        if (playerView != null) {
-            playerView.requestFocus();
+        if (subtitlePanel != null) {
+            subtitlePanel.hide();
+        } else {
+            subtitleSettingsVisible = false;
         }
     }
 
@@ -3237,289 +3260,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      * Re-collects tracks and updates UI without changing visibility or focus.
      */
     private void refreshSubtitlePanelForLoading() {
-        // Re-collect available subtitle tracks
-        subtitleTrackOptions.clear();
-
-        List<TrackOption> tracks = collectTrackOptions(C.TRACK_TYPE_TEXT);
-        subtitleTrackOptions.addAll(tracks);
-
-        // Determine currently selected embedded track index
-        boolean hasSelectedSubtitle = false;
-        if (!tracks.isEmpty()) {
-            Tracks currentTracks = player != null ? player.getCurrentTracks() : null;
-            if (currentTracks != null) {
-                for (int i = 0; i < tracks.size(); i++) {
-                    TrackOption opt = tracks.get(i);
-                    if (opt.group.isTrackSelected(opt.trackIndex)) {
-                        currentSubtitleTrackIndex = i;
-                        hasSelectedSubtitle = true;
-                        break;
-                    }
-                }
-            }
+        rebuildSubtitleTrackOptions();
+        if (subtitlePanel != null) {
+            subtitlePanel.refresh();
         }
-
-        // Add Stremio external subtitles
-        int embeddedTrackCount = subtitleTrackOptions.size();
-        for (int i = 0; i < stremioSubtitles.size(); i++) {
-            StremioSubtitle sub = stremioSubtitles.get(i);
-            String label = "⬇ " + sub.getDisplayName() + " (" + sub.getSource() + ")";
-            subtitleTrackOptions.add(new TrackOption(null, -1, label));
-
-            if (currentStremioSubtitleIndex == i) {
-                currentSubtitleTrackIndex = embeddedTrackCount + i;
-                hasSelectedSubtitle = true;
-            }
-        }
-
-        // Add loading indicator if still fetching
-        if (isLoadingStremioSubtitles) {
-            subtitleTrackOptions.add(new TrackOption(null, -2, "⏳ Loading external subtitles..."));
-        }
-
-        // If no track selected, set to -1 (Off)
-        if (!hasSelectedSubtitle && currentStremioSubtitleIndex < 0) {
-            currentSubtitleTrackIndex = -1;
-        }
-
-        // Update UI values only (don't change visibility or focus)
-        updateSubtitlePanelValues();
-
-        // If track selection dialog is open, refresh it to show updated list
-        if (subtitleTrackDialog != null && subtitleTrackDialog.isShowing()) {
-            subtitleTrackDialog.dismiss();
-            showSubtitleTrackSelectionDialogFromPanel();
-        }
-    }
-
-    private void updateSubtitlePanelValues() {
-        // Track
-        if (subtitleValueTrack != null) {
-            if (currentSubtitleTrackIndex < 0 || subtitleTrackOptions.isEmpty()) {
-                subtitleValueTrack.setText("Off");
-            } else if (currentSubtitleTrackIndex < subtitleTrackOptions.size()) {
-                subtitleValueTrack.setText(subtitleTrackOptions.get(currentSubtitleTrackIndex).label);
-            } else {
-                subtitleValueTrack.setText("Off");
-            }
-        }
-
-        // Size
-        if (subtitleValueSize != null) {
-            subtitleValueSize.setText(SubtitleSettings.getCurrentSize(this).getLabel());
-        }
-
-        // Style
-        if (subtitleValueStyle != null) {
-            subtitleValueStyle.setText(SubtitleSettings.getCurrentStyle(this).getLabel());
-        }
-
-        // Color
-        SubtitleSettings.ColorOption colorOption = SubtitleSettings.getCurrentColor(this);
-        if (subtitleValueColor != null) {
-            subtitleValueColor.setText(colorOption.getLabel());
-        }
-        if (subtitleColorSwatch != null) {
-            subtitleColorSwatch.setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(colorOption.getColor()));
-        }
-
-        // Outline Color
-        SubtitleSettings.OutlineColorOption outlineOption = SubtitleSettings.getCurrentOutlineColor(this);
-        if (subtitleValueOutline != null) {
-            subtitleValueOutline.setText(outlineOption.getLabel());
-        }
-        if (subtitleOutlineSwatch != null) {
-            Integer outlineSwatchColor = outlineOption.getColor();
-            if (outlineSwatchColor != null) {
-                subtitleOutlineSwatch.setBackgroundTintList(
-                        android.content.res.ColorStateList.valueOf(outlineSwatchColor));
-                subtitleOutlineSwatch.setVisibility(View.VISIBLE);
-            } else {
-                subtitleOutlineSwatch.setVisibility(View.INVISIBLE);
-            }
-        }
-
-        // Background
-        if (subtitleValueBg != null) {
-            subtitleValueBg.setText(SubtitleSettings.getCurrentBg(this).getLabel());
-        }
-
-        // Elevation
-        if (subtitleValueElevation != null) {
-            subtitleValueElevation.setText(SubtitleSettings.getCurrentElevation(this).getLabel());
-        }
-
-        // Font
-        if (subtitleValueFont != null) {
-            subtitleValueFont.setText(SubtitleFontManager.getCurrentFontLabel(this));
-        }
-
-        // Update preview
-        updateSubtitlePreview();
-    }
-
-    private void updateSubtitlePreview() {
-        if (subtitlePreviewText == null) return;
-
-        SubtitleSettings.ColorOption colorOption = SubtitleSettings.getCurrentColor(this);
-        SubtitleSettings.StyleOption styleOption = SubtitleSettings.getCurrentStyle(this);
-        SubtitleSettings.SizeOption sizeOption = SubtitleSettings.getCurrentSize(this);
-        SubtitleSettings.BgOption bgOption = SubtitleSettings.getCurrentBg(this);
-        SubtitleSettings.OutlineColorOption outlineOption = SubtitleSettings.getCurrentOutlineColor(this);
-        android.graphics.Typeface typeface = SubtitleFontManager.getTypeface(this);
-
-        // Resolve outline/edge color for preview
-        Integer outlineColorValue = outlineOption.getColor();
-        int previewEdgeColor = (outlineOption.isAuto() || outlineColorValue == null)
-                ? Color.BLACK : outlineColorValue;
-
-        subtitlePreviewText.setTextColor(colorOption.getColor());
-        subtitlePreviewText.setTextSize(sizeOption.getSizeSp());
-        subtitlePreviewText.setTypeface(typeface);
-
-        // Apply shadow based on edge style
-        switch (styleOption.getEdgeType()) {
-            case CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW:
-                subtitlePreviewText.setShadowLayer(4f, 2f, 2f, previewEdgeColor);
-                break;
-            case CaptionStyleCompat.EDGE_TYPE_OUTLINE:
-                subtitlePreviewText.setShadowLayer(2f, 1f, 1f, previewEdgeColor);
-                break;
-            default:
-                subtitlePreviewText.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
-                break;
-        }
-
-        // Background
-        if (bgOption.getColor() != Color.TRANSPARENT) {
-            subtitlePreviewText.setBackgroundColor(bgOption.getColor());
-            subtitlePreviewText.setPadding(8, 4, 8, 4);
-        } else {
-            subtitlePreviewText.setBackgroundColor(Color.TRANSPARENT);
-            subtitlePreviewText.setPadding(0, 0, 0, 0);
-        }
-    }
-
-    private void cycleSubtitleValueUp() {
-        View focusedView = getCurrentFocus();
-        if (focusedView == null) return;
-
-        int viewId = focusedView.getId();
-        if (viewId == R.id.subtitle_column_track) {
-            // Track uses dialog, no cycling
-            return;
-        } else if (viewId == R.id.subtitle_column_size) {
-            SubtitleSettings.cycleSizeUp(this);
-        } else if (viewId == R.id.subtitle_column_style) {
-            SubtitleSettings.cycleStyleUp(this);
-        } else if (viewId == R.id.subtitle_column_color) {
-            SubtitleSettings.cycleColorUp(this);
-        } else if (viewId == R.id.subtitle_column_outline) {
-            SubtitleSettings.cycleOutlineColorUp(this);
-        } else if (viewId == R.id.subtitle_column_bg) {
-            SubtitleSettings.cycleBgUp(this);
-        } else if (viewId == R.id.subtitle_column_elevation) {
-            SubtitleSettings.cycleElevationUp(this);
-        } else if (viewId == R.id.subtitle_column_font) {
-            SubtitleFontManager.cycleFontUp(this);
-        } else if (viewId == R.id.subtitle_reset_button) {
-            // Reset button doesn't cycle
-            return;
-        }
-
-        updateSubtitlePanelValues();
-        applySubtitleSettings();
-    }
-
-    private void cycleSubtitleValueDown() {
-        View focusedView = getCurrentFocus();
-        if (focusedView == null) return;
-
-        int viewId = focusedView.getId();
-        if (viewId == R.id.subtitle_column_track) {
-            // Track uses dialog, no cycling
-            return;
-        } else if (viewId == R.id.subtitle_column_size) {
-            SubtitleSettings.cycleSizeDown(this);
-        } else if (viewId == R.id.subtitle_column_style) {
-            SubtitleSettings.cycleStyleDown(this);
-        } else if (viewId == R.id.subtitle_column_color) {
-            SubtitleSettings.cycleColorDown(this);
-        } else if (viewId == R.id.subtitle_column_outline) {
-            SubtitleSettings.cycleOutlineColorDown(this);
-        } else if (viewId == R.id.subtitle_column_bg) {
-            SubtitleSettings.cycleBgDown(this);
-        } else if (viewId == R.id.subtitle_column_elevation) {
-            SubtitleSettings.cycleElevationDown(this);
-        } else if (viewId == R.id.subtitle_column_font) {
-            SubtitleFontManager.cycleFontDown(this);
-        } else if (viewId == R.id.subtitle_reset_button) {
-            // Reset button doesn't cycle
-            return;
-        }
-
-        updateSubtitlePanelValues();
-        applySubtitleSettings();
-    }
-
-    private void handleSubtitlePanelSelect() {
-        View focusedView = getCurrentFocus();
-        if (focusedView == null) return;
-
-        int viewId = focusedView.getId();
-        if (viewId == R.id.subtitle_column_track) {
-            showSubtitleTrackSelectionDialogFromPanel();
-        } else if (viewId == R.id.subtitle_reset_button) {
-            resetSubtitleSettingsFromPanel();
-        }
-    }
-
-    private void showSubtitleTrackSelectionDialogFromPanel() {
-        // Build labels array including "Off" option
-        List<String> labels = new ArrayList<>();
-        labels.add("Off");
-        for (TrackOption opt : subtitleTrackOptions) {
-            labels.add(opt.label);
-        }
-
-        // Adjust selected index (+1 because "Off" is at index 0)
-        int selectedIndex = currentSubtitleTrackIndex + 1;
-        if (selectedIndex < 0) selectedIndex = 0;
-
-        String[] labelsArray = labels.toArray(new String[0]);
-        subtitleTrackDialog = new AlertDialog.Builder(this)
-                .setTitle("Select Subtitle Track")
-                .setSingleChoiceItems(labelsArray, selectedIndex, (dialog, which) -> {
-                    // Ignore clicks on loading indicator (trackIndex == -2)
-                    if (which > 0 && which <= subtitleTrackOptions.size()) {
-                        TrackOption opt = subtitleTrackOptions.get(which - 1);
-                        if (opt.trackIndex == -2) {
-                            // Loading indicator - ignore click
-                            return;
-                        }
-                    }
-
-                    if (which == 0) {
-                        currentSubtitleTrackIndex = -1; // Off
-                    } else {
-                        currentSubtitleTrackIndex = which - 1;
-                    }
-                    applySelectedSubtitleTrackFromPanel();
-                    updateSubtitlePanelValues();
-                    dialog.dismiss();
-                })
-                .setNegativeButton("Cancel", null)
-                .setOnDismissListener(dialog -> subtitleTrackDialog = null)
-                .show();
-    }
-
-    private void resetSubtitleSettingsFromPanel() {
-        SubtitleSettings.resetToDefaults(this);
-        SubtitleFontManager.resetToDefault(this);
-        updateSubtitlePanelValues();
-        applySubtitleSettings();
-        showToast("Subtitle settings reset to defaults");
     }
 
     private void applySelectedSubtitleTrackFromPanel() {
@@ -4117,24 +3861,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Subtitle Settings Panel is visible - handle keys
-        if (subtitleSettingsVisible) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    hideSubtitleSettingsPanel();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    cycleSubtitleValueUp();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    cycleSubtitleValueDown();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    handleSubtitlePanelSelect();
-                    return true;
-                }
-            }
-            // Let left/right navigation work normally for focus
-            return super.dispatchKeyEvent(event);
+        if (subtitlePanel != null && subtitlePanel.isVisible()) {
+            return subtitlePanel.dispatchKey(event);
         }
 
         if (seekbarVisible) {

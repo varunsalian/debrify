@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════════
-     SUBTITLE SETTINGS PANEL - Quick In-Player Customization
-     Single row layout: Track, Size, Style, Color, Background, Reset
+     SUBTITLE SETTINGS PANEL - Two-pane list (Android TV style)
+     Left pane: categories (Track, Size, Style, Color, Outline, BG, Elevate, Font, Reset)
+     Right pane: options for the selected category, with live preview
+     Lists are populated programmatically by the player activity controllers.
      ═══════════════════════════════════════════════════════════════════════════════ -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/subtitle_settings_root"
@@ -15,39 +17,39 @@
         android:id="@+id/subtitle_settings_backdrop"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#99000000" />
+        android:background="#B3000000" />
 
     <!-- Main Panel Card -->
     <LinearLayout
         android:id="@+id/subtitle_settings_panel"
-        android:layout_width="wrap_content"
+        android:layout_width="640dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:orientation="vertical"
         android:background="@drawable/subtitle_panel_bg"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="20dp"
         android:elevation="16dp">
 
         <!-- Header -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
             android:text="SUBTITLE SETTINGS"
             android:textColor="#FFFFFF"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.1"
             android:layout_marginBottom="14dp" />
 
-        <!-- Online subtitle search action -->
+        <!-- Online subtitle search row -->
         <LinearLayout
+            android:id="@+id/subtitle_search_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="14dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -75,7 +77,6 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:gravity="center"
-                android:nextFocusDown="@id/subtitle_column_track"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:text="Search Movie/Show Subtitles"
@@ -85,511 +86,63 @@
 
         </LinearLayout>
 
-        <!-- Single Row: All Options -->
+        <!-- Two-pane list -->
         <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="match_parent"
+            android:layout_height="320dp"
             android:orientation="horizontal"
-            android:gravity="center">
+            android:background="@drawable/subtitle_preview_bg">
 
-            <!-- Column 1: Track Selection -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_track"
-                android:layout_width="88dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusUp="@id/subtitle_search_button"
-                android:nextFocusRight="@+id/subtitle_column_size"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="TRACK"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_track"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Off"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:maxLines="1"
-                    android:ellipsize="middle"
-                    android:maxWidth="76dp"
-                    android:gravity="center" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 2: Size -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_size"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_track"
-                android:nextFocusRight="@+id/subtitle_column_style"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SIZE"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_size"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Medium"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 3: Style -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_style"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_size"
-                android:nextFocusRight="@+id/subtitle_column_color"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="STYLE"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_style"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Outline"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 4: Color -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_color"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_style"
-                android:nextFocusRight="@+id/subtitle_column_outline"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="COLOR"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
+            <!-- Left pane: Categories -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/subtitle_categories_scroll"
+                android:layout_width="220dp"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:scrollbars="none">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:id="@+id/subtitle_categories_container"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:orientation="vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp" />
 
-                    <View
-                        android:id="@+id/subtitle_color_swatch"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
-                        android:background="@drawable/subtitle_color_swatch"
-                        android:backgroundTint="#FFFFFF" />
+            </androidx.core.widget.NestedScrollView>
 
-                    <TextView
-                        android:id="@+id/subtitle_value_color"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:text="White"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:fontFamily="sans-serif-medium" />
+            <!-- Divider -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="#22FFFFFF" />
 
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 5: Outline Color -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_outline"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_color"
-                android:nextFocusRight="@+id/subtitle_column_bg"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="OUTLINE"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
+            <!-- Right pane: Options -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/subtitle_options_scroll"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:scrollbars="none">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:id="@+id/subtitle_options_container"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:orientation="vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp" />
 
-                    <View
-                        android:id="@+id/subtitle_outline_swatch"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
-                        android:background="@drawable/subtitle_color_swatch"
-                        android:backgroundTint="#000000" />
-
-                    <TextView
-                        android:id="@+id/subtitle_value_outline"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:text="Auto"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:fontFamily="sans-serif-medium" />
-
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 6: Background -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_bg"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_outline"
-                android:nextFocusRight="@+id/subtitle_column_elevation"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="BG"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_bg"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="None"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 7: Elevation -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_elevation"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_bg"
-                android:nextFocusRight="@+id/subtitle_column_font"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ELEVATE"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_elevation"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Bottom"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 8: Font -->
-            <LinearLayout
-                android:id="@+id/subtitle_column_font"
-                android:layout_width="80dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_elevation"
-                android:nextFocusRight="@+id/subtitle_reset_button"
-                android:layout_marginEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="FONT"
-                    android:textColor="#80FFFFFF"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="▲"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-                <TextView
-                    android:id="@+id/subtitle_value_font"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Default"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:maxWidth="72dp"
-                    android:gravity="center" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="▼"
-                    android:textColor="#60FFFFFF"
-                    android:textSize="8sp" />
-
-            </LinearLayout>
-
-            <!-- Column 7: Reset -->
-            <LinearLayout
-                android:id="@+id/subtitle_reset_button"
-                android:layout_width="56dp"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/subtitle_column_bg"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:nextFocusLeft="@id/subtitle_column_font">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_reset"
-                    android:tint="#FFFFFF" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Reset"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:fontFamily="sans-serif-medium" />
-
-            </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
 
         </LinearLayout>
 
         <!-- Preview Section -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="12dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="14dp"
             android:background="@drawable/subtitle_preview_bg">
 
             <TextView
@@ -614,8 +167,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="10dp"
-            android:text="◄► Navigate  |  ▲▼ Change  |  OK Select  |  BACK Close"
-            android:textColor="#50FFFFFF"
+            android:text="◄► Switch pane  |  ▲▼ Navigate  |  OK Select  |  BACK Close"
+            android:textColor="#60FFFFFF"
             android:textSize="10sp"
             android:fontFamily="sans-serif" />
 
