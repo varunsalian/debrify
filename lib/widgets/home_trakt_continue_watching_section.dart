@@ -1850,10 +1850,24 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
   bool _isFocused = false;
   bool _isHovered = false;
   final GlobalKey _cardKey = GlobalKey();
+  Timer? _longPressTimer;
+  bool _longPressTriggered = false;
+  bool _keyDownReceived = false;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 
   void _onFocusChange(bool focused) {
     setState(() => _isFocused = focused);
     widget.onFocusChanged?.call(focused, widget.index);
+    if (!focused) {
+      _longPressTimer?.cancel();
+      _longPressTriggered = false;
+      _keyDownReceived = false;
+    }
 
     if (focused && widget.scrollController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1873,13 +1887,32 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
-        widget.onTap?.call();
+    if (event.logicalKey == LogicalKeyboardKey.select ||
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      if (event is KeyDownEvent) {
+        _keyDownReceived = true;
+        _longPressTriggered = false;
+        _longPressTimer?.cancel();
+        if (widget.onLongPress != null) {
+          _longPressTimer = Timer(const Duration(milliseconds: 800), () {
+            _longPressTriggered = true;
+            widget.onLongPress!();
+          });
+        }
+        return KeyEventResult.handled;
+      } else if (event is KeyUpEvent) {
+        _longPressTimer?.cancel();
+        if (!_keyDownReceived) return KeyEventResult.handled;
+        if (!_longPressTriggered) {
+          widget.onTap?.call();
+        }
+        _longPressTriggered = false;
+        _keyDownReceived = false;
         return KeyEventResult.handled;
       }
+    }
+    if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onUpPressed?.call();
         return KeyEventResult.handled;

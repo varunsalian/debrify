@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,8 +44,17 @@ class CatalogItemTile extends StatefulWidget {
 class _CatalogItemTileState extends State<CatalogItemTile> {
   bool _focused = false;
   bool _hovered = false;
+  Timer? _longPressTimer;
+  bool _longPressTriggered = false;
+  bool _keyDownReceived = false;
 
   bool get _active => _focused || _hovered;
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -228,9 +239,12 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
+        if (!f) {
+          _longPressTimer?.cancel();
+          _longPressTriggered = false;
+          _keyDownReceived = false;
+        }
         if (f) {
-          // Scroll the focused tile to the middle of the grid so the whole
-          // (scaled-up) card is visible instead of being clipped at an edge.
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             Scrollable.ensureVisible(
@@ -246,13 +260,32 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space ||
-                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
-          widget.onOpen();
-          return KeyEventResult.handled;
+        if (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space ||
+            event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+          if (event is KeyDownEvent) {
+            _keyDownReceived = true;
+            _longPressTriggered = false;
+            _longPressTimer?.cancel();
+            if (widget.onLongPress != null) {
+              _longPressTimer = Timer(const Duration(milliseconds: 800), () {
+                _longPressTriggered = true;
+                HapticFeedback.mediumImpact();
+                widget.onLongPress!();
+              });
+            }
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            _longPressTimer?.cancel();
+            if (!_keyDownReceived) return KeyEventResult.handled;
+            if (!_longPressTriggered) {
+              widget.onOpen();
+            }
+            _longPressTriggered = false;
+            _keyDownReceived = false;
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
