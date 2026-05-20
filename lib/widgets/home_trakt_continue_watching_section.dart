@@ -1359,6 +1359,7 @@ class _HomeTraktContinueWatchingSectionState
   }) {
     return _TraktCardWithFocus(
       onTap: () => _onItemTap(item),
+      onLongPress: () => _quickPlayItem(item),
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -1814,6 +1815,7 @@ class _GlassPill extends StatelessWidget {
 
 class _TraktCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -1828,6 +1830,7 @@ class _TraktCardWithFocus extends StatefulWidget {
   const _TraktCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -1920,6 +1923,7 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),

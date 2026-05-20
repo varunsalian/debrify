@@ -463,6 +463,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
         isPlaying: isPlaying,
         isFavorited: isFavorited,
         onTap: () => _onItemTap(item),
+        onLongPress: () => _playItem(item),
         index: index,
         focusNode: index < _cardFocusNodes.length
             ? _cardFocusNodes[index]
@@ -489,6 +490,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
     bool isPlaying = false,
     bool isFavorited = false,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
     int index = 0,
     FocusNode? focusNode,
     required bool isMobile,
@@ -513,6 +515,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
 
     return _PlaylistCardWithFocus(
       onTap: isPlaying ? null : onTap,
+      onLongPress: isPlaying ? null : onLongPress,
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -910,6 +913,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
 
 class _PlaylistCardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -924,6 +928,7 @@ class _PlaylistCardWithFocus extends StatefulWidget {
   const _PlaylistCardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -1021,6 +1026,7 @@ class _PlaylistCardWithFocusState extends State<_PlaylistCardWithFocus> {
               )
             : GestureDetector(
                 onTap: widget.onTap,
+                onLongPress: widget.onLongPress,
                 child: KeyedSubtree(
                   key: _cardKey,
                   child: widget.child(_isFocused, _isHovered),

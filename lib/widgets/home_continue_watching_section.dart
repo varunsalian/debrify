@@ -375,83 +375,7 @@ class _HomeContinueWatchingSectionState
     if (selection == null) return;
 
     if (choice == 'quick_play') {
-      if (selection.isSeries) {
-        // Use cached episode info from _loadItems
-        final cachedEp = _episodeInfoMap[selection.imdbId];
-        if (cachedEp != null) {
-          int season = cachedEp.season;
-          int episode = cachedEp.episode;
-          // If episode is near-complete (>=90%) or finished, find the real next episode from the catalog
-          final progress = _progressMap[selection.imdbId] ?? 0.0; // 0-100
-          debugPrint(
-            'HomeContinueWatching: Quick Play S${season}E$episode progress=$progress',
-          );
-          if (progress >= 90) {
-            final nextEp = await _findNextEpisode(
-              selection.imdbId,
-              season,
-              episode,
-              item['addonId'] as String?,
-            );
-            if (!mounted) return;
-            if (nextEp != null) {
-              season = nextEp.season;
-              episode = nextEp.episode;
-            } else {
-              // No next episode found — fall through to browse
-              widget.onItemSelected?.call(selection);
-              return;
-            }
-          }
-          final withEpisode = AdvancedSearchSelection(
-            imdbId: selection.imdbId,
-            isSeries: true,
-            title: selection.title,
-            year: selection.year,
-            contentType: selection.contentType,
-            posterUrl: selection.posterUrl,
-            season: season,
-            episode: episode,
-          );
-          if (widget.onQuickPlay != null) {
-            widget.onQuickPlay!(withEpisode);
-          } else {
-            widget.onItemSelected?.call(withEpisode);
-          }
-        } else {
-          // No episode from IMDB lookup — try title-based fallback
-          int fallbackSeason = 1;
-          int fallbackEpisode = 1;
-          final titleLastEp = await StorageService.getLastPlayedEpisode(
-            seriesTitle: selection.title,
-          );
-          if (titleLastEp != null) {
-            fallbackSeason = titleLastEp['season'] as int? ?? 1;
-            fallbackEpisode = titleLastEp['episode'] as int? ?? 1;
-          }
-          final withEpisode = AdvancedSearchSelection(
-            imdbId: selection.imdbId,
-            isSeries: true,
-            title: selection.title,
-            year: selection.year,
-            contentType: selection.contentType,
-            posterUrl: selection.posterUrl,
-            season: fallbackSeason,
-            episode: fallbackEpisode,
-          );
-          if (widget.onQuickPlay != null) {
-            widget.onQuickPlay!(withEpisode);
-          } else {
-            widget.onItemSelected?.call(withEpisode);
-          }
-        }
-      } else {
-        if (widget.onQuickPlay != null) {
-          widget.onQuickPlay!(selection);
-        } else {
-          widget.onItemSelected?.call(selection);
-        }
-      }
+      _quickPlayItem(item);
     } else if (choice == 'random_episode') {
       final addonId = item['addonId'] as String?;
       final cachedEp = _episodeInfoMap[selection.imdbId];
@@ -490,6 +414,82 @@ class _HomeContinueWatchingSectionState
         await StorageService.removeContinueWatchingItem(imdbId);
         await StorageService.clearPlaybackStateByImdbId(imdbId);
         if (mounted) _loadItems();
+      }
+    }
+  }
+
+  Future<void> _quickPlayItem(Map<String, dynamic> item) async {
+    final selection = _selectionFromItem(item);
+    if (selection == null) return;
+
+    if (selection.isSeries) {
+      final cachedEp = _episodeInfoMap[selection.imdbId];
+      if (cachedEp != null) {
+        int season = cachedEp.season;
+        int episode = cachedEp.episode;
+        final progress = _progressMap[selection.imdbId] ?? 0.0;
+        if (progress >= 90) {
+          final nextEp = await _findNextEpisode(
+            selection.imdbId,
+            season,
+            episode,
+            item['addonId'] as String?,
+          );
+          if (!mounted) return;
+          if (nextEp != null) {
+            season = nextEp.season;
+            episode = nextEp.episode;
+          } else {
+            widget.onItemSelected?.call(selection);
+            return;
+          }
+        }
+        final withEpisode = AdvancedSearchSelection(
+          imdbId: selection.imdbId,
+          isSeries: true,
+          title: selection.title,
+          year: selection.year,
+          contentType: selection.contentType,
+          posterUrl: selection.posterUrl,
+          season: season,
+          episode: episode,
+        );
+        if (widget.onQuickPlay != null) {
+          widget.onQuickPlay!(withEpisode);
+        } else {
+          widget.onItemSelected?.call(withEpisode);
+        }
+      } else {
+        int fallbackSeason = 1;
+        int fallbackEpisode = 1;
+        final titleLastEp = await StorageService.getLastPlayedEpisode(
+          seriesTitle: selection.title,
+        );
+        if (titleLastEp != null) {
+          fallbackSeason = titleLastEp['season'] as int? ?? 1;
+          fallbackEpisode = titleLastEp['episode'] as int? ?? 1;
+        }
+        final withEpisode = AdvancedSearchSelection(
+          imdbId: selection.imdbId,
+          isSeries: true,
+          title: selection.title,
+          year: selection.year,
+          contentType: selection.contentType,
+          posterUrl: selection.posterUrl,
+          season: fallbackSeason,
+          episode: fallbackEpisode,
+        );
+        if (widget.onQuickPlay != null) {
+          widget.onQuickPlay!(withEpisode);
+        } else {
+          widget.onItemSelected?.call(withEpisode);
+        }
+      }
+    } else {
+      if (widget.onQuickPlay != null) {
+        widget.onQuickPlay!(selection);
+      } else {
+        widget.onItemSelected?.call(selection);
       }
     }
   }
@@ -941,6 +941,7 @@ class _HomeContinueWatchingSectionState
   }) {
     return _CardWithFocus(
       onTap: () => _onItemTap(item),
+      onLongPress: () => _quickPlayItem(item),
       focusNode: focusNode,
       index: index,
       totalCount: _items.length,
@@ -1302,6 +1303,7 @@ class _HomeContinueWatchingSectionState
 
 class _CardWithFocus extends StatefulWidget {
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final int index;
   final int totalCount;
@@ -1316,6 +1318,7 @@ class _CardWithFocus extends StatefulWidget {
   const _CardWithFocus({
     required this.onTap,
     required this.child,
+    this.onLongPress,
     this.focusNode,
     this.index = 0,
     this.totalCount = 1,
@@ -1408,6 +1411,7 @@ class _CardWithFocusState extends State<_CardWithFocus> {
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
           onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
           child: KeyedSubtree(
             key: _cardKey,
             child: widget.child(_isFocused, _isHovered),
