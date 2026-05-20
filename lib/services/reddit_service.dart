@@ -264,7 +264,7 @@ class RedditService {
     final queryParams = <String, String>{
       'limit': limit.toString(),
       'raw_json': '1',
-      if (allowNsfw) 'include_over_18': 'on',
+      'include_over_18': 'on',
     };
 
     if (after != null && after.isNotEmpty) {
@@ -310,7 +310,9 @@ class RedditService {
       'limit': limit.toString(),
       'raw_json': '1',
       'type': 'link',
-      if (allowNsfw) 'include_over_18': 'on',
+      // Always include NSFW for subreddit search — Reddit's search silently
+      // drops all results from NSFW subs without this flag, even with restrict_sr.
+      'include_over_18': 'on',
     };
 
     if (after != null && after.isNotEmpty) {
@@ -425,7 +427,7 @@ class RedditService {
         if (i > 0) await Future.delayed(_pageDelay);
 
         final uri = Uri.parse('$_baseUrl/r/$subreddit/random.json')
-            .replace(queryParameters: {'raw_json': '1'});
+            .replace(queryParameters: {'raw_json': '1', 'include_over_18': 'on'});
         final response = await _get(uri);
 
         if (response.statusCode != 200) {
