@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/imdb_parents_guide_service.dart';
 import '../widgets/home/home_theme.dart';
+import '../widgets/parents_guide_section.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
@@ -87,6 +89,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// (a tapped recommendation). null until/unless enrichment succeeds.
   StremioMeta? _enriched;
 
+  /// Parents guide data. null = not yet loaded; result with empty categories =
+  /// loaded but nothing to show.
+  ParentsGuideResult? _parentsGuide;
+
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
   StremioMeta get _item => _enriched ?? widget.item;
@@ -115,6 +121,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       }
       _loadRecommendations();
       _loadEnrichedMeta();
+      _loadParentsGuide();
     });
   }
 
@@ -163,6 +170,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     } catch (_) {
       // Non-critical enrichment — swallow and keep the original item.
     }
+  }
+
+  Future<void> _loadParentsGuide() async {
+    final imdbId = _item.effectiveImdbId;
+    if (imdbId == null) return;
+    try {
+      final guide = await ImdbParentsGuideService.fetch(imdbId);
+      if (guide != null && mounted) setState(() => _parentsGuide = guide);
+    } catch (_) {}
   }
 
   /// Loads recommendations after first paint so the rail never blocks the
@@ -333,8 +349,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       ..add(_buildActionRow(0.40));
     final d = _secDescription(0.50);
     if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
-    final q = _secQuickActions(0.58);
+    final q = _secQuickActions(0.54);
     if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
+    final pg = _secParentsGuide(0.58);
+    if (pg != null) children..add(SizedBox(height: t ? 12 : 22))..add(pg);
     final r = _secRecommendations(0.66);
     if (r != null) children..add(SizedBox(height: t ? 16 : 28))..add(r);
     return Column(
@@ -361,8 +379,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       ..add(_buildActionRow(0.40));
     final d = _secDescription(0.50);
     if (d != null) children..add(const SizedBox(height: 22))..add(d);
-    final q = _secQuickActions(0.58);
+    final q = _secQuickActions(0.54);
     if (q != null) children..add(const SizedBox(height: 26))..add(q);
+    final pg = _secParentsGuide(0.58);
+    if (pg != null) children..add(const SizedBox(height: 20))..add(pg);
     final r = _secRecommendations(0.66);
     if (r != null) children..add(const SizedBox(height: 28))..add(r);
     return Column(
@@ -467,6 +487,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         spacing: 7,
         runSpacing: 7,
         children: [for (final g in genres.take(5)) _GenreChip(label: g)],
+      ),
+    );
+  }
+
+  Widget? _secParentsGuide(double start) {
+    final guide = _parentsGuide;
+    if (guide == null || guide.isEmpty) return null;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: ParentsGuideSection(
+        guide: guide,
+        tv: widget.isTelevision,
+        dense: _tight,
       ),
     );
   }
