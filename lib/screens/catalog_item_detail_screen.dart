@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
@@ -93,6 +94,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// loaded but nothing to show.
   ParentsGuideResult? _parentsGuide;
 
+  /// Extra metadata from IMDb GraphQL (runtime, certificate, cast, etc.).
+  ImdbEnrichment? _imdbExtra;
+
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
   StremioMeta get _item => _enriched ?? widget.item;
@@ -122,6 +126,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadRecommendations();
       _loadEnrichedMeta();
       _loadParentsGuide();
+      _loadImdbEnrichment();
     });
   }
 
@@ -170,6 +175,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     } catch (_) {
       // Non-critical enrichment — swallow and keep the original item.
     }
+  }
+
+  Future<void> _loadImdbEnrichment() async {
+    final imdbId = _item.effectiveImdbId;
+    if (imdbId == null) return;
+    try {
+      final extra = await ImdbEnrichmentService.fetch(imdbId);
+      if (extra != null && mounted) setState(() => _imdbExtra = extra);
+    } catch (_) {}
   }
 
   Future<void> _loadParentsGuide() async {
@@ -340,15 +354,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       SizedBox(height: t ? 8 : 14),
       _secMeta(0.20),
     ];
-    final g = _secGenres(0.30);
+    final g = _secGenres(0.28);
     if (g != null) children..add(SizedBox(height: t ? 10 : 18))..add(g);
-    // Play/Sources sit high (after genres) so they're visible without
-    // scrolling, then the synopsis and quick-action grid.
+    final aw = _secAwards(0.32);
+    if (aw != null) children..add(SizedBox(height: t ? 6 : 10))..add(aw);
     children
       ..add(SizedBox(height: t ? 16 : 26))
-      ..add(_buildActionRow(0.40));
-    final d = _secDescription(0.50);
+      ..add(_buildActionRow(0.38));
+    final d = _secDescription(0.46);
     if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
+    final cr = _secCredits(0.50);
+    if (cr != null) children..add(SizedBox(height: t ? 10 : 18))..add(cr);
     final q = _secQuickActions(0.54);
     if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
     final pg = _secParentsGuide(0.58);
@@ -372,13 +388,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       const SizedBox(height: 10),
       _secMeta(0.20),
     ];
-    final g = _secGenres(0.30);
+    final g = _secGenres(0.28);
     if (g != null) children..add(const SizedBox(height: 14))..add(g);
+    final aw = _secAwards(0.32);
+    if (aw != null) children..add(const SizedBox(height: 8))..add(aw);
     children
       ..add(const SizedBox(height: 22))
-      ..add(_buildActionRow(0.40));
-    final d = _secDescription(0.50);
+      ..add(_buildActionRow(0.38));
+    final d = _secDescription(0.46);
     if (d != null) children..add(const SizedBox(height: 22))..add(d);
+    final cr = _secCredits(0.50);
+    if (cr != null) children..add(const SizedBox(height: 16))..add(cr);
     final q = _secQuickActions(0.54);
     if (q != null) children..add(const SizedBox(height: 26))..add(q);
     final pg = _secParentsGuide(0.58);
@@ -437,8 +457,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget _secMeta(double start) {
     final item = _item;
-    final rating = item.imdbRating;
-    final hasYear = item.year != null && item.year!.isNotEmpty;
+    final extra = _imdbExtra;
+    final rating = extra?.rating ?? item.imdbRating;
+    final year = item.year ?? extra?.year;
+    final hasYear = year != null && year.isNotEmpty;
+    final cert = extra?.certificate;
+    final runtime = extra?.runtime;
+    final voteCount = extra?.voteCountFormatted;
+    final hasVotes = voteCount != null && voteCount.isNotEmpty;
     return _Reveal(
       parent: _revealCtrl,
       start: start,
@@ -455,9 +481,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           runSpacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (hasYear) Text(item.year!),
-            if (rating != null) ...[
+            if (hasYear) Text(year),
+            if (cert != null) ...[
               if (hasYear) _dot(),
+              _CertBadge(label: cert),
+            ],
+            if (runtime != null) ...[
+              if (hasYear || cert != null) _dot(),
+              Text(runtime),
+            ],
+            if (rating != null) ...[
+              if (hasYear || cert != null || runtime != null) _dot(),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -468,6 +502,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                   ),
                   const SizedBox(width: 4),
                   Text(rating.toStringAsFixed(1)),
+                  if (hasVotes) ...[
+                    const SizedBox(width: 3),
+                    Text(
+                      '($voteCount)',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: _wide && !_tight ? 12 : 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -478,7 +523,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget? _secGenres(double start) {
-    final genres = _item.genres ?? const [];
+    var genres = _item.genres ?? const <String>[];
+    if (genres.isEmpty) genres = _imdbExtra?.genres ?? const [];
     if (genres.isEmpty) return null;
     return _Reveal(
       parent: _revealCtrl,
@@ -487,6 +533,99 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         spacing: 7,
         runSpacing: 7,
         children: [for (final g in genres.take(5)) _GenreChip(label: g)],
+      ),
+    );
+  }
+
+  Widget? _secAwards(double start) {
+    final extra = _imdbExtra;
+    if (extra == null || !extra.hasAwards) return null;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.emoji_events_rounded,
+            size: 15,
+            color: Color(0xFFFBBF24),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            extra.awardsLine!,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: _tight ? 11 : 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _secCredits(double start) {
+    final extra = _imdbExtra;
+    if (extra == null) return null;
+    final hasDirector = extra.director != null && extra.director!.isNotEmpty;
+    final hasStars = extra.stars.isNotEmpty;
+    if (!hasDirector && !hasStars) return null;
+
+    final labelStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.45),
+      fontSize: _tight ? 11 : 12,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.3,
+    );
+    final valueStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.85),
+      fontSize: _tight ? 11 : 12,
+      fontWeight: FontWeight.w500,
+    );
+
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hasDirector) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 70,
+                  child: Text('Director', style: labelStyle),
+                ),
+                Expanded(
+                  child: Text(extra.director!, style: valueStyle),
+                ),
+              ],
+            ),
+            if (hasStars) SizedBox(height: _tight ? 4 : 6),
+          ],
+          if (hasStars)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 70,
+                  child: Text('Stars', style: labelStyle),
+                ),
+                Expanded(
+                  child: Text(
+                    extra.stars.take(4).join(', '),
+                    style: valueStyle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -591,20 +730,43 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget? _secDescription(double start) {
-    final description = _item.description ?? '';
+    var description = _item.description ?? '';
+    if (description.isEmpty || description.length < 40) {
+      description = _imdbExtra?.plot ?? description;
+    }
     if (description.isEmpty) return null;
+    final tagline = _imdbExtra?.tagline;
     return _Reveal(
       parent: _revealCtrl,
       start: start,
-      child: _Description(
-        text: description,
-        wide: _wide,
-        dense: _tight,
-        collapsedLines: _tight ? 2 : 4,
-        expanded: _descriptionExpanded,
-        onToggle: () => setState(
-          () => _descriptionExpanded = !_descriptionExpanded,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (tagline != null && tagline.isNotEmpty) ...[
+            Text(
+              '"$tagline"',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: _tight ? 12 : (_wide ? 15 : 13),
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+                letterSpacing: 0.2,
+              ),
+            ),
+            SizedBox(height: _tight ? 6 : 10),
+          ],
+          _Description(
+            text: description,
+            wide: _wide,
+            dense: _tight,
+            collapsedLines: _tight ? 2 : 4,
+            expanded: _descriptionExpanded,
+            onToggle: () => setState(
+              () => _descriptionExpanded = !_descriptionExpanded,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -867,6 +1029,37 @@ class _BackdropState extends State<_Backdrop>
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Certificate badge ──────────────────────────────────────────────────────
+
+class _CertBadge extends StatelessWidget {
+  final String label;
+  const _CertBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.45),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.85),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+          height: 1.3,
+        ),
       ),
     );
   }
