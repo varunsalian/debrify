@@ -126,6 +126,7 @@ flutter:
 
   assets:
     - assets/app_icon.png
+    - assets/app_icon_foreground.png
     - assets/config/app_remote_config.json
     - assets/config/engines/
 
