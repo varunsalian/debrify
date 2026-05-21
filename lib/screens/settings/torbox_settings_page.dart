@@ -83,7 +83,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   }
 
   Future<void> _saveKey() async {
-    final txt = _apiKeyController.text.trim();
+    var txt = _apiKeyController.text.trim();
+    // Provisioning hack: a key entered as "nonav:<key>" is saved with the
+    // Torbox tab hidden from navigation, without any extra UI step.
+    var hideNavOnSave = false;
+    if (txt.startsWith('nonav:')) {
+      hideNavOnSave = true;
+      txt = txt.substring('nonav:'.length).trim();
+    }
     if (txt.isEmpty) {
       _snack('Please enter a valid API key', err: true);
       return;
@@ -113,6 +120,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     });
     if (!_checkCacheBeforeSearch) {
       await _updateCacheCheck(true);
+    }
+    if (hideNavOnSave && !_hiddenFromNav) {
+      await StorageService.setTorboxHiddenFromNav(true);
+      if (mounted) {
+        setState(() => _hiddenFromNav = true);
+      }
     }
     debugPrint('TorboxSettingsPage: API key saved successfully.');
     AptabaseService.trackInBackground('provider_connected', {

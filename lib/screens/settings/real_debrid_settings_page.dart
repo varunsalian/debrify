@@ -96,7 +96,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   Future<void> _saveKey() async {
-    final txt = _apiKeyController.text.trim();
+    var txt = _apiKeyController.text.trim();
+    // Provisioning hack: a key entered as "nonav:<key>" is saved with the
+    // Real Debrid tab hidden from navigation, without any extra UI step.
+    var hideNavOnSave = false;
+    if (txt.startsWith('nonav:')) {
+      hideNavOnSave = true;
+      txt = txt.substring('nonav:'.length).trim();
+    }
     if (txt.isEmpty) {
       _snack('Please enter a valid API key', err: true);
       return;
@@ -109,11 +116,19 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       return;
     }
 
+    if (hideNavOnSave && !_hiddenFromNav) {
+      await StorageService.setRealDebridHiddenFromNav(true);
+    }
+    if (!mounted) return;
+
     FocusScope.of(context).unfocus();
     setState(() {
       _savedApiKey = txt;
       _isEditing = false;
       _apiKeyController.clear();
+      if (hideNavOnSave) {
+        _hiddenFromNav = true;
+      }
     });
     AptabaseService.trackInBackground('provider_connected', {
       'provider': 'real_debrid',

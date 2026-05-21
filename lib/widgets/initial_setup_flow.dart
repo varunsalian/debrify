@@ -1845,7 +1845,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           current == _IntegrationType.realDebrid
           ? _realDebridController
           : _torboxController;
-      final String value = controller.text.trim();
+      String value = controller.text.trim();
+
+      // Provisioning hack: a key entered as "nonav:<key>" is saved with the
+      // provider's tab hidden from navigation, without any extra UI step.
+      var hideNavOnSave = false;
+      if (value.startsWith('nonav:')) {
+        hideNavOnSave = true;
+        value = value.substring('nonav:'.length).trim();
+      }
 
       if (value.isEmpty) {
         setState(() {
@@ -1880,6 +1888,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (!mounted) return;
 
       if (success) {
+        if (hideNavOnSave) {
+          if (current == _IntegrationType.realDebrid) {
+            await StorageService.setRealDebridHiddenFromNav(true);
+          } else if (current == _IntegrationType.torbox) {
+            await StorageService.setTorboxHiddenFromNav(true);
+          }
+        }
         setState(() {
           _isProcessing = false;
           _hasConfigured = true;
