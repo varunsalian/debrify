@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/trakt/trakt_calendar_entry.dart';
+import '../services/android_native_downloader.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
@@ -31,6 +32,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   bool _isAuth = true;
   bool _isLoading = true;
   bool _isChangingMonth = false;
+  bool _isTelevision = false;
   int _latestMonthChangeRequestId = 0;
 
   @override
@@ -39,6 +41,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final now = DateTime.now();
     _selectedYear = now.year;
     _selectedMonth = now.month;
+    _detectTelevision();
     _loadInitial();
   }
 
@@ -50,6 +53,11 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       node.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _detectTelevision() async {
+    final isTv = await AndroidNativeDownloader.isTelevision();
+    if (mounted) setState(() => _isTelevision = isTv);
   }
 
   Future<void> _loadInitial() async {
@@ -211,12 +219,14 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF060816),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Trakt Calendar'),
-      ),
+      appBar: _isTelevision
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              title: const Text('Trakt Calendar'),
+            ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -249,6 +259,8 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     }
 
     final days = _visibleDays;
+
+    if (_isTelevision) return _buildTvBody(days, isWide);
 
     return Center(
       child: ConstrainedBox(
@@ -286,6 +298,188 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTvBody(List<_AiringDay> days, bool isWide) {
+    final dayListWidget = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 160),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      child: _isChangingMonth
+          ? const Center(
+              key: ValueKey('changing-month'),
+              child: CircularProgressIndicator(),
+            )
+          : days.isEmpty
+          ? _EmptyMonthState(
+              key: ValueKey('empty-$_selectedYear-$_selectedMonth'),
+              monthLabel: _monthName(_selectedMonth),
+              year: _selectedYear,
+              compact: true,
+            )
+          : _buildDayList(days, isWide),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 340,
+            child: SingleChildScrollView(
+              child: _buildTvHeaderSurface(days),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(child: dayListWidget),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvHeaderSurface(List<_AiringDay> days) {
+    final monthLabel = '${_monthName(_selectedMonth)} $_selectedYear';
+    final summary = days.isEmpty
+        ? 'No episodes this month.'
+        : '${days.length} airing day${days.length == 1 ? '' : 's'} · $_episodeCount episode${_episodeCount == 1 ? '' : 's'}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF211017), Color(0xFF110A0F), Color(0xFF07090F)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        boxShadow: [
+          BoxShadow(
+            color: _kNetflixRed.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: _kNetflixRed.withValues(alpha: 0.14),
+            ),
+            child: const Text(
+              'YOUR TRAKT SCHEDULE',
+              style: TextStyle(
+                color: Color(0xFFFFC4C8),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            monthLabel,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Browse only the days that have episodes airing.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 11,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _SelectorField(
+                  label: 'Year',
+                  value: _selectedYear,
+                  focusNode: _yearFocusNode,
+                  dense: true,
+                  items: [
+                    for (final year in _yearOptions)
+                      DropdownMenuItem<int>(
+                        value: year,
+                        child: Text('$year'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    _selectMonth(year: value);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SelectorField(
+                  label: 'Month',
+                  value: _selectedMonth,
+                  focusNode: _monthFocusNode,
+                  dense: true,
+                  items: [
+                    for (int i = 1; i <= 12; i++)
+                      DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(_monthName(i)),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    _selectMonth(month: value, focusFirstDay: true);
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              color: _kNetflixRed.withValues(alpha: 0.14),
+              border: Border.all(
+                color: _kNetflixRed.withValues(alpha: 0.22),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.bolt_rounded,
+                  size: 13,
+                  color: Color(0xFFFFB3B8),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    summary,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -509,13 +703,14 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       key: ValueKey('list-$_selectedYear-$_selectedMonth'),
       padding: EdgeInsets.zero,
       itemCount: days.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => SizedBox(height: _isTelevision ? 8 : 12),
       itemBuilder: (context, index) {
         final airingDay = days[index];
         return _AiringDayCard(
           day: airingDay.day,
           entries: airingDay.entries,
           isWide: isWide,
+          isTelevision: _isTelevision,
           focusNode: _focusNodeForDay(airingDay.day),
           onOpen: () => _openDaySheet(airingDay.day, airingDay.entries),
           onArrowUp: index == 0
@@ -627,11 +822,13 @@ class _AiringDayCard extends StatelessWidget {
     required this.onOpen,
     required this.onArrowUp,
     required this.onArrowDown,
+    this.isTelevision = false,
   });
 
   final DateTime day;
   final List<TraktCalendarEntry> entries;
   final bool isWide;
+  final bool isTelevision;
   final FocusNode focusNode;
   final VoidCallback onOpen;
   final VoidCallback onArrowUp;
@@ -681,7 +878,7 @@ class _AiringDayCard extends StatelessWidget {
             duration: const Duration(milliseconds: 140),
             curve: Curves.easeOutCubic,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(isTelevision ? 16 : 26),
               border: Border.all(
                 color: isFocused
                     ? const Color(0xFFE85A63)
@@ -711,11 +908,13 @@ class _AiringDayCard extends StatelessWidget {
               ],
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(26),
+              borderRadius: BorderRadius.circular(isTelevision ? 16 : 26),
               onTap: onOpen,
               child: Padding(
-                padding: EdgeInsets.all(isWide ? 18 : 14),
-                child: isWide
+                padding: EdgeInsets.all(isTelevision ? 10 : (isWide ? 18 : 14)),
+                child: isTelevision
+                    ? _buildTvLayout(accent)
+                    : isWide
                     ? _buildWideLayout(accent)
                     : _buildCompactLayout(accent),
               ),
@@ -856,6 +1055,53 @@ class _AiringDayCard extends StatelessWidget {
     );
   }
 
+  Widget _buildTvLayout(Color accent) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DateBadge(day: day, accent: accent, compact: true, tv: true),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _formatHeadline(day),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  _CountPill(count: entries.length, accent: accent, compact: true),
+                ],
+              ),
+              const SizedBox(height: 6),
+              for (final entry in entries.take(3))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _EpisodeRow(entry: entry, compact: true),
+                ),
+              if (entries.length > 3)
+                Text(
+                  '+${entries.length - 3} more',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.58),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   static String _formatHeadline(DateTime day) {
     const weekdays = [
       'Monday',
@@ -905,20 +1151,26 @@ class _DateBadge extends StatelessWidget {
     required this.day,
     required this.accent,
     this.compact = false,
+    this.tv = false,
   });
 
   final DateTime day;
   final Color accent;
   final bool compact;
+  final bool tv;
 
   @override
   Widget build(BuildContext context) {
     const shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final w = tv ? 48.0 : (compact ? 64.0 : 78.0);
+    final vPad = tv ? 7.0 : (compact ? 10.0 : 12.0);
+    final dayFontSize = tv ? 18.0 : (compact ? 24.0 : 30.0);
+    final labelFontSize = tv ? 9.0 : (compact ? 11.0 : 12.0);
     return Container(
-      width: compact ? 64 : 78,
-      padding: EdgeInsets.symmetric(vertical: compact ? 10 : 12),
+      width: w,
+      padding: EdgeInsets.symmetric(vertical: vPad),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(tv ? 12 : 20),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -928,8 +1180,8 @@ class _DateBadge extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: accent.withValues(alpha: 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            blurRadius: tv ? 8 : 16,
+            offset: Offset(0, tv ? 4 : 8),
           ),
         ],
       ),
@@ -940,17 +1192,17 @@ class _DateBadge extends StatelessWidget {
             '${day.day}',
             style: TextStyle(
               color: Colors.white,
-              fontSize: compact ? 24 : 30,
+              fontSize: dayFontSize,
               fontWeight: FontWeight.w900,
               height: 1.0,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             shortDays[day.weekday - 1],
             style: TextStyle(
               color: accent,
-              fontSize: compact ? 11 : 12,
+              fontSize: labelFontSize,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -961,15 +1213,19 @@ class _DateBadge extends StatelessWidget {
 }
 
 class _CountPill extends StatelessWidget {
-  const _CountPill({required this.count, required this.accent});
+  const _CountPill({required this.count, required this.accent, this.compact = false});
 
   final int count;
   final Color accent;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 10,
+        vertical: compact ? 3 : 5,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: accent.withValues(alpha: 0.16),
@@ -979,7 +1235,7 @@ class _CountPill extends StatelessWidget {
         '$count episode${count == 1 ? '' : 's'}',
         style: TextStyle(
           color: accent,
-          fontSize: 12,
+          fontSize: compact ? 10 : 12,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -988,10 +1244,11 @@ class _CountPill extends StatelessWidget {
 }
 
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.entry, this.roomy = false});
+  const _EpisodeRow({required this.entry, this.roomy = false, this.compact = false});
 
   final TraktCalendarEntry entry;
   final bool roomy;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1003,6 +1260,65 @@ class _EpisodeRow extends StatelessWidget {
     final detail = entry.episodeTitle == null || entry.episodeTitle!.isEmpty
         ? code
         : '$code · ${entry.episodeTitle}';
+
+    if (compact) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: const Color(0xFF181922),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        child: Row(
+          children: [
+            _PosterThumb(posterUrl: entry.posterUrl, width: 28, height: 40, radius: 7),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.showTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.68),
+                      fontSize: 10,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: accent.withValues(alpha: 0.14),
+                border: Border.all(color: accent.withValues(alpha: 0.22)),
+              ),
+              child: Text(
+                time,
+                style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: EdgeInsets.all(roomy ? 12 : 10),
       decoration: BoxDecoration(
@@ -1253,53 +1569,56 @@ class _EmptyMonthState extends StatelessWidget {
     super.key,
     required this.monthLabel,
     required this.year,
+    this.compact = false,
   });
 
   final String monthLabel;
   final int year;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(compact ? 18 : 28),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         color: const Color(0xFF0A0F1D).withValues(alpha: 0.96),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(compact ? 16 : 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
         children: [
           Container(
-            width: 68,
-            height: 68,
+            width: compact ? 48 : 68,
+            height: compact ? 48 : 68,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(compact ? 14 : 22),
               color: Colors.white.withValues(alpha: 0.05),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.event_busy_rounded,
               color: Colors.white70,
-              size: 30,
+              size: compact ? 22 : 30,
             ),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: compact ? 12 : 18),
           Text(
             'Nothing airing in $monthLabel $year',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 24,
+              fontSize: compact ? 16 : 24,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Try another month or year. This screen only lists days that actually have episodes, so empty months stay clean.',
+            'Try another month or year.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.66),
-              fontSize: 14,
+              fontSize: compact ? 12 : 14,
               height: 1.4,
             ),
           ),
