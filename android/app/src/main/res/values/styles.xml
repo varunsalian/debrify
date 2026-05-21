@@ -11,7 +11,7 @@
          
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:windowBackground">@color/splash_background</item>
     </style>
     <style name="DebrifyTvChipButton" parent="Widget.AppCompat.Button">
         <item name="android:background">@drawable/debrify_tv_premium_button_bg</item>
