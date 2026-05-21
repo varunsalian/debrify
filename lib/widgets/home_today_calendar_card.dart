@@ -14,9 +14,10 @@ import 'home_trakt_now_playing_card.dart';
 /// Three visible states:
 /// - **Hidden**: Trakt not connected OR nothing airing in the next 7 days
 /// - **Loading**: thin skeleton while first fetch is in flight
-/// - **Hero**: rich card showing a featured episode (today's first, or the
-///   next upcoming if today is empty) plus a 7-day dot strip at the bottom
-///   for week-at-a-glance multi-show awareness
+/// - **Hero**: full-bleed fanart card showing a featured episode (today's
+///   first, or the next upcoming if today is empty) with a countdown pill,
+///   a mini date tile, and a 7-day timeline strip for week-at-a-glance
+///   multi-show awareness
 class HomeTodayCalendarCard extends StatefulWidget {
   const HomeTodayCalendarCard({
     super.key,
@@ -228,32 +229,42 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
   // ─── Skeleton ───────────────────────────────────────────────────────────
 
   Widget _buildSkeleton() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Card(
-        child: SizedBox(
-          height: 108,
-          child: Padding(
-            padding: EdgeInsets.all(14),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 52,
-                  height: 78,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: Color(0x22FFFFFF)),
-                  ),
-                ),
-                SizedBox(width: 14),
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: Color(0x11FFFFFF)),
-                  ),
-                ),
-              ],
-            ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        height: 210,
+        decoration: BoxDecoration(
+          color: HomeTheme.cardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _skeletonBar(width: 96, height: 12),
+              const SizedBox(height: 10),
+              _skeletonBar(width: 200, height: 22),
+              const SizedBox(height: 10),
+              _skeletonBar(width: 140, height: 12),
+              const SizedBox(height: 18),
+              _skeletonBar(width: double.infinity, height: 4),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _skeletonBar({required double width, required double height}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(height / 2),
       ),
     );
   }
@@ -263,7 +274,7 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
   /// Soft accent reserved for the focus ring only.
   static const Color _kFocusAccent = HomeTheme.accent;
 
-  /// Breakpoint above which we render bigger poster + bigger type.
+  /// Breakpoint above which we render bigger type and a taller card.
   static const double _kWideBreakpoint = 720;
 
   /// Build the metahub fanart URL for a show. Returns null when imdbId missing.
@@ -280,16 +291,13 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
   }) {
     final featured = dayEntries.first;
     final extraOnDay = dayEntries.length - 1;
-    final label = isToday
-        ? 'TONIGHT'
-        : 'UPCOMING · ${_relativeDayLabel(featuredDay).toUpperCase()}';
-    final time = _formatTime(featured.firstAiredLocal);
     final badge = featured.isNewShow
         ? 'NEW SHOW'
         : featured.isSeasonPremiere
         ? 'SEASON PREMIERE'
         : null;
     final fanartUrl = _fanartUrlFor(featured);
+    final showColor = _colorForShow(featured.showTitle);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -321,15 +329,25 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
             final hasFocus = Focus.of(ctx).hasFocus;
             return LayoutBuilder(
               builder: (_, constraints) {
-                final wide = constraints.maxWidth >= _kWideBreakpoint;
+                final w = constraints.maxWidth;
+                final wide = w >= _kWideBreakpoint;
+                // Card height scales with width on phones, capped on tablets
+                // and TVs so it never becomes a billboard.
+                final height = wide
+                    ? 250.0
+                    : (w * 0.62).clamp(196.0, 240.0);
+                final pad = wide ? 18.0 : 14.0;
+                final titleSize = wide ? 27.0 : 21.0;
+
                 return Container(
+                  height: height,
                   decoration: BoxDecoration(
                     color: HomeTheme.cardBg,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: hasFocus
                           ? _kFocusAccent.withValues(alpha: 0.85)
-                          : Colors.white.withValues(alpha: 0.05),
+                          : Colors.white.withValues(alpha: 0.06),
                       width: hasFocus ? 2 : 1,
                     ),
                     boxShadow: [
@@ -345,95 +363,142 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
                           spreadRadius: 1,
                         ),
                     ],
-                    image: fanartUrl != null
-                        ? DecorationImage(
-                            image: NetworkImage(fanartUrl),
-                            fit: BoxFit.cover,
-                            alignment: Alignment.centerRight,
-                            onError: (_, __) {},
-                          )
-                        : null,
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(19),
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: _openFullCalendar,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            // Cinematic scrim: pure card-bg on the left
-                            // fading to transparent on the right so the
-                            // fanart breathes. No tinted accent.
-                            gradient: LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                HomeTheme.cardBg,
-                                HomeTheme.cardBg.withValues(alpha: 0.92),
-                                HomeTheme.cardBg.withValues(alpha: 0.45),
-                                HomeTheme.cardBg.withValues(alpha: 0.0),
-                              ],
-                              stops: const [0.0, 0.35, 0.7, 1.0],
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Full-bleed fanart (or a show-tinted gradient
+                            // fallback when no artwork is available).
+                            _background(
+                              fanartUrl,
+                              featured.posterUrl,
+                              showColor,
                             ),
-                          ),
-                          child: IntrinsicHeight(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const SizedBox(width: 16),
-                                // Poster
-                                Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    vertical: wide ? 20 : 16,
-                                  ),
-                                  child: _poster(featured, big: wide),
+                            // Diagonal scrim — keeps the top-right of the
+                            // image readable while anchoring text bottom-left.
+                            const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomLeft,
+                                  end: Alignment.topRight,
+                                  colors: [
+                                    Color(0xF0000000),
+                                    Color(0x8C000000),
+                                    Color(0x1F000000),
+                                  ],
+                                  stops: [0.0, 0.55, 1.0],
                                 ),
-                                const SizedBox(width: 16),
-                                // Featured text column. On wide screens it's
-                                // capped so the rest of the row becomes reveal
-                                // space for the fanart background. On narrow
-                                // it flexes to fill available width.
-                                if (wide)
-                                  SizedBox(
-                                    width: 320,
-                                    child: _buildFeaturedColumn(
-                                      label: label,
-                                      extraOnDay: extraOnDay,
-                                      featured: featured,
-                                      time: time,
-                                      badge: badge,
-                                      wide: wide,
-                                    ),
-                                  )
-                                else
-                                  Expanded(
-                                    child: _buildFeaturedColumn(
-                                      label: label,
-                                      extraOnDay: extraOnDay,
-                                      featured: featured,
-                                      time: time,
-                                      badge: badge,
-                                      wide: wide,
-                                    ),
-                                  ),
-                                // Wide screens only: Spacer eats remaining
-                                // horizontal space so fanart shows through.
-                                if (wide) const Spacer(),
-                                // Chevron on far right
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    right: 12,
-                                    left: 6,
-                                  ),
-                                  child: Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
+                            // Extra bottom darkening so the timeline + title
+                            // stay crisp over busy artwork.
+                            const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Color(0xCC000000),
+                                    Color(0x00000000),
+                                  ],
+                                  stops: [0.0, 0.6],
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.all(pad),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _dateTile(featuredDay),
+                                      const Spacer(),
+                                      _countdownPill(featured.firstAiredLocal),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        isToday ? 'AIRING TODAY' : 'UP NEXT',
+                                        style: TextStyle(
+                                          color: showColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.8,
+                                        ),
+                                      ),
+                                      if (extraOnDay > 0)
+                                        Text(
+                                          '  ·  +$extraOnDay MORE',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.45,
+                                            ),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  SizedBox(height: wide ? 6 : 4),
+                                  Text(
+                                    featured.showTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: titleSize,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                      height: 1.05,
+                                    ),
+                                  ),
+                                  SizedBox(height: wide ? 6 : 4),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          'S${featured.seasonNumber.toString().padLeft(2, '0')}'
+                                          'E${featured.episodeNumber.toString().padLeft(2, '0')}'
+                                          ' · ${_formatTime(featured.firstAiredLocal)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.7,
+                                            ),
+                                            fontSize: wide ? 13 : 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      if (badge != null) ...[
+                                        const SizedBox(width: 8),
+                                        _pill(
+                                          badge,
+                                          accent: const Color(0xFFF59E0B),
+                                          dense: true,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  SizedBox(height: wide ? 14 : 11),
+                                  _buildWeekTimeline(),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -447,127 +512,113 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
     );
   }
 
-  Widget _buildFeaturedColumn({
-    required String label,
-    required int extraOnDay,
-    required TraktCalendarEntry featured,
-    required String time,
-    required String? badge,
-    required bool wide,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: wide ? 14 : 12),
+  /// Full-bleed background image. Falls back to the show poster, and finally
+  /// to a show-tinted gradient when no artwork resolves.
+  Widget _background(String? fanartUrl, String? posterUrl, Color showColor) {
+    final url = fanartUrl ?? posterUrl;
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [showColor.withValues(alpha: 0.5), HomeTheme.cardBg],
+        ),
+      ),
+    );
+    if (url == null) return fallback;
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+
+  /// Compact stacked weekday + day-number tile.
+  Widget _dateTile(DateTime day) {
+    const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    return Container(
+      width: 48,
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Label — clean uppercase editorial type, no chip
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.6,
-                  ),
-                ),
-              ),
-              if (extraOnDay > 0) ...[
-                Text(
-                  '  ·  +$extraOnDay MORE',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          SizedBox(height: wide ? 10 : 8),
-          // Show title — bolder, tighter for cinematic feel
           Text(
-            featured.showTitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: wide ? 22 : 18,
+            weekdays[day.weekday - 1],
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 9,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              height: 1.1,
+              letterSpacing: 1.2,
             ),
           ),
-          SizedBox(height: wide ? 4 : 2),
-          // Episode line
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  'S${featured.seasonNumber.toString().padLeft(2, '0')}E${featured.episodeNumber.toString().padLeft(2, '0')} · $time',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontSize: wide ? 13 : 12,
-                  ),
-                ),
-              ),
-              if (badge != null) ...[
-                const SizedBox(width: 6),
-                _pill(badge, accent: const Color(0xFFF59E0B), dense: true),
-              ],
-            ],
+          const SizedBox(height: 1),
+          Text(
+            '${day.day}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              height: 1.0,
+            ),
           ),
-          const Spacer(),
-          // Week-at-a-glance dots
-          _buildWeekDots(),
         ],
       ),
     );
   }
 
-  Widget _poster(TraktCalendarEntry e, {bool big = false}) {
-    final w = big ? 86.0 : 64.0;
-    final h = big ? 128.0 : 96.0;
-    final placeholder = Container(
-      width: w,
-      height: h,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(Icons.tv_rounded, size: big ? 32 : 24, color: Colors.white30),
-    );
-    if (e.posterUrl == null) return placeholder;
+  /// Pill showing time-until-airing, e.g. "IN 4H 20M" / "TOMORROW".
+  Widget _countdownPill(DateTime airTime) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.schedule_rounded,
+            size: 13,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _countdownLabel(airTime),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          e.posterUrl!,
-          width: w,
-          height: h,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => placeholder,
-        ),
-      ),
     );
+  }
+
+  String _countdownLabel(DateTime airTime) {
+    final now = DateTime.now();
+    final diff = airTime.difference(now);
+    if (diff.isNegative) return 'AIRED';
+    if (diff.inMinutes < 60) return 'IN ${diff.inMinutes}M';
+    if (diff.inHours < 24) {
+      final h = diff.inHours;
+      final m = diff.inMinutes % 60;
+      return m > 0 ? 'IN ${h}H ${m}M' : 'IN ${h}H';
+    }
+    final today = DateTime(now.year, now.month, now.day);
+    final airDay = DateTime(airTime.year, airTime.month, airTime.day);
+    final days = airDay.difference(today).inDays;
+    if (days <= 1) return 'TOMORROW';
+    return 'IN $days DAYS';
   }
 
   Widget _pill(
@@ -604,53 +655,61 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
     );
   }
 
-  Widget _buildWeekDots() {
+  /// 7-day strip rendered as a segmented timeline: each day is a bar that
+  /// fills with its show's color when something airs. Today's label is
+  /// emphasized so the week reads at a glance.
+  Widget _buildWeekTimeline() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    const weekdayInitials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const initials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: List.generate(7, (i) {
         final day = today.add(Duration(days: i));
         final dayKey = DateTime(day.year, day.month, day.day);
         final entries = _grouped[dayKey] ?? const <TraktCalendarEntry>[];
         final hasEpisodes = entries.isNotEmpty;
-        final isTodayDot = i == 0;
+        final isTodayCol = i == 0;
+        final barColor = hasEpisodes
+            ? _colorForShow(entries.first.showTitle)
+            : Colors.white.withValues(alpha: 0.12);
 
-        return Padding(
-          padding: const EdgeInsets.only(right: 7),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                weekdayInitials[day.weekday - 1],
-                style: TextStyle(
-                  color: isTodayDot
-                      ? Colors.white.withValues(alpha: 0.8)
-                      : Colors.white.withValues(alpha: 0.35),
-                  fontSize: 8,
-                  fontWeight: isTodayDot ? FontWeight.w700 : FontWeight.w500,
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: i == 6 ? 0 : 5),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: barColor,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: hasEpisodes
+                        ? [
+                            BoxShadow(
+                              color: barColor.withValues(alpha: 0.55),
+                              blurRadius: 6,
+                            ),
+                          ]
+                        : null,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: hasEpisodes
-                      ? _colorForShow(entries.first.showTitle)
-                      : Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: isTodayDot
-                      ? Border.all(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          width: 1,
-                        )
-                      : null,
+                const SizedBox(height: 5),
+                Text(
+                  initials[day.weekday - 1],
+                  style: TextStyle(
+                    color: isTodayCol
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.4),
+                    fontSize: 8.5,
+                    fontWeight: isTodayCol
+                        ? FontWeight.w800
+                        : FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       }),
@@ -667,16 +726,6 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
     if (result != null) {
       widget.onItemSelected(result);
     }
-  }
-
-  String _relativeDayLabel(DateTime d) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final diff = d.difference(today).inDays;
-    if (diff == 0) return 'today';
-    if (diff == 1) return 'tomorrow';
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return weekdays[d.weekday - 1];
   }
 
   String _formatTime(DateTime local) {
