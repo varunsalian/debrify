@@ -659,8 +659,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
             displayProgress: _displayProgress(channel, np),
             hideNowPlaying: widget.hideNowPlaying,
             loading: widget.loadingChannelIds.contains(channel.id),
-            showSurfHint: true,
             onOpenList: _openChannelList,
+            onOpenDetail: () => widget.onOpenDetail(channel),
           ),
         );
       },
@@ -683,11 +683,12 @@ class _Stage extends StatelessWidget {
   final double displayProgress;
   final bool hideNowPlaying;
   final bool loading;
-  final bool showSurfHint;
 
   /// When set (mobile), the top-right pill becomes a tappable "Channels"
   /// button that opens the all-channels overview list.
   final VoidCallback? onOpenList;
+
+  final VoidCallback? onOpenDetail;
 
   const _Stage({
     required this.channel,
@@ -697,8 +698,8 @@ class _Stage extends StatelessWidget {
     required this.displayProgress,
     required this.hideNowPlaying,
     required this.loading,
-    this.showSurfHint = false,
     this.onOpenList,
+    this.onOpenDetail,
   });
 
   @override
@@ -845,11 +846,14 @@ class _Stage extends StatelessWidget {
               ),
             ),
           ),
-          if (showSurfHint)
+          if (onOpenDetail != null)
             Positioned(
               top: 14,
               right: 18,
-              child: _hintPill(),
+              child: GestureDetector(
+                onTap: onOpenDetail,
+                child: _detailsPill(),
+              ),
             ),
           if (onOpenList != null)
             Positioned(
@@ -1105,17 +1109,18 @@ class _Stage extends StatelessWidget {
     );
   }
 
-  Widget _hintPill() {
+  Widget _detailsPill() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
+        color: Colors.black.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: const [
-        Icon(Icons.swipe_vertical_rounded, size: 15, color: Colors.white70),
+        Icon(Icons.info_outline_rounded, size: 15, color: Colors.white70),
         SizedBox(width: 6),
-        Text('Surf',
+        Text('Details',
             style: TextStyle(
                 color: Colors.white70,
                 fontSize: 11.5,
