@@ -5428,6 +5428,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val model = payload ?: return
 
+        // Capture playback position + current item identity so the new source
+        // resumes the same content instead of restarting from the beginning.
+        val resumePositionMs = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+        val currentItem = model.items.getOrNull(currentIndex)
+        val resumeSeason = currentItem?.season
+        val resumeEpisode = currentItem?.episode
+
         // Parse metadata entry (first item with __meta__ flag)
         var contentType = model.contentType
         val itemMaps = mutableListOf<Map<*, *>>()
@@ -5473,6 +5480,44 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
 
+        // Find which item in the new source's playlist matches what the user was
+        // watching, so we resume the same content rather than restarting at file 0.
+        //  - Single item: unambiguous — it's the content (movie, or one episode).
+        //  - Series (multi-file): match by season+episode.
+        //  - Collection (multi-file movie torrent): match by title; if names
+        //    differ across sources, keep the same list position but don't carry
+        //    the timestamp onto what could be a different movie.
+        var targetIndex = 0
+        var matchedSameContent = false
+        if (newItems.size == 1) {
+            targetIndex = 0
+            matchedSameContent = true
+        } else if (resumeSeason != null && resumeEpisode != null) {
+            val matched = newItems.indexOfFirst {
+                it.season == resumeSeason && it.episode == resumeEpisode
+            }
+            if (matched >= 0) {
+                targetIndex = matched
+                matchedSameContent = true
+            }
+        } else if (currentItem != null) {
+            val byTitle = newItems.indexOfFirst {
+                it.title.isNotEmpty() && it.title == currentItem.title
+            }
+            if (byTitle >= 0) {
+                targetIndex = byTitle
+                matchedSameContent = true
+            } else {
+                targetIndex = currentIndex.coerceIn(0, newItems.lastIndex)
+            }
+        }
+        if (matchedSameContent && resumePositionMs > 0 && targetIndex in newItems.indices) {
+            newItems[targetIndex] = newItems[targetIndex].copy(resumePositionMs = resumePositionMs)
+            android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - resuming item $targetIndex at $resumePositionMs ms")
+        } else {
+            android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - playing item $targetIndex from start (matchedSameContent=$matchedSameContent)")
+        }
+
         // Update source state
         currentStremioSourceIndex = sourceIndex
         updateStremioQualityBadge()
@@ -5505,8 +5550,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             titleHandler.postDelayed(hideTitleRunnable, TITLE_FADE_DELAY_MS)
         }
 
-        // Start playing from the first item
-        playItem(0)
+        // Resume the previously-playing item; the captured position is carried
+        // on the item above as resumePositionMs. Suppress trakt/startAt percent
+        // seeks so they can't override our explicit resume position.
+        percentSeekApplied = true
+        playItem(targetIndex)
 
         // Hide sources panel once playback is ready (or on timeout)
         hideSourcesPanelWhenReady()
