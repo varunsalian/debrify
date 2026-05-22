@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
+import '../../../services/imdb_parents_guide_service.dart';
 import '../stremio_tv_service.dart';
 
 /// "The Tuner" — a cinematic channel-surfing experience for Stremio TV.
@@ -672,7 +673,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 // The Stage — the cinematic now-playing hero.
 // =========================================================================
 
-class _Stage extends StatelessWidget {
+class _Stage extends StatefulWidget {
   final StremioTvChannel channel;
   final Color ident;
   final StremioTvNowPlaying? nowPlaying;
@@ -703,17 +704,49 @@ class _Stage extends StatelessWidget {
   });
 
   @override
+  State<_Stage> createState() => _StageState();
+}
+
+class _StageState extends State<_Stage> {
+  ParentsGuideResult? _parentsGuide;
+  String? _loadedImdbId;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeLoadParentsGuide();
+  }
+
+  @override
+  void didUpdateWidget(_Stage old) {
+    super.didUpdateWidget(old);
+    _maybeLoadParentsGuide();
+  }
+
+  void _maybeLoadParentsGuide() {
+    final imdbId = widget.nowPlaying?.item.effectiveImdbId;
+    if (imdbId == null || imdbId == _loadedImdbId) return;
+    _loadedImdbId = imdbId;
+    _parentsGuide = null;
+    ImdbParentsGuideService.fetch(imdbId).then((result) {
+      if (mounted && result != null && _loadedImdbId == imdbId) {
+        setState(() => _parentsGuide = result);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final item = nowPlaying?.item;
+    final item = widget.nowPlaying?.item;
     final bg = item?.background ?? item?.poster;
-    final blurArt = hideNowPlaying;
+    final blurArt = widget.hideNowPlaying;
 
     // Only the mobile pager passes onOpenList. There the content sits at
     // the very bottom of a full-screen page, so it must clear the nav bar
     // *and* any floating system button (e.g. Samsung's assistant/Menu
     // pill). The wide TV Stage keeps the slim inset so it doesn't steal
     // height from the Dial below it.
-    final isNarrow = onOpenList != null;
+    final isNarrow = widget.onOpenList != null;
     final bottomInset = isNarrow
         ? 30.0 + MediaQuery.of(context).padding.bottom + 72.0
         : 30.0;
@@ -757,7 +790,7 @@ class _Stage extends StatelessWidget {
                 colors: [
                   const Color(0xFF09090F).withValues(alpha: 0.96),
                   const Color(0xFF09090F).withValues(alpha: 0.55),
-                  ident.withValues(alpha: 0.10),
+                  widget.ident.withValues(alpha: 0.10),
                 ],
                 stops: const [0.0, 0.55, 1.0],
               ),
@@ -794,7 +827,7 @@ class _Stage extends StatelessWidget {
                 const SizedBox(height: 14),
                 if (item == null)
                   _tuningState()
-                else if (hideNowPlaying) ...[
+                else if (widget.hideNowPlaying) ...[
                   // Spoiler-free: never reveal the title/meta/up-next in
                   // text. The live clock is not a spoiler, so it stays.
                   _hiddenState(),
@@ -818,13 +851,18 @@ class _Stage extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   _metaRow(item),
+                  if (_parentsGuide != null &&
+                      !_parentsGuide!.isEmpty) ...[
+                    const SizedBox(height: 10),
+                    _parentsGuideLabels(isNarrow),
+                  ],
                   if (item.description != null &&
                       item.description!.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
                     _StageDescription(
                       text: item.description!.trim(),
                       title: item.name,
-                      ident: ident,
+                      ident: widget.ident,
                       // Only the mobile pager can tap "Read more"; the TV
                       // Stage isn't focusable (details live in the Dial
                       // long-press sheet), so it keeps the slim 2-line
@@ -834,7 +872,7 @@ class _Stage extends StatelessWidget {
                   ],
                   const SizedBox(height: 18),
                   _liveBar(),
-                  if (nextPlaying != null) ...[
+                  if (widget.nextPlaying != null) ...[
                     const SizedBox(height: 12),
                     _upNext(),
                   ],
@@ -846,21 +884,21 @@ class _Stage extends StatelessWidget {
               ),
             ),
           ),
-          if (onOpenDetail != null)
+          if (widget.onOpenDetail != null)
             Positioned(
               top: 14,
               right: 18,
               child: GestureDetector(
-                onTap: onOpenDetail,
+                onTap: widget.onOpenDetail,
                 child: _detailsPill(),
               ),
             ),
-          if (onOpenList != null)
+          if (widget.onOpenList != null)
             Positioned(
               top: 14,
               left: 18,
               child: GestureDetector(
-                onTap: onOpenList,
+                onTap: widget.onOpenList,
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -889,6 +927,18 @@ class _Stage extends StatelessWidget {
     );
   }
 
+  Widget _parentsGuideLabels(bool narrow) {
+    final cats = _parentsGuide!.categories;
+    return Wrap(
+      spacing: narrow ? 6 : 8,
+      runSpacing: narrow ? 4 : 6,
+      children: [
+        for (final cat in cats)
+          _PgBadge(label: cat.label, severity: cat.severity, narrow: narrow),
+      ],
+    );
+  }
+
   Widget _channelTag() {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -896,17 +946,17 @@ class _Stage extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
-            color: ident,
+            color: widget.ident,
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                  color: ident.withValues(alpha: 0.55),
+                  color: widget.ident.withValues(alpha: 0.55),
                   blurRadius: 16,
                   spreadRadius: 1)
             ],
           ),
           child: Text(
-            'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
+            'CH ${widget.channel.channelNumber.toString().padLeft(2, '0')}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 12,
@@ -918,7 +968,7 @@ class _Stage extends StatelessWidget {
         const SizedBox(width: 10),
         Flexible(
           child: Text(
-            channel.displayName.toUpperCase(),
+            widget.channel.displayName.toUpperCase(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -988,11 +1038,11 @@ class _Stage extends StatelessWidget {
       );
 
   Widget _liveBar() {
-    final np = nowPlaying;
-    final progress = displayProgress;
+    final np = widget.nowPlaying;
+    final progress = widget.displayProgress;
     return Row(
       children: [
-        _LivePip(color: ident),
+        _LivePip(color: widget.ident),
         const SizedBox(width: 8),
         const Text('LIVE',
             style: TextStyle(
@@ -1009,7 +1059,7 @@ class _Stage extends StatelessWidget {
               value: progress.clamp(0.0, 1.0),
               minHeight: 4,
               backgroundColor: Colors.white.withValues(alpha: 0.16),
-              valueColor: AlwaysStoppedAnimation(ident),
+              valueColor: AlwaysStoppedAnimation(widget.ident),
             ),
           ),
         ),
@@ -1030,7 +1080,7 @@ class _Stage extends StatelessWidget {
   }
 
   Widget _upNext() {
-    final n = nextPlaying!;
+    final n = widget.nextPlaying!;
     return Opacity(
       opacity: 0.72,
       child: Row(
@@ -1038,7 +1088,7 @@ class _Stage extends StatelessWidget {
           Text(
             'UP NEXT',
             style: TextStyle(
-              color: ident,
+              color: widget.ident,
               fontSize: 11,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.6,
@@ -1070,12 +1120,12 @@ class _Stage extends StatelessWidget {
           height: 16,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation(ident),
+            valueColor: AlwaysStoppedAnimation(widget.ident),
           ),
         ),
         const SizedBox(width: 14),
         Text(
-          loading ? 'Tuning in…' : 'No broadcast on this channel',
+          widget.loading ? 'Tuning in…' : 'No broadcast on this channel',
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.7),
             fontSize: 16,
@@ -1127,6 +1177,75 @@ class _Stage extends StatelessWidget {
                 fontWeight: FontWeight.w700)),
       ]),
     );
+  }
+}
+
+class _PgBadge extends StatelessWidget {
+  final String label;
+  final String severity;
+  final bool narrow;
+
+  const _PgBadge({
+    required this.label,
+    required this.severity,
+    this.narrow = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _severityColor(severity);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: narrow ? 7 : 9,
+        vertical: narrow ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: color.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontSize: narrow ? 9.5 : 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            severity,
+            style: TextStyle(
+              color: color,
+              fontSize: narrow ? 9 : 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _severityColor(String severity) {
+    return switch (severity.toLowerCase()) {
+      'none' => const Color(0xFF4ADE80),
+      'mild' => const Color(0xFFFBBF24),
+      'moderate' => const Color(0xFFFB923C),
+      'severe' => const Color(0xFFEF4444),
+      _ => Colors.white54,
+    };
   }
 }
 
