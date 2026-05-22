@@ -56,28 +56,6 @@ class _AppInitializerState extends State<AppInitializer>
     _checkInitializationStatus();
   }
 
-  // ---------------------------------------------------------------------------
-  // Logo shape definition — bezier curves tracing the Debrify D-play mark
-  // ---------------------------------------------------------------------------
-
-  static Offset _cubic(
-      Offset p0, Offset p1, Offset p2, Offset p3, double t) {
-    final u = 1 - t;
-    return p0 * (u * u * u) +
-        p1 * (3 * u * u * t) +
-        p2 * (3 * u * t * t) +
-        p3 * (t * t * t);
-  }
-
-  List<Offset> _sampleBezier(
-      Offset p0, Offset p1, Offset p2, Offset p3, int samples) {
-    final pts = <Offset>[];
-    for (int i = 0; i <= samples; i++) {
-      pts.add(_cubic(p0, p1, p2, p3, i / samples));
-    }
-    return pts;
-  }
-
   void _initParticles() {
     final screen = MediaQuery.of(context).size;
     final area = screen.width * screen.height;
@@ -86,133 +64,40 @@ class _AppInitializerState extends State<AppInitializer>
     final cx = screen.width / 2;
     final cy = screen.height / 2;
 
-    // Scale factor — keeps logo proportional across devices
     final scale = (screen.shortestSide / 420).clamp(0.85, 1.6);
-    const s = 1.0; // base scale (coordinates in ~50px range)
-
-    // --- Outer contour of the D-play mark ---
-    // 3 bezier segments: left edge, bottom→tip, tip→top
-
-    final outerPts = <Offset>[
-      // Left edge (top to bottom) — slight outward bow
-      ..._sampleBezier(
-        Offset(-28 * s, -40 * s),
-        Offset(-32 * s, -14 * s),
-        Offset(-32 * s, 14 * s),
-        Offset(-28 * s, 40 * s),
-        30,
-      ),
-      // Bottom-left curving to right tip
-      ..._sampleBezier(
-        Offset(-28 * s, 40 * s),
-        Offset(-18 * s, 48 * s),
-        Offset(24 * s, 24 * s),
-        Offset(42 * s, 0),
-        35,
-      ),
-      // Right tip curving back to top-left
-      ..._sampleBezier(
-        Offset(42 * s, 0),
-        Offset(24 * s, -24 * s),
-        Offset(-18 * s, -48 * s),
-        Offset(-28 * s, -40 * s),
-        35,
-      ),
-    ];
-
-    // --- Inner cutout contour ---
-    final innerPts = <Offset>[
-      // Left inner edge
-      ..._sampleBezier(
-        Offset(-12 * s, -18 * s),
-        Offset(-14 * s, -6 * s),
-        Offset(-14 * s, 6 * s),
-        Offset(-12 * s, 18 * s),
-        18,
-      ),
-      // Inner bottom to inner tip
-      ..._sampleBezier(
-        Offset(-12 * s, 18 * s),
-        Offset(-8 * s, 22 * s),
-        Offset(12 * s, 12 * s),
-        Offset(20 * s, 0),
-        22,
-      ),
-      // Inner tip back to inner top
-      ..._sampleBezier(
-        Offset(20 * s, 0),
-        Offset(12 * s, -12 * s),
-        Offset(-8 * s, -22 * s),
-        Offset(-12 * s, -18 * s),
-        22,
-      ),
-    ];
-
-    // --- Fill particles between inner and outer contours ---
-    // Sample along the outer contour and offset inward for structured fill
-    final fillPts = <Offset>[];
-    final outerLen = outerPts.length;
-    final innerLen = innerPts.length;
-    for (int i = 0; i < 70; i++) {
-      // Pick matching points on outer and inner by normalized position
-      final norm = i / 70.0;
-      final outerIdx = (norm * outerLen).toInt().clamp(0, outerLen - 1);
-      final innerIdx = (norm * innerLen).toInt().clamp(0, innerLen - 1);
-      // Lerp between them at varying depths
-      final t = 0.25 + _rng.nextDouble() * 0.50;
-      fillPts.add(Offset.lerp(outerPts[outerIdx], innerPts[innerIdx], t)!);
-    }
-
-    // Combine outer contour + fill (inner contour is negative space, not drawn)
-    final allTargets = <Offset>[];
-    for (final pt in [...outerPts, ...fillPts]) {
-      allTargets.add(Offset(cx + pt.dx * scale, cy + pt.dy * scale));
-    }
-
-    // Compute x-range for directional convergence delay
-    double minX = double.infinity, maxX = double.negativeInfinity;
-    for (final pt in allTargets) {
-      if (pt.dx < minX) minX = pt.dx;
-      if (pt.dx > maxX) maxX = pt.dx;
-    }
-    final xRange = maxX - minX;
 
     _particles = [];
 
-    // --- Logo particles ---
-    final logoCount = allTargets.length.clamp(0, (count * 0.55).toInt());
-    for (int i = 0; i < logoCount; i++) {
-      final target = allTargets[i % allTargets.length];
+    // --- Core particles — converge to a compact cluster at center ---
+    final coreCount = (count * 0.55).toInt();
+    for (int i = 0; i < coreCount; i++) {
+      final angle = _rng.nextDouble() * 2 * pi;
+      final dist = _rng.nextDouble() * 30 * scale;
+      final targetX = cx + cos(angle) * dist;
+      final targetY = cy + sin(angle) * dist;
 
-      // Delay based on x-position: left arrives first, right tip last
-      final xDelay = xRange > 0
-          ? 0.02 + ((target.dx - minX) / xRange) * 0.16
-          : 0.08;
-
-      // Color: blue-to-indigo gradient matching the logo
-      final yNorm = ((target.dy - cy) / (46 * scale)).clamp(-1.0, 1.0);
       final blend = _rng.nextDouble() * 0.15;
-      final r = (0.25 + 0.12 * (1 - yNorm) * 0.5 + blend).clamp(0.0, 1.0);
-      final g = (0.22 + 0.14 * (1 - yNorm) * 0.5 + blend).clamp(0.0, 1.0);
-      final b = (0.85 + 0.10 * (1 - yNorm) * 0.5).clamp(0.0, 1.0);
+      final r = (0.25 + blend).clamp(0.0, 1.0);
+      final g = (0.22 + blend).clamp(0.0, 1.0);
+      final b = (0.85 + _rng.nextDouble() * 0.10).clamp(0.0, 1.0);
 
       _particles.add(_Particle(
         startX: _rng.nextDouble() * screen.width,
         startY: _rng.nextDouble() * screen.height,
-        targetX: target.dx,
-        targetY: target.dy,
+        targetX: targetX,
+        targetY: targetY,
         size: 1.0 + _rng.nextDouble() * 1.5,
         r: r,
         g: g,
         b: b,
         type: 0,
-        delay: xDelay,
+        delay: 0.02 + _rng.nextDouble() * 0.16,
         driftAngle: _rng.nextDouble() * 2 * pi,
         driftSpeed: 0.3 + _rng.nextDouble() * 0.7,
       ));
     }
 
-    // --- Glow particles (tight halo near the logo) ---
+    // --- Glow particles (tight halo around center) ---
     final glowCount = (count * 0.18).toInt();
     for (int i = 0; i < glowCount; i++) {
       final angle = _rng.nextDouble() * 2 * pi;
@@ -292,7 +177,7 @@ class _AppInitializerState extends State<AppInitializer>
       if (!mounted) return;
       await _showOnboarding();
     } else {
-      await Future.delayed(const Duration(milliseconds: 2000));
+      await Future.delayed(const Duration(milliseconds: 3400));
       if (!mounted) return;
       await _exitController.forward();
       if (!mounted) return;
@@ -408,67 +293,35 @@ class _AppInitializerState extends State<AppInitializer>
                       0.90 + 0.10 * Curves.easeOutBack.transform(logoRaw);
                   final glowIntensity = Curves.easeOut.transform(logoRaw);
 
-                  // Text reveals: 0.84 → 0.96
-                  final textRaw = ((p - 0.84) / 0.12).clamp(0.0, 1.0);
-                  final textOpacity = Curves.easeOut.transform(textRaw);
-                  final textSlide =
-                      12.0 * (1.0 - Curves.easeOut.transform(textRaw));
-
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Logo mark with glow
-                      Opacity(
-                        opacity: logoOpacity,
-                        child: Transform.scale(
-                          scale: logoScale,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF4F46E5).withValues(
-                                    alpha: 0.35 * glowIntensity,
-                                  ),
-                                  blurRadius: 60 * glowIntensity,
-                                  spreadRadius: 15 * glowIntensity,
-                                ),
-                                BoxShadow(
-                                  color: const Color(0xFF818CF8).withValues(
-                                    alpha: 0.18 * glowIntensity,
-                                  ),
-                                  blurRadius: 120 * glowIntensity,
-                                  spreadRadius: 40 * glowIntensity,
-                                ),
-                              ],
+                  return Opacity(
+                    opacity: logoOpacity,
+                    child: Transform.scale(
+                      scale: logoScale,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF4F46E5).withValues(
+                                alpha: 0.35 * glowIntensity,
+                              ),
+                              blurRadius: 60 * glowIntensity,
+                              spreadRadius: 15 * glowIntensity,
                             ),
-                            child: Image.asset(
-                              'assets/app_icon_foreground.png',
-                              width: 130,
-                              height: 130,
+                            BoxShadow(
+                              color: const Color(0xFF818CF8).withValues(
+                                alpha: 0.18 * glowIntensity,
+                              ),
+                              blurRadius: 120 * glowIntensity,
+                              spreadRadius: 40 * glowIntensity,
                             ),
-                          ),
+                          ],
+                        ),
+                        child: Image.asset(
+                          'assets/splash_logo.png',
+                          width: 320,
                         ),
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // App name
-                      Opacity(
-                        opacity: textOpacity,
-                        child: Transform.translate(
-                          offset: Offset(0, textSlide),
-                          child: const Text(
-                            'Debrify',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w300,
-                              letterSpacing: 6,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   );
                 },
               ),
