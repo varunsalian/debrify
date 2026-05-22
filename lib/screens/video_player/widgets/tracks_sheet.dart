@@ -32,6 +32,7 @@ class TracksSheet {
     required Future<void> Function(String audioId, String subtitleId)
     onTrackChanged,
     void Function(SubtitleSettingsData settings)? onSubtitleStyleChanged,
+    VoidCallback? onSyncOverlayRequested,
     String? contentImdbId,
     String? contentType,
     int? contentSeason,
@@ -300,6 +301,12 @@ class TracksSheet {
                           onSubtitleStyleChanged?.call(newStyle);
                         },
                         isWide: isWide,
+                        onSyncOverlayRequested: onSyncOverlayRequested == null
+                            ? null
+                            : () {
+                                Navigator.of(context).pop();
+                                onSyncOverlayRequested();
+                              },
                       ),
                     ),
                   ),
@@ -409,6 +416,7 @@ class TracksSheet {
     required SubtitleSettingsData subtitleStyle,
     required void Function(SubtitleSettingsData) onStyleChanged,
     required bool isWide,
+    VoidCallback? onSyncOverlayRequested,
   }) {
     switch (tabIndex) {
       case 0:
@@ -444,6 +452,7 @@ class TracksSheet {
           subtitleStyle: subtitleStyle,
           onStyleChanged: onStyleChanged,
           isWide: isWide,
+          onSyncOverlayRequested: onSyncOverlayRequested,
         );
       default:
         return const SizedBox.shrink();
@@ -702,12 +711,14 @@ class _StyleTab extends StatelessWidget {
   final SubtitleSettingsData subtitleStyle;
   final void Function(SubtitleSettingsData) onStyleChanged;
   final bool isWide;
+  final VoidCallback? onSyncOverlayRequested;
 
   const _StyleTab({
     super.key,
     required this.subtitleStyle,
     required this.onStyleChanged,
     required this.isWide,
+    this.onSyncOverlayRequested,
   });
 
   @override
@@ -916,6 +927,47 @@ class _StyleTab extends StatelessWidget {
               );
               onStyleChanged(subtitleStyle.copyWith(elevationIndex: newIndex));
             },
+          ),
+
+          GestureDetector(
+            onTap: onSyncOverlayRequested,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'Sync',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    subtitleStyle.syncOffsetLabel,
+                    style: TextStyle(
+                      color: subtitleStyle.syncOffsetColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    size: 16,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                ],
+              ),
+            ),
           ),
 
           const SizedBox(height: 20),

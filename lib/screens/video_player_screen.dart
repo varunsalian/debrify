@@ -358,6 +358,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // Channel guide state
   bool _showChannelGuide = false;
+  bool _showSyncOverlay = false;
   List<ChannelEntry> _channelEntries = [];
 
   // IPTV channel sheet state
@@ -1940,6 +1941,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _subtitleSettings = settings;
       });
+      if (settings.syncOffsetMs != 0) {
+        _applySubtitleSyncOffset(settings.syncOffsetMs);
+      }
     }
   }
 
@@ -1955,9 +1959,225 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Update subtitle style settings
   void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
+    final offsetChanged = _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
     setState(() {
       _subtitleSettings = settings;
     });
+    if (offsetChanged) {
+      _applySubtitleSyncOffset(settings.syncOffsetMs);
+    }
+  }
+
+  void _applySubtitleSyncOffset(int ms) {
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      platform.setProperty('sub-delay', (ms / 1000.0).toStringAsFixed(3));
+    }
+  }
+
+  void _showSyncOverlayPanel() {
+    setState(() {
+      _showSyncOverlay = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  void _hideSyncOverlay() {
+    setState(() => _showSyncOverlay = false);
+  }
+
+  Widget _buildSyncOverlay() {
+    final settings = _subtitleSettings;
+    final ms = settings?.syncOffsetMs ?? 0;
+    final accent = settings?.syncOffsetColor ?? const Color(0xFF4CAF50);
+    final label = settings?.syncOffsetLabel ?? '0';
+    const minMs = SubtitleSettingsService.syncOffsetMinMs;
+    const maxMs = SubtitleSettingsService.syncOffsetMaxMs;
+    const step = SubtitleSettingsService.syncOffsetStepMs;
+
+    void update(int newMs) async {
+      final clamped = newMs.clamp(minMs, maxMs);
+      await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
+      _applySubtitleSyncOffset(clamped);
+      if (mounted) {
+        setState(() {
+          _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: clamped);
+        });
+      }
+    }
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: GestureDetector(
+        onTap: () {},
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(32, 16, 32, 28),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [Color(0xCC000000), Color(0x00000000)],
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'SUBTITLE SYNC',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => update(0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Reset',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _hideSyncOverlay,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Done',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => update(ms - step),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.remove_rounded,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: accent,
+                        inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
+                        thumbColor: Colors.white,
+                        overlayColor: accent.withValues(alpha: 0.2),
+                        trackHeight: 4,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 8,
+                        ),
+                      ),
+                      child: Slider(
+                        value: ms.toDouble(),
+                        min: minMs.toDouble(),
+                        max: maxMs.toDouble(),
+                        divisions: (maxMs - minMs) ~/ step,
+                        onChanged: (v) => update(v.round()),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => update(ms + step),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 40),
+                    child: Text(
+                      '-10s',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        fontSize: 9,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '0',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 9,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 40),
+                    child: Text(
+                      '+10s',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.35),
+                        fontSize: 9,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Show channel guide overlay
@@ -4577,6 +4797,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
             final key = event.logicalKey;
 
+            // Sync overlay is open - handle its keys first
+            if (_showSyncOverlay) {
+              if (key == LogicalKeyboardKey.escape ||
+                  key == LogicalKeyboardKey.goBack) {
+                _hideSyncOverlay();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            }
+
             // Channel guide is open - handle its keys first
             if (_showChannelGuide) {
               if (key == LogicalKeyboardKey.escape ||
@@ -5155,6 +5385,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onClose: _hideStremioTvGuide,
                   ),
                 ),
+              // Subtitle sync overlay
+              if (_showSyncOverlay) _buildSyncOverlay(),
             ],
           ),
         ),
@@ -5912,6 +6144,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _persistTrackChoice(audioId, subtitleId);
       },
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
+      onSyncOverlayRequested: _showSyncOverlayPanel,
       contentImdbId: effectiveImdbId,
       contentType: effectiveContentType,
       contentSeason: subtitleSeason,
@@ -5953,6 +6186,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
     _cleanupTempSubtitleFilesSync();
+    _showSyncOverlay = false;
   }
 
   /// Restore audio and subtitle track preferences

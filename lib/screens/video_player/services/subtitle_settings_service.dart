@@ -152,6 +152,11 @@ class SubtitleSettingsService {
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
   static const String _keyElevationIndex = 'subtitle_elevation_index';
+  static const String _keySyncOffsetMs = 'subtitle_sync_offset_ms';
+
+  static const int syncOffsetMinMs = -10000;
+  static const int syncOffsetMaxMs = 10000;
+  static const int syncOffsetStepMs = 100;
 
   static SubtitleSettingsService? _instance;
   static SubtitleSettingsService get instance {
@@ -237,6 +242,17 @@ class SubtitleSettingsService {
         index.clamp(0, SubtitleElevation.options.length - 1));
   }
 
+  Future<int> getSyncOffsetMs() async {
+    await _ensurePrefs();
+    return _prefs!.getInt(_keySyncOffsetMs) ?? 0;
+  }
+
+  Future<void> setSyncOffsetMs(int ms) async {
+    await _ensurePrefs();
+    await _prefs!.setInt(
+        _keySyncOffsetMs, ms.clamp(syncOffsetMinMs, syncOffsetMaxMs));
+  }
+
   // Get current values
   Future<SubtitleSize> getCurrentSize() async {
     final idx = await getSizeIndex();
@@ -288,6 +304,7 @@ class SubtitleSettingsService {
           SubtitleOutlineColor.defaultIndex,
       elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
           SubtitleElevation.defaultIndex,
+      syncOffsetMs: _prefs!.getInt(_keySyncOffsetMs) ?? 0,
       fontIndex: fontIndex,
       fontFamily: fontFamily,
       fontLabel: selectedFont.label,
@@ -304,6 +321,7 @@ class SubtitleSettingsService {
     await _prefs!.setInt(
         _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
     await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
+    await _prefs!.setInt(_keySyncOffsetMs, 0);
     await SubtitleFontService.instance.resetToDefault();
   }
 
@@ -316,7 +334,8 @@ class SubtitleSettingsService {
         data.bgIndex == SubtitleBackground.defaultIndex &&
         data.outlineColorIndex == SubtitleOutlineColor.defaultIndex &&
         data.elevationIndex == SubtitleElevation.defaultIndex &&
-        data.fontIndex == SubtitleFont.defaultIndex;
+        data.fontIndex == SubtitleFont.defaultIndex &&
+        data.syncOffsetMs == 0;
   }
 }
 
@@ -329,8 +348,9 @@ class SubtitleSettingsData {
   final int outlineColorIndex;
   final int elevationIndex;
   final int fontIndex;
-  final String? fontFamily; // Resolved font family (null = system default)
-  final String fontLabel; // Display label for the font
+  final String? fontFamily;
+  final String fontLabel;
+  final int syncOffsetMs;
 
   const SubtitleSettingsData({
     required this.sizeIndex,
@@ -342,6 +362,7 @@ class SubtitleSettingsData {
     this.fontIndex = 0,
     this.fontFamily,
     this.fontLabel = 'Default',
+    this.syncOffsetMs = 0,
   });
 
   SubtitleSize get size =>
@@ -379,6 +400,25 @@ class SubtitleSettingsData {
       fontFamily: fontFamily,
     );
 
+  String get syncOffsetLabel {
+    if (syncOffsetMs == 0) return '0';
+    final sign = syncOffsetMs > 0 ? '+' : '';
+    final abs = syncOffsetMs.abs();
+    if (abs >= 1000 && abs % 1000 == 0) return '$sign${syncOffsetMs ~/ 1000}s';
+    if (abs >= 1000) return '$sign${(syncOffsetMs / 1000).toStringAsFixed(1)}s';
+    return '$sign${syncOffsetMs}ms';
+  }
+
+  Color get syncOffsetColor {
+    final abs = syncOffsetMs.abs();
+    if (abs == 0) return const Color(0xFF4CAF50);
+    if (abs <= 500) return const Color(0xFF8BC34A);
+    if (abs <= 1000) return const Color(0xFFCDDC39);
+    if (abs <= 2000) return const Color(0xFFFFC107);
+    if (abs <= 3000) return const Color(0xFFFF9800);
+    return const Color(0xFFFF5722);
+  }
+
   /// Build TextStyle for subtitles
   TextStyle buildTextStyle() {
     return TextStyle(
@@ -401,6 +441,7 @@ class SubtitleSettingsData {
     int? fontIndex,
     String? fontFamily,
     String? fontLabel,
+    int? syncOffsetMs,
   }) {
     return SubtitleSettingsData(
       sizeIndex: sizeIndex ?? this.sizeIndex,
@@ -412,6 +453,7 @@ class SubtitleSettingsData {
       fontIndex: fontIndex ?? this.fontIndex,
       fontFamily: fontFamily ?? this.fontFamily,
       fontLabel: fontLabel ?? this.fontLabel,
+      syncOffsetMs: syncOffsetMs ?? this.syncOffsetMs,
     );
   }
 }
