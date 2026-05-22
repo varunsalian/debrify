@@ -2371,30 +2371,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _goBackToCatalog() {
-    // If these results came from an EpisodesScreen episode tap, re-open that
-    // episode list *before* clearing results below. EpisodesScreen is an
-    // opaque full-screen route, so pushing it first means the catalog grid
-    // (revealed by the clear) is never painted — no flash. Clear the flags
-    // first so this can't loop; the push is synchronous (we're inside an
-    // event callback) and the grid-clear then happens hidden behind it.
-    if (_resultsFromEpisodeTap) {
-      final int? season = _episodeReturnSeason;
-      final int? episode = _episodeReturnEpisode;
-      _resultsFromEpisodeTap = false;
-      _episodeReturnSeason = null;
-      _episodeReturnEpisode = null;
-      _catalogBrowserKey.currentState
-          ?.reEnterEpisodeDrillDown(season: season, episode: episode);
-    }
+    // Snapshot re-entry flags before clearing them — we need to know where
+    // the user came from so we can re-open the right screen after the
+    // bound-sources refresh below updates the data the detail screen reads.
+    final fromEpisode = _resultsFromEpisodeTap;
+    final fromDetail = _resultsFromItemDetail;
+    final int? season = _episodeReturnSeason;
+    final int? episode = _episodeReturnEpisode;
 
-    // Same pattern for the movie / no-meta-series detail screen: re-open it
-    // (instant, opaque) before the grid-clear so it's never seen. Mutually
-    // exclusive with the episode case above (a selection sets at most one
-    // flag), so the order of these two blocks doesn't matter.
-    if (_resultsFromItemDetail) {
-      _resultsFromItemDetail = false;
-      _catalogBrowserKey.currentState?.reEnterItemDetail();
-    }
+    _resultsFromEpisodeTap = false;
+    _resultsFromItemDetail = false;
+    _episodeReturnSeason = null;
+    _episodeReturnEpisode = null;
 
     setState(() {
       // Clear search results
@@ -2425,8 +2413,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _previousSearchQuery = '';
     });
 
-    // Refresh bound sources in all views (picks up any auto-saved movie sources)
-    _catalogBrowserKey.currentState?.refreshBoundSources();
+    // Refresh bound sources first so the re-entered detail screen sees the
+    // newly bound source (shows "Edit Source" instead of "Select Source").
+    _catalogBrowserKey.currentState?.refreshBoundSources().then((_) {
+      if (!mounted) return;
+      if (fromEpisode) {
+        _catalogBrowserKey.currentState
+            ?.reEnterEpisodeDrillDown(season: season, episode: episode);
+      } else if (fromDetail) {
+        _catalogBrowserKey.currentState?.reEnterItemDetail();
+      }
+    });
     _aggregatedResultsKey.currentState?.refreshBoundSources();
   }
 

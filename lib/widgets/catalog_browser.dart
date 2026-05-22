@@ -1116,7 +1116,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
   }
 
   /// Public: refresh bound sources cache (call after Select Source completes).
-  void refreshBoundSources() async {
+  Future<void> refreshBoundSources() async {
     await _loadBoundSources();
   }
 
@@ -1256,6 +1256,8 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         backgroundColor: const Color(0xFF10B981),
       ),
     );
+    _dismissCatalogDetail();
+    _openItemDetail(item, instant: true);
   }
 
   /// Show "Edit Sources" dialog with list of bound sources and management options.
@@ -1564,9 +1566,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
         await SeriesSourceService.addSource(imdbId, source);
       }
       final updated = await SeriesSourceService.getSources(imdbId);
-      if (mounted) {
-        setState(() => _boundSources[imdbId] = updated);
-      }
+      if (!mounted) return;
+      setState(() => _boundSources[imdbId] = updated);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _dismissCatalogDetail();
+        _openItemDetail(show, instant: true);
+      });
     }
 
     void pushRd() {
