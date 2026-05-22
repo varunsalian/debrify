@@ -4715,14 +4715,38 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun loadStremioSubtitle(subtitle: StremioSubtitle) {
         val currentPlayer = player ?: return
         val currentItem = currentPlayer.currentMediaItem ?: return
-        // If a resume seek is pending (player hasn't reached STATE_READY yet),
-        // use that as the target position instead of currentPosition (which would be 0).
-        val targetPosition = if (pendingSeekMs > 0) pendingSeekMs else currentPlayer.currentPosition
+
+        // Check if a percent-based seek (Trakt or startAt) is still pending.
+        // It depends on duration (only known at STATE_READY) so it's owned by the
+        // main playbackListener. percentSeekApplied is false until that seek lands
+        // — which also covers the case where the player already reached STATE_READY
+        // once but the seek was skipped (duration not yet resolved). In all those
+        // cases the subtitle reload must NOT seek, or it would clobber the resume.
+        val hasPendingPercentSeek = !percentSeekApplied && (
+            ((payload?.traktProgressPercent ?: 0.0).let { it > 0 && it < 100 }) ||
+            ((payload?.startAtPercent ?: 0.0) > 0)
+        )
+
+        val targetPosition: Long
+        val subtitleShouldSeek: Boolean
+
         if (pendingSeekMs > 0) {
-            // We'll handle the resume seek in our listener below, so clear the pending seek
-            // to prevent the main playbackListener from also seeking (avoiding a double-seek race).
+            // Absolute resume position is known — take ownership of the seek.
+            targetPosition = pendingSeekMs
             pendingSeekMs = 0
+            subtitleShouldSeek = true
+        } else if (hasPendingPercentSeek) {
+            // A percent-based resume seek is still pending. Defer to the main
+            // playbackListener (it re-fires on the STATE_READY caused by prepare()
+            // below). Preserve any drift if playback already started; else start at 0.
+            targetPosition = if (hasEverBeenReady) currentPlayer.currentPosition else 0L
+            subtitleShouldSeek = false
+            android.util.Log.d("AndroidTvPlayer", "loadStremioSubtitle: deferring resume seek to main playbackListener (percent seek pending)")
+        } else {
+            targetPosition = currentPlayer.currentPosition
+            subtitleShouldSeek = true
         }
+
         val wasPlaying = currentPlayer.isPlaying
 
         // Extract path without query string for MIME type detection
@@ -4751,19 +4775,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setSubtitleConfigurations(listOf(subtitleConfig))
             .build()
 
-        // Set the new media item, preserving position
         currentPlayer.setMediaItem(newMediaItem, targetPosition)
         currentPlayer.prepare()
 
-        // Wait for player to be ready, then seek again to force subtitle sync
-        currentPlayer.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) {
-                    currentPlayer.seekTo(targetPosition)
-                    currentPlayer.removeListener(this)
+        if (subtitleShouldSeek) {
+            // Wait for player to be ready, then seek again to force subtitle sync.
+            // Skipped when a percent-based resume seek is pending — the main
+            // playbackListener owns that seek and this would override it.
+            currentPlayer.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        currentPlayer.seekTo(targetPosition)
+                        currentPlayer.removeListener(this)
+                    }
                 }
-            }
-        })
+            })
+        }
 
         if (wasPlaying) {
             currentPlayer.play()
