@@ -6323,7 +6323,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         title: String,
         hideGuideOnReady: Boolean
     ) {
-        val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble()
+        val startAtPercent = (map["startAtPercent"] as? Number)?.toDouble() ?: 0.0
 
         updateStremioTvGuideChannelData(channel, map)
         replacePayloadWithStremioTvItem(channel, map, title, url)
@@ -6342,6 +6342,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         clearStremioLoadingState()
         cancelPikPakRetry()
 
+        // Route the channel's slot-progress seek through the shared resume
+        // machinery instead of an isolated inline listener. The main
+        // playbackListener applies the seek on STATE_READY, and loadStremioSubtitle
+        // defers to it — so a fast subtitle reload can't clobber the seek.
+        payload?.startAtPercent = startAtPercent
+        percentSeekApplied = false
+        pendingSeekMs = 0
+        hasEverBeenReady = false
+
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .build()
@@ -6353,19 +6362,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player?.apply {
             setMediaItem(mediaItem)
             prepare()
-            if (startAtPercent != null && startAtPercent > 0) {
-                addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) {
-                        if (state == Player.STATE_READY) {
-                            val dur = duration
-                            if (dur > 0) {
-                                seekTo((dur * startAtPercent).toLong())
-                            }
-                            removeListener(this)
-                        }
-                    }
-                })
-            }
             playWhenReady = true
             play()
         }
@@ -6849,7 +6845,7 @@ private data class PlaybackPayload(
     var imdbId: String? = null, // IMDB ID for fetching external subtitles from Stremio addons (var to allow async discovery from TVMaze)
     val httpHeaders: Map<String, String> = emptyMap(), // Optional per-session headers for protected direct streams
     val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
-    val startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration
+    var startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration — var so Stremio TV channel switches can update it
     val traktProgressPercent: Double = 0.0, // Trakt watch progress (0-100) for resume — takes priority over local resume
 )
 
