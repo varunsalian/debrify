@@ -3664,6 +3664,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       year: show.year,
       contentType: show.type,
       posterUrl: show.poster,
+      fromCatalogItemDetail: true,
     );
 
     _handleCatalogItemSelected(selection, updateSearchText: true);
@@ -3690,6 +3691,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _isSelectSourceMode = true;
       _selectSourceShow = show;
       _cameFromCatalogBrowse = true;
+      _resultsFromItemDetail = true;
       _previousSearchQuery = _searchController.text;
       _searchMode = SearchMode.keyword;
       _activeAdvancedSelection = null;
