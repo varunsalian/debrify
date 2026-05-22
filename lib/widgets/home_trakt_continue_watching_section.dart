@@ -18,6 +18,8 @@ import '../screens/debrid_downloads_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import 'add_source_picker_dialog.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
@@ -1129,46 +1131,15 @@ class _HomeTraktContinueWatchingSectionState
     final title = isMovies ? 'Trakt Movies' : 'Trakt Shows';
 
     if (_isLoading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader(title),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 60,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Loading...',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.25),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
+      return HomeSectionSkeleton(isTelevision: widget.isTelevision);
     }
 
     if (_items.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(title),
@@ -1280,6 +1251,7 @@ class _HomeTraktContinueWatchingSectionState
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 

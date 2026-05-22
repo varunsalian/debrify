@@ -9,6 +9,7 @@ import '../services/main_page_bridge.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/trakt/trakt_item_transformer.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Compact "Now Playing" bar — slim music-player style with poster art.
@@ -250,7 +251,9 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard>
   Widget build(BuildContext context) {
     super.build(context);
     if (_isLoading || _data == null) return const SizedBox.shrink();
-    return _buildBar(_data!);
+    return HomeSectionReveal(
+      child: _buildBar(_data!),
+    );
   }
 
   Widget _buildBar(_NowPlayingData data) {

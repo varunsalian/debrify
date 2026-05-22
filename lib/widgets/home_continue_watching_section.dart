@@ -8,6 +8,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/advanced_search_selection.dart';
 import '../services/storage_service.dart';
 import '../services/series_source_service.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/main_page_bridge.dart';
@@ -882,9 +884,13 @@ class _HomeContinueWatchingSectionState
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_isLoading || _items.isEmpty) return const SizedBox.shrink();
+    if (_isLoading) {
+      return HomeSectionSkeleton(isTelevision: widget.isTelevision);
+    }
+    if (_items.isEmpty) return const SizedBox.shrink();
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Section header
@@ -930,6 +936,7 @@ class _HomeContinueWatchingSectionState
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 

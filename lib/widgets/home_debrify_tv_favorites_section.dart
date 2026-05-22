@@ -8,6 +8,8 @@ import '../services/storage_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/main_page_bridge.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Premium Debrify TV channel favorites section for the home screen
@@ -191,11 +193,18 @@ class _HomeDebrifyTvFavoritesSectionState
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_isLoading || _favoriteChannels.isEmpty) {
+    if (_isLoading) {
+      return HomeSectionSkeleton(
+        style: HomeSectionSkeletonStyle.channel,
+        isTelevision: widget.isTelevision,
+      );
+    }
+    if (_favoriteChannels.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(),
@@ -285,6 +294,7 @@ class _HomeDebrifyTvFavoritesSectionState
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 

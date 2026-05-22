@@ -9,6 +9,8 @@ import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../screens/playlist_content_view_screen.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Premium OTT-style horizontal scrollable favorites section for the home screen
@@ -328,11 +330,15 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_isLoading || _favoriteItems.isEmpty) {
+    if (_isLoading) {
+      return HomeSectionSkeleton(isTelevision: widget.isTelevision);
+    }
+    if (_favoriteItems.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(),
@@ -440,6 +446,7 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection>
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 

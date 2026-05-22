@@ -6,6 +6,7 @@ import '../screens/trakt_calendar_screen.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 import 'home_trakt_now_playing_card.dart';
 
@@ -203,10 +204,12 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
     final todayEntries = _grouped[todayBucket] ?? const [];
 
     if (todayEntries.isNotEmpty) {
-      return _buildHeroCard(
-        isToday: true,
-        featuredDay: todayBucket,
-        dayEntries: todayEntries,
+      return HomeSectionReveal(
+        child: _buildHeroCard(
+          isToday: true,
+          featuredDay: todayBucket,
+          dayEntries: todayEntries,
+        ),
       );
     }
 
@@ -219,10 +222,12 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
     if (nextKey.year == 0) {
       return const SizedBox.shrink();
     }
-    return _buildHeroCard(
-      isToday: false,
-      featuredDay: nextKey,
-      dayEntries: _grouped[nextKey]!,
+    return HomeSectionReveal(
+      child: _buildHeroCard(
+        isToday: false,
+        featuredDay: nextKey,
+        dayEntries: _grouped[nextKey]!,
+      ),
     );
   }
 

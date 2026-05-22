@@ -9,6 +9,8 @@ import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../screens/playlist_content_view_screen.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Horizontal scrollable playlist section for the home screen.
@@ -378,11 +380,15 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_isLoading || _items.isEmpty) {
+    if (_isLoading) {
+      return HomeSectionSkeleton(isTelevision: widget.isTelevision);
+    }
+    if (_items.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(),
@@ -445,6 +451,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 

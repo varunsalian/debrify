@@ -6,6 +6,8 @@ import '../models/iptv_playlist.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import 'home/home_theme.dart';
+import 'home/home_section_skeleton.dart';
+import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 
 /// Horizontal scrollable IPTV channel favorites section for the home screen
@@ -195,16 +197,19 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // Don't show anything if loading or no favorites
     if (_isLoading) {
-      return const SizedBox.shrink();
+      return HomeSectionSkeleton(
+        style: HomeSectionSkeletonStyle.channel,
+        isTelevision: widget.isTelevision,
+      );
     }
 
     if (_favoriteChannels.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Column(
+    return HomeSectionReveal(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         HomeSectionHeader(
@@ -285,6 +290,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
         ),
         const SizedBox(height: 10),
       ],
+      ),
     );
   }
 
