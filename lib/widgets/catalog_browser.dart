@@ -726,6 +726,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       episode: episode,
       contentType: item.type,
       posterUrl: item.poster,
+      fromCatalogItemDetail: true,
     );
 
     // Use onQuickPlay if available, otherwise fallback to onItemSelected

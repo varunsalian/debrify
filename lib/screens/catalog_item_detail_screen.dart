@@ -8,7 +8,6 @@ import '../services/imdb_parents_guide_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
-import 'episodes_screen.dart' show kCatalogDetailRouteName;
 
 /// Cinematic detail screen for a catalog item.
 ///
@@ -801,18 +800,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // TV only: the top row is the highest focusable widget, so a D-pad
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
-        onPlay: () {
-          final nav = Navigator.of(context);
-          nav.pop();
-          nav.popUntil(
-            (r) => r.settings.name != kCatalogDetailRouteName,
-          );
-          widget.onPlay();
-        },
-        // Browse does NOT pop here: the host owns teardown so the series
-        // drill-down (EpisodesScreen) can stack on top of this detail screen
-        // and back returns here. The host pops this route for the
-        // direct/movie path. (Play still pops above — it opens a player.)
+        onPlay: widget.onPlay,
+        // Neither Play nor Browse pop here: the player pushes on top of
+        // this detail screen so the user returns here when playback ends.
+        // Browse keeps the detail for the same reason (series drill-down
+        // stacks on top). The host handles teardown via _returnToCatalogIfNeeded.
         onBrowse: widget.onBrowse,
       ),
     );

@@ -309,6 +309,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // if no resume arrives (launch silently failed after the signal).
   bool _maskClearDeferredForExternal = false;
   Timer? _deferredMaskClearTimer;
+  bool _returnToCatalogAfterPlayback = false;
+  bool _quickPlayNextPending = false;
   // Epoch for the active masked Quick Play attempt. Bumped when a new
   // attempt starts or the user cancels, so a long pre-search phase (e.g.
   // the series IMDb metadata probe) can detect it was superseded/cancelled
@@ -1567,6 +1569,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
       onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
+    _returnToCatalogIfNeeded();
   }
 
   /// Open an external URL in browser
@@ -2361,6 +2364,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // Back Navigation Methods
   // ============================================================================
 
+  /// Return to catalog browse view after Quick Play playback ends.
+  /// Only fires for auto-play flows (Quick Play / bound source), not
+  /// manual torrent selection from Browse Sources results.
+  void _returnToCatalogIfNeeded() {
+    if (!mounted || !_returnToCatalogAfterPlayback) return;
+    if (_quickPlayPending || _quickPlayNextPending) return;
+    _returnToCatalogAfterPlayback = false;
+    Navigator.of(context).popUntil(
+      (r) => r.settings.name != kCatalogDetailRouteName,
+    );
+    _goBackAndRefreshSources();
+  }
+
   /// Go back to the catalog browse view after viewing search results
   /// Go back to catalog view and refresh Trakt bound sources cache.
   void _goBackAndRefreshSources() {
@@ -2410,6 +2426,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
       // Reset the flag
       _cameFromCatalogBrowse = false;
+      _returnToCatalogAfterPlayback = false;
       _previousSearchQuery = '';
     });
 
@@ -4255,6 +4272,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
 
+    // No bound source — falling through to search-and-play. Pop the
+    // detail screen so the loading mask is visible underneath.
+    if (selection.fromCatalogItemDetail) {
+      Navigator.of(context).popUntil(
+        (r) => r.settings.name != kCatalogDetailRouteName,
+      );
+      _returnToCatalogAfterPlayback = true;
+    }
+
     // Set quick play pending state.
     // Quick Play (a movie OR a specific series episode) never needs the
     // episode guide, so mask the search UI until auto-play takes over.
@@ -4437,6 +4463,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     debugPrint(
       'TorrentSearchScreen: Quick Play next episode S${season}E$episode for $title',
     );
+    _quickPlayNextPending = true;
     final selection = AdvancedSearchSelection(
       imdbId: imdbId,
       isSeries: true,
@@ -4452,6 +4479,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     // push() returns and would clobber _quickPlayPending. Deferring ensures
     // cleanup finishes first.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _quickPlayNextPending = false;
       if (!mounted) return;
       _handleQuickPlay(selection);
     });
@@ -5196,7 +5224,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
 
-    if (mounted) _goBackAndRefreshSources();
+    _returnToCatalogIfNeeded();
+    if (mounted) {
+      _catalogBrowserKey.currentState?.refreshBoundSources();
+      _aggregatedResultsKey.currentState?.refreshBoundSources();
+    }
   }
 
   // ── Local bound source playback ───────────────────────────────────────────
@@ -10652,6 +10684,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           final useDeoVR = await _shouldUseDeoVR(title);
           if (useDeoVR) {
             await _launchWithDeoVR(videoUrl: url, filename: title);
+            _returnToCatalogIfNeeded();
             return;
           }
 
@@ -10692,6 +10725,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             onQuickPlayNextEpisode: _quickPlayNextCallback,
           );
+          _returnToCatalogIfNeeded();
         }
       } catch (e) {
         _showPikPakSnack('Failed to play: ${e.toString()}', isError: true);
@@ -10838,6 +10872,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       ),
       onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
+    _returnToCatalogIfNeeded();
   }
 
   String _pikpakDisplayName(Map<String, dynamic> file) {
@@ -12287,6 +12322,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _maskClearDeferredForExternal) {
       _clearQuickPlayMovieMask(force: true);
     }
+    if (state == AppLifecycleState.resumed && _returnToCatalogAfterPlayback) {
+      _returnToCatalogAfterPlayback = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _returnToCatalogIfNeeded();
+      });
+    }
   }
 
   /// User backed out of / cancelled a movie Quick Play before it resolved.
@@ -13534,6 +13575,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         if (useDeoVR) {
           await _launchWithDeoVR(videoUrl: streamUrl, filename: torrent.name);
           if (forcePlay) _resetQuickPlayState();
+          _returnToCatalogIfNeeded();
           return;
         }
 
@@ -13562,6 +13604,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           onQuickPlayNextEpisode: _quickPlayNextCallback,
         );
         if (forcePlay) _resetQuickPlayState();
+        _returnToCatalogIfNeeded();
       } catch (e) {
         if (forcePlay && _tryNextQuickPlayTorrent(provider: 'torbox')) return;
         _showTorboxSnack(
@@ -13713,6 +13756,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onQuickPlayNextEpisode: _quickPlayNextCallback,
     );
     if (forcePlay) _resetQuickPlayState();
+    _returnToCatalogIfNeeded();
   }
 
   void _openTorboxFiles(TorboxTorrent torrent) {
@@ -14908,6 +14952,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         if (useDeoVR) {
           await _launchWithDeoVR(videoUrl: videoUrl, filename: finalTitle);
           if (forcePlay) _resetQuickPlayState();
+          _returnToCatalogIfNeeded();
           return;
         }
 
@@ -14937,6 +14982,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           onQuickPlayNextEpisode: _quickPlayNextCallback,
         );
         if (forcePlay) _resetQuickPlayState();
+        _returnToCatalogIfNeeded();
       } else {
         if (forcePlay && _tryNextQuickPlayTorrent(provider: 'debrid')) return;
         if (forcePlay) _resetQuickPlayState();
@@ -15455,6 +15501,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
         onQuickPlayNextEpisode: _quickPlayNextCallback,
       );
+      _returnToCatalogIfNeeded();
     } catch (e) {
       if (mounted) {
         if (Navigator.of(context).canPop()) {
