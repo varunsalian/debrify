@@ -57,6 +57,7 @@ import com.debrify.app.R
 import com.debrify.app.subtitle.StremioSubtitle
 import com.debrify.app.subtitle.StremioSubtitleService
 import com.debrify.app.util.LanguageMapper
+import com.debrify.app.util.OffsetRenderersFactory
 import com.debrify.app.util.SubtitleFontManager
 import com.debrify.app.util.SubtitleSettings
 import kotlinx.coroutines.CoroutineScope
@@ -132,6 +133,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
+    private var offsetRenderersFactory: OffsetRenderersFactory? = null
 
     // Seek feedback manager
     private lateinit var seekFeedbackManager: SeekFeedbackManager
@@ -218,6 +220,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleSettingsRoot: View? = null
     private var subtitleSettingsVisible = false
     private var subtitlePanel: SubtitlePanelController? = null
+    private var syncOverlay: SubtitleSyncOverlayController? = null
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
 
@@ -785,9 +788,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         trackSelector?.parameters = paramsBuilder?.build()!!
 
-        val renderersFactory = DefaultRenderersFactory(this)
+        val baseRenderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+        val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
+            .also { offsetRenderersFactory = it }
 
         // Create HTTP data source factory with redirect support for HLS/live streams
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -3080,6 +3085,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
 
+        // Handle subtitle sync overlay (floats on top of video)
+        if (syncOverlay?.isVisible == true) {
+            return syncOverlay?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
+        }
+
         // Handle subtitle settings panel
         if (subtitlePanel?.isVisible == true) {
             return subtitlePanel?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
@@ -4624,6 +4634,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun onSearchSubtitle() { showSearchSubtitleDialog() }
         override fun getIdentityLabel(): String = currentSubtitleIdentityLabel()
         override fun onSettingsChanged() { applySubtitleSettings() }
+        override fun onSyncOverlayRequested() { showSyncOverlay() }
         override fun onHidden() {
             subtitleSettingsVisible = false
             if (::playerView.isInitialized) playerView.requestFocus()
@@ -4638,6 +4649,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideSubtitleSettingsPanel() {
         subtitlePanel?.hide() ?: run { subtitleSettingsVisible = false }
+    }
+
+    private fun showSyncOverlay() {
+        val root = findViewById<ViewGroup>(android.R.id.content)?.getChildAt(0) as? ViewGroup ?: return
+        if (syncOverlay == null) {
+            syncOverlay = SubtitleSyncOverlayController(
+                activity = this,
+                rootContainer = root,
+                onSettingsChanged = Runnable { applySubtitleSettings() },
+                onDismissed = Runnable { if (::playerView.isInitialized) playerView.requestFocus() }
+            )
+        }
+        syncOverlay?.show()
     }
 
     /**
@@ -4815,6 +4839,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
         subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
+        offsetRenderersFactory?.setOffsetUs(SubtitleSettings.getSyncOffsetMs(this) * 1000L)
     }
 
     // Aspect ratio
@@ -5931,6 +5956,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player = null
         subtitleListener = null
         trackSelector = null
+        offsetRenderersFactory = null
+        syncOverlay = null
 
         // Clear adapters to release lambda references
         playlistView.adapter = null

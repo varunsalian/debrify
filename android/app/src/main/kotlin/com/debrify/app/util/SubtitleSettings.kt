@@ -20,6 +20,7 @@ object SubtitleSettings {
     private const val KEY_BG_INDEX = "subtitle_bg_index"
     private const val KEY_OUTLINE_COLOR_INDEX = "subtitle_outline_color_index"
     private const val KEY_ELEVATION_INDEX = "subtitle_elevation_index"
+    private const val KEY_SYNC_OFFSET_MS = "subtitle_sync_offset_ms"
     private const val KEY_DEFAULT_SUBTITLE_LANGUAGE = "flutter.player_default_subtitle_language"
     private const val KEY_DEFAULT_AUDIO_LANGUAGE = "flutter.player_default_audio_language"
 
@@ -30,6 +31,9 @@ object SubtitleSettings {
     const val DEFAULT_BG_INDEX = 0        // None
     const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
     const val DEFAULT_ELEVATION_INDEX = 0      // Bottom
+    const val SYNC_OFFSET_MIN_MS = -10_000L
+    const val SYNC_OFFSET_MAX_MS =  10_000L
+    const val SYNC_OFFSET_STEP_MS =    100L
 
     // Size options (in SP)
     data class SizeOption(val label: String, val sizeSp: Float)
@@ -208,6 +212,44 @@ object SubtitleSettings {
     @JvmStatic
     fun getCurrentElevation(context: Context): ElevationOption = ELEVATION_OPTIONS[getElevationIndex(context).coerceIn(0, ELEVATION_OPTIONS.size - 1)]
 
+    @JvmStatic
+    fun getSyncOffsetMs(context: Context): Long {
+        return getPrefs(context).getLong(KEY_SYNC_OFFSET_MS, 0L)
+    }
+
+    @JvmStatic
+    fun setSyncOffsetMs(context: Context, ms: Long) {
+        getPrefs(context).edit().putLong(
+            KEY_SYNC_OFFSET_MS,
+            ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
+        ).apply()
+    }
+
+    @JvmStatic
+    fun formatSyncOffset(ms: Long): String {
+        if (ms == 0L) return "0"
+        val sign = if (ms > 0) "+" else ""
+        val abs = kotlin.math.abs(ms)
+        return when {
+            abs >= 1000 && abs % 1000 == 0L -> "${sign}${ms / 1000}s"
+            abs >= 1000 -> "${sign}${String.format("%.1f", ms / 1000.0)}s"
+            else -> "${sign}${ms}ms"
+        }
+    }
+
+    @JvmStatic
+    fun getSyncOffsetColor(ms: Long): Int {
+        val abs = kotlin.math.abs(ms)
+        return when {
+            abs == 0L  -> Color.parseColor("#4CAF50")
+            abs <= 500 -> Color.parseColor("#8BC34A")
+            abs <= 1000 -> Color.parseColor("#CDDC39")
+            abs <= 2000 -> Color.parseColor("#FFC107")
+            abs <= 3000 -> Color.parseColor("#FF9800")
+            else        -> Color.parseColor("#FF5722")
+        }
+    }
+
     // Cycle functions (for up/down navigation)
     @JvmStatic
     fun cycleSizeUp(context: Context): Int {
@@ -311,6 +353,7 @@ object SubtitleSettings {
             .putInt(KEY_BG_INDEX, DEFAULT_BG_INDEX)
             .putInt(KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX)
             .putInt(KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX)
+            .putLong(KEY_SYNC_OFFSET_MS, 0L)
             .apply()
     }
 
@@ -324,7 +367,8 @@ object SubtitleSettings {
                 getColorIndex(context) == DEFAULT_COLOR_INDEX &&
                 getBgIndex(context) == DEFAULT_BG_INDEX &&
                 getOutlineColorIndex(context) == DEFAULT_OUTLINE_COLOR_INDEX &&
-                getElevationIndex(context) == DEFAULT_ELEVATION_INDEX
+                getElevationIndex(context) == DEFAULT_ELEVATION_INDEX &&
+                getSyncOffsetMs(context) == 0L
     }
 
     /**

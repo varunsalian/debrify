@@ -58,6 +58,9 @@ class SubtitlePanelController(
         /** Panel was dismissed; activity should restore its prior focus. */
         fun onHidden()
 
+        /** Open the floating sync overlay on top of video. */
+        fun onSyncOverlayRequested()
+
         /** Whether the search row should be available (some players don't expose it). */
         fun supportsSearch(): Boolean = true
     }
@@ -117,7 +120,15 @@ class SubtitlePanelController(
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
         return when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK -> { hide(); true }
+            KeyEvent.KEYCODE_BACK -> {
+                if (pane == PANE_OPTIONS) {
+                    pane = PANE_CATEGORIES
+                    applyHighlights()
+                } else {
+                    hide()
+                }
+                true
+            }
             KeyEvent.KEYCODE_DPAD_UP -> { onUp(); true }
             KeyEvent.KEYCODE_DPAD_DOWN -> { onDown(); true }
             KeyEvent.KEYCODE_DPAD_LEFT -> { onLeft(); true }
@@ -189,17 +200,21 @@ class SubtitlePanelController(
     }
 
     private fun onRight() {
-        if (pane == PANE_SEARCH) {
-            pane = PANE_CATEGORIES
-            applyHighlights()
-            return
-        }
-        if (pane == PANE_CATEGORIES) {
-            val cat = currentCategory() ?: return
-            if (cat.getOptionCount() > 0) {
-                pane = PANE_OPTIONS
-                optIndex = cat.getCurrentIndex().coerceIn(0, cat.getOptionCount() - 1)
+        when (pane) {
+            PANE_SEARCH -> {
+                pane = PANE_CATEGORIES
                 applyHighlights()
+            }
+            PANE_CATEGORIES -> {
+                val cat = currentCategory() ?: return
+                if (cat.isSlider) {
+                    hide()
+                    callbacks.onSyncOverlayRequested()
+                } else if (cat.getOptionCount() > 0) {
+                    pane = PANE_OPTIONS
+                    optIndex = cat.getCurrentIndex().coerceIn(0, cat.getOptionCount() - 1)
+                    applyHighlights()
+                }
             }
         }
     }
@@ -213,7 +228,6 @@ class SubtitlePanelController(
                 cat.onSelect(optIndex)
                 afterOptionChanged()
                 if (cat.dismissOnSelect) {
-                    // Reset to top so the next open starts fresh, not on Reset
                     catIndex = 0
                     hide()
                 }
@@ -273,7 +287,6 @@ class SubtitlePanelController(
                 }
             }
         }
-        // Scroll to current
         optionsScroll.post {
             optionRows.getOrNull(optIndex)?.let { row ->
                 optionsScroll.smoothScrollTo(0, (row.top - 16).coerceAtLeast(0))
@@ -362,7 +375,7 @@ class SubtitlePanelController(
             row.background = when {
                 pane == PANE_CATEGORIES && i == catIndex ->
                     activity.resources.getDrawable(R.drawable.subtitle_row_focused, activity.theme)
-                i == catIndex ->
+                i == catIndex && pane == PANE_OPTIONS ->
                     activity.resources.getDrawable(R.drawable.subtitle_row_selected, activity.theme)
                 else -> null
             }
@@ -450,6 +463,7 @@ class SubtitlePanelController(
     private interface Category {
         val name: String
         val dismissOnSelect: Boolean get() = false
+        val isSlider: Boolean get() = false
 
         /**
          * If true, [onSelect] fires as the user arrows over options (live preview).
@@ -537,6 +551,20 @@ class SubtitlePanelController(
             override fun getOptionLabel(i: Int) = SubtitleFontManager.FONT_OPTIONS[i].label
             override fun getCurrentIndex() = SubtitleFontManager.getFontIndex(activity)
             override fun onSelect(i: Int) { SubtitleFontManager.setFontIndex(activity, i) }
+        },
+        object : Category {
+            override val name = "Sync"
+            override val isSlider = true
+            override fun getCurrentLabel(): String {
+                val offset = SubtitleSettings.formatSyncOffset(SubtitleSettings.getSyncOffsetMs(activity))
+                return "$offset  ▸ open slider"
+            }
+            override fun getOptionCount() = 0
+            override fun getOptionLabel(i: Int) = ""
+            override fun getCurrentIndex() = 0
+            override fun onSelect(i: Int) {
+                SubtitleSettings.setSyncOffsetMs(activity, 0L)
+            }
         },
         object : Category {
             override val name = "Reset"

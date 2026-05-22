@@ -66,6 +66,7 @@ import com.debrify.app.R;
 import com.debrify.app.subtitle.StremioSubtitle;
 import com.debrify.app.subtitle.StremioSubtitleService;
 import com.debrify.app.util.LanguageMapper;
+import com.debrify.app.util.OffsetRenderersFactory;
 import com.debrify.app.util.SubtitleFontManager;
 import com.debrify.app.util.SubtitleSettings;
 
@@ -121,6 +122,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private ExoPlayer player;
     private DefaultTrackSelector trackSelector;
     private RenderersFactory renderersFactory;
+    private OffsetRenderersFactory offsetRenderersFactory;
     private DefaultBandwidthMeter bandwidthMeter;
     private Player.Listener subtitleListener; // Track subtitle listener for proper cleanup
     private Player.Listener trackChangeListener; // Track listener for proper cleanup on channel switch
@@ -287,6 +289,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View subtitleSettingsRoot;
     private boolean subtitleSettingsVisible = false;
     private SubtitlePanelController subtitlePanel;
+    private SubtitleSyncOverlayController syncOverlay;
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
 
@@ -503,10 +506,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = UnstableApi.class)
     private void initialisePlayer() {
-        renderersFactory = new DefaultRenderersFactory(this)
+        DefaultRenderersFactory baseRenderersFactory = new DefaultRenderersFactory(this)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
                 .setAllowedVideoJoiningTimeMs(300);
+        offsetRenderersFactory = new OffsetRenderersFactory(baseRenderersFactory);
+        renderersFactory = offsetRenderersFactory;
 
         bandwidthMeter = new DefaultBandwidthMeter.Builder(this).build();
 
@@ -3225,6 +3230,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onSyncOverlayRequested() {
+                showSyncOverlay();
+            }
+
+            @Override
             public void onHidden() {
                 subtitleSettingsVisible = false;
                 if (playerView != null) {
@@ -3253,6 +3263,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         } else {
             subtitleSettingsVisible = false;
         }
+    }
+
+    private void showSyncOverlay() {
+        ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
+        if (root == null) return;
+        if (syncOverlay == null) {
+            syncOverlay = new SubtitleSyncOverlayController(
+                    this,
+                    root,
+                    () -> applySubtitleSettings(),
+                    () -> { if (playerView != null) playerView.requestFocus(); }
+            );
+        }
+        syncOverlay.show();
     }
 
     /**
@@ -3321,6 +3345,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     SubtitleSettings.getFontSizeSp(this));
             subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
             subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
+        }
+        if (offsetRenderersFactory != null) {
+            offsetRenderersFactory.setOffsetUs(SubtitleSettings.getSyncOffsetMs(this) * 1000L);
         }
     }
 
@@ -3860,6 +3887,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return super.dispatchKeyEvent(event);
         }
 
+        // Subtitle sync overlay (floats on top of video)
+        if (syncOverlay != null && syncOverlay.isVisible()) {
+            return syncOverlay.dispatchKey(event);
+        }
+
         // Subtitle Settings Panel is visible - handle keys
         if (subtitlePanel != null && subtitlePanel.isVisible()) {
             return subtitlePanel.dispatchKey(event);
@@ -4106,6 +4138,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player.stop();
             player.release();
             player = null;
+            offsetRenderersFactory = null;
+            syncOverlay = null;
         }
         hideNextOverlay();
         cancelTitleFade();
