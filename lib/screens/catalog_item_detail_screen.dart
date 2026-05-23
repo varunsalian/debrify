@@ -258,7 +258,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             top: 0,
             left: 0,
             right: 0,
-            height: isWide ? size.height : size.height * 0.55,
+            height: isWide ? size.height : size.height * 0.62,
             child: _Backdrop(
               url: backdropUrl,
               isWide: isWide,
@@ -296,12 +296,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget _buildNarrowContent(Size size) {
-    // Prime-style single natural scroll: hero, then title/meta/genres, then
-    // Play/Sources high up, the quick-action row, and the synopsis. Nothing
-    // is pinned — the important controls already sit in the first screenful.
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.only(top: size.height * 0.26, bottom: 36),
+      padding: EdgeInsets.only(top: size.height * 0.30, bottom: 48),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: _buildNarrowColumn(),
@@ -361,7 +358,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   /// Wide: cinematic bottom-left sheet — info first, Play/Sources at the end.
   Widget _buildContentColumn() {
-    final t = _tight; // vertically-constrained (e.g. Android TV 540px)
+    final t = _tight;
     final children = <Widget>[
       _secEyebrow(0.00),
       SizedBox(height: t ? 6 : 10),
@@ -372,7 +369,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final g = _secGenres(0.28);
     if (g != null) children..add(SizedBox(height: t ? 10 : 18))..add(g);
     final aw = _secAwards(0.32);
-    if (aw != null) children..add(SizedBox(height: t ? 6 : 10))..add(aw);
+    if (aw != null) children..add(SizedBox(height: t ? 8 : 12))..add(aw);
     children
       ..add(SizedBox(height: t ? 16 : 26))
       ..add(_buildActionRow(0.38));
@@ -380,8 +377,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (d != null) children..add(SizedBox(height: t ? 12 : 24))..add(d);
     final cr = _secCredits(0.50);
     if (cr != null) children..add(SizedBox(height: t ? 10 : 18))..add(cr);
+    final ca = _secCast(0.52);
+    if (ca != null) children..add(SizedBox(height: t ? 14 : 24))..add(ca);
     final q = _secQuickActions(0.54);
     if (q != null) children..add(SizedBox(height: t ? 14 : 26))..add(q);
+    final dt = _secDetails(0.56);
+    if (dt != null) children..add(SizedBox(height: t ? 12 : 22))..add(dt);
     final pg = _secParentsGuide(0.58);
     if (pg != null) children..add(SizedBox(height: t ? 12 : 22))..add(pg);
     final r = _secRecommendations(0.66);
@@ -393,31 +394,72 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     );
   }
 
-  /// Narrow (Prime-style): one natural scroll — Play/Sources high under the
-  /// meta, then the synopsis, then the quick-action grid.
   Widget _buildNarrowColumn() {
     final children = <Widget>[
       _secEyebrow(0.00),
       const SizedBox(height: 8),
       _secTitle(0.10),
-      const SizedBox(height: 10),
+      const SizedBox(height: 12),
       _secMeta(0.20),
     ];
     final g = _secGenres(0.28);
     if (g != null) children..add(const SizedBox(height: 14))..add(g);
     final aw = _secAwards(0.32);
-    if (aw != null) children..add(const SizedBox(height: 8))..add(aw);
+    if (aw != null) children..add(const SizedBox(height: 12))..add(aw);
     children
-      ..add(const SizedBox(height: 22))
+      ..add(const SizedBox(height: 24))
       ..add(_buildActionRow(0.38));
-    final d = _secDescription(0.46);
-    if (d != null) children..add(const SizedBox(height: 22))..add(d);
-    final cr = _secCredits(0.50);
-    if (cr != null) children..add(const SizedBox(height: 16))..add(cr);
+
+    // ── Glass info card: synopsis + credits + cast ──
+    // All inner sections share the card's start time so they fade in
+    // together — no staggered holes inside the card.
+    const infoStart = 0.46;
+    final infoChildren = <Widget>[];
+    final d = _secDescription(infoStart);
+    if (d != null) infoChildren.add(d);
+    final cr = _secCredits(infoStart);
+    if (cr != null) {
+      if (infoChildren.isNotEmpty) infoChildren.add(_divider());
+      infoChildren.add(cr);
+    }
+    final ca = _secCast(infoStart);
+    if (ca != null) {
+      if (infoChildren.isNotEmpty) infoChildren.add(_divider());
+      infoChildren.add(ca);
+    }
+    if (infoChildren.isNotEmpty) {
+      children
+        ..add(const SizedBox(height: 24))
+        ..add(_Reveal(
+          parent: _revealCtrl,
+          start: infoStart,
+          child: _GlassCard(children: infoChildren),
+        ));
+    }
+
     final q = _secQuickActions(0.54);
-    if (q != null) children..add(const SizedBox(height: 26))..add(q);
-    final pg = _secParentsGuide(0.58);
-    if (pg != null) children..add(const SizedBox(height: 20))..add(pg);
+    if (q != null) children..add(const SizedBox(height: 24))..add(q);
+
+    // ── Glass details card: production details + parents guide ──
+    const detailStart = 0.56;
+    final detailChildren = <Widget>[];
+    final dt = _secDetails(detailStart);
+    if (dt != null) detailChildren.add(dt);
+    final pg = _secParentsGuide(detailStart);
+    if (pg != null) {
+      if (detailChildren.isNotEmpty) detailChildren.add(_divider());
+      detailChildren.add(pg);
+    }
+    if (detailChildren.isNotEmpty) {
+      children
+        ..add(const SizedBox(height: 24))
+        ..add(_Reveal(
+          parent: _revealCtrl,
+          start: detailStart,
+          child: _GlassCard(children: detailChildren),
+        ));
+    }
+
     final r = _secRecommendations(0.66);
     if (r != null) children..add(const SizedBox(height: 28))..add(r);
     return Column(
@@ -426,6 +468,24 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children: children,
     );
   }
+
+  Widget _divider() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Container(
+          height: 0.5,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0x00FFFFFF),
+                Color(0x18FFFFFF),
+                Color(0x18FFFFFF),
+                Color(0x00FFFFFF),
+              ],
+              stops: [0.0, 0.2, 0.8, 1.0],
+            ),
+          ),
+        ),
+      );
 
   // ── Sections ──────────────────────────────────────────────────────────────
 
@@ -549,6 +609,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               if (hasYear || cert != null || runtime != null) _dot(),
               Shimmer(width: 60, height: 14, borderRadius: BorderRadius.circular(4)),
             ],
+            if (extra?.metacriticScore != null) ...[
+              _dot(),
+              _MetacriticBadge(score: extra!.metacriticScore!),
+            ],
           ],
         ),
       ),
@@ -591,25 +655,41 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     return _Reveal(
       parent: _revealCtrl,
       start: start,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.emoji_events_rounded,
-            size: 15,
-            color: Color(0xFFFBBF24),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: _tight ? 10 : 12,
+          vertical: _tight ? 6 : 8,
+        ),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0x22FBBF24), Color(0x0AFBBF24)],
           ),
-          const SizedBox(width: 6),
-          Text(
-            extra.awardsLine!,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: _tight ? 11 : 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0x33FBBF24),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.emoji_events_rounded,
+              size: 16,
+              color: Color(0xFFFBBF24),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              extra.awardsLine!,
+              style: TextStyle(
+                color: const Color(0xFFFBBF24).withValues(alpha: 0.9),
+                fontSize: _tight ? 11 : 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -701,6 +781,172 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               ],
             ),
         ],
+      ),
+    );
+  }
+
+  Widget? _secCast(double start) {
+    final cast = _imdbExtra?.cast ?? const [];
+    if (cast.isEmpty) {
+      if (_imdbLoaded) return null;
+      return _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sectionHeader('CAST'),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: (_tight ? 56.0 : 68.0) + 42,
+              child: Row(
+                children: [
+                  for (var i = 0; i < 4; i++) ...[
+                    if (i > 0) const SizedBox(width: 14),
+                    Column(
+                      children: [
+                        Shimmer(
+                          width: _tight ? 56 : 68,
+                          height: _tight ? 56 : 68,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        const SizedBox(height: 6),
+                        Shimmer(width: 50, height: 10, borderRadius: BorderRadius.circular(3)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final avatarSize = _tight ? 56.0 : 68.0;
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _sectionHeader('CAST'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: avatarSize + 42,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              clipBehavior: Clip.none,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < cast.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 14),
+                    _CastAvatar(
+                      member: cast[i],
+                      size: avatarSize,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _secDetails(double start) {
+    final extra = _imdbExtra;
+    if (extra == null) {
+      if (_imdbLoaded) return null;
+      return _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sectionHeader('DETAILS'),
+            const SizedBox(height: 10),
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(height: 6),
+              Row(children: [
+                Shimmer(width: 70, height: 11, borderRadius: BorderRadius.circular(3)),
+                const SizedBox(width: 10),
+                Shimmer(width: 120, height: 11, borderRadius: BorderRadius.circular(3)),
+              ]),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final rows = <(String, String)>[];
+    if (extra.countries.isNotEmpty) {
+      rows.add(('Country', extra.countries.take(2).join(', ')));
+    }
+    if (extra.languages.isNotEmpty) {
+      rows.add(('Language', extra.languages.take(3).join(', ')));
+    }
+    if (extra.productionCompany != null) {
+      rows.add(('Studio', extra.productionCompany!));
+    }
+    if (extra.boxOffice != null) {
+      rows.add(('Box Office', extra.boxOffice!));
+    }
+    if (rows.isEmpty) return null;
+
+    final labelStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.40),
+      fontSize: _tight ? 11 : 12,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.3,
+      shadows: const [Shadow(color: Color(0x55000000), blurRadius: 4)],
+    );
+    final valueStyle = TextStyle(
+      color: Colors.white.withValues(alpha: 0.82),
+      fontSize: _tight ? 11 : 12,
+      fontWeight: FontWeight.w500,
+      shadows: const [Shadow(color: Color(0x55000000), blurRadius: 4)],
+    );
+
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _sectionHeader('DETAILS'),
+          SizedBox(height: _tight ? 8 : 10),
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) SizedBox(height: _tight ? 4 : 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 78, child: Text(rows[i].$1, style: labelStyle)),
+                Expanded(child: Text(rows[i].$2, style: valueStyle)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String label) {
+    return Text(
+      label,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.45),
+        fontSize: _tight ? 10 : 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 2.2,
+        shadows: const [Shadow(color: Color(0x55000000), blurRadius: 4)],
       ),
     );
   }
@@ -1219,6 +1465,124 @@ class _GenreChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Metacritic badge ──────────────────────────────────────────────────────
+
+class _MetacriticBadge extends StatelessWidget {
+  final int score;
+  const _MetacriticBadge({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    if (score >= 61) {
+      bg = const Color(0xFF66CC33);
+    } else if (score >= 40) {
+      bg = const Color(0xFFFFCC33);
+    } else {
+      bg = const Color(0xFFFF0000);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        '$score',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          height: 1.3,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Cast avatar ──────────────────────────────────────────────────────────
+
+class _CastAvatar extends StatelessWidget {
+  final CastMember member;
+  final double size;
+  const _CastAvatar({required this.member, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size + 8,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.06),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 0.5,
+              ),
+              boxShadow: const [
+                BoxShadow(color: Color(0x33000000), blurRadius: 8),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: member.imageUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: member.imageUrl!,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _initials(),
+                    errorWidget: (_, __, ___) => _initials(),
+                  )
+                : _initials(),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            member.name.split(' ').last,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.80),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+            ),
+          ),
+          if (member.character != null) ...[
+            const SizedBox(height: 1),
+            Text(
+              member.character!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.38),
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _initials() => Center(
+        child: Text(
+          member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
 }
 
 // ── Recommendation ("Watch Next") card ─────────────────────────────────────
@@ -1957,6 +2321,41 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Glass card ────────────────────────────────────────────────────────────
+
+class _GlassCard extends StatelessWidget {
+  final List<Widget> children;
+  const _GlassCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 0.5,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
       ),
     );
   }
