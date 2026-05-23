@@ -901,8 +901,7 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
               fontWeight: FontWeight.w800,
               letterSpacing: -0.8,
               shadows: const [
-                Shadow(blurRadius: 24, color: Colors.black),
-                Shadow(blurRadius: 48, color: Color(0x88000000)),
+                Shadow(blurRadius: 16, color: Colors.black),
               ],
             ),
           ),
@@ -935,32 +934,26 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
   }
 
   Widget _glassPill({required IconData icon, required String label}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.15),
-              width: 0.5,
-            ),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.85)),
-            const SizedBox(width: 7),
-            Text(label,
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3)),
-          ]),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.50),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 0.5,
         ),
       ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.85)),
+        const SizedBox(width: 7),
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3)),
+      ]),
     );
   }
 
@@ -997,9 +990,8 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: widget.ident.withValues(alpha: 0.55),
-                    blurRadius: 20,
-                    spreadRadius: 2,
+                    color: widget.ident.withValues(alpha: 0.45),
+                    blurRadius: 10,
                   ),
                 ],
               ),
@@ -1135,19 +1127,8 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
                     widthFactor: progress.clamp(0.0, 1.0),
                     child: Container(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            widget.ident,
-                            widget.ident.withValues(alpha: 0.7),
-                          ],
-                        ),
+                        color: widget.ident,
                         borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.ident.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                          ),
-                        ],
                       ),
                     ),
                   ),
@@ -1509,25 +1490,15 @@ class _LivePipState extends State<_LivePip>
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
-        final t = _c.value;
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF3B5C),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFFF3B5C).withValues(alpha: 0.3 + 0.3 * t),
-              width: 2,
+        return Opacity(
+          opacity: 0.6 + 0.4 * _c.value,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFF3B5C),
+              shape: BoxShape.circle,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF3B5C)
-                    .withValues(alpha: 0.20 + 0.45 * t),
-                blurRadius: 8 + 10 * t,
-                spreadRadius: 1 + 3 * t,
-              ),
-            ],
           ),
         );
       },
@@ -1763,21 +1734,16 @@ class _DialCardState extends State<_DialCard> {
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: ident.withValues(alpha: 0.55),
-                        blurRadius: 32,
-                        spreadRadius: 2,
-                      ),
-                      BoxShadow(
-                        color: ident.withValues(alpha: 0.20),
-                        blurRadius: 60,
-                        spreadRadius: 6,
+                        color: ident.withValues(alpha: 0.50),
+                        blurRadius: 16,
+                        spreadRadius: 1,
                       ),
                     ]
-                  : [
+                  : const [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                        color: Colors.black54,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
                       ),
                     ],
             ),
@@ -1875,21 +1841,18 @@ class _DialCardState extends State<_DialCard> {
                             size: 14, color: Color(0xFFFFC107)),
                       ),
                     ),
-                  // Title + progress glass overlay.
+                  // Title + progress overlay.
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(15),
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: Container(
+                    child: Container(
                           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.25),
+                            borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(15),
+                            ),
+                            color: Colors.black.withValues(alpha: 0.55),
                             border: Border(
                               top: BorderSide(
                                 color: Colors.white.withValues(alpha: 0.08),
@@ -1946,8 +1909,6 @@ class _DialCardState extends State<_DialCard> {
                               ),
                             ],
                           ),
-                        ),
-                      ),
                     ),
                   ),
                 ],
