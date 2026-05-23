@@ -2293,22 +2293,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     );
     await Navigator.of(context).push(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 260),
-        reverseTransitionDuration: const Duration(milliseconds: 200),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
         pageBuilder: (_, __, ___) => screen,
-        transitionsBuilder: (_, anim, __, child) {
-          final curved = CurvedAnimation(
-            parent: anim,
-            curve: Curves.easeOutCubic,
-          );
-          return FadeTransition(
-            opacity: curved,
-            child: ScaleTransition(
-              scale: Tween(begin: 1.08, end: 1.0).animate(curved),
-              child: child,
-            ),
-          );
-        },
       ),
     );
   }
@@ -3571,22 +3558,21 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
       onKeyEvent: _handleKey,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: widget.isActive
                 ? const Color(0xFF536DFE)
                 : _focused
-                ? const Color(0xFF536DFE).withValues(alpha: 0.15)
-                : Colors.transparent,
+                    ? const Color(0xFF536DFE).withValues(alpha: 0.15)
+                    : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: _focused
                   ? const Color(0xFF536DFE).withValues(alpha: 0.7)
                   : widget.isActive
-                  ? Colors.transparent
-                  : Colors.white12,
+                      ? Colors.transparent
+                      : Colors.white12,
               width: _focused ? 1.5 : 1,
             ),
           ),
@@ -3679,8 +3665,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
       onKeyEvent: _handleKey,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(

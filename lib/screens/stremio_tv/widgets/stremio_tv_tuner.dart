@@ -508,30 +508,24 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     return Column(
       children: [
         Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            switchInCurve: Curves.easeOut,
-            transitionBuilder: (child, anim) =>
-                FadeTransition(opacity: anim, child: child),
-            child: active == null
-                ? const SizedBox.shrink()
-                : Builder(
-                    key: ValueKey(active.id),
-                    builder: (_) {
-                      final np = _nowPlaying(active);
-                      return _Stage(
-                        channel: active,
-                        ident: _identFor(active),
-                        nowPlaying: np,
-                        nextPlaying: _nextPlaying(active),
-                        displayProgress: _displayProgress(active, np),
-                        hideNowPlaying: widget.hideNowPlaying,
-                        loading:
-                            widget.loadingChannelIds.contains(active.id),
-                      );
-                    },
-                  ),
-          ),
+          child: active == null
+              ? const SizedBox.shrink()
+              : Builder(
+                  key: ValueKey(active.id),
+                  builder: (_) {
+                    final np = _nowPlaying(active);
+                    return _Stage(
+                      channel: active,
+                      ident: _identFor(active),
+                      nowPlaying: np,
+                      nextPlaying: _nextPlaying(active),
+                      displayProgress: _displayProgress(active, np),
+                      hideNowPlaying: widget.hideNowPlaying,
+                      loading:
+                          widget.loadingChannelIds.contains(active.id),
+                    );
+                  },
+                ),
         ),
         // Dial area
         Container(
@@ -677,18 +671,13 @@ class _Stage extends StatefulWidget {
   State<_Stage> createState() => _StageState();
 }
 
-class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
+class _StageState extends State<_Stage> {
   ParentsGuideResult? _parentsGuide;
   String? _loadedImdbId;
-  late final AnimationController _enterCtrl;
 
   @override
   void initState() {
     super.initState();
-    _enterCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..forward();
     _maybeLoadParentsGuide();
   }
 
@@ -696,12 +685,6 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
   void didUpdateWidget(_Stage old) {
     super.didUpdateWidget(old);
     _maybeLoadParentsGuide();
-  }
-
-  @override
-  void dispose() {
-    _enterCtrl.dispose();
-    super.dispose();
   }
 
   void _maybeLoadParentsGuide() {
@@ -826,22 +809,7 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
                   alignment: Alignment.bottomLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: c.maxWidth),
-                    child: AnimatedBuilder(
-                      animation: _enterCtrl,
-                      builder: (context, _) {
-                        final t = CurvedAnimation(
-                          parent: _enterCtrl,
-                          curve: Curves.easeOutCubic,
-                        ).value;
-                        return Opacity(
-                          opacity: t,
-                          child: Transform.translate(
-                            offset: Offset(0, 16 * (1 - t)),
-                            child: _buildContent(item, isNarrow),
-                          ),
-                        );
-                      },
-                    ),
+                    child: _buildContent(item, isNarrow),
                   ),
                 ),
               ),
@@ -988,12 +956,6 @@ class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
               decoration: BoxDecoration(
                 color: widget.ident,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.ident.withValues(alpha: 0.45),
-                    blurRadius: 10,
-                  ),
-                ],
               ),
               child: Text(
                 'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
@@ -1463,45 +1425,19 @@ class _StageDescription extends StatelessWidget {
   }
 }
 
-/// A softly pulsing "on air" pip with glow ring.
-class _LivePip extends StatefulWidget {
+class _LivePip extends StatelessWidget {
   final Color color;
   const _LivePip({required this.color});
 
   @override
-  State<_LivePip> createState() => _LivePipState();
-}
-
-class _LivePipState extends State<_LivePip>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, _) {
-        return Opacity(
-          opacity: 0.6 + 0.4 * _c.value,
-          child: Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFF3B5C),
-              shape: BoxShape.circle,
-            ),
-          ),
-        );
-      },
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: const BoxDecoration(
+        color: Color(0xFFFF3B5C),
+        shape: BoxShape.circle,
+      ),
     );
   }
 }
@@ -1510,107 +1446,19 @@ class _LivePipState extends State<_LivePip>
 // Marquee — auto-scrolling text for overflowing labels.
 // =========================================================================
 
-class _Marquee extends StatefulWidget {
+class _Marquee extends StatelessWidget {
   final String text;
   final TextStyle style;
 
   const _Marquee({required this.text, required this.style});
 
   @override
-  State<_Marquee> createState() => _MarqueeState();
-}
-
-class _MarqueeState extends State<_Marquee> with SingleTickerProviderStateMixin {
-  late final ScrollController _scroll;
-  AnimationController? _anim;
-  bool _overflows = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll = ScrollController();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
-  }
-
-  @override
-  void didUpdateWidget(_Marquee old) {
-    super.didUpdateWidget(old);
-    if (old.text != widget.text) {
-      _anim?.stop();
-      _anim?.dispose();
-      _anim = null;
-      _scroll.jumpTo(0);
-      _overflows = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
-    }
-  }
-
-  void _checkOverflow() {
-    if (!mounted || !_scroll.hasClients) return;
-    final maxScroll = _scroll.position.maxScrollExtent;
-    if (maxScroll > 0) {
-      setState(() => _overflows = true);
-      _startScroll(maxScroll);
-    }
-  }
-
-  void _startScroll(double extent) {
-    _anim?.dispose();
-    final ms = (extent * 28).round().clamp(2000, 12000);
-    _anim = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: ms),
-    );
-    _anim!.addListener(() {
-      if (_scroll.hasClients) {
-        _scroll.jumpTo(_anim!.value * extent);
-      }
-    });
-    _anim!.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          if (!mounted) return;
-          _scroll.jumpTo(0);
-          Future.delayed(const Duration(milliseconds: 1000), () {
-            if (!mounted || _anim == null) return;
-            _anim!.forward(from: 0);
-          });
-        });
-      }
-    });
-    Future.delayed(const Duration(milliseconds: 2000), () {
-      if (mounted && _anim != null) _anim!.forward(from: 0);
-    });
-  }
-
-  @override
-  void dispose() {
-    _anim?.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ShaderMask(
-      shaderCallback: (bounds) {
-        return LinearGradient(
-          colors: [
-            if (_overflows) Colors.transparent else Colors.white,
-            Colors.white,
-            Colors.white,
-            if (_overflows) Colors.transparent else Colors.white,
-          ],
-          stops: const [0.0, 0.05, 0.90, 1.0],
-        ).createShader(bounds);
-      },
-      blendMode: BlendMode.dstIn,
-      child: SingleChildScrollView(
-        controller: _scroll,
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        child: Text(widget.text, style: widget.style, maxLines: 1),
-      ),
+    return Text(
+      text,
+      style: style,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -1715,12 +1563,9 @@ class _DialCardState extends State<_DialCard> {
           widget.onSelect();
         },
         onLongPress: widget.onLongPress,
-        child: AnimatedScale(
+        child: Transform.scale(
           scale: _focused ? 1.10 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          child: Container(
             width: 138,
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
@@ -1734,18 +1579,11 @@ class _DialCardState extends State<_DialCard> {
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: ident.withValues(alpha: 0.50),
-                        blurRadius: 16,
-                        spreadRadius: 1,
+                        color: ident.withValues(alpha: 0.40),
+                        blurRadius: 12,
                       ),
                     ]
-                  : const [
-                      BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 8,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
+                  : null,
             ),
             clipBehavior: Clip.antiAlias,
             child: AspectRatio(
@@ -1809,12 +1647,6 @@ class _DialCardState extends State<_DialCard> {
                       decoration: BoxDecoration(
                         color: ident,
                         borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: ident.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                          ),
-                        ],
                       ),
                       child: Text(
                         channelNumberLabel,
@@ -1847,68 +1679,65 @@ class _DialCardState extends State<_DialCard> {
                     right: 0,
                     bottom: 0,
                     child: Container(
-                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                          decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(15),
-                            ),
-                            color: Colors.black.withValues(alpha: 0.55),
-                            border: Border(
-                              top: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                width: 0.5,
-                              ),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(15),
+                        ),
+                        color: Colors.black.withValues(alpha: 0.55),
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.hideNowPlaying
+                                ? widget.channel.catalog.name
+                                : (item?.name ??
+                                    widget.channel.catalog.name),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              height: 1.2,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.hideNowPlaying
-                                    ? widget.channel.catalog.name
-                                    : (item?.name ?? widget.channel.catalog.name),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  height: 1.2,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: SizedBox(
-                                  height: 4,
-                                  child: Stack(
-                                    children: [
-                                      Container(
-                                        color: Colors.white.withValues(alpha: 0.15),
-                                      ),
-                                      FractionallySizedBox(
-                                        widthFactor: widget.displayProgress
-                                            .clamp(0.0, 1.0),
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                ident,
-                                                ident.withValues(alpha: 0.6),
-                                              ],
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: SizedBox(
+                              height: 4,
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.15),
                                   ),
-                                ),
+                                  FractionallySizedBox(
+                                    widthFactor: widget.displayProgress
+                                        .clamp(0.0, 1.0),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: ident,
+                                        borderRadius:
+                                            BorderRadius.circular(3),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
