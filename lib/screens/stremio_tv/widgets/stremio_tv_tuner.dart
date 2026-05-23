@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
-import '../../../services/imdb_parents_guide_service.dart';
 import '../stremio_tv_service.dart';
 
 /// "The Tuner" — a cinematic channel-surfing experience for Stremio TV.
@@ -672,33 +671,6 @@ class _Stage extends StatefulWidget {
 }
 
 class _StageState extends State<_Stage> {
-  ParentsGuideResult? _parentsGuide;
-  String? _loadedImdbId;
-
-  @override
-  void initState() {
-    super.initState();
-    _maybeLoadParentsGuide();
-  }
-
-  @override
-  void didUpdateWidget(_Stage old) {
-    super.didUpdateWidget(old);
-    _maybeLoadParentsGuide();
-  }
-
-  void _maybeLoadParentsGuide() {
-    final imdbId = widget.nowPlaying?.item.effectiveImdbId;
-    if (imdbId == null || imdbId == _loadedImdbId) return;
-    _loadedImdbId = imdbId;
-    _parentsGuide = null;
-    ImdbParentsGuideService.fetch(imdbId).then((result) {
-      if (mounted && result != null && _loadedImdbId == imdbId) {
-        setState(() => _parentsGuide = result);
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final item = widget.nowPlaying?.item;
@@ -875,14 +847,9 @@ class _StageState extends State<_Stage> {
           ),
           const SizedBox(height: 12),
           _metaRow(item),
-          if (_parentsGuide != null &&
-              !_parentsGuide!.isEmpty) ...[
-            const SizedBox(height: 10),
-            _parentsGuideLabels(isNarrow),
-          ],
           if (item.description != null &&
               item.description!.trim().isNotEmpty) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             _StageDescription(
               text: item.description!.trim(),
               title: item.name,
@@ -922,19 +889,6 @@ class _StageState extends State<_Stage> {
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3)),
       ]),
-    );
-  }
-
-  Widget _parentsGuideLabels(bool narrow) {
-    final cats = _parentsGuide!.categories;
-    final display = narrow ? cats.take(3).toList() : cats;
-    return Wrap(
-      spacing: narrow ? 6 : 8,
-      runSpacing: narrow ? 4 : 6,
-      children: [
-        for (final cat in display)
-          _PgBadge(label: cat.label, severity: cat.severity, narrow: narrow),
-      ],
     );
   }
 
@@ -1205,75 +1159,6 @@ class _StageState extends State<_Stage> {
   }
 }
 
-class _PgBadge extends StatelessWidget {
-  final String label;
-  final String severity;
-  final bool narrow;
-
-  const _PgBadge({
-    required this.label,
-    required this.severity,
-    this.narrow = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _severityColor(severity);
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: narrow ? 7 : 9,
-        vertical: narrow ? 3 : 4,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: color.withValues(alpha: 0.25),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.75),
-              fontSize: narrow ? 9.5 : 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            severity,
-            style: TextStyle(
-              color: color,
-              fontSize: narrow ? 9 : 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Color _severityColor(String severity) {
-    return switch (severity.toLowerCase()) {
-      'none' => const Color(0xFF4ADE80),
-      'mild' => const Color(0xFFFBBF24),
-      'moderate' => const Color(0xFFFB923C),
-      'severe' => const Color(0xFFEF4444),
-      _ => Colors.white54,
-    };
-  }
-}
-
 /// Stage synopsis with "Read more" sheet for mobile.
 class _StageDescription extends StatelessWidget {
   final String text;
@@ -1289,9 +1174,9 @@ class _StageDescription extends StatelessWidget {
   });
 
   static const _style = TextStyle(
-    color: Color(0xB8FFFFFF),
-    fontSize: 14.5,
-    height: 1.4,
+    color: Color(0xC8FFFFFF),
+    fontSize: 17,
+    height: 1.5,
     shadows: [Shadow(blurRadius: 8, color: Colors.black)],
   );
 
@@ -1300,7 +1185,7 @@ class _StageDescription extends StatelessWidget {
     if (!interactive) {
       return Text(
         text,
-        maxLines: 2,
+        maxLines: 3,
         overflow: TextOverflow.ellipsis,
         style: _style,
       );
