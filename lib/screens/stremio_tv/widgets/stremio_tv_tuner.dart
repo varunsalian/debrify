@@ -116,9 +116,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   void initState() {
     super.initState();
     _activeId = widget.channels.isNotEmpty ? widget.channels.first.id : null;
-    // Slots are 45–90 min, so a coarse tick keeps the broadcast "alive"
-    // (sweeping progress, self-flipping slot rollovers) without rebuilding
-    // the Stage + Dial every second on low-end TV hardware.
     _tick = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) setState(() {});
     });
@@ -127,7 +124,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   @override
   void didUpdateWidget(StremioTvTuner old) {
     super.didUpdateWidget(old);
-    // Keep the active channel valid as search/sort reshuffles the list.
     if (_activeId == null ||
         !widget.channels.any((c) => c.id == _activeId)) {
       _activeId = widget.channels.isNotEmpty ? widget.channels.first.id : null;
@@ -146,8 +142,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   // --- Channel ident ------------------------------------------------------
 
-  /// A rich, deterministic accent per channel — like a TV channel's brand
-  /// colour. Stable across rebuilds, distinct between neighbours.
   static const List<Color> _idents = [
     Color(0xFF6C5CE7), // indigo
     Color(0xFFE84393), // magenta
@@ -168,8 +162,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   StremioTvNowPlaying? _nextPlaying(StremioTvChannel c) => widget.service
       .getNextPlaying(c, rotationMinutes: widget.rotationFor(c), salt: widget.mixSalt);
 
-  /// Progress to render on a card/stage — capped per the host's "max
-  /// start %" setting so the bar agrees with where playback will join.
   double _displayProgress(StremioTvChannel c, StremioTvNowPlaying? np) =>
       np == null ? 0.0 : widget.displayProgress(c, np.progress);
 
@@ -186,15 +178,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   void _setActive(StremioTvChannel c) {
     if (_pendingId == c.id) return;
     _pendingId = c.id;
-    // Report the focused channel to the host immediately — it is cheap
-    // bookkeeping (no rebuild) and must stay current so header→down returns
-    // to the card the user is actually on, even mid-surf.
     final ri = widget.allChannels.indexWhere((x) => x.id == c.id);
     if (ri >= 0) widget.onFocusedIndexChanged(ri);
-    // Surfing must stay instant. The Dial highlight is cheap, local card
-    // state and already moved; only the heavy full-bleed Stage swap is
-    // debounced to focus-settle (Netflix hero/rail pattern), so holding
-    // left/right no longer queues a backlog of image decodes.
     _settle?.cancel();
     _settle = Timer(const Duration(milliseconds: 180), () {
       if (!mounted) return;
@@ -301,8 +286,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   // --- Channels overview (mobile) ----------------------------------------
 
-  /// A scannable list of every channel + what's on right now. Tapping a
-  /// row jumps the pager straight to that channel.
   void _openChannelList() {
     Timer? sheetTick;
     showModalBottomSheet<void>(
@@ -319,10 +302,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         expand: false,
         builder: (ctx, scrollCtrl) => StatefulBuilder(
           builder: (ctx, setSheet) {
-            // Refresh as channels lazily load and progress ticks. 5s (not
-            // 1s) — rebuilding the whole list + restarting every row's
-            // image resolution every second janks long lists on low-end
-            // TVs, and slots are 45–90 min so a coarse tick is plenty.
             sheetTick ??= Timer.periodic(const Duration(seconds: 5), (_) {
               if (ctx.mounted) setSheet(() {});
             });
@@ -374,9 +353,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
       color: active ? ident.withValues(alpha: 0.16) : Colors.transparent,
       child: InkWell(
         onTap: () {
-          // Resolve by id at tap time — the list can reshuffle/shrink while
-          // the sheet is open (lazy-load may drop an empty channel), so the
-          // build-time index `i` is not safe to jump with.
           final idx =
               widget.channels.indexWhere((c) => c.id == channel.id);
           Navigator.of(ctx).pop();
@@ -522,10 +498,6 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
     final active = _activeChannel;
     if (active != null) widget.ensureLoaded(active);
 
-    // Only channels that have a focus node are renderable in the Dial.
-    // Driving itemCount/navigation off this list (instead of
-    // widget.channels with a SizedBox.shrink fallback) avoids a
-    // counted-but-invisible blank slot that swallows D-pad focus.
     final dial = widget.channels.where((c) => _nodeFor(c) != null).toList();
     assert(
       dial.length == widget.channels.length,
@@ -535,20 +507,15 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
     return Column(
       children: [
-        // Stage flexes; the Dial is a fixed band so its fixed-size cards can
-        // never overflow on short windows.
         Expanded(
           child: AnimatedSwitcher(
-            // Fade only — scaling a full-bleed image is GPU-heavy on TV.
-            duration: const Duration(milliseconds: 220),
+            duration: const Duration(milliseconds: 300),
             switchInCurve: Curves.easeOut,
             transitionBuilder: (child, anim) =>
                 FadeTransition(opacity: anim, child: child),
             child: active == null
                 ? const SizedBox.shrink()
                 : Builder(
-                    // Key on the Builder — AnimatedSwitcher keys off its
-                    // direct child, so the cross-fade must trigger here.
                     key: ValueKey(active.id),
                     builder: (_) {
                       final np = _nowPlaying(active);
@@ -566,15 +533,30 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   ),
           ),
         ),
-        SizedBox(
-          // 112/0.667 ≈ 168 card + 28 vertical margin + 18 padding ≈ 214;
-          // a slimmer Dial gives the Stage more height on short TVs.
-          height: 218,
+        // Dial area
+        Container(
+          height: 240,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF09090F).withValues(alpha: 0.88),
+                const Color(0xFF09090F),
+              ],
+            ),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.06),
+                width: 0.5,
+              ),
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 12),
+            padding: const EdgeInsets.only(top: 10, bottom: 14),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               itemCount: dial.length,
               itemBuilder: (context, i) {
                 final channel = dial[i];
@@ -591,14 +573,9 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   hideNowPlaying: widget.hideNowPlaying,
                   loading: widget.loadingChannelIds.contains(channel.id),
                   onFocused: () => _setActive(channel),
-                  // Lean-back: clicking a channel tunes straight in. Details
-                  // live in the long-press sheet for anyone who wants them.
                   onSelect: () => widget.onPlay(channel),
                   onLongPress: () => _openActions(channel),
                   onLeft: () {
-                    // Resolve position by id at press time — the list can
-                    // reshuffle/shrink while a card is focused, so the
-                    // build-time index is not safe to navigate with.
                     final live = widget.channels
                         .where((c) => _nodeFor(c) != null)
                         .toList();
@@ -678,17 +655,10 @@ class _Stage extends StatefulWidget {
   final Color ident;
   final StremioTvNowPlaying? nowPlaying;
   final StremioTvNowPlaying? nextPlaying;
-
-  /// Capped/jittered progress to draw on the LIVE bar (honours the "max
-  /// start %" setting so it matches where playback will join).
   final double displayProgress;
   final bool hideNowPlaying;
   final bool loading;
-
-  /// When set (mobile), the top-right pill becomes a tappable "Channels"
-  /// button that opens the all-channels overview list.
   final VoidCallback? onOpenList;
-
   final VoidCallback? onOpenDetail;
 
   const _Stage({
@@ -707,13 +677,18 @@ class _Stage extends StatefulWidget {
   State<_Stage> createState() => _StageState();
 }
 
-class _StageState extends State<_Stage> {
+class _StageState extends State<_Stage> with SingleTickerProviderStateMixin {
   ParentsGuideResult? _parentsGuide;
   String? _loadedImdbId;
+  late final AnimationController _enterCtrl;
 
   @override
   void initState() {
     super.initState();
+    _enterCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
     _maybeLoadParentsGuide();
   }
 
@@ -721,6 +696,12 @@ class _StageState extends State<_Stage> {
   void didUpdateWidget(_Stage old) {
     super.didUpdateWidget(old);
     _maybeLoadParentsGuide();
+  }
+
+  @override
+  void dispose() {
+    _enterCtrl.dispose();
+    super.dispose();
   }
 
   void _maybeLoadParentsGuide() {
@@ -741,11 +722,6 @@ class _StageState extends State<_Stage> {
     final bg = item?.background ?? item?.poster;
     final blurArt = widget.hideNowPlaying;
 
-    // Only the mobile pager passes onOpenList. There the content sits at
-    // the very bottom of a full-screen page, so it must clear the nav bar
-    // *and* any floating system button (e.g. Samsung's assistant/Menu
-    // pill). The wide TV Stage keeps the slim inset so it doesn't steal
-    // height from the Dial below it.
     final isNarrow = widget.onOpenList != null;
     final bottomInset = isNarrow
         ? 30.0 + MediaQuery.of(context).padding.bottom + 72.0
@@ -763,7 +739,7 @@ class _StageState extends State<_Stage> {
                 Widget art = CachedNetworkImage(
                   imageUrl: bg,
                   fit: BoxFit.cover,
-                  memCacheWidth: blurArt ? 480 : 900,
+                  memCacheWidth: blurArt ? 480 : 1280,
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 );
                 if (blurArt) {
@@ -774,23 +750,35 @@ class _StageState extends State<_Stage> {
                 }
                 return ColorFiltered(
                   colorFilter: ColorFilter.mode(
-                    Colors.black.withValues(alpha: 0.18),
+                    Colors.black.withValues(alpha: 0.12),
                     BlendMode.darken,
                   ),
                   child: art,
                 );
               },
             ),
-          // Channel-ident wash + readability scrims.
+          // Multi-layer scrim for depth.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment.topRight,
+                radius: 1.6,
+                colors: [
+                  widget.ident.withValues(alpha: 0.08),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.bottomLeft,
                 end: Alignment.topRight,
                 colors: [
-                  const Color(0xFF09090F).withValues(alpha: 0.96),
-                  const Color(0xFF09090F).withValues(alpha: 0.55),
-                  widget.ident.withValues(alpha: 0.10),
+                  const Color(0xFF09090F).withValues(alpha: 0.97),
+                  const Color(0xFF09090F).withValues(alpha: 0.50),
+                  widget.ident.withValues(alpha: 0.06),
                 ],
                 stops: const [0.0, 0.55, 1.0],
               ),
@@ -801,83 +789,58 @@ class _StageState extends State<_Stage> {
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.center,
-                colors: [Color(0xCC09090F), Color(0x0009090F)],
+                colors: [Color(0xDD09090F), Color(0x0009090F)],
               ),
             ),
           ),
-          // Content.
+          // Side vignette for widescreen depth.
+          if (!isNarrow)
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Color(0x6609090F),
+                    Color(0x0009090F),
+                    Color(0x0009090F),
+                    Color(0x3309090F),
+                  ],
+                  stops: [0.0, 0.15, 0.85, 1.0],
+                ),
+              ),
+            ),
+          // Content with entrance animation.
           Padding(
-            padding: EdgeInsets.fromLTRB(40, 28, 40, bottomInset),
+            padding: EdgeInsets.fromLTRB(
+              isNarrow ? 28 : 48,
+              isNarrow ? 56 : 28,
+              isNarrow ? 28 : 48,
+              bottomInset,
+            ),
             child: LayoutBuilder(
               builder: (context, c) => Align(
                 alignment: Alignment.bottomLeft,
                 child: FittedBox(
-                  // Anchors bottom-left and scales the whole block down to
-                  // fit short TV heights — it can never overflow into the
-                  // Dial or clip LIVE / progress / UP NEXT.
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.bottomLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: c.maxWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                _channelTag(),
-                const SizedBox(height: 14),
-                if (item == null)
-                  _tuningState()
-                else if (widget.hideNowPlaying) ...[
-                  // Spoiler-free: never reveal the title/meta/up-next in
-                  // text. The live clock is not a spoiler, so it stays.
-                  _hiddenState(),
-                  const SizedBox(height: 18),
-                  _liveBar(),
-                ] else ...[
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 38,
-                      height: 1.05,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      shadows: [
-                        Shadow(blurRadius: 18, color: Colors.black)
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _metaRow(item),
-                  if (_parentsGuide != null &&
-                      !_parentsGuide!.isEmpty) ...[
-                    const SizedBox(height: 10),
-                    _parentsGuideLabels(isNarrow),
-                  ],
-                  if (item.description != null &&
-                      item.description!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _StageDescription(
-                      text: item.description!.trim(),
-                      title: item.name,
-                      ident: widget.ident,
-                      // Only the mobile pager can tap "Read more"; the TV
-                      // Stage isn't focusable (details live in the Dial
-                      // long-press sheet), so it keeps the slim 2-line
-                      // synopsis and no dead affordance.
-                      interactive: isNarrow,
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  _liveBar(),
-                  if (widget.nextPlaying != null) ...[
-                    const SizedBox(height: 12),
-                    _upNext(),
-                  ],
-                ],
-              ],
+                    child: AnimatedBuilder(
+                      animation: _enterCtrl,
+                      builder: (context, _) {
+                        final t = CurvedAnimation(
+                          parent: _enterCtrl,
+                          curve: Curves.easeOutCubic,
+                        ).value;
+                        return Opacity(
+                          opacity: t,
+                          child: Transform.translate(
+                            offset: Offset(0, 16 * (1 - t)),
+                            child: _buildContent(item, isNarrow),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -890,7 +853,10 @@ class _StageState extends State<_Stage> {
               right: 18,
               child: GestureDetector(
                 onTap: widget.onOpenDetail,
-                child: _detailsPill(),
+                child: _glassPill(
+                  icon: Icons.info_outline_rounded,
+                  label: 'Details',
+                ),
               ),
             ),
           if (widget.onOpenList != null)
@@ -899,26 +865,9 @@ class _StageState extends State<_Stage> {
               left: 18,
               child: GestureDetector(
                 onTap: widget.onOpenList,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18)),
-                  ),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.format_list_bulleted_rounded,
-                        size: 16, color: Colors.white),
-                    SizedBox(width: 7),
-                    Text('Channels',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3)),
-                  ]),
+                child: _glassPill(
+                  icon: Icons.format_list_bulleted_rounded,
+                  label: 'Channels',
                 ),
               ),
             ),
@@ -927,56 +876,176 @@ class _StageState extends State<_Stage> {
     );
   }
 
+  Widget _buildContent(StremioMeta? item, bool isNarrow) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _channelTag(),
+        const SizedBox(height: 16),
+        if (item == null)
+          _tuningState()
+        else if (widget.hideNowPlaying) ...[
+          _hiddenState(),
+          const SizedBox(height: 20),
+          _liveBar(),
+        ] else ...[
+          Text(
+            item.name,
+            maxLines: isNarrow ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isNarrow ? 28 : 44,
+              height: 1.05,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.8,
+              shadows: const [
+                Shadow(blurRadius: 24, color: Colors.black),
+                Shadow(blurRadius: 48, color: Color(0x88000000)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _metaRow(item),
+          if (_parentsGuide != null &&
+              !_parentsGuide!.isEmpty) ...[
+            const SizedBox(height: 10),
+            _parentsGuideLabels(isNarrow),
+          ],
+          if (item.description != null &&
+              item.description!.trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _StageDescription(
+              text: item.description!.trim(),
+              title: item.name,
+              ident: widget.ident,
+              interactive: isNarrow,
+            ),
+          ],
+          const SizedBox(height: 22),
+          _liveBar(),
+          if (widget.nextPlaying != null) ...[
+            const SizedBox(height: 14),
+            _upNext(),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _glassPill({required IconData icon, required String label}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.15),
+              width: 0.5,
+            ),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.85)),
+            const SizedBox(width: 7),
+            Text(label,
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget _parentsGuideLabels(bool narrow) {
     final cats = _parentsGuide!.categories;
+    final display = narrow ? cats.take(3).toList() : cats;
     return Wrap(
       spacing: narrow ? 6 : 8,
       runSpacing: narrow ? 4 : 6,
       children: [
-        for (final cat in cats)
+        for (final cat in display)
           _PgBadge(label: cat.label, severity: cat.severity, narrow: narrow),
       ],
     );
   }
 
   Widget _channelTag() {
-    return Row(
+    final channel = widget.channel;
+    final catalogLabel = channel.genre != null
+        ? '${channel.catalog.name} — ${channel.genre}'
+        : channel.catalog.name;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-          decoration: BoxDecoration(
-            color: widget.ident,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                  color: widget.ident.withValues(alpha: 0.55),
-                  blurRadius: 16,
-                  spreadRadius: 1)
-            ],
-          ),
-          child: Text(
-            'CH ${widget.channel.channelNumber.toString().padLeft(2, '0')}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: widget.ident,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.ident.withValues(alpha: 0.55),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Text(
+                'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  width: 0.5,
+                ),
+              ),
+              child: Text(
+                channel.addon.name.toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.50),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                  shadows: const [Shadow(blurRadius: 8, color: Colors.black)],
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            widget.channel.displayName.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.78),
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.4,
-            ),
+        const SizedBox(height: 8),
+        _Marquee(
+          text: catalogLabel.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.72),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.8,
+            shadows: const [Shadow(blurRadius: 12, color: Colors.black)],
           ),
         ),
       ],
@@ -986,9 +1055,7 @@ class _StageState extends State<_Stage> {
   Widget _metaRow(StremioMeta item) {
     final bits = <Widget>[];
     void add(Widget w) {
-      if (bits.isNotEmpty) {
-        bits.add(_dot());
-      }
+      if (bits.isNotEmpty) bits.add(_dot());
       bits.add(w);
     }
 
@@ -997,14 +1064,12 @@ class _StageState extends State<_Stage> {
     }
     if (item.imdbRating != null) {
       add(Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.star_rounded, size: 15, color: Color(0xFFFFC107)),
-        const SizedBox(width: 3),
+        const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFC107)),
+        const SizedBox(width: 4),
         Text(item.imdbRating!.toStringAsFixed(1), style: _metaStyle),
       ]));
     }
     if (item.genres != null && item.genres!.isNotEmpty) {
-      // Flexible + ellipsis so long genre lists truncate instead of
-      // overflowing the row (the stripes seen above LIVE).
       add(Flexible(
         child: Text(
           item.genres!.take(3).join(' · '),
@@ -1021,17 +1086,18 @@ class _StageState extends State<_Stage> {
 
   static const _metaStyle = TextStyle(
     color: Colors.white,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: FontWeight.w600,
+    shadows: [Shadow(blurRadius: 12, color: Colors.black)],
   );
 
   Widget _dot() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Container(
-          width: 3,
-          height: 3,
+          width: 4,
+          height: 4,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.45),
+            color: Colors.white.withValues(alpha: 0.40),
             shape: BoxShape.circle,
           ),
         ),
@@ -1043,35 +1109,62 @@ class _StageState extends State<_Stage> {
     return Row(
       children: [
         _LivePip(color: widget.ident),
-        const SizedBox(width: 8),
-        const Text('LIVE',
+        const SizedBox(width: 9),
+        Text('LIVE',
             style: TextStyle(
-              color: Colors.white,
+              color: widget.ident,
               fontSize: 12,
               fontWeight: FontWeight.w900,
-              letterSpacing: 2,
+              letterSpacing: 2.5,
             )),
-        const SizedBox(width: 14),
+        const SizedBox(width: 16),
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 4,
-              backgroundColor: Colors.white.withValues(alpha: 0.16),
-              valueColor: AlwaysStoppedAnimation(widget.ident),
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 5,
+              child: Stack(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  FractionallySizedBox(
+                    widthFactor: progress.clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            widget.ident,
+                            widget.ident.withValues(alpha: 0.7),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.ident.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 16),
         Text(
           np?.progressText ?? '',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 12.5,
+            color: Colors.white.withValues(alpha: 0.65),
+            fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1081,28 +1174,37 @@ class _StageState extends State<_Stage> {
 
   Widget _upNext() {
     final n = widget.nextPlaying!;
-    return Opacity(
-      opacity: 0.72,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.06),
+          width: 0.5,
+        ),
+      ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             'UP NEXT',
             style: TextStyle(
-              color: widget.ident,
+              color: widget.ident.withValues(alpha: 0.85),
               fontSize: 11,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.6,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Flexible(
             child: Text(
               n.item.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13.5,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.78),
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1116,8 +1218,8 @@ class _StageState extends State<_Stage> {
     return Row(
       children: [
         SizedBox(
-          width: 16,
-          height: 16,
+          width: 18,
+          height: 18,
           child: CircularProgressIndicator(
             strokeWidth: 2,
             valueColor: AlwaysStoppedAnimation(widget.ident),
@@ -1128,7 +1230,7 @@ class _StageState extends State<_Stage> {
           widget.loading ? 'Tuning in…' : 'No broadcast on this channel',
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1140,7 +1242,7 @@ class _StageState extends State<_Stage> {
     return Row(
       children: [
         Icon(Icons.visibility_off_rounded,
-            size: 26, color: Colors.white.withValues(alpha: 0.5)),
+            size: 28, color: Colors.white.withValues(alpha: 0.5)),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
@@ -1149,33 +1251,13 @@ class _StageState extends State<_Stage> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.78),
-              fontSize: 22,
+              fontSize: 24,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
             ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _detailsPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: const [
-        Icon(Icons.info_outline_rounded, size: 15, color: Colors.white70),
-        SizedBox(width: 6),
-        Text('Details',
-            style: TextStyle(
-                color: Colors.white70,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700)),
-      ]),
     );
   }
 }
@@ -1249,17 +1331,11 @@ class _PgBadge extends StatelessWidget {
   }
 }
 
-/// Stage synopsis: shows up to 4 lines and, only when the text actually
-/// overflows that, a "Read more" that opens the full synopsis in a sheet.
-/// A sheet (not inline expand) because the Stage body lives inside a
-/// scale-down FittedBox — expanding inline would just shrink everything.
+/// Stage synopsis with "Read more" sheet for mobile.
 class _StageDescription extends StatelessWidget {
   final String text;
   final String title;
   final Color ident;
-
-  /// Mobile pager only: render more lines and a tappable "Read more".
-  /// On TV this is false → slim 2-line synopsis, no affordance.
   final bool interactive;
 
   const _StageDescription({
@@ -1270,16 +1346,14 @@ class _StageDescription extends StatelessWidget {
   });
 
   static const _style = TextStyle(
-    color: Color(0xB8FFFFFF), // white @ ~0.72
+    color: Color(0xB8FFFFFF),
     fontSize: 14.5,
-    height: 1.35,
+    height: 1.4,
+    shadows: [Shadow(blurRadius: 8, color: Colors.black)],
   );
 
   @override
   Widget build(BuildContext context) {
-    // TV: slim 2-line synopsis, no affordance. Return early so the Stage's
-    // frequent rebuilds (15s tick + every surf) don't lay out a throwaway
-    // TextPainter whose overflow result is never used here.
     if (!interactive) {
       return Text(
         text,
@@ -1292,7 +1366,7 @@ class _StageDescription extends StatelessWidget {
       builder: (context, c) {
         final tp = TextPainter(
           text: TextSpan(text: text, style: _style),
-          maxLines: 4,
+          maxLines: 3,
           textDirection: Directionality.of(context),
         )..layout(maxWidth: c.maxWidth);
         final overflows = tp.didExceedMaxLines;
@@ -1302,7 +1376,7 @@ class _StageDescription extends StatelessWidget {
           children: [
             Text(
               text,
-              maxLines: 4,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: _style,
             ),
@@ -1408,7 +1482,7 @@ class _StageDescription extends StatelessWidget {
   }
 }
 
-/// A softly pulsing "on air" pip.
+/// A softly pulsing "on air" pip with glow ring.
 class _LivePip extends StatefulWidget {
   final Color color;
   const _LivePip({required this.color});
@@ -1421,7 +1495,7 @@ class _LivePipState extends State<_LivePip>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 1400),
   )..repeat(reverse: true);
 
   @override
@@ -1437,17 +1511,21 @@ class _LivePipState extends State<_LivePip>
       builder: (context, _) {
         final t = _c.value;
         return Container(
-          width: 9,
-          height: 9,
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(
             color: const Color(0xFFFF3B5C),
             shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFFF3B5C).withValues(alpha: 0.3 + 0.3 * t),
+              width: 2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFFFF3B5C)
-                    .withValues(alpha: 0.25 + 0.45 * t),
-                blurRadius: 6 + 8 * t,
-                spreadRadius: 1 + 2 * t,
+                    .withValues(alpha: 0.20 + 0.45 * t),
+                blurRadius: 8 + 10 * t,
+                spreadRadius: 1 + 3 * t,
               ),
             ],
           ),
@@ -1458,7 +1536,116 @@ class _LivePipState extends State<_LivePip>
 }
 
 // =========================================================================
-// The Dial — a single surfable channel card.
+// Marquee — auto-scrolling text for overflowing labels.
+// =========================================================================
+
+class _Marquee extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _Marquee({required this.text, required this.style});
+
+  @override
+  State<_Marquee> createState() => _MarqueeState();
+}
+
+class _MarqueeState extends State<_Marquee> with SingleTickerProviderStateMixin {
+  late final ScrollController _scroll;
+  AnimationController? _anim;
+  bool _overflows = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+  }
+
+  @override
+  void didUpdateWidget(_Marquee old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) {
+      _anim?.stop();
+      _anim?.dispose();
+      _anim = null;
+      _scroll.jumpTo(0);
+      _overflows = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
+    }
+  }
+
+  void _checkOverflow() {
+    if (!mounted || !_scroll.hasClients) return;
+    final maxScroll = _scroll.position.maxScrollExtent;
+    if (maxScroll > 0) {
+      setState(() => _overflows = true);
+      _startScroll(maxScroll);
+    }
+  }
+
+  void _startScroll(double extent) {
+    _anim?.dispose();
+    final ms = (extent * 28).round().clamp(2000, 12000);
+    _anim = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: ms),
+    );
+    _anim!.addListener(() {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_anim!.value * extent);
+      }
+    });
+    _anim!.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (!mounted) return;
+          _scroll.jumpTo(0);
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (!mounted || _anim == null) return;
+            _anim!.forward(from: 0);
+          });
+        });
+      }
+    });
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (mounted && _anim != null) _anim!.forward(from: 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _anim?.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      shaderCallback: (bounds) {
+        return LinearGradient(
+          colors: [
+            if (_overflows) Colors.transparent else Colors.white,
+            Colors.white,
+            Colors.white,
+            if (_overflows) Colors.transparent else Colors.white,
+          ],
+          stops: const [0.0, 0.05, 0.90, 1.0],
+        ).createShader(bounds);
+      },
+      blendMode: BlendMode.dstIn,
+      child: SingleChildScrollView(
+        controller: _scroll,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        child: Text(widget.text, style: widget.style, maxLines: 1),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// The Dial — a single surfable channel card (premium glass treatment).
 // =========================================================================
 
 class _DialCard extends StatefulWidget {
@@ -1466,9 +1653,6 @@ class _DialCard extends StatefulWidget {
   final Color ident;
   final FocusNode focusNode;
   final StremioTvNowPlaying? nowPlaying;
-
-  /// Capped/jittered progress for the card's bottom strip (honours the
-  /// "max start %" setting).
   final double displayProgress;
   final bool hideNowPlaying;
   final bool loading;
@@ -1505,7 +1689,6 @@ class _DialCardState extends State<_DialCard> {
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     final k = e.logicalKey;
-    // Surfing left/right repeats while the D-pad is held.
     if (e is KeyDownEvent || e is KeyRepeatEvent) {
       if (k == LogicalKeyboardKey.arrowLeft) {
         widget.onLeft();
@@ -1516,8 +1699,6 @@ class _DialCardState extends State<_DialCard> {
         return KeyEventResult.handled;
       }
     }
-    // Everything else is edge-triggered: a held ENTER must not push the
-    // detail route (or reopen the action sheet) on every repeat.
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     if (k == LogicalKeyboardKey.arrowUp) {
       widget.onUp();
@@ -1550,8 +1731,6 @@ class _DialCardState extends State<_DialCard> {
         setState(() => _focused = f);
         if (f) {
           widget.onFocused();
-          // Instant on TV — an animated scroll concurrent with the Stage
-          // swap is a known jank source (CatalogItemTile does the same).
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
@@ -1566,35 +1745,40 @@ class _DialCardState extends State<_DialCard> {
         },
         onLongPress: widget.onLongPress,
         child: AnimatedScale(
-          scale: _focused ? 1.06 : 1.0,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
+          scale: _focused ? 1.10 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 112,
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+            duration: const Duration(milliseconds: 200),
+            width: 138,
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: _focused
                     ? ident
-                    : Colors.white.withValues(alpha: 0.07),
-                width: _focused ? 2.5 : 1,
+                    : Colors.white.withValues(alpha: 0.06),
+                width: _focused ? 2.5 : 0.5,
               ),
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: ident.withValues(alpha: 0.5),
-                        blurRadius: 26,
-                        spreadRadius: 1,
-                      )
-                    ]
-                  : const [
+                        color: ident.withValues(alpha: 0.55),
+                        blurRadius: 32,
+                        spreadRadius: 2,
+                      ),
                       BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      )
+                        color: ident.withValues(alpha: 0.20),
+                        blurRadius: 60,
+                        spreadRadius: 6,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
             ),
             clipBehavior: Clip.antiAlias,
@@ -1603,11 +1787,12 @@ class _DialCardState extends State<_DialCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
+                  // Poster artwork
                   if (poster != null && !widget.hideNowPlaying)
                     CachedNetworkImage(
                       imageUrl: poster,
                       fit: BoxFit.cover,
-                      memCacheWidth: 320,
+                      memCacheWidth: 280,
                       placeholder: (_, __) => _placeholder(ident),
                       errorWidget: (_, __, ___) => _placeholder(ident),
                     )
@@ -1624,26 +1809,46 @@ class _DialCardState extends State<_DialCard> {
                     )
                   else
                     _placeholder(ident),
-                  // Bottom scrim for the live strip.
+                  // Multi-layer bottom scrim for readability.
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
-                        end: Alignment.center,
-                        colors: [Color(0xE6000000), Color(0x00000000)],
+                        end: Alignment(0, -0.3),
+                        colors: [Color(0xEE000000), Color(0x00000000)],
                       ),
                     ),
                   ),
+                  // Focused ident tint on top edge.
+                  if (_focused)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.center,
+                          colors: [
+                            ident.withValues(alpha: 0.18),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
                   // Channel number badge.
                   Positioned(
-                    top: 8,
-                    left: 8,
+                    top: 9,
+                    left: 9,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 7, vertical: 3),
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: ident.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                          ),
+                        ],
                       ),
                       child: Text(
                         channelNumberLabel,
@@ -1651,55 +1856,98 @@ class _DialCardState extends State<_DialCard> {
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.8,
                         ),
                       ),
                     ),
                   ),
                   if (widget.channel.isFavorite)
-                    const Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Icon(Icons.star_rounded,
-                          size: 16, color: Color(0xFFFFC107)),
+                    Positioned(
+                      top: 9,
+                      right: 9,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.star_rounded,
+                            size: 14, color: Color(0xFFFFC107)),
+                      ),
                     ),
-                  // Title + live strip.
+                  // Title + progress glass overlay.
                   Positioned(
-                    left: 9,
-                    right: 9,
-                    bottom: 9,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          // Spoiler-free mode shows the channel, never the
-                          // hidden program's title.
-                          widget.hideNowPlaying
-                              ? widget.channel.catalog.name
-                              : (item?.name ?? widget.channel.catalog.name),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            height: 1.15,
-                            fontWeight: FontWeight.w700,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(15),
+                      ),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            border: Border(
+                              top: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                width: 0.5,
+                              ),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.hideNowPlaying
+                                    ? widget.channel.catalog.name
+                                    : (item?.name ?? widget.channel.catalog.name),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: SizedBox(
+                                  height: 4,
+                                  child: Stack(
+                                    children: [
+                                      Container(
+                                        color: Colors.white.withValues(alpha: 0.15),
+                                      ),
+                                      FractionallySizedBox(
+                                        widthFactor: widget.displayProgress
+                                            .clamp(0.0, 1.0),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                ident,
+                                                ident.withValues(alpha: 0.6),
+                                              ],
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: widget.displayProgress.clamp(0.0, 1.0),
-                            minHeight: 3,
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.2),
-                            valueColor:
-                                AlwaysStoppedAnimation(ident),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -1721,9 +1969,11 @@ class _DialCardState extends State<_DialCard> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            ident.withValues(alpha: 0.35),
-            const Color(0xFF111118),
+            ident.withValues(alpha: 0.25),
+            const Color(0xFF0A0A12),
+            ident.withValues(alpha: 0.08),
           ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
       child: Center(
@@ -1731,8 +1981,8 @@ class _DialCardState extends State<_DialCard> {
           widget.channel.type == 'series'
               ? Icons.live_tv_rounded
               : Icons.movie_rounded,
-          color: Colors.white.withValues(alpha: 0.25),
-          size: 30,
+          color: Colors.white.withValues(alpha: 0.18),
+          size: 32,
         ),
       ),
     );

@@ -2601,12 +2601,22 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     return Scaffold(
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingSkeleton()
           : Column(
               children: [
-                // Controls row — search + options centered
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                // Premium header bar
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF09090F),
+                        const Color(0xFF09090F).withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -2682,7 +2692,6 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               )
                             : const SizedBox.shrink(),
                       ),
-                      // Centered search + options buttons
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -2748,28 +2757,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                               },
                               child: ListenableBuilder(
                                 listenable: _searchBtnFocusNode,
-                                builder: (context, _) => Container(
-                                  height: 40,
-                                  width: 40,
-                                  decoration: BoxDecoration(
-                                    color: _searchBtnFocusNode.hasFocus
-                                        ? Colors.white.withValues(alpha: 0.15)
-                                        : const Color(0xFF141414),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: _searchBtnFocusNode.hasFocus
-                                        ? Border.all(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.6,
-                                            ),
-                                            width: 2,
-                                          )
-                                        : null,
-                                  ),
+                                builder: (context, _) => _headerButton(
+                                  focused: _searchBtnFocusNode.hasFocus,
+                                  active: _showSearchField || _searchQuery.isNotEmpty,
                                   child: Icon(
                                     Icons.search_rounded,
                                     size: 20,
-                                    color:
-                                        (_searchBtnFocusNode.hasFocus ||
+                                    color: (_searchBtnFocusNode.hasFocus ||
                                             _showSearchField ||
                                             _searchQuery.isNotEmpty)
                                         ? Colors.white
@@ -2914,44 +2908,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   ),
                                 ],
                                 builder: (context, controller, child) =>
-                                    Container(
-                                      height: 40,
-                                      width: 40,
-                                      decoration: BoxDecoration(
-                                        color: _menuFocusNode.hasFocus
-                                            ? Colors.white.withValues(
-                                                alpha: 0.15,
-                                              )
-                                            : const Color(0xFF141414),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: _menuFocusNode.hasFocus
-                                            ? Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.6,
-                                                ),
-                                                width: 2,
-                                              )
-                                            : null,
-                                      ),
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.more_vert_rounded,
-                                          size: 20,
-                                        ),
-                                        padding: EdgeInsets.zero,
+                                    _headerButton(
+                                      focused: _menuFocusNode.hasFocus,
+                                      child: Icon(
+                                        Icons.more_vert_rounded,
+                                        size: 20,
                                         color: _menuFocusNode.hasFocus
                                             ? Colors.white
                                             : Colors.white.withValues(
                                                 alpha: 0.5,
                                               ),
-                                        onPressed: () {
-                                          if (controller.isOpen) {
-                                            controller.close();
-                                          } else {
-                                            controller.open();
-                                          }
-                                        },
                                       ),
+                                      onTap: () {
+                                        if (controller.isOpen) {
+                                          controller.close();
+                                        } else {
+                                          controller.open();
+                                        }
+                                      },
                                     ),
                               ),
                             ),
@@ -3047,32 +3021,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                             controller.open();
                                           }
                                         },
-                                        child: Container(
-                                          height: 40,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 48,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                          ),
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: _providerFocusNode.hasFocus
-                                                ? Colors.white.withValues(
-                                                    alpha: 0.15,
-                                                  )
-                                                : const Color(0xFF141414),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                            border: _providerFocusNode.hasFocus
-                                                ? Border.all(
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.6),
-                                                    width: 2,
-                                                  )
-                                                : null,
-                                          ),
+                                        child: _headerButton(
+                                          focused: _providerFocusNode.hasFocus,
+                                          wide: true,
                                           child: Text(
                                             _providerShortLabel(
                                               _debridProvider,
@@ -3165,6 +3116,130 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _headerButton({
+    required bool focused,
+    required Widget child,
+    bool active = false,
+    bool wide = false,
+    VoidCallback? onTap,
+  }) {
+    final btn = Container(
+      height: 40,
+      constraints: wide ? const BoxConstraints(minWidth: 48) : null,
+      width: wide ? null : 40,
+      padding: wide ? const EdgeInsets.symmetric(horizontal: 12) : null,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: focused
+            ? Colors.white.withValues(alpha: 0.12)
+            : active
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: focused
+              ? Colors.white.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.06),
+          width: focused ? 1.5 : 0.5,
+        ),
+        boxShadow: focused
+            ? [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                ),
+              ]
+            : null,
+      ),
+      child: child,
+    );
+    if (onTap != null) return GestureDetector(onTap: onTap, child: btn);
+    return btn;
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return Column(
+      children: [
+        const SizedBox(height: 52),
+        // Skeleton stage area
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 48,
+                  bottom: 60,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: 320,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 200,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Skeleton dial cards
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            itemCount: 6,
+            itemBuilder: (context, i) {
+              return Container(
+                width: 138,
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    width: 0.5,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+      ],
     );
   }
 
