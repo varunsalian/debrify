@@ -4247,6 +4247,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       'TorrentSearchScreen: Quick Play triggered for ${selection.title}',
     );
 
+    // Episode Quick Play pops the episodes+detail routes before entering
+    // here (_popToHost), so we must set the return flag early — the bound-
+    // source path returns before the block below that normally sets it.
+    if (selection.fromCatalogEpisodeDrillDown) {
+      _returnToCatalogAfterPlayback = true;
+    }
+
     // Check if a bound source exists for this item (series or movie)
     // Show loading overlay while resolving bound source
     final prefetchedSources = await SeriesSourceService.getSources(
@@ -4273,9 +4280,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
 
     // No bound source — falling through to search-and-play.
-    if (selection.fromCatalogItemDetail) {
+    if (selection.fromCatalogItemDetail ||
+        selection.fromCatalogEpisodeDrillDown) {
       _returnToCatalogAfterPlayback = true;
-      // Pop the detail screen (if one is on the stack) so the loading
+      // Pop the detail / episodes screen (if on the stack) so the loading
       // mask is visible underneath. Long-press Quick Play never opens a
       // detail screen, so there may be nothing to pop.
       bool hasDetailRoute = false;

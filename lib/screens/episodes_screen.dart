@@ -450,6 +450,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
       episode: episode.number,
       contentType: show.type,
       posterUrl: show.poster,
+      fromCatalogEpisodeDrillDown: true,
     );
 
     _selectionDispatched = true;
