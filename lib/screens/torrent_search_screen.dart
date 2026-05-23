@@ -4272,13 +4272,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
     }
 
-    // No bound source — falling through to search-and-play. Pop the
-    // detail screen so the loading mask is visible underneath.
+    // No bound source — falling through to search-and-play.
     if (selection.fromCatalogItemDetail) {
-      Navigator.of(context).popUntil(
-        (r) => r.settings.name != kCatalogDetailRouteName,
-      );
       _returnToCatalogAfterPlayback = true;
+      // Pop the detail screen (if one is on the stack) so the loading
+      // mask is visible underneath. Long-press Quick Play never opens a
+      // detail screen, so there may be nothing to pop.
+      bool hasDetailRoute = false;
+      Navigator.of(context).popUntil((r) {
+        if (r.settings.name == kCatalogDetailRouteName) {
+          hasDetailRoute = true;
+          return false; // pop it
+        }
+        return true; // keep
+      });
+      if (!hasDetailRoute) {
+        _resultsFromItemDetail = false;
+      }
     }
 
     // Set quick play pending state.
