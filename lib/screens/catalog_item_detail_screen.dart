@@ -440,7 +440,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             fontWeight: FontWeight.w800,
             letterSpacing: 2.4,
             shadows: const [
-              Shadow(color: Color(0x803B2A00), blurRadius: 10),
+              Shadow(color: Color(0x993B2A00), blurRadius: 12),
+              Shadow(color: Color(0x66000000), blurRadius: 6),
             ],
           ),
         ),
@@ -461,9 +462,13 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             height: 1.05,
             shadows: const [
               Shadow(
-                color: Color(0xB3000000),
-                blurRadius: 18,
-                offset: Offset(0, 3),
+                color: Color(0xDD000000),
+                blurRadius: 24,
+                offset: Offset(0, 4),
+              ),
+              Shadow(
+                color: Color(0x66000000),
+                blurRadius: 8,
               ),
             ],
           ),
@@ -490,7 +495,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           fontSize: _wide && !_tight ? 14 : 13,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
-          shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
+          shadows: const [
+            Shadow(color: Color(0xBB000000), blurRadius: 10),
+            Shadow(color: Color(0x55000000), blurRadius: 4),
+          ],
         ),
         child: Wrap(
           spacing: 10,
@@ -637,16 +645,19 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final hasStars = extra.stars.isNotEmpty;
     if (!hasDirector && !hasStars) return null;
 
+    const sh = [Shadow(color: Color(0x55000000), blurRadius: 4)];
     final labelStyle = TextStyle(
       color: Colors.white.withValues(alpha: 0.45),
       fontSize: _tight ? 11 : 12,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.3,
+      shadows: sh,
     );
     final valueStyle = TextStyle(
       color: Colors.white.withValues(alpha: 0.85),
       fontSize: _tight ? 11 : 12,
       fontWeight: FontWeight.w500,
+      shadows: sh,
     );
 
     return _Reveal(
@@ -858,20 +869,33 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                 fontStyle: FontStyle.italic,
                 height: 1.4,
                 letterSpacing: 0.2,
+                shadows: const [Shadow(color: Color(0x88000000), blurRadius: 8)],
               ),
             ),
             SizedBox(height: _tight ? 6 : 10),
           ],
-          _Description(
-            text: description,
-            wide: _wide,
-            dense: _tight,
-            collapsedLines: _tight ? 2 : 4,
-            expanded: _descriptionExpanded,
-            onToggle: () => setState(
-              () => _descriptionExpanded = !_descriptionExpanded,
+          if (_wide)
+            _Description(
+              text: description,
+              wide: true,
+              dense: _tight,
+              collapsedLines: _tight ? 2 : 4,
+              expanded: _descriptionExpanded,
+              onToggle: () => setState(
+                () => _descriptionExpanded = !_descriptionExpanded,
+              ),
+            )
+          else
+            Text(
+              description,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.82),
+                fontSize: 15,
+                height: 1.5,
+                letterSpacing: 0.1,
+                shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1069,11 +1093,11 @@ class _BackdropState extends State<_Backdrop>
           else
             Container(color: Colors.black),
 
-          // Corner vignette — frames the art, cinema style. Painted *under*
-          // the vertical scrim so it only shows where the art is still
-          // visible up top; lower down the opaque scrim hides it, keeping
-          // the backdrop's bottom edge exactly the scaffold colour (no seam
-          // showing through the semi-transparent Sources button).
+          // Base darkening wash — guarantees legibility even on pure-white
+          // or very bright posters. Uniform tint, no gradient.
+          const ColoredBox(color: Color(0x44000000)),
+
+          // Corner vignette — frames the art, cinema style.
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
@@ -1082,29 +1106,30 @@ class _BackdropState extends State<_Backdrop>
                 colors: [
                   Color(0x00000000),
                   Color(0x00000000),
-                  Color(0x55000000),
+                  Color(0x66000000),
                 ],
-                stops: [0.0, 0.62, 1.0],
+                stops: [0.0, 0.55, 1.0],
               ),
             ),
           ),
 
-          // Vertical scrim — content side stays legible, art breathes up top.
+          // Vertical scrim — heavier than before so content stays readable
+          // regardless of poster brightness.
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: const [
-                  Color(0x22000000),
-                  Color(0x44000000),
-                  Color(0xAA050507),
-                  Color(0xF2050507),
+                  Color(0x33000000),
+                  Color(0x66000000),
+                  Color(0xCC050507),
+                  Color(0xF5050507),
                   Color(0xFF050507),
                 ],
                 stops: isWide
-                    ? const [0.0, 0.35, 0.62, 0.85, 1.0]
-                    : const [0.0, 0.38, 0.7, 0.9, 1.0],
+                    ? const [0.0, 0.30, 0.58, 0.82, 1.0]
+                    : const [0.0, 0.32, 0.62, 0.86, 1.0],
               ),
             ),
           ),
@@ -1118,12 +1143,12 @@ class _BackdropState extends State<_Backdrop>
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Color(0xDD050507),
-                    Color(0x88050507),
-                    Color(0x22000000),
+                    Color(0xEE050507),
+                    Color(0x99050507),
+                    Color(0x33000000),
                     Color(0x00000000),
                   ],
-                  stops: [0.0, 0.35, 0.65, 1.0],
+                  stops: [0.0, 0.32, 0.60, 1.0],
                 ),
               ),
             ),
@@ -1144,9 +1169,10 @@ class _CertBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.30),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.45),
+          color: Colors.white.withValues(alpha: 0.50),
           width: 1,
         ),
       ),
@@ -1175,17 +1201,17 @@ class _GenreChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
+          color: Colors.white.withValues(alpha: 0.15),
           width: 0.5,
         ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
+          color: Colors.white.withValues(alpha: 0.88),
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.3,
@@ -1344,6 +1370,7 @@ class _Description extends StatelessWidget {
       fontSize: dense ? 13 : (wide ? 17 : 15),
       height: dense ? 1.4 : 1.5,
       letterSpacing: 0.1,
+      shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)],
     );
 
     return LayoutBuilder(
@@ -1953,12 +1980,19 @@ class _GlassIconButton extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.45),
+            color: Colors.black.withValues(alpha: 0.55),
             shape: BoxShape.circle,
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.18),
               width: 0.5,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x44000000),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
           ),
           child: Icon(icon, color: Colors.white, size: 22),
         ),
