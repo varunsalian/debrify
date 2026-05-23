@@ -7,6 +7,7 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 
 /// Cinematic detail screen for a catalog item.
@@ -96,6 +97,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Extra metadata from IMDb GraphQL (runtime, certificate, cast, etc.).
   ImdbEnrichment? _imdbExtra;
 
+  bool _imdbLoaded = false;
+  bool _parentsGuideLoaded = false;
+  bool _recommendationsLoaded = false;
+
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
   StremioMeta get _item => _enriched ?? widget.item;
@@ -178,32 +183,43 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Future<void> _loadImdbEnrichment() async {
     final imdbId = _item.effectiveImdbId;
-    if (imdbId == null) return;
+    if (imdbId == null) {
+      if (mounted) setState(() => _imdbLoaded = true);
+      return;
+    }
     try {
       final extra = await ImdbEnrichmentService.fetch(imdbId);
-      if (extra != null && mounted) setState(() => _imdbExtra = extra);
-    } catch (_) {}
+      if (mounted) setState(() { _imdbExtra = extra; _imdbLoaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _imdbLoaded = true);
+    }
   }
 
   Future<void> _loadParentsGuide() async {
     final imdbId = _item.effectiveImdbId;
-    if (imdbId == null) return;
+    if (imdbId == null) {
+      if (mounted) setState(() => _parentsGuideLoaded = true);
+      return;
+    }
     try {
       final guide = await ImdbParentsGuideService.fetch(imdbId);
-      if (guide != null && mounted) setState(() => _parentsGuide = guide);
-    } catch (_) {}
+      if (mounted) setState(() { _parentsGuide = guide; _parentsGuideLoaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _parentsGuideLoaded = true);
+    }
   }
 
   /// Loads recommendations after first paint so the rail never blocks the
   /// detail screen's appearance. Fail-soft: any error leaves the rail hidden.
   Future<void> _loadRecommendations() async {
     final loader = widget.recommendationsLoader;
-    if (loader == null) return;
+    if (loader == null) {
+      if (mounted) setState(() => _recommendationsLoaded = true);
+      return;
+    }
     try {
       final recs = await loader();
-      if (mounted) setState(() => _recommendations = recs);
-      // Prefetch enriched metadata for the first few recommendations so
-      // tapping one opens the detail screen with cached meta instantly.
+      if (mounted) setState(() { _recommendations = recs; _recommendationsLoaded = true; });
       final enrich = widget.metaEnricher;
       if (enrich != null) {
         for (final rec in recs.take(8)) {
@@ -212,7 +228,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         }
       }
     } catch (_) {
-      // Non-critical strip — swallow and leave it hidden.
+      if (mounted) setState(() => _recommendationsLoaded = true);
     }
   }
 
@@ -464,6 +480,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final runtime = extra?.runtime;
     final voteCount = extra?.voteCountFormatted;
     final hasVotes = voteCount != null && voteCount.isNotEmpty;
+    final showMetaShimmer = !_imdbLoaded && extra == null;
     return _Reveal(
       parent: _revealCtrl,
       start: start,
@@ -488,6 +505,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             if (runtime != null) ...[
               if (hasYear || cert != null) _dot(),
               Text(runtime),
+            ],
+            if (showMetaShimmer && cert == null && runtime == null) ...[
+              if (hasYear) _dot(),
+              Shimmer(width: 28, height: 16, borderRadius: BorderRadius.circular(4)),
+              _dot(),
+              Shimmer(width: 48, height: 14, borderRadius: BorderRadius.circular(4)),
             ],
             if (rating != null) ...[
               if (hasYear || cert != null || runtime != null) _dot(),
@@ -514,6 +537,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                   ],
                 ],
               ),
+            ] else if (showMetaShimmer) ...[
+              if (hasYear || cert != null || runtime != null) _dot(),
+              Shimmer(width: 60, height: 14, borderRadius: BorderRadius.circular(4)),
             ],
           ],
         ),
@@ -524,7 +550,22 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget? _secGenres(double start) {
     var genres = _item.genres ?? const <String>[];
     if (genres.isEmpty) genres = _imdbExtra?.genres ?? const [];
-    if (genres.isEmpty) return null;
+    if (genres.isEmpty) {
+      if (_imdbLoaded) return null;
+      return _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: const [
+            Shimmer(width: 64, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
+            Shimmer(width: 52, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
+            Shimmer(width: 72, height: 28, borderRadius: BorderRadius.all(Radius.circular(14))),
+          ],
+        ),
+      );
+    }
     return _Reveal(
       parent: _revealCtrl,
       start: start,
@@ -567,7 +608,31 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget? _secCredits(double start) {
     final extra = _imdbExtra;
-    if (extra == null) return null;
+    if (extra == null) {
+      if (_imdbLoaded) return null;
+      final h = _tight ? 10.0 : 12.0;
+      return _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Shimmer(width: 60, height: h, borderRadius: BorderRadius.circular(4)),
+              const SizedBox(width: 10),
+              Shimmer(width: 140, height: h, borderRadius: BorderRadius.circular(4)),
+            ]),
+            SizedBox(height: _tight ? 4 : 8),
+            Row(children: [
+              Shimmer(width: 60, height: h, borderRadius: BorderRadius.circular(4)),
+              const SizedBox(width: 10),
+              Shimmer(width: 200, height: h, borderRadius: BorderRadius.circular(4)),
+            ]),
+          ],
+        ),
+      );
+    }
     final hasDirector = extra.director != null && extra.director!.isNotEmpty;
     final hasStars = extra.stars.isNotEmpty;
     if (!hasDirector && !hasStars) return null;
@@ -631,7 +696,31 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget? _secParentsGuide(double start) {
     final guide = _parentsGuide;
-    if (guide == null || guide.isEmpty) return null;
+    if (guide == null) {
+      if (_parentsGuideLoaded) return null;
+      final rowH = _tight ? 38.0 : 44.0;
+      return _Reveal(
+        parent: _revealCtrl,
+        start: start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Shimmer(width: 130, height: 14, borderRadius: BorderRadius.circular(4)),
+            SizedBox(height: _tight ? 8 : 10),
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) SizedBox(height: _tight ? 6 : 8),
+              Shimmer(
+                width: double.infinity,
+                height: rowH,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    if (guide.isEmpty) return null;
     return _Reveal(
       parent: _revealCtrl,
       start: start,
@@ -661,16 +750,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     );
   }
 
-  /// "Watch Next" rail. Hidden until recommendations resolve and only when
-  /// the host wired a tap handler. Non-critical: never blocks the screen.
   Widget? _secRecommendations(double start) {
     final recs = _recommendations;
     final onTap = widget.onRecommendationTap;
-    if (recs == null || recs.isEmpty || onTap == null) return null;
-
     final tight = _tight;
     final cardW = _wide ? (tight ? 104.0 : 120.0) : 112.0;
     final posterH = cardW * 1.5;
+    final loading = recs == null && !_recommendationsLoaded && widget.recommendationsLoader != null;
+
+    if (!loading && (recs == null || recs.isEmpty || onTap == null)) return null;
 
     return _Reveal(
       parent: _revealCtrl,
@@ -679,49 +767,68 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'More Like This',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
-              fontSize: _wide && !tight ? 18 : 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-              shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
-            ),
-          ),
+          loading
+              ? Shimmer(width: 130, height: 16, borderRadius: BorderRadius.circular(4))
+              : Text(
+                  'More Like This',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    fontSize: _wide && !tight ? 18 : 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                    shadows: const [Shadow(color: Color(0x99000000), blurRadius: 8)],
+                  ),
+                ),
           SizedBox(height: tight ? 8 : 12),
           SizedBox(
-            // poster + two-line title beneath it
             height: posterH + 44,
-            // Built eagerly into a Row (not a lazy ListView) so every card
-            // has a focus node up front — required for D-pad/remote
-            // traversal on Android TV: directional focus can only move to
-            // already-instantiated nodes, and the list is capped at 24
-            // small cards so the cost is negligible. FocusTraversalGroup
-            // keeps it an ordered, self-contained focus region.
-            child: FocusTraversalGroup(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                clipBehavior: Clip.none,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < recs.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 12),
-                      _RecCard(
-                        item: recs[i],
-                        width: cardW,
-                        posterHeight: posterH,
-                        tv: widget.isTelevision,
-                        onTap: () => onTap(recs[i]),
-                      ),
+            child: loading
+                ? Row(
+                    children: [
+                      for (var i = 0; i < 4; i++) ...[
+                        if (i > 0) const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Shimmer(
+                              width: cardW,
+                              height: posterH,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            const SizedBox(height: 6),
+                            Shimmer(
+                              width: cardW * 0.8,
+                              height: 12,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
+                  )
+                : FocusTraversalGroup(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      clipBehavior: Clip.none,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < recs!.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 12),
+                            _RecCard(
+                              item: recs[i],
+                              width: cardW,
+                              posterHeight: posterH,
+                              tv: widget.isTelevision,
+                              onTap: () => onTap!(recs[i]),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
