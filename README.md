@@ -31,16 +31,16 @@
 ---
 
 <p align="center">
+  <img src="docs/assets/screenshots/catalog-search/catalog-grid.png" alt="Catalog Search" width="49%">
+  <img src="docs/assets/screenshots/catalog-search/detail-screen.png" alt="Detail Screen" width="49%">
+</p>
+<p align="center">
   <img src="docs/assets/screenshots/keyword-search/results.png" alt="Keyword Search Results" width="49%">
-  <img src="docs/assets/screenshots/catalog-search/movie-results.png" alt="Catalog Search Results" width="49%">
+  <img src="docs/assets/screenshots/stremio-tv-guide/cinematic-tuner.png" alt="Stremio TV Cinematic Tuner" width="49%">
 </p>
 <p align="center">
-  <img src="docs/assets/screenshots/stremio-tv-guide/channel-screen.png" alt="Stremio TV Channels" width="49%">
   <img src="docs/assets/screenshots/trakt-guide/home-surfaces.png" alt="Trakt Home Surfaces" width="49%">
-</p>
-<p align="center">
-  <img src="docs/assets/screenshots/catalog-search/series-episodes-bound.png" alt="Series Episodes" width="49%">
-  <img src="docs/assets/screenshots/stremio-tv-guide/import-menu.png" alt="Stremio TV Import Menu" width="49%">
+  <img src="docs/assets/screenshots/catalog-search/episode-guide.png" alt="Episode Guide" width="49%">
 </p>
 
 <p align="center">
@@ -61,7 +61,7 @@
 
 ## What is Debrify?
 
-Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, and **Stremio Addons support** for discovering content.
+Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, **Stremio Addons support** for discovering content, and a **cinematic UI** inspired by premium streaming services.
 
 ## Responsible Use
 
@@ -97,7 +97,9 @@ If Debrify has been useful to you, you can support development here:
 ### Built-in Player
 - **Native playback** — Powered by media_kit/libmpv
 - **Track selection** — Switch audio and subtitle tracks on the fly
-- **Resume playback** — Picks up where you left off, always
+- **Subtitle sync** — Floating overlay slider to adjust subtitle offset in real time
+- **Manual subtitle search** — Find and load subtitles from within the player
+- **Resume playback** — Picks up where you left off, even across source switches
 - **TV-optimized** — Gesture controls on mobile, remote-friendly on TV
 
 </td>
@@ -118,6 +120,7 @@ If Debrify has been useful to you, you can support development here:
 - **Engine marketplace** — Import community-built torrent search engines
 - **Multi-engine search** — Query multiple sources simultaneously
 - **Jackett & Prowlarr** — Connect your own indexer managers and use them from the same source picker
+- **RSS support** — Engines can use RSS response format for broader source compatibility
 - **Smart filtering** — Filter by quality, size, seeders, and more
 - **One-click add** — Send results directly to your debrid provider
 - **Build your own** — Follow the [custom engine guide](docs/engines/creating-custom-engines.md)
@@ -130,17 +133,21 @@ If Debrify has been useful to you, you can support development here:
 ### Stremio Addons
 - **Easy install** — Paste addon links or install directly from browser
 - **Content discovery** — Search movies and shows across multiple sources
-- **Quick play** — Stream directly or browse available torrents
+- **Quick Play** — Long-press any poster to instantly play; seamless full-screen mask through loading with automatic retry on blocked torrents
+- **Watch Next** — Recommendations rail on the detail screen with full metadata
+- **IMDb enrichment** — Detail screen shows IMDb ratings, metadata, and Parents Guide
 - **Seamless integration** — Works with your debrid provider
+- **Stremio importer** — Import your existing Stremio addon collection into Debrify
 
 </td>
 <td width="50%">
 
 ### Stremio TV
-- **TV guide experience** — Addon catalogs as live TV channels
+- **Cinematic tuner** — Browse addon catalogs as live TV channels, with a premium UI optimized for Android TV
 - **Auto-rotation** — "Now playing" rotates on a configurable schedule
 - **Channel filters** — Filter by addon or content type
 - **Favorites** — Pin channels to home screen
+- **Torrents-first** — Optional setting to prioritize torrent sources
 - **Catalog importer** — Bring in JSON catalogs from files, URLs, repos, or Trakt lists (with one-tap refresh)
 - **Build your own** — Follow the [Stremio catalog guide](docs/stremio/building-local-catalogs.md)
 
@@ -152,6 +159,7 @@ If Debrify has been useful to you, you can support development here:
 ### Debrify TV
 - **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, and PikPak engines to auto-build always-on channels
 - **Quick Play & auto-launch** — Instant channel playback with random starts, resume buttons, and optional auto-launch overlay
+- **Smart filtering** — Automatically skips RD-blocked torrents so playback never stalls
 - **Smart caching & rotation** — Caches torrents per channel and rotates movies/series so the lineup stays fresh all day
 - **Import/Export** — ZIP/YAML packs, community collections, and remote-control export keep channels in sync across devices
 
@@ -188,6 +196,8 @@ If Debrify has been useful to you, you can support development here:
 
 ### Reddit Videos
 - **Audio merged** — Plays videos with audio properly combined
+- **Random play** — Shuffle through subreddit videos with multi-page aggregation
+- **Subreddit filters** — Scrollable filter bar to browse by subreddit
 - **Download support** — Save Reddit videos locally
 
 </td>
@@ -212,6 +222,28 @@ If Debrify has been useful to you, you can support development here:
 </td>
 <td width="50%">
 
+### Backup & Restore
+- **Full export** — Back up all settings, sources, engines, and provider configs in a single file
+- **One-tap restore** — Restore from a backup file to get up and running instantly on any device
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Remote Setup
+- **Bidirectional sync** — Send or receive your full setup between devices
+- **Transfer Everything** — One-click export of all providers, engines, addons, and Trakt
+- **Role picker** — Choose to send or receive when pairing devices
+
+</td>
+<td width="50%">
+
+### Playback Features
+- **Play Random** — Shuffle play from any playlist or home section
+- **Continuous shuffle** — Keep shuffling through content automatically
+- **Startup screen** — Choose what screen to launch into (Trakt, continue watching, and more)
+
 </td>
 </tr>
 </table>
@@ -220,12 +252,16 @@ If Debrify has been useful to you, you can support development here:
 
 ## 📺 Android TV
 
-A dedicated lean-back experience for your living room.
+A dedicated lean-back experience for your living room, with a cinematic UI optimized for big screens and low-end hardware.
 
+- **Cinematic UI** — Premium poster grids, detail screens, and episode guides designed for the big screen
 - **Remote-friendly player** — Full playback controls with D-pad navigation
+- **Quick Play** — Long-press any card to start playing immediately
+- **Subtitle sync & search** — Adjust subtitle offset with a floating overlay; search and load subtitles manually
 - **Subtitle customization** — Size, style, color, and background options
-- **Channel mode** — Watch content like cable TV with channel numbers
+- **Cinematic tuner** — Redesigned Stremio TV with stripped GPU effects for smooth performance on Android TV
 - **Quick channel guide** — Switch channels on the fly
+- **Debrify TV** — Keyword-driven channels with auto-play and RD-blocked torrent filtering
 
 ---
 
