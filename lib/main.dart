@@ -58,15 +58,12 @@ import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'services/update_service.dart';
 
-final WindowListener _desktopFullscreenListener = _DesktopFullscreenListener();
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AptabaseService.init();
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
-    windowManager.addListener(_desktopFullscreenListener);
   }
 
   // Initialize sqflite FFI for Windows/Linux desktop (sqflite needs FFI on these platforms)
@@ -150,24 +147,6 @@ Future<void> _cleanupPlaybackState() async {
   try {
     await StorageService.cleanupOldPlaybackState();
   } catch (e) {}
-}
-
-class _DesktopFullscreenListener with WindowListener {
-  @override
-  Future<void> onWindowEvent(String eventName) async {
-    if (!Platform.isWindows && !Platform.isLinux) return;
-    if (eventName == 'maximize') {
-      final isFull = await windowManager.isFullScreen();
-      if (!isFull) {
-        await windowManager.setFullScreen(true);
-      }
-    } else if (eventName == 'unmaximize' || eventName == 'restore') {
-      final isFull = await windowManager.isFullScreen();
-      if (isFull) {
-        await windowManager.setFullScreen(false);
-      }
-    }
-  }
 }
 
 // Global scaffold messenger key for showing snackbars from anywhere
