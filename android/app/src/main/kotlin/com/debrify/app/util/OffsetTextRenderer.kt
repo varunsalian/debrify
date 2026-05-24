@@ -64,7 +64,11 @@ class OffsetRenderersFactory(
 
     private val offsetRenderers = mutableListOf<OffsetTextRenderer>()
 
+    var currentOffsetUs: Long = 0L
+        private set
+
     fun setOffsetUs(value: Long) {
+        currentOffsetUs = value
         offsetRenderers.forEach { it.offsetUs = value }
     }
 

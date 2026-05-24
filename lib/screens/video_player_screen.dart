@@ -60,6 +60,7 @@ import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
+import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -425,6 +426,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // these to libmpv as file URIs so it auto-detects encoding (GBK, Big5,
   // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
   final Set<String> _tempSubtitleFiles = {};
+  String? _activeExternalSubtitlePath;
 
   // media_kit state
   bool _isReady = false;
@@ -1987,6 +1989,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Widget _buildSyncOverlay() {
+    final externalPath = _activeExternalSubtitlePath;
+    if (externalPath != null) {
+      return SubtitleLinePickerOverlay(
+        subtitleFilePath: externalPath,
+        getCurrentPositionMs: () =>
+            _player.state.position.inMilliseconds,
+        currentOffsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
+        onOffsetChanged: (ms) async {
+          await SubtitleSettingsService.instance.setSyncOffsetMs(ms);
+          _applySubtitleSyncOffset(ms);
+          if (mounted) {
+            setState(() {
+              _subtitleSettings =
+                  _subtitleSettings?.copyWith(syncOffsetMs: ms);
+            });
+          }
+        },
+        onDismiss: _hideSyncOverlay,
+      );
+    }
+
+    return _buildSliderSyncOverlay();
+  }
+
+  Widget _buildSliderSyncOverlay() {
     final settings = _subtitleSettings;
     final ms = settings?.syncOffsetMs ?? 0;
     final accent = settings?.syncOffsetColor ?? const Color(0xFF4CAF50);
@@ -2141,13 +2168,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ],
               ),
               const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  'Line picker is only available for addon subtitles',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(left: 40),
                     child: Text(
-                      '-10s',
+                      '-1hr',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.35),
                         fontSize: 9,
@@ -2164,7 +2203,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   Padding(
                     padding: const EdgeInsets.only(right: 40),
                     child: Text(
-                      '+10s',
+                      '+1hr',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.35),
                         fontSize: 9,
@@ -6141,6 +6180,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _player,
       onTrackChanged: (audioId, subtitleId) async {
         _userManuallySelectedSubtitle = true;
+        if (!subtitleId.startsWith('stremio:')) {
+          _activeExternalSubtitlePath = null;
+        }
         await _persistTrackChoice(audioId, subtitleId);
       },
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
@@ -6186,6 +6228,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
     _cleanupTempSubtitleFilesSync();
+    _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
   }
 
@@ -6395,6 +6438,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // session) — reuse the existing file instead of re-downloading.
       if (file.existsSync()) {
         _tempSubtitleFiles.add(file.path);
+        _activeExternalSubtitlePath = file.path;
         return file.path;
       }
 
@@ -6408,6 +6452,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       await file.writeAsBytes(response.bodyBytes);
       _tempSubtitleFiles.add(file.path);
+      _activeExternalSubtitlePath = file.path;
       debugPrint(
         'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)',
       );
@@ -6607,6 +6652,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _player.setSubtitleTrack(mk.SubtitleTrack.no());
       await _player.setSubtitleTrack(track);
       _selectedStremioSubtitleId = matchingSub.id;
+      _activeExternalSubtitlePath = filePath;
 
       debugPrint(
         'VideoPlayer: Auto-enabled ${matchingSub.lang} addon subtitle',

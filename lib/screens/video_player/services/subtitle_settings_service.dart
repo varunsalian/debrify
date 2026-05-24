@@ -154,8 +154,8 @@ class SubtitleSettingsService {
   static const String _keyElevationIndex = 'subtitle_elevation_index';
   static const String _keySyncOffsetMs = 'subtitle_sync_offset_ms';
 
-  static const int syncOffsetMinMs = -10000;
-  static const int syncOffsetMaxMs = 10000;
+  static const int syncOffsetMinMs = -3600000;
+  static const int syncOffsetMaxMs = 3600000;
   static const int syncOffsetStepMs = 100;
 
   static SubtitleSettingsService? _instance;

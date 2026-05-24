@@ -31,8 +31,8 @@ object SubtitleSettings {
     const val DEFAULT_BG_INDEX = 0        // None
     const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
     const val DEFAULT_ELEVATION_INDEX = 0      // Bottom
-    const val SYNC_OFFSET_MIN_MS = -10_000L
-    const val SYNC_OFFSET_MAX_MS =  10_000L
+    const val SYNC_OFFSET_MIN_MS = -3_600_000L
+    const val SYNC_OFFSET_MAX_MS =  3_600_000L
     const val SYNC_OFFSET_STEP_MS =    100L
 
     // Size options (in SP)

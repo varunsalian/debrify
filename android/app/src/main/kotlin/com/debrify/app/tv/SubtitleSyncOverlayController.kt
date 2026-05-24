@@ -226,9 +226,9 @@ class SubtitleSyncOverlayController(
             gravity = grav
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight)
         }
-        labels.addView(dimLabel("-10s", Gravity.START, 1f))
+        labels.addView(dimLabel("-1hr", Gravity.START, 1f))
         labels.addView(dimLabel("0", Gravity.CENTER, 1f))
-        labels.addView(dimLabel("+10s", Gravity.END, 1f))
+        labels.addView(dimLabel("+1hr", Gravity.END, 1f))
         bar.addView(labels)
 
         bar.addView(Space(activity).apply {

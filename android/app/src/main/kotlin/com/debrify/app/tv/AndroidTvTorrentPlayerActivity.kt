@@ -221,6 +221,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var subtitleSettingsVisible = false
     private var subtitlePanel: SubtitlePanelController? = null
     private var syncOverlay: SubtitleSyncOverlayController? = null
+    private var linePickerOverlay: SubtitleLinePickerController? = null
+    private val subtitleSeekHandler = Handler(Looper.getMainLooper())
+    private val subtitleSeekRunnable = Runnable {
+        player?.let { p ->
+            val pos = p.currentPosition
+            if (pos >= 0) p.seekTo(pos)
+        }
+    }
     private var subtitleTracks = mutableListOf<Pair<String, TrackSelectionOverride?>>()
     private var currentSubtitleTrackIndex = 0
 
@@ -3085,6 +3093,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
 
+        // Handle subtitle line picker overlay (floats on top of video)
+        if (linePickerOverlay?.isVisible == true) {
+            return linePickerOverlay?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
+        }
+
         // Handle subtitle sync overlay (floats on top of video)
         if (syncOverlay?.isVisible == true) {
             return syncOverlay?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
@@ -4653,6 +4666,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun showSyncOverlay() {
         val root = findViewById<ViewGroup>(android.R.id.content)?.getChildAt(0) as? ViewGroup ?: return
+
+        // Use line picker for external (Stremio) subtitles
+        if (currentStremioSubtitleIndex >= 0 && currentStremioSubtitleIndex < stremioSubtitles.size) {
+            val subtitle = stremioSubtitles[currentStremioSubtitleIndex]
+            if (linePickerOverlay == null) {
+                linePickerOverlay = SubtitleLinePickerController(
+                    activity = this,
+                    rootContainer = root,
+                    getCurrentPositionMs = { player?.currentPosition ?: 0L },
+                    onOffsetApplied = { applySubtitleSettings() },
+                    onDismissed = Runnable {
+                        linePickerOverlay = null
+                        if (::playerView.isInitialized) playerView.requestFocus()
+                    }
+                )
+            }
+            linePickerOverlay?.show(subtitle.url)
+            return
+        }
+
+        // Fall back to slider for embedded subtitles
         if (syncOverlay == null) {
             syncOverlay = SubtitleSyncOverlayController(
                 activity = this,
@@ -4839,7 +4873,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
         subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
-        offsetRenderersFactory?.setOffsetUs(SubtitleSettings.getSyncOffsetMs(this) * 1000L)
+        val newOffsetUs = SubtitleSettings.getSyncOffsetMs(this) * 1000L
+        val oldOffsetUs = offsetRenderersFactory?.currentOffsetUs ?: 0L
+        offsetRenderersFactory?.setOffsetUs(newOffsetUs)
+        if (newOffsetUs != oldOffsetUs) {
+            // Debounce: rapid offset changes (line picker tap, arrow key hold)
+            // would otherwise pile up seeks and confuse the text renderer.
+            subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
+            subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150)
+        }
     }
 
     // Aspect ratio
@@ -5958,6 +6000,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         trackSelector = null
         offsetRenderersFactory = null
         syncOverlay = null
+        linePickerOverlay?.hide()
+        linePickerOverlay = null
+        subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
 
         // Clear adapters to release lambda references
         playlistView.adapter = null

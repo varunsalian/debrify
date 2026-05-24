@@ -290,6 +290,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean subtitleSettingsVisible = false;
     private SubtitlePanelController subtitlePanel;
     private SubtitleSyncOverlayController syncOverlay;
+    private SubtitleLinePickerController linePickerOverlay;
+    private final Handler subtitleSeekHandler = new Handler(Looper.getMainLooper());
+    private final Runnable subtitleSeekRunnable = () -> {
+        if (player != null) {
+            long pos = player.getCurrentPosition();
+            if (pos >= 0) player.seekTo(pos);
+        }
+    };
     private final ArrayList<TrackOption> subtitleTrackOptions = new ArrayList<>();
     private int currentSubtitleTrackIndex = 0;
 
@@ -3268,6 +3276,28 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void showSyncOverlay() {
         ViewGroup root = (ViewGroup) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
         if (root == null) return;
+
+        // Use line picker for external (Stremio) subtitles
+        if (currentStremioSubtitleIndex >= 0 && currentStremioSubtitleIndex < stremioSubtitles.size()) {
+            StremioSubtitle subtitle = stremioSubtitles.get(currentStremioSubtitleIndex);
+            if (linePickerOverlay == null) {
+                final TorboxTvPlayerActivity self = this;
+                linePickerOverlay = new SubtitleLinePickerController(
+                        this,
+                        root,
+                        () -> player != null ? player.getCurrentPosition() : 0L,
+                        (kotlin.jvm.functions.Function1<Long, kotlin.Unit>) (offset) -> { applySubtitleSettings(); return kotlin.Unit.INSTANCE; },
+                        () -> {
+                            self.linePickerOverlay = null;
+                            if (playerView != null) playerView.requestFocus();
+                        }
+                );
+            }
+            linePickerOverlay.show(subtitle.getUrl());
+            return;
+        }
+
+        // Fall back to slider for embedded subtitles
         if (syncOverlay == null) {
             syncOverlay = new SubtitleSyncOverlayController(
                     this,
@@ -3347,7 +3377,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
         }
         if (offsetRenderersFactory != null) {
-            offsetRenderersFactory.setOffsetUs(SubtitleSettings.getSyncOffsetMs(this) * 1000L);
+            long newOffsetUs = SubtitleSettings.getSyncOffsetMs(this) * 1000L;
+            long oldOffsetUs = offsetRenderersFactory.getCurrentOffsetUs();
+            offsetRenderersFactory.setOffsetUs(newOffsetUs);
+            if (newOffsetUs != oldOffsetUs) {
+                // Debounce: rapid offset changes (line picker tap, arrow key
+                // hold) would otherwise pile up seeks and confuse the text
+                // renderer.
+                subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable);
+                subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150);
+            }
         }
     }
 
@@ -3887,6 +3926,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return super.dispatchKeyEvent(event);
         }
 
+        // Subtitle line picker overlay (floats on top of video)
+        if (linePickerOverlay != null && linePickerOverlay.isVisible()) {
+            return linePickerOverlay.dispatchKey(event);
+        }
+
         // Subtitle sync overlay (floats on top of video)
         if (syncOverlay != null && syncOverlay.isVisible()) {
             return syncOverlay.dispatchKey(event);
@@ -4140,6 +4184,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             player = null;
             offsetRenderersFactory = null;
             syncOverlay = null;
+            if (linePickerOverlay != null) {
+                linePickerOverlay.hide();
+                linePickerOverlay = null;
+            }
+            subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable);
         }
         hideNextOverlay();
         cancelTitleFade();
