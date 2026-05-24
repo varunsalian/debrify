@@ -309,8 +309,157 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             textAlign: TextAlign.center,
           ),
         ],
+
+        // Manual IP entry — works for Tailscale or any reachable IP that
+        // UDP broadcast discovery can't see.
+        const SizedBox(height: 20),
+        _buildManualIpButton(state),
       ],
     );
+  }
+
+  Widget _buildManualIpButton(RemoteControlState state) {
+    return OutlinedButton.icon(
+      onPressed: () {
+        HapticFeedback.mediumImpact();
+        _showManualIpDialog(state);
+      },
+      icon: const Icon(Icons.lan_rounded, size: 18),
+      label: const Text('Connect by IP (Tailscale / VPN)'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white.withValues(alpha: 0.85),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
+  void _showManualIpDialog(RemoteControlState state) {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Connect by IP',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter the receiver\'s IP. For Tailscale, this is the 100.x.y.z address shown on the receiving device.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Form(
+                key: formKey,
+                child: TextFormField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: '100.64.0.5',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF6366F1),
+                        width: 1.5,
+                      ),
+                    ),
+                    errorStyle: const TextStyle(
+                      color: Color(0xFFEF4444),
+                      fontSize: 12,
+                    ),
+                  ),
+                  validator: _validateIpv4,
+                  onFieldSubmitted: (_) =>
+                      _submitManualIp(dialogContext, formKey, controller, state),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+              ),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  _submitManualIp(dialogContext, formKey, controller, state),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+              ),
+              child: const Text('Connect'),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(controller.dispose);
+  }
+
+  void _submitManualIp(
+    BuildContext dialogContext,
+    GlobalKey<FormState> formKey,
+    TextEditingController controller,
+    RemoteControlState state,
+  ) {
+    if (!(formKey.currentState?.validate() ?? false)) return;
+    final ip = controller.text.trim();
+    Navigator.of(dialogContext).pop();
+    HapticFeedback.mediumImpact();
+    state.connectToManualIp(ip);
+  }
+
+  String? _validateIpv4(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Enter an IP address';
+    final parts = v.split('.');
+    if (parts.length != 4) return 'Use the form 1.2.3.4';
+    for (final p in parts) {
+      if (p.isEmpty) return 'Use the form 1.2.3.4';
+      final n = int.tryParse(p);
+      if (n == null || n < 0 || n > 255) return 'Each part must be 0–255';
+    }
+    return null;
   }
 
   Widget _buildDeviceTile(DiscoveredDevice device, RemoteControlState state) {

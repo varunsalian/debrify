@@ -148,6 +148,21 @@ class RemoteControlState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Connect to a device by manually entered IP (e.g. Tailscale / VPN address).
+  /// Bypasses UDP broadcast discovery — useful when the receiver is reachable
+  /// over a mesh VPN but not on the same Wi-Fi subnet.
+  Future<void> connectToManualIp(String ip, {String? deviceName}) async {
+    final trimmed = ip.trim();
+    if (trimmed.isEmpty) return;
+    final device = DiscoveredDevice(
+      deviceName: deviceName?.trim().isNotEmpty == true
+          ? deviceName!.trim()
+          : trimmed,
+      ip: trimmed,
+    );
+    await connectToDevice(device);
+  }
+
   /// Connect to a specific TV (for mobile)
   Future<void> connectToDevice(DiscoveredDevice device) async {
     if (_isTv) return;
