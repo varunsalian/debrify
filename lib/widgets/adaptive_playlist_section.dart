@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'playlist_grid_card.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Adaptive playlist section with platform-optimized layouts:
 /// - TV/Large screens (width > 1000): Horizontal scrolling rows (Netflix-style)
@@ -296,7 +297,9 @@ String _getDedupeKey(Map<String, dynamic> item) {
 
     return SizedBox(
       height: cardHeight + 35, // Extra space for scale animation overflow + shadows
-      child: ShaderMask(
+      child: HorizontalMouseWheel(
+        controller: _scrollController,
+        child: ShaderMask(
         // Subtle fade effect at edges to hint at more content
         shaderCallback: (Rect bounds) {
           return LinearGradient(
@@ -332,6 +335,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
             );
           },
         ),
+      ),
       ),
     );
   }

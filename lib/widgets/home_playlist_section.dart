@@ -12,6 +12,7 @@ import 'home/home_theme.dart';
 import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Horizontal scrollable playlist section for the home screen.
 /// Shows all playlist items (not just favorites).
@@ -399,7 +400,9 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
             final isMobile = sw < 600;
             return SizedBox(
           height: isMobile ? 200.0 : 220.0,
-          child: Stack(
+          child: HorizontalMouseWheel(
+            controller: _scrollController,
+            child: Stack(
             children: [
               if (widget.isTelevision)
                 ListView.builder(
@@ -440,6 +443,7 @@ class HomePlaylistSectionState extends State<HomePlaylistSection>
                   ),
                 ),
             ],
+          ),
           ),
         );
           },

@@ -9,6 +9,7 @@ import 'home/home_theme.dart';
 import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Horizontal scrollable IPTV channel favorites section for the home screen
 class HomeIptvFavoritesSection extends StatefulWidget {
@@ -221,7 +222,9 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
         // Horizontal scrolling favorites with edge fade and scroll indicators
         SizedBox(
           height: 115,
-          child: Stack(
+          child: HorizontalMouseWheel(
+            controller: _scrollController,
+            child: Stack(
             children: [
               // Skip ShaderMask on TV for GPU performance
               if (widget.isTelevision)
@@ -281,6 +284,7 @@ class _HomeIptvFavoritesSectionState extends State<HomeIptvFavoritesSection>
                   ),
                 ),
             ],
+          ),
           ),
         ),
         const SizedBox(height: 10),

@@ -21,6 +21,7 @@ import 'home/home_theme.dart';
 import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
 class HomeTraktContinueWatchingSection extends StatefulWidget {
@@ -1152,7 +1153,9 @@ class _HomeTraktContinueWatchingSectionState
             final rowHeight = isMobile ? 200.0 : 220.0;
             return SizedBox(
               height: rowHeight,
-              child: Stack(
+              child: HorizontalMouseWheel(
+                controller: _scrollController,
+                child: Stack(
                 children: [
                   // Edge fade (skip ShaderMask on TV for GPU performance)
                   if (widget.isTelevision)
@@ -1240,6 +1243,7 @@ class _HomeTraktContinueWatchingSectionState
                       ),
                     ),
                 ],
+              ),
               ),
             );
           },

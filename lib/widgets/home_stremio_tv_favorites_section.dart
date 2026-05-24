@@ -14,6 +14,7 @@ import 'home/home_theme.dart';
 import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Horizontal scrollable Stremio TV channel favorites section for the home screen.
 class HomeStremioTvFavoritesSection extends StatefulWidget {
@@ -222,7 +223,9 @@ class _HomeStremioTvFavoritesSectionState
         const SizedBox(height: 8),
         SizedBox(
           height: rowHeight,
-          child: Stack(
+          child: HorizontalMouseWheel(
+            controller: _scrollController,
+            child: Stack(
             children: [
               if (widget.isTelevision)
                 ListView.builder(
@@ -312,6 +315,7 @@ class _HomeStremioTvFavoritesSectionState
                   ),
                 ),
             ],
+          ),
           ),
         ),
         const SizedBox(height: 10),

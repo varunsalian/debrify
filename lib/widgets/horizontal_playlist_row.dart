@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'playlist_landscape_card.dart';
+import 'horizontal_mouse_wheel.dart';
 
 /// Horizontal scrolling row of playlist items (YouTube TV style).
 ///
@@ -168,7 +169,9 @@ class _HorizontalPlaylistRowState extends State<HorizontalPlaylistRow> {
 
     return SizedBox(
       height: widget.cardHeight + 8, // Extra padding for shadow
-      child: ListView.builder(
+      child: HorizontalMouseWheel(
+        controller: _scrollController,
+        child: ListView.builder(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
         physics: const ClampingScrollPhysics(),
@@ -199,6 +202,7 @@ class _HorizontalPlaylistRowState extends State<HorizontalPlaylistRow> {
             ),
           );
         },
+      ),
       ),
     );
   }
