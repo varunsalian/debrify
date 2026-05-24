@@ -3939,6 +3939,18 @@ class StorageService {
     await prefs.setInt(_quickPlaySearchTimeoutKey, seconds);
   }
 
+  static const String _stremioSourcesTimeoutKey = 'stremio_sources_timeout';
+
+  static Future<int> getStremioSourcesTimeout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_stremioSourcesTimeoutKey) ?? 15;
+  }
+
+  static Future<void> setStremioSourcesTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_stremioSourcesTimeoutKey, seconds);
+  }
+
   /// Clear all Quick Play Cache Fallback settings
   static Future<void> clearQuickPlayCacheFallbackSettings() async {
     final prefs = await SharedPreferences.getInstance();

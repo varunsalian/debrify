@@ -2700,11 +2700,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           'TorrentSearchScreen: Using IMDB search for ${selection.imdbId}, isMovie=${!selection.isSeries}, title=${selection.title}, contentType=${selection.contentType}',
         );
         final Duration? quickPlayTimeout;
+        final Duration stremioSourcesTimeout;
         if (_quickPlayPending) {
           final timeoutSecs = await StorageService.getQuickPlaySearchTimeout();
           quickPlayTimeout = Duration(seconds: timeoutSecs);
+          stremioSourcesTimeout = quickPlayTimeout;
         } else {
           quickPlayTimeout = null;
+          final sourcesSecs = await StorageService.getStremioSourcesTimeout();
+          stremioSourcesTimeout = Duration(seconds: sourcesSecs);
         }
         result = await TorrentService.searchByImdbWithStremio(
           selection.imdbId,
@@ -2714,7 +2718,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           episode: selection.episode,
           availableSeasons: selection.isSeries ? _availableSeasons : null,
           contentType: selection.contentType,
-          stremioTimeout: quickPlayTimeout,
+          stremioTimeout: stremioSourcesTimeout,
           engineTimeout: quickPlayTimeout,
         );
       } else {

@@ -15,6 +15,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
   // Search timeout
   int _searchTimeout = 5;
+  int _sourcesTimeout = 15;
 
   // Cache Fallback Settings
   bool _tryMultipleTorrents = false;
@@ -31,6 +32,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
   Future<void> _loadSettings() async {
     final searchTimeout = await StorageService.getQuickPlaySearchTimeout();
+    final sourcesTimeout = await StorageService.getStremioSourcesTimeout();
     final tryMultipleTorrents = await StorageService.getQuickPlayTryMultipleTorrents();
     final maxRetries = await StorageService.getQuickPlayMaxRetries();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
@@ -39,6 +41,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
     setState(() {
       _searchTimeout = searchTimeout;
+      _sourcesTimeout = sourcesTimeout;
       _tryMultipleTorrents = tryMultipleTorrents;
       _maxRetries = maxRetries;
       _defaultProvider = defaultProvider;
@@ -84,6 +87,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             _buildHeader(context),
             const SizedBox(height: 24),
             _buildSearchTimeoutSection(context),
+            const SizedBox(height: 24),
+            _buildSourcesTimeoutSection(context),
             const SizedBox(height: 24),
             // Cache Fallback section (hide for PikPak - not supported)
             if (_defaultProvider != 'pikpak') ...[
@@ -147,8 +152,44 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   }
 
   Widget _buildSearchTimeoutSection(BuildContext context) {
+    return _buildTimeoutCard(
+      context: context,
+      title: 'Quick Play Timeout',
+      description:
+          'Maximum time to wait for search results before starting playback with whatever is available.',
+      options: const [5, 10, 15, 20, 30],
+      value: _searchTimeout,
+      onSelected: (selected) {
+        setState(() => _searchTimeout = selected);
+        StorageService.setQuickPlaySearchTimeout(selected);
+      },
+    );
+  }
+
+  Widget _buildSourcesTimeoutSection(BuildContext context) {
+    return _buildTimeoutCard(
+      context: context,
+      title: 'Sources Timeout',
+      description:
+          'Maximum time to wait for each Stremio addon when listing sources for a title. Raise this if you use slow addons (e.g. addons that scrape on demand).',
+      options: const [10, 15, 20, 30, 45, 60],
+      value: _sourcesTimeout,
+      onSelected: (selected) {
+        setState(() => _sourcesTimeout = selected);
+        StorageService.setStremioSourcesTimeout(selected);
+      },
+    );
+  }
+
+  Widget _buildTimeoutCard({
+    required BuildContext context,
+    required String title,
+    required String description,
+    required List<int> options,
+    required int value,
+    required ValueChanged<int> onSelected,
+  }) {
     final theme = Theme.of(context);
-    const timeoutOptions = [5, 10, 15, 20, 30];
 
     return Container(
       decoration: BoxDecoration(
@@ -172,7 +213,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Search Timeout',
+                  title,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -184,7 +225,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Maximum time to wait for search results before starting playback with whatever is available.',
+              description,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
@@ -195,12 +236,12 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               final selected = await showDialog<int>(
                 context: context,
                 builder: (ctx) => SimpleDialog(
-                  title: const Text('Search Timeout'),
-                  children: timeoutOptions.map((s) => SimpleDialogOption(
+                  title: Text(title),
+                  children: options.map((s) => SimpleDialogOption(
                     onPressed: () => Navigator.of(ctx).pop(s),
                     child: Row(
                       children: [
-                        if (s == _searchTimeout)
+                        if (s == value)
                           Icon(Icons.check, size: 18, color: theme.colorScheme.primary)
                         else
                           const SizedBox(width: 18),
@@ -212,8 +253,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 ),
               );
               if (selected != null) {
-                setState(() => _searchTimeout = selected);
-                StorageService.setQuickPlaySearchTimeout(selected);
+                onSelected(selected);
               }
             },
             child: Padding(
@@ -234,7 +274,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${_searchTimeout}s',
+                      '${value}s',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onPrimaryContainer,

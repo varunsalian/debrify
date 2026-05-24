@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -41,7 +40,6 @@ class StremioAddonImportResult {
 class StremioService {
   static const String _addonsKey = 'stremio_addons_v1';
   static const Duration _requestTimeout = Duration(seconds: 15);
-  static const Duration _retryTimeout = Duration(seconds: 5);
 
   // Singleton pattern
   static final StremioService _instance = StremioService._internal();
@@ -827,16 +825,7 @@ class StremioService {
     try {
       final uri = Uri.parse(url);
       final effectiveTimeout = timeout ?? _requestTimeout;
-      http.Response response;
-      try {
-        response = await http.get(uri).timeout(effectiveTimeout);
-      } on TimeoutException {
-        // Retry once with shorter timeout (covers cold starts)
-        // Skip retry if caller provided a custom timeout (e.g. Quick Play)
-        if (timeout != null) rethrow;
-        debugPrint('StremioService: ${addon.name} timed out, retrying...');
-        response = await http.get(uri).timeout(_retryTimeout);
-      }
+      final response = await http.get(uri).timeout(effectiveTimeout);
 
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
