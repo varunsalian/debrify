@@ -467,6 +467,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   AspectMode _aspectMode = AspectMode.contain;
   double _playbackSpeed = 1.0;
 
+  // Press-and-hold for 2x speed
+  double? _speedBeforeHold;
+  final ValueNotifier<bool> _speedHoldHud = ValueNotifier<bool>(false);
+
   // Orientation
   bool _landscapeLocked = false;
 
@@ -3912,6 +3916,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
+    _speedHoldHud.dispose();
     _posSub?.cancel();
     _durSub?.cancel();
     _playSub?.cancel();
@@ -4220,6 +4225,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     final aspectStr = AspectModeUtils.aspectModeToString(_aspectMode);
+    // While the user is holding for temporary 2x boost, persist the prior speed
+    // so a kill/dispose mid-hold doesn't strand 2x as the resume value.
+    final persistedSpeed = _speedBeforeHold ?? _playbackSpeed;
 
     // Save to enhanced playback state system
     try {
@@ -4240,7 +4248,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               episode: currentEpisode.seriesInfo.episode!,
               positionMs: pos.inMilliseconds,
               durationMs: dur.inMilliseconds,
-              speed: _playbackSpeed,
+              speed: persistedSpeed,
               aspect: aspectStr,
               imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
             );
@@ -4273,7 +4281,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               videoUrl: currentVideoUrl,
               positionMs: pos.inMilliseconds,
               durationMs: dur.inMilliseconds,
-              speed: _playbackSpeed,
+              speed: persistedSpeed,
               aspect: aspectStr,
               imdbId: widget.contentImdbId,
             );
@@ -4295,7 +4303,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 episode: episode, // Parsed from filename, fallback to index
                 positionMs: pos.inMilliseconds,
                 durationMs: dur.inMilliseconds,
-                speed: _playbackSpeed,
+                speed: persistedSpeed,
                 aspect: aspectStr,
                 imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
               );
@@ -4320,7 +4328,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               episode: _effectiveContentEpisode!,
               positionMs: pos.inMilliseconds,
               durationMs: dur.inMilliseconds,
-              speed: _playbackSpeed,
+              speed: persistedSpeed,
               aspect: aspectStr,
               imdbId: _effectiveContentImdbId,
             );
@@ -4337,7 +4345,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               videoUrl: currentUrl,
               positionMs: pos.inMilliseconds,
               durationMs: dur.inMilliseconds,
-              speed: _playbackSpeed,
+              speed: persistedSpeed,
               aspect: aspectStr,
               imdbId: _effectiveContentImdbId,
             );
@@ -4349,7 +4357,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Also save to legacy system for backward compatibility
     await StorageService.upsertVideoResume(_resumeKey, {
       'positionMs': pos.inMilliseconds,
-      'speed': _playbackSpeed,
+      'speed': persistedSpeed,
       'aspect': aspectStr,
       'durationMs': dur.inMilliseconds,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
@@ -4691,6 +4699,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() => _playbackSpeed = next);
     _scheduleAutoHide();
     _saveResume();
+  }
+
+  void _onLongPressStart(LongPressStartDetails details) {
+    // Respect the same lock used by the single-tap path
+    if (widget.hideBackButton && widget.hideOptions) return;
+    // Only engage during playback so a pause-hold doesn't strand speed at 2x
+    if (!_isPlaying) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null) {
+      final size = box.size;
+      final localPos = details.localPosition;
+      // Avoid edge conflicts with the system back gesture
+      const edgeGuard = 24.0;
+      if (localPos.dx < edgeGuard || localPos.dx > size.width - edgeGuard) {
+        return;
+      }
+      // When controls are visible, skip top/bottom bar regions so buttons/slider win
+      if (_controlsVisible.value) {
+        const topBar = 72.0;
+        const bottomBar = 72.0;
+        if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) {
+          return;
+        }
+      }
+    }
+    _speedBeforeHold = _playbackSpeed;
+    _player.setRate(2.0);
+    setState(() => _playbackSpeed = 2.0);
+    _speedHoldHud.value = true;
+    HapticFeedback.mediumImpact();
+  }
+
+  void _onLongPressEnd(LongPressEndDetails details) {
+    final prior = _speedBeforeHold;
+    if (prior == null) return;
+    _speedBeforeHold = null;
+    if (!mounted) return;
+    _player.setRate(prior);
+    setState(() => _playbackSpeed = prior);
+    _speedHoldHud.value = false;
   }
 
   Future<void> _toggleOrientation() async {
@@ -5191,6 +5239,60 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   );
                 },
               ),
+              ValueListenableBuilder<bool>(
+                valueListenable: _speedHoldHud,
+                builder: (context, active, _) {
+                  return IgnorePointer(
+                    ignoring: true,
+                    child: AnimatedOpacity(
+                      opacity: active ? 1 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 80),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.fast_forward_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  '2× Speed',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
               // Buffering indicator (OTT-style centered spinner)
               ValueListenableBuilder<bool>(
                 valueListenable: _showBufferingIndicator,
@@ -5229,6 +5331,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   }
                 },
                 onDoubleTapDown: _handleDoubleTap,
+                onLongPressStart: _onLongPressStart,
+                onLongPressEnd: _onLongPressEnd,
                 onPanStart: _onPanStart,
                 onPanUpdate: _onPanUpdate,
                 onPanEnd: _onPanEnd,
