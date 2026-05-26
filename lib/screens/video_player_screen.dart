@@ -574,6 +574,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {
       // Wakelock not supported on this platform (e.g., Linux)
     }
+    if (Platform.isWindows || Platform.isLinux) {
+      windowManager.setFullScreen(true);
+    }
     // System volume UI not modified
 
     // Initialize the player asynchronously
@@ -3939,6 +3942,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {
       // Wakelock not supported on this platform (e.g., Linux)
     }
+    if (Platform.isWindows || Platform.isLinux) {
+      windowManager.setFullScreen(false);
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     AndroidNativeDownloader.isTelevision().then((isTv) {
       if (!isTv) {
@@ -5102,6 +5108,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _goToNextEpisode();
                 return KeyEventResult.handled;
               }
+            }
+
+            // F / F11: toggle fullscreen on Windows/Linux
+            if ((key == LogicalKeyboardKey.keyF ||
+                    key == LogicalKeyboardKey.f11) &&
+                (Platform.isWindows || Platform.isLinux)) {
+              windowManager.isFullScreen().then((isFullScreen) {
+                if (!mounted) return;
+                windowManager.setFullScreen(!isFullScreen);
+              });
+              return KeyEventResult.handled;
             }
 
             // Escape key: exit fullscreen first, then quit the player
