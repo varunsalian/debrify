@@ -17,6 +17,8 @@ import '../video_player/models/playlist_entry.dart';
 import '../../services/torbox_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
+import '../../services/premiumize_service.dart';
+import '../../models/premiumize_file.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
@@ -208,6 +210,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     if (pikpakEnabled) {
       providers.add(const MapEntry('pikpak', 'PikPak'));
+    }
+    final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
+    final pmKey = await StorageService.getPremiumizeApiKey();
+    if (pmEnabled && pmKey != null && pmKey.isNotEmpty) {
+      providers.add(const MapEntry('premiumize', 'Premiumize'));
     }
     return providers;
   }
@@ -449,6 +456,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return 'TB';
       case 'pikpak':
         return 'PP';
+      case 'premiumize':
+        return 'PM';
       default:
         return 'AUTO';
     }
@@ -462,6 +471,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return 'TorBox';
       case 'pikpak':
         return 'PikPak';
+      case 'premiumize':
+        return 'Premiumize';
       default:
         if (_availableProviders.isEmpty) return 'Auto';
         return 'Auto (${_availableProviders.first.value})';
@@ -925,6 +936,44 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         }
       }
 
+      // For Premiumize, filter torrent sources to only cached ones
+      if (_debridProvider == 'premiumize') {
+        final pmKey = await StorageService.getPremiumizeApiKey();
+        if (pmKey != null && pmKey.isNotEmpty) {
+          final torrentSources = playableSources
+              .where((t) => t.streamType == StreamType.torrent)
+              .toList();
+          final torrentHashes = torrentSources
+              .map((t) => t.infohash.trim().toLowerCase())
+              .where((h) => h.isNotEmpty)
+              .toList();
+          if (torrentHashes.isNotEmpty) {
+            if (!mounted) return;
+            final cachedResults = await PremiumizeService.checkCache(
+              pmKey,
+              torrentHashes,
+            );
+            final cachedSet = <String>{};
+            for (int i = 0; i < torrentHashes.length; i++) {
+              if (i < cachedResults.length && cachedResults[i]) {
+                cachedSet.add(torrentHashes[i]);
+              }
+            }
+            debugPrint(
+              'StremioTV: Premiumize cache check: ${cachedSet.length} cached '
+              'out of ${torrentHashes.length} torrents',
+            );
+            playableSources = playableSources
+                .where(
+                  (t) =>
+                      t.streamType != StreamType.torrent ||
+                      cachedSet.contains(t.infohash.trim().toLowerCase()),
+                )
+                .toList();
+          }
+        }
+      }
+
       if (playableSources.isEmpty) {
         _notifyStartupAutoLaunchFailed('No playable streams found');
         if (mounted) {
@@ -1218,6 +1267,39 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       }
     }
 
+    // Premiumize cache filter
+    if (_debridProvider == 'premiumize') {
+      final pmKey = await StorageService.getPremiumizeApiKey();
+      if (pmKey != null && pmKey.isNotEmpty) {
+        final torrentSources = playableSources
+            .where((t) => t.streamType == StreamType.torrent)
+            .toList();
+        final torrentHashes = torrentSources
+            .map((t) => t.infohash.trim().toLowerCase())
+            .where((h) => h.isNotEmpty)
+            .toList();
+        if (torrentHashes.isNotEmpty) {
+          final cachedResults = await PremiumizeService.checkCache(
+            pmKey,
+            torrentHashes,
+          );
+          final cachedSet = <String>{};
+          for (int i = 0; i < torrentHashes.length; i++) {
+            if (i < cachedResults.length && cachedResults[i]) {
+              cachedSet.add(torrentHashes[i]);
+            }
+          }
+          playableSources = playableSources
+              .where(
+                (t) =>
+                    t.streamType != StreamType.torrent ||
+                    cachedSet.contains(t.infohash.trim().toLowerCase()),
+              )
+              .toList();
+        }
+      }
+    }
+
     if (playableSources.isEmpty) return null;
 
     // Auto-play best stream (respects torrents-first setting)
@@ -1301,6 +1383,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (pikpakEnabled) {
         return _playViaPikPak(torrent, item);
       }
+    } else if (_debridProvider == 'premiumize') {
+      final pmKey = await StorageService.getPremiumizeApiKey();
+      if (pmKey != null && pmKey.isNotEmpty) {
+        return _playViaPremiumize(torrent, item, pmKey);
+      }
     }
 
     // Auto or fallback if selected provider is unavailable
@@ -1319,11 +1406,16 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return _playViaPikPak(torrent, item);
     }
 
+    final pmKey = await StorageService.getPremiumizeApiKey();
+    if (pmKey != null && pmKey.isNotEmpty) {
+      return _playViaPremiumize(torrent, item, pmKey);
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'No debrid provider configured. Connect Real Debrid, Torbox, or PikPak in Settings.',
+            'No debrid provider configured. Connect Real Debrid, Torbox, PikPak, or Premiumize in Settings.',
           ),
         ),
       );
@@ -1600,6 +1692,66 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (!mounted) return false;
       if (dialogShown) Navigator.of(context).pop();
       debugPrint('StremioTV: PikPak error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _playViaPremiumize(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey,
+  ) async {
+    bool dialogShown = false;
+    try {
+      if (!mounted) return false;
+      showPsychLoading(context, 'Routing through Premiumize...');
+      dialogShown = true;
+
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final files = await PremiumizeService.directDownload(apiKey, magnet);
+
+      if (!mounted) return false;
+      Navigator.of(context).pop();
+      dialogShown = false;
+
+      if (files.isEmpty) return false;
+
+      PremiumizeFile? targetFile;
+      final videoFiles = files
+          .where((f) => FileUtils.isVideoFile(f.fileName))
+          .toList();
+      final candidates = videoFiles.isNotEmpty ? videoFiles : files;
+
+      if (item.type.toLowerCase() == 'movie' && candidates.length > 1) {
+        // Pick the largest file for movies
+        targetFile = candidates.reduce(
+          (a, b) => a.size >= b.size ? a : b,
+        );
+      } else {
+        targetFile = candidates.first;
+      }
+
+      final streamUrl = targetFile.streamLink ?? targetFile.link;
+      if (streamUrl != null && streamUrl.isNotEmpty && mounted) {
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: streamUrl,
+            title: _currentPlayTitle ?? item.name,
+            startAtPercent: _currentSlotProgress,
+            contentImdbId: item.effectiveImdbId,
+            contentTitle: item.name,
+            contentType: item.type,
+          ),
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (!mounted) return false;
+      if (dialogShown) Navigator.of(context).pop();
+      debugPrint('StremioTV: Premiumize error: $e');
       return false;
     }
   }
@@ -1941,6 +2093,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           episode: episode,
         );
       }
+    } else if (debridProvider == 'premiumize') {
+      final pmKey = await StorageService.getPremiumizeApiKey();
+      if (pmKey != null && pmKey.isNotEmpty) {
+        return _resolveViaPremiumize(
+          torrent,
+          item,
+          pmKey,
+          season: season,
+          episode: episode,
+        );
+      }
     }
 
     // Auto fallback
@@ -1967,6 +2130,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     if (pikpakEnabled) {
       return _resolveViaPikPak(torrent, item, season: season, episode: episode);
+    }
+    final pmKey = await StorageService.getPremiumizeApiKey();
+    if (pmKey != null && pmKey.isNotEmpty) {
+      return _resolveViaPremiumize(torrent, item, pmKey, season: season, episode: episode);
     }
 
     return null;
@@ -2211,6 +2378,49 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return streamUrl;
     } catch (e) {
       debugPrint('StremioTV: PikPak resolve error: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _resolveViaPremiumize(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey, {
+    int? season,
+    int? episode,
+  }) async {
+    try {
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      final files = await PremiumizeService.directDownload(apiKey, magnet);
+
+      if (files.isEmpty) return null;
+
+      final videoFiles = files
+          .where((f) => FileUtils.isVideoFile(f.fileName))
+          .toList();
+      final candidates = videoFiles.isNotEmpty ? videoFiles : files;
+
+      PremiumizeFile? targetFile;
+      final isSeries = item.type.toLowerCase() == 'series';
+      if (isSeries && season != null && episode != null && candidates.length > 1) {
+        final candidateNames = candidates.map((f) => f.path).toList();
+        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+          candidateNames,
+          season: season,
+          episode: episode,
+        );
+        if (targetIndex != null && targetIndex < candidates.length) {
+          targetFile = candidates[targetIndex];
+        }
+      }
+      targetFile ??= candidates.length > 1
+          ? candidates.reduce((a, b) => a.size >= b.size ? a : b)
+          : candidates.first;
+
+      return targetFile.streamLink ?? targetFile.link;
+    } catch (e) {
+      debugPrint('StremioTV: Premiumize resolve error: $e');
       return null;
     }
   }

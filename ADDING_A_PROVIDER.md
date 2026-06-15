@@ -366,6 +366,55 @@ Quick Play keyword flow mirroring `_watchWithTorbox`:
 | Launch | `_launchTorboxOnAndroidTv` | `_launchPikPakOnAndroidTv` (HTTPS URLs) |
 | Seen-key | `torrentId|fileId` | `infohash|file.path` |
 
+## 18. Stremio TV debrid provider (DONE for Premiumize)
+
+Wire the provider into `lib/screens/stremio_tv/stremio_tv_screen.dart` so it appears
+in the provider picker and is used for cache filtering and stream resolution.
+
+**Imports** — add `premiumize_service.dart` and `premiumize_file.dart`.
+
+**`_loadAvailableProviders`** — check both `getPremiumizeIntegrationEnabled()` AND
+`getPremiumizeApiKey()`. Only add the entry when both pass (Premiumize has a two-flag
+guard; other providers only check the key or a single enabled flag).
+
+**`_providerShortLabel` / `_providerFullLabel`** — add `'premiumize'` cases (`'PM'` /
+`'Premiumize'`). The menu UI is data-driven off `_availableProviders` so no other UI
+changes are needed.
+
+**Cache pre-filter (two locations)** — one inside `_playChannel`, one inside the
+prefetch/next-channel helper. For Premiumize, `checkCache` returns `List<bool>`
+(positional, not a `Set<String>`), so build `cachedSet` via an index loop:
+```dart
+final cachedResults = await PremiumizeService.checkCache(pmKey, torrentHashes);
+final cachedSet = <String>{};
+for (int i = 0; i < torrentHashes.length; i++) {
+  if (i < cachedResults.length && cachedResults[i]) cachedSet.add(torrentHashes[i]);
+}
+```
+Then filter `playableSources` to keep direct streams + only cached torrents.
+
+**`_playTorrentViaDebrid`** — add `'premiumize'` branch (explicit) and auto-fallback
+(last in chain, after RD → Torbox → PikPak). Update the no-provider snackbar to
+mention Premiumize.
+
+**`_playViaPremiumize`** — single `directDownload` call returns ready URLs; no polling.
+Pick largest file for movies, `candidates.first` for others. Prefer `streamLink ?? link`.
+Pattern matches `_playViaPikPak` (HTTPS URLs, no create/poll steps).
+
+**`_resolveTorrentUrl`** — same `'premiumize'` branch + auto-fallback pattern as above.
+
+**`_resolveViaPremiumize`** — like `_playViaPremiumize` but returns URL only (no
+`VideoPlayerLauncher`). Adds episode matching via `StremioEpisodeSelector.findEpisodeFileIndex`
+on `f.path`; falls back to largest file on miss. This is better than the Torbox equivalent.
+
+### Key differences vs Torbox
+| | Torbox | Premiumize |
+|---|---|---|
+| Cache check response | `Set<String>` of hashes | `List<bool>` positional — use index loop |
+| Stream resolution | createTorrent → 3 s delay → getTorrentById → requestFileDownloadLink | `directDownload` (1 step, returns ready URLs) |
+| URL type | HTTPS download link | `streamLink` (HLS) preferred, `link` fallback |
+| Episode selection in `_resolve*` | `findLargestFileIndex` + `findEpisodeFileIndex` | same, but on `f.path` |
+
 ## Not done yet (future steps)
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
 
