@@ -26,6 +26,8 @@ class StorageService {
   static const String _premiumizeApiKey = 'premiumize_api_key';
   static const String _premiumizeIntegrationEnabledKey =
       'premiumize_integration_enabled';
+  static const String _premiumizePostTorrentActionKey =
+      'premiumize_post_torrent_action';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -462,6 +464,17 @@ class StorageService {
   static Future<void> savePikPakPostTorrentAction(String action) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pikpakPostTorrentActionKey, action);
+  }
+
+  // Premiumize post-torrent action methods
+  static Future<String> getPremiumizePostTorrentAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_premiumizePostTorrentActionKey) ?? 'choose';
+  }
+
+  static Future<void> savePremiumizePostTorrentAction(String action) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_premiumizePostTorrentActionKey, action);
   }
 
   // Battery optimization status

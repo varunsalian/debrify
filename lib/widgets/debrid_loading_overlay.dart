@@ -132,6 +132,21 @@ class DebridLoadingOverlay {
       suppressVisual: suppressVisual,
     );
   }
+
+  static void showPremiumize(
+    BuildContext context,
+    String torrentName, {
+    bool suppressVisual = false,
+  }) {
+    show(
+      context,
+      provider: 'Premiumize',
+      torrentName: torrentName,
+      accentColor: const Color(0xFFF59E0B),
+      icon: Icons.workspace_premium_rounded,
+      suppressVisual: suppressVisual,
+    );
+  }
 }
 
 class _DebridLoadingContent extends StatefulWidget {

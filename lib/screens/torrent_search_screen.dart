@@ -36,6 +36,8 @@ import 'video_player_screen.dart';
 import '../models/rd_torrent.dart';
 import '../services/main_page_bridge.dart';
 import '../services/torbox_service.dart';
+import '../services/premiumize_service.dart';
+import '../models/premiumize_file.dart';
 import '../services/torrent_file_service.dart';
 import '../services/debrify_tv_channel_add_service.dart';
 import '../models/torbox_torrent.dart';
@@ -1442,6 +1444,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_pikpakEnabled) {
       count++;
     }
+    if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      count++;
+    }
     return count;
   }
 
@@ -1501,6 +1508,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
         _sendToPikPak(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
         return;
+      } else if (defaultProvider == 'premiumize' &&
+          _premiumizeIntegrationEnabled &&
+          _premiumizeApiKey != null &&
+          _premiumizeApiKey!.isNotEmpty) {
+        _addToPremiumize(
+          torrent.infohash,
+          torrent.name,
+          forcePlay: isQuickPlay,
+        );
+        return;
       }
       // If default provider is not available, fall through to show dialog or use available service
     }
@@ -1527,12 +1544,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } else if (_pikpakEnabled) {
       // Direct to PikPak
       _sendToPikPak(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
+    } else if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      // Direct to Premiumize
+      _addToPremiumize(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
     } else {
       // No service configured
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please configure Real-Debrid, Torbox, or PikPak in Settings',
+            'Please configure Real-Debrid, Torbox, Premiumize, or PikPak in Settings',
           ),
         ),
       );
@@ -1933,6 +1955,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
 
+    if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      providers.add(
+        _ProviderOption(
+          id: 'premiumize',
+          name: 'Premiumize',
+          icon: Icons.workspace_premium_rounded,
+          color: const Color(0xFFF59E0B),
+        ),
+      );
+    }
+
     final result = await showDialog<_ProviderDialogResult>(
       context: context,
       builder: (context) => _ProviderSelectionDialog(providers: providers),
@@ -1951,6 +1986,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _addToRealDebrid(torrent.infohash, torrent.name, index);
       } else if (result.provider == 'pikpak') {
         _sendToPikPak(torrent.infohash, torrent.name);
+      } else if (result.provider == 'premiumize') {
+        _addToPremiumize(torrent.infohash, torrent.name);
       }
     }
   }
@@ -6917,6 +6954,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return StorageService.getTorboxPostTorrentAction();
       case 'pikpak':
         return StorageService.getPikPakPostTorrentAction();
+      case 'premiumize':
+        return StorageService.getPremiumizePostTorrentAction();
       case 'debrid':
       default:
         return StorageService.getPostTorrentAction();
@@ -6932,6 +6971,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return StorageService.saveTorboxPostTorrentAction(action);
       case 'pikpak':
         return StorageService.savePikPakPostTorrentAction(action);
+      case 'premiumize':
+        return StorageService.savePremiumizePostTorrentAction(action);
       case 'debrid':
       default:
         return StorageService.savePostTorrentAction(action);
@@ -11730,7 +11771,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   /// Shows a dialog when a torrent is not cached, asking the user if they want
   /// to add it anyway. Returns true if the user wants to add it.
   Future<bool> _showNotCachedDialog(String provider) async {
-    final pageName = provider == 'torbox' ? 'Torbox' : 'Real-Debrid';
+    final pageName = provider == 'torbox'
+        ? 'Torbox'
+        : provider == 'premiumize'
+        ? 'Premiumize'
+        : 'Real-Debrid';
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
@@ -12344,6 +12389,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         nextIndex >= 0 ? nextIndex : 0,
         forcePlay: true,
       );
+    } else if (provider == 'premiumize') {
+      _addToPremiumize(nextTorrent.infohash, nextTorrent.name, forcePlay: true);
     }
 
     return true;
@@ -12721,6 +12768,666 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  // ===========================================================================
+  // Premiumize: Add / Play / Download
+  //
+  // Premiumize's /transfer/directdl returns ready-to-use direct links for every
+  // file in one call (no per-file unrestrict step), so playlists carry real URLs
+  // and downloads enqueue those URLs directly.
+  // ===========================================================================
+
+  void _showPremiumizeApiKeyMissingMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please add your Premiumize API key in Settings first!'),
+        backgroundColor: Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showPremiumizeSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  String _formatPremiumizeError(Object error) {
+    var message = error.toString();
+    // Strip nested "Exception:" prefixes for a cleaner message.
+    message = message.replaceAll('Exception:', '').trim();
+    if (message.isEmpty) return 'Something went wrong.';
+    return message;
+  }
+
+  bool _premiumizeFileLooksLikeVideo(PremiumizeFile file) {
+    return FileUtils.isVideoFile(file.fileName);
+  }
+
+  Future<void> _addToPremiumize(
+    String infohash,
+    String torrentName, {
+    bool forcePlay = false,
+  }) async {
+    final apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showPremiumizeApiKeyMissingMessage();
+      _clearQuickPlayMovieMask();
+      return;
+    }
+
+    DebridLoadingOverlay.showPremiumize(
+      context,
+      torrentName,
+      suppressVisual: _quickPlayMovieMasking,
+    );
+
+    try {
+      final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
+
+      // Cache check first — free, no fair-use cost.
+      final cached = await PremiumizeService.isCached(apiKey, magnetLink);
+
+      if (!cached) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'premiumize')) {
+          return;
+        }
+        if (forcePlay) {
+          _resetQuickPlayState();
+          _showPremiumizeSnack(
+            'This torrent is not cached on Premiumize.',
+            isError: true,
+          );
+          return;
+        }
+        if (!mounted) return;
+        final addAnyway = await _showNotCachedDialog('premiumize');
+        if (!mounted) return;
+        final cardIndex = _torrents.indexWhere(
+          (t) => t.infohash.toLowerCase() == infohash.toLowerCase(),
+        );
+        _restoreFocusToCard(cardIndex);
+        if (addAnyway) {
+          try {
+            await PremiumizeService.createTransfer(apiKey, magnetLink);
+            _showPremiumizeSnack(
+              'Added to Premiumize. It will be available once the download finishes.',
+            );
+          } catch (e) {
+            _showPremiumizeSnack(
+              'Failed to add to Premiumize: ${_formatPremiumizeError(e)}',
+              isError: true,
+            );
+          }
+        }
+        return;
+      }
+
+      // Cached — resolve direct links for every file at once.
+      final files = await PremiumizeService.directDownload(apiKey, magnetLink);
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (files.isEmpty) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'premiumize')) {
+          return;
+        }
+        _showPremiumizeSnack(
+          'Premiumize returned no files for this torrent.',
+          isError: true,
+        );
+        if (forcePlay) _resetQuickPlayState();
+        return;
+      }
+
+      if (!mounted) return;
+
+      final torrent = _findTorrentByInfohash(infohash, torrentName);
+      await _showPremiumizePostAddOptions(
+        files,
+        torrent,
+        torrentName,
+        infohash: infohash,
+        forcePlay: forcePlay,
+      );
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'premiumize')) {
+        return;
+      }
+      _showPremiumizeSnack(
+        'Failed to add torrent: ${_formatPremiumizeError(e)}',
+        isError: true,
+      );
+      if (forcePlay) _resetQuickPlayState();
+    }
+  }
+
+  Future<void> _showPremiumizePostAddOptions(
+    List<PremiumizeFile> files,
+    Torrent torrent,
+    String torrentName, {
+    String? infohash,
+    bool forcePlay = false,
+  }) async {
+    if (!mounted) return;
+    final videoFiles = files.where(_premiumizeFileLooksLikeVideo).toList();
+    final hasVideo = videoFiles.isNotEmpty;
+    final isVideoOnly =
+        files.isNotEmpty && files.every(_premiumizeFileLooksLikeVideo);
+
+    // Quick Play always plays; otherwise honour the user's preference.
+    final postAction = forcePlay
+        ? 'play'
+        : await StorageService.getPremiumizePostTorrentAction();
+
+    switch (postAction) {
+      case 'none':
+        _showPremiumizeSnack('Torrent added to Premiumize successfully');
+        return;
+      case 'channel':
+        final keyword = _searchController.text.trim();
+        await _addTorrentToChannel(torrent, keyword);
+        return;
+      case 'play':
+        if (hasVideo) {
+          await _playPremiumizeFiles(
+            files,
+            torrentName,
+            torrent,
+            infohash: infohash,
+            forcePlay: forcePlay,
+          );
+          if (_activeAdvancedSelection?.contentType == 'movie') {
+            _traktResultsKey.currentState?.refreshBoundSources();
+            _catalogBrowserKey.currentState?.refreshBoundSources();
+            _aggregatedResultsKey.currentState?.refreshBoundSources();
+          }
+          return;
+        }
+        if (forcePlay) {
+          if (_tryNextQuickPlayTorrent(provider: 'premiumize')) return;
+          _resetQuickPlayState();
+        }
+        break; // fall through to the chooser
+      case 'download':
+        if (isVideoOnly) {
+          _showPremiumizeDownloadOptions(files, torrentName);
+          return;
+        }
+        break; // fall through to the chooser
+      case 'choose':
+      default:
+        break;
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFB45309)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.workspace_premium_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                torrentName,
+                                maxLines: 5,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                hasVideo
+                                    ? 'Cached on Premiumize. Choose your next step.'
+                                    : 'Available for download. No obvious videos detected.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            DialogTapGuard.markKeyAction();
+                            Navigator.of(ctx).pop();
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF1E293B)),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _DebridActionTile(
+                            icon: Icons.play_circle_fill_rounded,
+                            color: const Color(0xFF60A5FA),
+                            title: 'Play now',
+                            subtitle: hasVideo
+                                ? 'Stream instantly from Premiumize.'
+                                : 'Available for torrents with video files.',
+                            enabled: hasVideo,
+                            autofocus: hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              _playPremiumizeFiles(
+                                files,
+                                torrentName,
+                                torrent,
+                                infohash: infohash,
+                              );
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.download_rounded,
+                            color: const Color(0xFF4ADE80),
+                            title: 'Download to device',
+                            subtitle: 'Grab files via Premiumize instantly.',
+                            enabled: true,
+                            autofocus: !hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              _showPremiumizeDownloadOptions(files, torrentName);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.connected_tv,
+                            color: const Color(0xFF10B981),
+                            title: 'Add to channel',
+                            subtitle:
+                                'Cache this torrent in a Debrify TV channel.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              final keyword = _searchController.text.trim();
+                              _addTorrentToChannel(torrent, keyword);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      DialogTapGuard.markKeyAction();
+                      Navigator.of(ctx).pop();
+                      _restoreFocusToCard(-1, torrent);
+                    },
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _playPremiumizeFiles(
+    List<PremiumizeFile> files,
+    String torrentName,
+    Torrent torrent, {
+    String? infohash,
+    bool forcePlay = false,
+  }) async {
+    final videoFiles = files.where(_premiumizeFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'premiumize')) return;
+      _showPremiumizeSnack(
+        'No playable video files found in this torrent.',
+        isError: true,
+      );
+      if (forcePlay) _resetQuickPlayState();
+      return;
+    }
+
+    final int sourceIndex = infohash != null ? _findTorrentIndex(infohash) : 0;
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        debugPrint('Premiumize PLAY (single): title="$torrentName"');
+        final useDeoVR = await _shouldUseDeoVR(torrentName);
+        if (useDeoVR) {
+          await _launchWithDeoVR(videoUrl: file.link, filename: torrentName);
+          if (forcePlay) _resetQuickPlayState();
+          _returnToCatalogIfNeeded();
+          return;
+        }
+        if (!mounted) return;
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: file.link,
+            title: torrentName,
+            subtitle: Formatters.formatFileSize(file.size),
+            viewMode: PlaylistViewMode.sorted,
+            contentImdbId: _activeAdvancedSelection?.imdbId,
+            contentType: _activeAdvancedSelection?.contentType,
+            contentSeason: _activeAdvancedSelection?.season,
+            contentEpisode: _activeAdvancedSelection?.episode,
+            stremioSources: _torrents,
+            stremioCurrentSourceIndex: sourceIndex,
+            resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+            traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
+            traktProgressPercent:
+                _activeAdvancedSelection?.traktProgressPercent,
+            contentTitle: _activeAdvancedSelection?.title,
+            posterUrl: _activeAdvancedSelection?.posterUrl,
+            contentYear: _activeAdvancedSelection?.year,
+            addonId: _selectedSource.addon?.id,
+          ),
+          onQuickPlayNextEpisode: _quickPlayNextCallback,
+        );
+        if (forcePlay) _resetQuickPlayState();
+        _returnToCatalogIfNeeded();
+      } catch (e) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'premiumize')) {
+          return;
+        }
+        _showPremiumizeSnack(
+          'Failed to play file: ${_formatPremiumizeError(e)}',
+          isError: true,
+        );
+        if (forcePlay) _resetQuickPlayState();
+      }
+      return;
+    }
+
+    // Multi-file: build a sorted playlist (series-aware) of direct links.
+    final items = List<_PremiumizePlaylistItem>.generate(videoFiles.length, (
+      index,
+    ) {
+      final displayName = videoFiles[index].fileName;
+      final info = SeriesParser.parseFilename(displayName);
+      return _PremiumizePlaylistItem(
+        file: videoFiles[index],
+        seriesInfo: info,
+        displayName: displayName,
+      );
+    });
+
+    final filenames = items.map((e) => e.displayName).toList();
+    final bool isSeriesCollection =
+        items.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    final sortedEntries = [...items];
+    if (isSeriesCollection) {
+      sortedEntries.sort((a, b) {
+        final seasonCompare = (a.seriesInfo.season ?? 0).compareTo(
+          b.seriesInfo.season ?? 0,
+        );
+        if (seasonCompare != 0) return seasonCompare;
+        final episodeCompare = (a.seriesInfo.episode ?? 0).compareTo(
+          b.seriesInfo.episode ?? 0,
+        );
+        if (episodeCompare != 0) return episodeCompare;
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
+      });
+    } else {
+      sortedEntries.sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    }
+
+    final seriesInfos = sortedEntries.map((entry) => entry.seriesInfo).toList();
+    int startIndex = isSeriesCollection
+        ? _findFirstEpisodeIndex(seriesInfos)
+        : 0;
+    if (startIndex < 0 || startIndex >= sortedEntries.length) {
+      startIndex = 0;
+    }
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final seriesInfo = entry.seriesInfo;
+      final episodeLabel = _formatTorboxPlaylistTitle(
+        info: seriesInfo,
+        fallback: entry.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _combineSeriesAndEpisodeTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: entry.displayName,
+      );
+
+      // Strip the first folder level (torrent name) from path.
+      String relativePath = entry.file.path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
+      playlistEntries.add(
+        PlaylistEntry(
+          url: entry.file.link, // direct link, ready to play
+          title: combinedTitle,
+          relativePath: relativePath,
+          sizeBytes: entry.file.size,
+          torrentHash: (infohash != null && infohash.isNotEmpty)
+              ? infohash
+              : null,
+        ),
+      );
+    }
+
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, entry) => sum + entry.file.size,
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    debugPrint(
+      'Premiumize PLAY (multi): ${playlistEntries.length} files, '
+      'startIndex=$startIndex isSeries=$isSeriesCollection',
+    );
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: sortedEntries[startIndex].file.link,
+        title: torrentName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+        viewMode: isSeriesCollection
+            ? PlaylistViewMode.series
+            : PlaylistViewMode.sorted,
+        contentImdbId: _activeAdvancedSelection?.imdbId,
+        contentType: _activeAdvancedSelection?.contentType,
+        contentSeason: _activeAdvancedSelection?.season,
+        contentEpisode: _activeAdvancedSelection?.episode,
+        stremioSources: _torrents,
+        stremioCurrentSourceIndex: sourceIndex,
+        resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+        traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
+        traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+        contentTitle: _activeAdvancedSelection?.title,
+        posterUrl: _activeAdvancedSelection?.posterUrl,
+        contentYear: _activeAdvancedSelection?.year,
+        addonId: _selectedSource.addon?.id,
+      ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
+    );
+    if (forcePlay) _resetQuickPlayState();
+    _returnToCatalogIfNeeded();
+  }
+
+  Future<void> _showPremiumizeDownloadOptions(
+    List<PremiumizeFile> files,
+    String torrentName,
+  ) async {
+    if (files.isEmpty) {
+      _showPremiumizeSnack('No files available to download.', isError: true);
+      return;
+    }
+
+    final formattedFiles = <Map<String, dynamic>>[];
+    for (int i = 0; i < files.length; i++) {
+      formattedFiles.add({
+        '_fullPath': files[i].path,
+        'name': files[i].path,
+        'size': files[i].size.toString(),
+        '_premiumizeIndex': i,
+      });
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return FileSelectionDialog(
+          files: formattedFiles,
+          torrentName: torrentName,
+          onDownload: (selectedFiles) {
+            if (selectedFiles.isEmpty) return;
+            _downloadSelectedPremiumizeFiles(
+              selectedFiles,
+              files,
+              torrentName,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _downloadSelectedPremiumizeFiles(
+    List<Map<String, dynamic>> selectedFiles,
+    List<PremiumizeFile> allFiles,
+    String torrentName,
+  ) async {
+    if (selectedFiles.isEmpty) return;
+
+    int successCount = 0;
+    int failCount = 0;
+    for (final file in selectedFiles) {
+      try {
+        final index = file['_premiumizeIndex'] as int? ?? -1;
+        if (index < 0 || index >= allFiles.length) {
+          failCount++;
+          continue;
+        }
+        final target = allFiles[index];
+        // Premiumize links are direct — enqueue the URL as-is.
+        await DownloadService.instance.enqueueDownload(
+          url: target.link,
+          fileName: target.fileName,
+          torrentName: torrentName,
+          context: mounted ? context : null,
+        );
+        successCount++;
+      } catch (e) {
+        failCount++;
+      }
+    }
+
+    if (!mounted) return;
+    if (successCount > 0 && failCount == 0) {
+      _showPremiumizeSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+      );
+    } else if (successCount > 0) {
+      _showPremiumizeSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        isError: true,
+      );
+    } else {
+      _showPremiumizeSnack(
+        'Failed to queue any files for download',
+        isError: true,
+      );
+    }
   }
 
   void _showTorboxLoadingDialog(String torrentName) {
@@ -15997,6 +16704,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return _resolveSourceViaTorbox(torrent, magnet);
       } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
         return _resolveSourceViaPikPak(torrent, magnet);
+      } else if (defaultProvider == 'premiumize' &&
+          _premiumizeIntegrationEnabled &&
+          _premiumizeApiKey != null &&
+          _premiumizeApiKey!.isNotEmpty) {
+        return _resolveSourceViaPremiumize(torrent, magnet);
       }
 
       // Fallback: no default set or selected provider unavailable → first available
@@ -16010,6 +16722,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return _resolveSourceViaTorbox(torrent, magnet);
       } else if (_pikpakEnabled) {
         return _resolveSourceViaPikPak(torrent, magnet);
+      } else if (_premiumizeIntegrationEnabled &&
+          _premiumizeApiKey != null &&
+          _premiumizeApiKey!.isNotEmpty) {
+        return _resolveSourceViaPremiumize(torrent, magnet);
       }
       return null;
     };
@@ -16081,6 +16797,90 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         torrent: torboxTorrent,
         apiKey: apiKey,
       );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<PlaylistEntry>?> _resolveSourceViaPremiumize(
+    Torrent torrent,
+    String magnet,
+  ) async {
+    try {
+      final apiKey = _premiumizeApiKey;
+      if (apiKey == null || apiKey.isEmpty) return null;
+      // Only resolve cached torrents for in-player source switching.
+      final cached = await PremiumizeService.isCached(apiKey, magnet);
+      if (!cached) return null;
+      final files = await PremiumizeService.directDownload(apiKey, magnet);
+      final videoFiles = files.where(_premiumizeFileLooksLikeVideo).toList();
+      if (videoFiles.isEmpty) return null;
+
+      final items = videoFiles
+          .map(
+            (f) => _PremiumizePlaylistItem(
+              file: f,
+              seriesInfo: SeriesParser.parseFilename(f.fileName),
+              displayName: f.fileName,
+            ),
+          )
+          .toList();
+      final isSeriesCollection =
+          items.length > 1 &&
+          SeriesParser.isSeriesPlaylist(
+            items.map((e) => e.displayName).toList(),
+          );
+      if (isSeriesCollection) {
+        items.sort((a, b) {
+          final seasonCompare = (a.seriesInfo.season ?? 0).compareTo(
+            b.seriesInfo.season ?? 0,
+          );
+          if (seasonCompare != 0) return seasonCompare;
+          final episodeCompare = (a.seriesInfo.episode ?? 0).compareTo(
+            b.seriesInfo.episode ?? 0,
+          );
+          if (episodeCompare != 0) return episodeCompare;
+          return a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
+        });
+      } else {
+        items.sort(
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
+        );
+      }
+
+      final entries = <PlaylistEntry>[];
+      for (final entry in items) {
+        final episodeLabel = _formatTorboxPlaylistTitle(
+          info: entry.seriesInfo,
+          fallback: entry.displayName,
+          isSeriesCollection: isSeriesCollection,
+        );
+        final combinedTitle = _combineSeriesAndEpisodeTitle(
+          seriesTitle: entry.seriesInfo.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: entry.displayName,
+        );
+        String relativePath = entry.file.path;
+        final firstSlash = relativePath.indexOf('/');
+        if (firstSlash > 0) {
+          relativePath = relativePath.substring(firstSlash + 1);
+        }
+        entries.add(
+          PlaylistEntry(
+            url: entry.file.link,
+            title: combinedTitle,
+            relativePath: relativePath,
+            sizeBytes: entry.file.size,
+            torrentHash: torrent.infohash.isNotEmpty ? torrent.infohash : null,
+          ),
+        );
+      }
+      return entries.isEmpty ? null : entries;
     } catch (_) {
       return null;
     }
@@ -20487,6 +21287,70 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           );
         }
 
+        Widget buildPremiumizeButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+              onTap: () => _addToPremiumize(torrent.infohash, torrent.name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFF59E0B), Color(0xFFB45309)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Premiumize',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.expand_more_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         final Widget? torboxButton =
             (_torboxIntegrationEnabled &&
                 _torboxApiKey != null &&
@@ -20502,63 +21366,46 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         final Widget? pikpakButton = _pikpakEnabled
             ? buildPikPakButton()
             : null;
+        final Widget? premiumizeButton =
+            (_premiumizeIntegrationEnabled &&
+                _premiumizeApiKey != null &&
+                _premiumizeApiKey!.isNotEmpty)
+            ? buildPremiumizeButton()
+            : null;
 
-        if (torboxButton == null &&
-            realDebridButton == null &&
-            pikpakButton == null) {
-          return const SizedBox.shrink();
-        }
-
-        final int buttonCount = [
+        final List<Widget> providerButtons = [
           torboxButton,
           realDebridButton,
           pikpakButton,
-        ].where((b) => b != null).length;
+          premiumizeButton,
+        ].whereType<Widget>().toList();
+
+        if (providerButtons.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
         if (isCompactLayout) {
+          final List<Widget> children = [];
+          for (int i = 0; i < providerButtons.length; i++) {
+            if (i > 0) children.add(const SizedBox(height: 8));
+            children.add(providerButtons[i]);
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (torboxButton != null) torboxButton,
-              if (torboxButton != null &&
-                  (realDebridButton != null || pikpakButton != null))
-                const SizedBox(height: 8),
-              if (realDebridButton != null) realDebridButton,
-              if (realDebridButton != null && pikpakButton != null)
-                const SizedBox(height: 8),
-              if (pikpakButton != null) pikpakButton,
-            ],
+            children: children,
           );
         }
 
-        if (buttonCount == 3) {
-          return Row(
-            children: [
-              Expanded(child: torboxButton!),
-              const SizedBox(width: 8),
-              Expanded(child: realDebridButton!),
-              const SizedBox(width: 8),
-              Expanded(child: pikpakButton!),
-            ],
-          );
-        } else if (buttonCount == 2) {
-          return Row(
-            children: [
-              if (torboxButton != null) Expanded(child: torboxButton),
-              if (torboxButton != null &&
-                  (realDebridButton != null || pikpakButton != null))
-                const SizedBox(width: 8),
-              if (realDebridButton != null) Expanded(child: realDebridButton),
-              if (realDebridButton != null && pikpakButton != null)
-                const SizedBox(width: 8),
-              if (pikpakButton != null) Expanded(child: pikpakButton),
-            ],
-          );
-        } else {
-          final Widget singleButton =
-              torboxButton ?? realDebridButton ?? pikpakButton!;
-          return SizedBox(width: double.infinity, child: singleButton);
+        if (providerButtons.length == 1) {
+          return SizedBox(width: double.infinity, child: providerButtons.first);
         }
+
+        final List<Widget> rowChildren = [];
+        for (int i = 0; i < providerButtons.length; i++) {
+          if (i > 0) rowChildren.add(const SizedBox(width: 8));
+          rowChildren.add(Expanded(child: providerButtons[i]));
+        }
+        return Row(children: rowChildren);
       },
     );
   }
@@ -20587,6 +21434,18 @@ class _TorboxPlaylistItem {
   const _TorboxPlaylistItem({
     required this.file,
     required this.originalIndex,
+    required this.seriesInfo,
+    required this.displayName,
+  });
+}
+
+class _PremiumizePlaylistItem {
+  final PremiumizeFile file;
+  final SeriesInfo seriesInfo;
+  final String displayName;
+
+  const _PremiumizePlaylistItem({
+    required this.file,
     required this.seriesInfo,
     required this.displayName,
   });

@@ -70,15 +70,34 @@ Let users pick it as the default torrent provider.
 
 ---
 
-## Not done yet (future steps — wire the provider into actual flows)
-These make the provider functional beyond settings:
+## 9. Add / Play / Download from torrent search (DONE for Premiumize)
+Wire the provider into `lib/screens/torrent_search_screen.dart`. Premiumize is
+simpler than RD/Torbox: `/transfer/directdl` returns ready-to-use direct links
+for every file in one call (no per-file unrestrict), so playlist entries carry
+real URLs and downloads enqueue those URLs directly.
+- API service methods: `checkCache` (free, gates the flow), `directDownload`
+  (cached → links), `createTransfer` (not-cached → add to cloud).
+  See `lib/services/premiumize_service.dart`, `lib/models/premiumize_file.dart`.
+- Screen entry: `_addToPremiumize` → cache-check → directdl → post-add options
+  (`_showPremiumizePostAddOptions`) → `_playPremiumizeFiles` /
+  `_showPremiumizeDownloadOptions`. Mirror `_addToTorbox` / `_playTorboxTorrent`.
+- Series/movie handling reuses `SeriesParser` + `_findFirstEpisodeIndex` +
+  `_formatTorboxPlaylistTitle` / `_combineSeriesAndEpisodeTitle` (provider-agnostic).
+- Dispatch points wired: default-provider tap, service-selection dialog,
+  per-result-card button (`buildPremiumizeButton`), Quick Play next-retry,
+  post-torrent-action helpers, `_enabledServicesCount`, in-player source
+  switching (`_resolveSourceViaPremiumize`), not-cached "add anyway".
+- Loading overlay: `DebridLoadingOverlay.showPremiumize`.
 
-- [ ] **Add-torrent flow** — handle the provider id in `lib/screens/torrent_search_screen.dart`
-      (and the provider-selection dialog) so adding a torrent routes to it.
-- [ ] **Magnet / file selection / unrestrict / download** logic in the API service.
-- [ ] **Navigation tab** (browse cloud library) + hide-from-nav support, if desired.
-- [ ] **Quick Play** + post-torrent-action support.
-- [ ] **Backup/restore** of the new credentials (`settings_screen.dart` backup logic).
+## Not done yet (future steps)
+- [ ] **Bound sources / "Edit Source"** (series source binding + replay):
+      `_handleSelectSourceTorrentPicked` (select-source mode) and
+      `_tryPlayFromBoundSource*` have no `premiumize` branch yet. Premiumize
+      movie sources are intentionally NOT auto-saved to avoid a dangling
+      un-replayable source.
+- [ ] **Bulk add** (`_bulkAddTo*`) for Premiumize.
+- [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
+- [ ] **Backup/restore** of the new credentials (`settings_screen.dart`).
 
 ---
 
