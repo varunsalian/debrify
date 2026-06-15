@@ -1,5 +1,6 @@
 import '../torrent.dart';
 import '../torbox_file.dart';
+import '../premiumize_file.dart';
 import '../debrify_tv_cache.dart';
 import '../../utils/series_parser.dart';
 
@@ -29,6 +30,19 @@ class TorboxPlayableEntry {
   final SeriesInfo info;
 
   TorboxPlayableEntry({
+    required this.file,
+    required this.title,
+    required this.info,
+  });
+}
+
+/// Represents a playable file entry from a Premiumize torrent.
+class PremiumizePlayableEntry {
+  final PremiumizeFile file;
+  final String title;
+  final SeriesInfo info;
+
+  PremiumizePlayableEntry({
     required this.file,
     required this.title,
     required this.info,

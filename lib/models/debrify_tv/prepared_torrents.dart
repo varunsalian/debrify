@@ -29,3 +29,19 @@ class PikPakPreparedTorrent {
     required this.hasMore,
   });
 }
+
+/// Represents a Premiumize torrent that has been prepared for streaming.
+///
+/// Premiumize returns ready-to-use direct links from directdl in one call,
+/// so no separate unrestrict step is needed.
+class PremiumizePreparedTorrent {
+  final String streamUrl;
+  final String title;
+  final bool hasMore;
+
+  PremiumizePreparedTorrent({
+    required this.streamUrl,
+    required this.title,
+    required this.hasMore,
+  });
+}

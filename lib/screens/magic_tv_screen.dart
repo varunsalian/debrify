@@ -27,6 +27,8 @@ import '../services/pikpak_tv_service.dart';
 import '../services/storage_service.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
+import '../models/premiumize_file.dart';
+import '../services/premiumize_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
 import '../services/engine/engine_registry.dart';
@@ -157,6 +159,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerRealDebrid = 'real_debrid';
   static const String _providerTorbox = 'torbox';
   static const String _providerPikPak = 'pikpak';
+  static const String _providerPremiumize = 'premiumize';
   static const String _torboxFileEntryType = 'torbox_file';
   static const int _torboxMinVideoSizeBytes =
       50 * 1024 * 1024; // 50 MB filter threshold
@@ -217,6 +220,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _rdAvailable = false;
   bool _torboxAvailable = false;
   bool _pikpakAvailable = false;
+  bool _premiumizeAvailable = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -555,8 +559,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool rdAvailable,
     bool torboxAvailable,
     bool pikpakAvailable,
+    bool premiumizeAvailable,
   ) {
     // If user has a preferred provider that's available, use it
+    if (preferred == _providerPremiumize && premiumizeAvailable) {
+      return _providerPremiumize;
+    }
     if (preferred == _providerPikPak && pikpakAvailable) {
       return _providerPikPak;
     }
@@ -574,6 +582,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (torboxAvailable) {
       return _providerTorbox;
     }
+    if (premiumizeAvailable) {
+      return _providerPremiumize;
+    }
     if (pikpakAvailable) {
       return _providerPikPak;
     }
@@ -588,6 +599,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     if (provider == _providerPikPak) {
       return _pikpakAvailable;
+    }
+    if (provider == _providerPremiumize) {
+      return _premiumizeAvailable;
     }
     return _rdAvailable;
   }
@@ -667,11 +681,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final torboxAvailable =
         torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
+    final premiumizeIntegrationEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final premiumizeAvailable = premiumizeIntegrationEnabled &&
+        premiumizeKey != null &&
+        premiumizeKey.isNotEmpty;
     final defaultProvider = _determineDefaultProvider(
       hasStoredProvider ? storedProvider : null,
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
+      premiumizeAvailable,
     );
     final isTv = await AndroidNativeDownloader.isTelevision();
 
@@ -687,6 +708,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _rdAvailable = rdAvailable;
         _torboxAvailable = torboxAvailable;
         _pikpakAvailable = pikpakAvailable;
+        _premiumizeAvailable = premiumizeAvailable;
         _provider = defaultProvider;
         _isAndroidTv = isTv;
 
@@ -1215,6 +1237,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         await StorageService.getTorboxIntegrationEnabled();
     final torboxKey = await StorageService.getTorboxApiKey();
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
+    final premiumizeIntegrationEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final premiumizeAvailable = premiumizeIntegrationEnabled &&
+        premiumizeKey != null &&
+        premiumizeKey.isNotEmpty;
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
@@ -1226,12 +1254,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
+      premiumizeAvailable,
     );
     final nextQuickProvider = _determineDefaultProvider(
       _quickProvider,
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
+      premiumizeAvailable,
     );
 
     if (!mounted) return;
@@ -1240,6 +1270,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _rdAvailable = rdAvailable;
       _torboxAvailable = torboxAvailable;
       _pikpakAvailable = pikpakAvailable;
+      _premiumizeAvailable = premiumizeAvailable;
       _provider = nextChannelProvider;
       _quickProvider = nextQuickProvider;
     });
@@ -1494,6 +1525,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   String _providerDisplay(String provider) {
     if (provider == _providerTorbox) return 'Torbox';
     if (provider == _providerPikPak) return 'PikPak';
+    if (provider == _providerPremiumize) return 'Premiumize';
     return 'Real Debrid';
   }
 
@@ -1580,6 +1612,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 : (selected) {
                     if (selected) {
                       handleSelection(_providerPikPak);
+                    }
+                  },
+          ),
+        ),
+        Tooltip(
+          message: _premiumizeAvailable
+              ? 'Use Premiumize for Debrify TV'
+              : 'Enable Premiumize and add an API key in Settings to use this option.',
+          child: ChoiceChip(
+            label: const Text('Premiumize'),
+            selected: currentProvider == _providerPremiumize,
+            disabledColor: Colors.white12,
+            onSelected: (!_premiumizeAvailable || _isBusy)
+                ? null
+                : (selected) {
+                    if (selected) {
+                      handleSelection(_providerPremiumize);
                     }
                   },
           ),
@@ -3612,6 +3661,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final bool providerReady = switch (_provider) {
       _providerTorbox => _torboxAvailable,
       _providerPikPak => _pikpakAvailable,
+      _providerPremiumize => _premiumizeAvailable,
       _ => _rdAvailable,
     };
     if (!providerReady) {
@@ -3698,6 +3748,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
+    } else if (_provider == _providerPremiumize) {
+      debugPrint('🎬 [WATCH] Launching Premiumize flow...');
+      await _watchPremiumizeWithCachedTorrents(
+        cachedTorrents,
+        channelName: channel.name,
+        channelId: channel.id,
+        channelNumber: resolvedChannelNumber,
+      );
     } else {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
@@ -3729,15 +3787,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     await _syncProviderAvailability();
-    if (!_rdAvailable && !_torboxAvailable && !_pikpakAvailable) {
+    if (!_rdAvailable && !_torboxAvailable && !_pikpakAvailable && !_premiumizeAvailable) {
       if (mounted) {
         setState(() {
           _status =
-              'Connect Real Debrid, Torbox, or PikPak in Settings to use Debrify TV.';
+              'Connect Real Debrid, Torbox, Premiumize, or PikPak in Settings to use Debrify TV.';
         });
       }
       _showSnack(
-        'Connect Real Debrid, Torbox, or PikPak in Settings to use Debrify TV.',
+        'Connect Real Debrid, Torbox, Premiumize, or PikPak in Settings to use Debrify TV.',
         color: Colors.orange,
       );
       return;
@@ -3793,6 +3851,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ? 'Torbox'
         : _quickProvider == _providerPikPak
         ? 'PikPak'
+        : _quickProvider == _providerPremiumize
+        ? 'Premiumize'
         : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
@@ -4017,6 +4077,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (_quickProvider == _providerPikPak) {
       await _watchWithPikPak(keywords, _log);
+      return;
+    }
+
+    if (_quickProvider == _providerPremiumize) {
+      await _watchWithPremiumize(keywords, _log);
       return;
     }
 
@@ -4371,7 +4436,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             _channels.length > 1 &&
                                 (_quickProvider == _providerRealDebrid ||
                                     _quickProvider == _providerTorbox ||
-                                    _quickProvider == _providerPikPak)
+                                    _quickProvider == _providerPikPak ||
+                                    _quickProvider == _providerPremiumize)
                             ? _requestNextChannel
                             : null,
                         channelDirectory: activeChannelDirectory,
@@ -5620,7 +5686,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 _channels.length > 1 &&
                     (_provider == _providerRealDebrid ||
                         _provider == _providerTorbox ||
-                        _provider == _providerPikPak)
+                        _provider == _providerPikPak ||
+                        _provider == _providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -6540,7 +6607,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 _channels.length > 1 &&
                     (_provider == _providerRealDebrid ||
                         _provider == _providerTorbox ||
-                        _provider == _providerPikPak)
+                        _provider == _providerPikPak ||
+                        _provider == _providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -6702,7 +6770,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 _channels.length > 1 &&
                     (_provider == _providerRealDebrid ||
                         _provider == _providerTorbox ||
-                        _provider == _providerPikPak)
+                        _provider == _providerPikPak ||
+                        _provider == _providerPremiumize)
                 ? _requestNextChannel
                 : null,
             channelDirectory: channelDirectory,
@@ -8092,6 +8161,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     _rdAvailable,
                     _torboxAvailable,
                     _pikpakAvailable,
+                    _premiumizeAvailable,
                   );
 
                   setState(() {
@@ -9006,6 +9076,644 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       title: selectedFileName,
       hasMore: unseenFiles.isNotEmpty,
     );
+  }
+
+  // ── Premiumize helpers ──────────────────────────────────────────────────────
+
+  Future<TorboxCacheWindowResult> _fetchPremiumizeCacheWindow({
+    required List<Torrent> candidates,
+    required int startIndex,
+    required String apiKey,
+  }) async {
+    const int chunkSize = 100;
+    const int maxCalls = 2;
+
+    int cursor = startIndex;
+    int calls = 0;
+    final List<Torrent> hits = [];
+
+    while (cursor < candidates.length && calls < maxCalls && hits.isEmpty) {
+      final int end = min(cursor + chunkSize, candidates.length);
+      final List<Torrent> chunk = candidates.sublist(cursor, end);
+      cursor = end;
+
+      final List<String> hashes = chunk
+          .map((t) => _normalizeInfohash(t.infohash))
+          .where((h) => h.isNotEmpty)
+          .toList();
+
+      if (hashes.isEmpty) continue;
+
+      calls++;
+      final List<bool> cached =
+          await PremiumizeService.checkCache(apiKey, hashes);
+
+      for (int i = 0; i < chunk.length; i++) {
+        if (i < cached.length && cached[i]) {
+          hits.add(chunk[i]);
+        }
+      }
+    }
+
+    return TorboxCacheWindowResult(
+      cachedTorrents: hits,
+      nextCursor: cursor,
+      exhausted: cursor >= candidates.length,
+    );
+  }
+
+  Future<PremiumizePreparedTorrent?> _preparePremiumizeTorrent({
+    required Torrent candidate,
+    required String apiKey,
+    required void Function(String message) log,
+  }) async {
+    final infohash = _normalizeInfohash(candidate.infohash);
+    if (infohash.isEmpty) return null;
+
+    log('⏳ Premiumize: preparing ${candidate.name}');
+
+    final magnet = 'magnet:?xt=urn:btih:${candidate.infohash}';
+    List<PremiumizeFile> files;
+    try {
+      files = await PremiumizeService.directDownload(apiKey, magnet);
+    } catch (e) {
+      log('❌ Premiumize directdl failed: $e');
+      return null;
+    }
+
+    if (files.isEmpty) {
+      log('⚠️ Premiumize: no files for ${candidate.name}');
+      return null;
+    }
+
+    final playableEntries =
+        _buildPremiumizePlayableEntries(files, candidate.name);
+    if (playableEntries.isEmpty) {
+      log('⚠️ Premiumize: no playable files for ${candidate.name}');
+      return null;
+    }
+
+    final filteredEntries = playableEntries
+        .where(
+          (e) => !_seenLinkWithTorrentId.contains('$infohash|${e.file.path}'),
+        )
+        .toList();
+    if (filteredEntries.isEmpty) {
+      log('⚠️ Premiumize: no unseen playable files for ${candidate.name}');
+      return null;
+    }
+
+    filteredEntries.shuffle(Random());
+    final next = filteredEntries.removeAt(0);
+    final streamUrl = next.file.streamLink ?? next.file.link;
+    _seenLinkWithTorrentId.add('$infohash|${next.file.path}');
+    log('🎬 Premiumize: streaming ${next.title}');
+    return PremiumizePreparedTorrent(
+      streamUrl: streamUrl,
+      title: next.title,
+      hasMore: filteredEntries.isNotEmpty,
+    );
+  }
+
+  List<PremiumizePlayableEntry> _buildPremiumizePlayableEntries(
+    List<PremiumizeFile> files,
+    String fallbackTitle,
+  ) {
+    final seriesCandidates = <PremiumizePlayableEntry>[];
+    final otherCandidates = <PremiumizePlayableEntry>[];
+
+    for (final file in files) {
+      if (!_premiumizeFileLooksLikeVideo(file)) continue;
+      if (file.size < _torboxMinVideoSizeBytes) continue;
+
+      final displayName =
+          file.fileName.isNotEmpty ? file.fileName : fallbackTitle;
+      final info = SeriesParser.parseFilenameConservative(displayName);
+      final title = info.isSeries
+          ? _formatTorboxSeriesTitle(info, fallbackTitle)
+          : (displayName.isNotEmpty ? displayName : fallbackTitle);
+      final entry =
+          PremiumizePlayableEntry(file: file, title: title, info: info);
+
+      if (info.isSeries && info.season != null && info.episode != null) {
+        seriesCandidates.add(entry);
+      } else {
+        otherCandidates.add(entry);
+      }
+    }
+
+    seriesCandidates.sort((a, b) {
+      final seasonCompare =
+          (a.info.season ?? 0).compareTo(b.info.season ?? 0);
+      if (seasonCompare != 0) return seasonCompare;
+      return (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
+    });
+
+    otherCandidates.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+
+    final entries = <PremiumizePlayableEntry>[
+      ...seriesCandidates,
+      ...otherCandidates,
+    ];
+    entries.shuffle(Random());
+    return entries;
+  }
+
+  bool _premiumizeFileLooksLikeVideo(PremiumizeFile file) {
+    final name = file.fileName;
+    if (name.isEmpty) return false;
+    return FileUtils.isVideoFile(name);
+  }
+
+  Future<void> _watchPremiumizeWithCachedTorrents(
+    List<Torrent> cachedTorrents, {
+    String? channelName,
+    String? channelId,
+    int? channelNumber,
+  }) async {
+    if (cachedTorrents.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
+      _showSnack(
+        'Cached channel has no torrents yet. Please wait a moment.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
+        ? _androidTvChannelMetadata(
+            activeChannelId: channelId ?? _currentWatchingChannelId,
+          )
+        : null;
+
+    void log(String message) => debugPrint('DebrifyTV/PM: $message');
+
+    final integrationEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    if (!integrationEnabled) {
+      _showSnack(
+        'Enable Premiumize in Settings to use this provider.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No Premiumize API key');
+      _showSnack(
+        'Please add your Premiumize API key in Settings first!',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    _showCachedPlaybackDialog();
+
+    final List<Torrent> candidatePool = List<Torrent>.from(cachedTorrents);
+    candidatePool.shuffle(Random());
+
+    if (mounted) {
+      setState(() {
+        _status = 'Checking Premiumize cache...';
+        _isBusy = true;
+      });
+    }
+
+    int candidateCursor = 0;
+
+    Future<bool> populateQueue() async {
+      while (true) {
+        if (candidateCursor >= candidatePool.length) return false;
+        final TorboxCacheWindowResult window =
+            await _fetchPremiumizeCacheWindow(
+          candidates: candidatePool,
+          startIndex: candidateCursor,
+          apiKey: apiKey,
+        );
+        candidateCursor = window.nextCursor;
+        if (window.cachedTorrents.isEmpty) {
+          if (window.exhausted) return false;
+          continue;
+        }
+        _queue
+          ..clear()
+          ..addAll(window.cachedTorrents);
+        _lastQueueSize = _queue.length;
+        _lastSearchAt = DateTime.now();
+        if (mounted) {
+          setState(() {
+            _status = _queue.isEmpty
+                ? ''
+                : 'Queue has ${_queue.length} remaining';
+          });
+        }
+        log('✅ Cached Premiumize batch ready with ${_queue.length} item(s)');
+        return true;
+      }
+    }
+
+    bool seeded;
+    try {
+      seeded = await populateQueue();
+    } catch (e) {
+      _closeProgressDialog();
+      _showSnack(
+        'Premiumize cache check failed: $e',
+        color: Colors.orange,
+      );
+      if (mounted) setState(() => _isBusy = false);
+      return;
+    }
+
+    if (!seeded) {
+      _closeProgressDialog();
+      _showSnack(
+        'No cached torrents found on Premiumize. Please refresh the channel.',
+        color: Colors.orange,
+      );
+      if (mounted) setState(() => _isBusy = false);
+      return;
+    }
+
+    Future<Map<String, String>?> requestPremiumizeNext() async {
+      while (true) {
+        if (_queue.isEmpty) {
+          bool replenished;
+          try {
+            replenished = await populateQueue();
+          } catch (e) {
+            _closeProgressDialog();
+            _showSnack('Premiumize cache check failed: $e',
+                color: Colors.orange);
+            if (mounted) setState(() => _isBusy = false);
+            return null;
+          }
+          if (!replenished) break;
+        }
+        if (_queue.isEmpty) break;
+
+        final next = _queue.removeAt(0);
+        if (next is! Torrent) continue;
+
+        final prepared = await _preparePremiumizeTorrent(
+          candidate: next,
+          apiKey: apiKey,
+          log: log,
+        );
+        if (prepared == null) continue;
+        if (prepared.hasMore) candidatePool.add(next);
+        return {'url': prepared.streamUrl, 'title': prepared.title};
+      }
+      return null;
+    }
+
+    try {
+      final first = await requestPremiumizeNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (!mounted) return;
+        setState(() {
+          _status = 'No playable Premiumize streams found. Try refreshing.';
+          _isBusy = false;
+        });
+        MainPageBridge.notifyAutoLaunchFailed(
+          'No cached Premiumize streams available',
+        );
+        _showSnack(
+          'No cached Premiumize streams are playable. Try refreshing the channel.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      _closeProgressDialog();
+
+      final launchedOnTv = await _launchPikPakOnAndroidTv(
+        firstStream: first,
+        requestNext: requestPremiumizeNext,
+        channelName: channelName,
+        channelId: channelId,
+        channelNumber: channelNumber,
+        channelDirectory: channelDirectory,
+      );
+      if (launchedOnTv) return;
+
+      MainPageBridge.notifyPlayerLaunching();
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: first['url'] ?? '',
+            title: first['title'] ?? 'Debrify TV',
+            startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
+            hideSeekbar: _hideSeekbar,
+            showChannelName: _showChannelName,
+            channelName: channelName,
+            channelNumber: channelNumber,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            requestMagicNext: requestPremiumizeNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                    (_provider == _providerRealDebrid ||
+                        _provider == _providerTorbox ||
+                        _provider == _providerPikPak ||
+                        _provider == _providerPremiumize)
+                ? _requestNextChannel
+                : null,
+            channelDirectory: channelDirectory,
+            requestChannelById:
+                _channels.length > 1 ? _requestChannelById : null,
+          ),
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _status =
+              _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _watchWithPremiumize(
+    List<String> keywords,
+    void Function(String message) log,
+  ) async {
+    final integrationEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
+    if (!integrationEnabled) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Enable Premiumize in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Enable Premiumize in Settings to use this provider.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status =
+            'Add your Premiumize API key in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Please add your Premiumize API key in Settings first!',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    log('🌐 Premiumize: searching for cached torrents...');
+    final Map<String, Torrent> dedup = {};
+    final engineStates = await _tvEngineSearchStates();
+    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+
+    try {
+      final futures = keywords
+          .map(
+            (kw) => TorrentService.searchAllEngines(
+              kw,
+              engineStates: engineStates,
+              maxResultsOverrides: maxResultsOverrides,
+            ),
+          )
+          .toList();
+
+      await for (final result in Stream.fromFutures(futures)) {
+        final torrents =
+            (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+
+        List<Torrent> torrentsToProcess = torrents;
+        if (_quickAvoidNsfw) {
+          torrentsToProcess = torrents.where((t) {
+            return !NsfwFilter.shouldFilter(t.category, t.name);
+          }).toList();
+        }
+
+        for (final torrent in torrentsToProcess) {
+          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          if (normalizedHash.isEmpty) continue;
+          dedup.putIfAbsent(normalizedHash, () => torrent);
+        }
+
+        if (dedup.isNotEmpty && mounted) {
+          setState(() => _status = 'Checking Premiumize cache...');
+        }
+      }
+
+      final combinedList = dedup.values.toList();
+      if (combinedList.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() => _status = 'No results found. Try different keywords.');
+          _showSnack('No results found. Try different keywords.',
+              color: Colors.red);
+        }
+        return;
+      }
+
+      combinedList.shuffle(Random());
+      if (mounted) setState(() => _status = 'Checking Premiumize cache...');
+
+      int candidateCursor = 0;
+
+      Future<bool> populateQueue() async {
+        while (true) {
+          if (candidateCursor >= combinedList.length) return false;
+          final window = await _fetchPremiumizeCacheWindow(
+            candidates: combinedList,
+            startIndex: candidateCursor,
+            apiKey: apiKey,
+          );
+          candidateCursor = window.nextCursor;
+          if (window.cachedTorrents.isEmpty) {
+            if (window.exhausted) return false;
+            continue;
+          }
+          _queue
+            ..clear()
+            ..addAll(window.cachedTorrents);
+          _lastQueueSize = _queue.length;
+          _lastSearchAt = DateTime.now();
+          if (mounted) {
+            setState(() {
+              _status = _queue.isEmpty
+                  ? ''
+                  : 'Queue has ${_queue.length} remaining';
+            });
+          }
+          log('✅ Found ${_queue.length} cached Premiumize torrent(s)');
+          return true;
+        }
+      }
+
+      bool seeded;
+      try {
+        seeded = await populateQueue();
+      } catch (e) {
+        log('❌ Premiumize cache check failed: $e');
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() => _status = 'Premiumize cache check failed. Try again.');
+          _showSnack('Premiumize cache check failed: $e', color: Colors.red);
+        }
+        return;
+      }
+
+      if (!seeded) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(
+            () =>
+                _status = 'Premiumize has no cached results for these keywords.',
+          );
+          _showSnack('Premiumize has no cached results for these keywords.',
+              color: Colors.orange);
+        }
+        return;
+      }
+
+      Future<Map<String, String>?> requestPremiumizeNext() async {
+        if (_watchCancelled) return null;
+        while (!_watchCancelled) {
+          if (_queue.isEmpty) {
+            bool replenished;
+            try {
+              replenished = await populateQueue();
+            } catch (e) {
+              log('❌ Premiumize cache check failed: $e');
+              _closeProgressDialog();
+              if (mounted && !_watchCancelled) {
+                setState(
+                  () => _status = 'Premiumize cache check failed. Try again.',
+                );
+                _showSnack('Premiumize cache check failed: $e',
+                    color: Colors.red);
+              }
+              return null;
+            }
+            if (!replenished) break;
+          }
+          if (_queue.isEmpty) break;
+
+          final item = _queue.removeAt(0);
+          if (_watchCancelled) break;
+          if (item is! Torrent) continue;
+
+          final result = await _preparePremiumizeTorrent(
+            candidate: item,
+            apiKey: apiKey,
+            log: log,
+          );
+          if (_watchCancelled) return null;
+          if (result != null) {
+            if (result.hasMore && !_watchCancelled) combinedList.add(item);
+            if (mounted && !_watchCancelled) {
+              setState(() {
+                _status = _queue.isEmpty
+                    ? ''
+                    : 'Queue has ${_queue.length} remaining';
+              });
+            }
+            if (_watchCancelled) return null;
+            return {'url': result.streamUrl, 'title': result.title};
+          }
+        }
+        if (mounted && !_watchCancelled) {
+          setState(() => _status = 'No more cached Premiumize streams.');
+        }
+        return null;
+      }
+
+      final first = await requestPremiumizeNext();
+      if (_watchCancelled) return;
+      if (first == null) {
+        _closeProgressDialog();
+        if (mounted && !_watchCancelled) {
+          setState(() {
+            _status =
+                'No playable Premiumize streams found. Try different keywords.';
+          });
+          _showSnack(
+            'No playable Premiumize streams found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      _closeProgressDialog();
+      if (!mounted) return;
+
+      final launchedOnTv = await _launchPikPakOnAndroidTv(
+        firstStream: first,
+        requestNext: requestPremiumizeNext,
+        showChannelNameOverride: _quickShowChannelName,
+        channelName: null,
+        channelId: null,
+        channelNumber: null,
+        channelDirectory: null,
+      );
+      if (_watchCancelled) return;
+      if (launchedOnTv) return;
+
+      if (!_watchCancelled) {
+        MainPageBridge.notifyPlayerLaunching();
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: first['url'] ?? '',
+              title: first['title'] ?? 'Debrify TV',
+              startFromRandom: _startRandom,
+              randomStartMaxPercent: _randomStartPercent,
+              hideSeekbar: _hideSeekbar,
+              showChannelName: _showChannelName,
+              channelName: null,
+              channelNumber: null,
+              showVideoTitle: _showVideoTitle,
+              hideOptions: _hideOptions,
+              requestMagicNext: requestPremiumizeNext,
+              requestNextChannel:
+                  _channels.length > 1 &&
+                      (_quickProvider == _providerRealDebrid ||
+                          _quickProvider == _providerTorbox ||
+                          _quickProvider == _providerPikPak ||
+                          _quickProvider == _providerPremiumize)
+                  ? _requestNextChannel
+                  : null,
+            ),
+          ),
+        );
+      }
+
+      if (mounted && !_watchCancelled) {
+        setState(() {
+          _status =
+              _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   List<TorboxPlayableEntry> _buildTorboxPlayableEntries(
