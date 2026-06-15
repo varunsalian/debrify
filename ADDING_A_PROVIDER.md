@@ -174,9 +174,54 @@ add-to-channel), settable per provider — same as RD/Torbox.
   home **quick-controls** dialog shows the right options. `_addToPremiumize`'s
   `_showPremiumizePostAddOptions` reads the pref and dispatches all 5 actions.
 
+## 15. Backup/restore (DONE for Premiumize)
+Include the provider's API key in the file backup and restore it on import.
+- **Edit:** `lib/services/backup_restore_service.dart`
+  - `buildBackup()`: read `StorageService.get<Provider>ApiKey()`, add
+    `'<provider>ApiKey': key` to the JSON map (guarded by non-empty).
+  - `summarize()`: populate `has<Provider>` from the map key.
+  - `applyBackup()`: add a `if (selection.<provider>)` block that reads the
+    key, saves it, and calls `set<Provider>IntegrationEnabled(true)`.
+  - `BackupSummary`: add `has<Provider>` field + constructor param + include in
+    `isEmpty` getter.
+  - `BackupSelection`: add `<provider>` field, set to `true` in `.all()`,
+    add to constructor + `copyWith`.
+  - `RestoreReport`: add `<provider>` field + count in `totalSuccess`.
+- **Edit:** `lib/screens/settings_screen.dart`
+  - `_backupSummaryLines()`: add `if (s.has<Provider>) lines.add('<Provider>')`.
+  - `_formatRestoreReport()`: add `if (r.<provider>) parts.add('<Provider>')`.
+  - Restore dialog text: add provider name to the credentials-overwrite warning.
+  - Post-restore: `if (report.<provider>) <Provider>AccountService.clearUserInfo()`
+    so the connection card refreshes after restore.
+
+## 16. Remote Control — Transfer Everything + Send Setup to TV (DONE for Premiumize)
+Let the remote sender push credentials to a TV via UDP, just like RD/Torbox.
+- **Edit:** `lib/services/remote_control/remote_constants.dart`
+  - Add `static const String <provider> = '<provider>';` to `ConfigCommand`.
+- **Edit:** `lib/services/remote_control/remote_command_router.dart` (TV receiver)
+  - Import the provider's account service.
+  - Add `case ConfigCommand.<provider>: await _handle<Provider>Config(data);` to
+    the `_handleConfigCommand` switch.
+  - Add `_handle<Provider>Config(String apiKey)` handler: validate via
+    `<Provider>AccountService.validateAndGetUserInfo(apiKey)`, then save key +
+    enable integration. Validation happens here (unlike file restore) because the
+    key crossed a network.
+- **Edit:** `lib/widgets/remote/remote_config_export.dart` (Send Setup to TV)
+  - Add `_ConfigItem? _<provider>` and `String? _<provider>ApiKey` state fields.
+  - In `_loadConfigs()`: read key + enabled flag, build `_ConfigItem`.
+  - Add to `_hasAnyConfigured` and `_hasAnySelected` guards.
+  - In `_sendToTv()`: add a send block for the provider key.
+  - In the build UI: add provider tile inside the "DEBRID PROVIDERS" section
+    (update the section's `isConfigured` guard too).
+  - Add `case ConfigCommand.<provider>` in `_getIcon()` and `_getIconColor()`.
+- **Edit:** `lib/widgets/remote/remote_transfer_all.dart` (Transfer Everything)
+  - Add `String? _<provider>ApiKey` state field.
+  - In `_loadBundle()`: read key + enabled flag, add a `_TransferItem` when
+    configured (icon + brand color).
+  - Add `case ConfigCommand.<provider>` in `_sendConfigItem()` switch.
+
 ## Not done yet (future steps)
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
-- [x] **Backup/restore** of the new credentials (`backup_restore_service.dart` + `settings_screen.dart`).
 
 ---
 
