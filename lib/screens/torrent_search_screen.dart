@@ -8975,6 +8975,134 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     );
   }
 
+  /// Awareness dialog shown before a Premiumize bulk add, explaining that adds
+  /// consume fair-use points. Returns true if the user chooses to continue.
+  /// D-pad friendly and responsive across screen sizes.
+  Future<bool> _showPremiumizeFairUseDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF0F172A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFB923C).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.bolt_rounded,
+                    color: Color(0xFFFB923C),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Text(
+                    'Premiumize Fair Use',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Premiumize works on a fair-use points system — about '
+                      '1000 points max, topping up ~30/day. Adding a cached '
+                      'torrent and later streaming it both spend points '
+                      '(roughly 1 point per GB).',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFB923C).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFFFB923C).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: const Color(0xFFFB923C).withValues(alpha: 0.9),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Only cached torrents are added, but each one still '
+                              'uses points. Select carefully to avoid running out '
+                              'of your daily quota.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            actions: [
+              _DpadSafeButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                semanticLabel: 'Cancel',
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              _DpadSafeButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                filled: true,
+                autofocus: true,
+                color: const Color(0xFFFB923C),
+                semanticLabel: 'Continue',
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return result ?? false;
+  }
+
   /// Show bulk add provider selection dialog
   Future<void> _showBulkAddDialog() async {
     final selectedCount = _isSelectionMode
@@ -8983,6 +9111,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     final torboxEnabled = _torboxIntegrationEnabled && _torboxApiKey != null;
     final rdEnabled = _realDebridIntegrationEnabled && _apiKey != null;
+    final premiumizeEnabled =
+        _premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty;
 
     final result = await showDialog<String>(
       context: context,
@@ -9089,6 +9221,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               enabled: _pikpakEnabled,
               onTap: () => Navigator.of(context).pop('pikpak'),
             ),
+            const SizedBox(height: 8),
+            _buildBulkOptionTile(
+              icon: Icons.workspace_premium_rounded,
+              color: const Color(0xFFFB923C),
+              title: 'Premiumize',
+              subtitle: premiumizeEnabled
+                  ? 'Only cached torrents are added'
+                  : 'Not configured',
+              enabled: premiumizeEnabled,
+              onTap: () => Navigator.of(context).pop('premiumize'),
+            ),
             const SizedBox(height: 16),
             // Channel section header
             Padding(
@@ -9121,6 +9264,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _bulkAddToTorbox();
     } else if (result == 'realdebrid') {
       _bulkAddToRealDebrid();
+    } else if (result == 'premiumize') {
+      if (!mounted) return;
+      final proceed = await _showPremiumizeFairUseDialog();
+      if (proceed) _bulkAddToPremiumize();
     } else if (result == 'create_channel') {
       _createChannelFromSelection();
     }
@@ -10311,6 +10458,404 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             ),
             margin: const EdgeInsets.all(16),
           ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
+      }
+    }
+  }
+
+  /// Bulk-add selected torrents to Premiumize. Uses transfer/create for each,
+  /// which instantly completes for cached content and queues a cloud download
+  /// for the rest (so, unlike RD/Torbox, nothing is skipped for being uncached).
+  Future<void> _bulkAddToPremiumize() async {
+    final torrentsToAdd = _isSelectionMode
+        ? _torrents
+              .where((t) => _selectedInfohashes.contains(t.infohash))
+              .toList()
+        : List<Torrent>.from(_torrents);
+
+    if (torrentsToAdd.isEmpty) return;
+
+    final apiKey = _premiumizeApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      _showPremiumizeApiKeyMissingMessage();
+      return;
+    }
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    final totalTorrents = torrentsToAdd.length;
+    int successCount = 0;
+    int failureCount = 0;
+    int skippedCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    final Map<String, String> torrentStatus = {
+      for (final t in torrentsToAdd) t.infohash: 'pending',
+    };
+
+    // Cache-check up front (free) so only cached torrents are added; uncached
+    // ones are skipped rather than queued as cloud downloads.
+    Set<String> cachedHashes = {};
+    try {
+      final hashes = torrentsToAdd
+          .map((t) => t.infohash.trim().toLowerCase())
+          .where((h) => h.isNotEmpty)
+          .toList();
+      final results = await PremiumizeService.checkCache(apiKey, hashes);
+      cachedHashes = {
+        for (var i = 0; i < hashes.length; i++)
+          if (i < results.length && results[i]) hashes[i],
+      };
+    } catch (e) {
+      debugPrint('Premiumize Bulk: cache check failed: $e');
+    }
+    if (!mounted) return;
+
+    bool isCached(Torrent t) =>
+        cachedHashes.contains(t.infohash.trim().toLowerCase());
+
+    try {
+      if (!mounted) return;
+
+      StateSetter? dialogSetState;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              dialogSetState = setDialogState;
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFB923C).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.workspace_premium_rounded,
+                        color: Color(0xFFFB923C),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to Premiumize',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalTorrents > 0
+                            ? currentIndex / totalTorrents
+                            : 0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFFB923C),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalTorrents',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Color(0xFF10B981),
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Added: $successCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFEF4444,
+                              ).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.error,
+                                  color: Color(0xFFEF4444),
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Failed: $failureCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFEF4444),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFF59E0B,
+                              ).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.block,
+                                  color: Color(0xFFF59E0B),
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Not cached: $skippedCount',
+                                  style: const TextStyle(
+                                    color: Color(0xFFF59E0B),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: torrentsToAdd.length,
+                          itemBuilder: (context, index) {
+                            final torrent = torrentsToAdd[index];
+                            final status =
+                                torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+                            String? subtitle;
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'not_cached') {
+                              icon = Icons.cancel;
+                              iconColor = const Color(0xFFF59E0B);
+                              subtitle = 'Not cached — skipped';
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFFFB923C);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          torrent.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.7,
+                                            ),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (subtitle != null)
+                                          Text(
+                                            subtitle,
+                                            style: TextStyle(
+                                              color: iconColor.withValues(
+                                                alpha: 0.7,
+                                              ),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      DialogTapGuard.markKeyAction();
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      for (final torrent in torrentsToAdd) {
+        if (cancelled) break;
+
+        // Skip uncached torrents — don't queue cloud downloads in bulk.
+        if (!isCached(torrent)) {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'not_cached';
+              skippedCount++;
+              currentIndex++;
+            });
+          }
+          continue;
+        }
+
+        try {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'processing';
+              currentIndex++;
+            });
+          }
+
+          final magnetLink = _torrentAcquisitionUrlForTorrent(torrent);
+          await PremiumizeService.createTransfer(apiKey, magnetLink);
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'success';
+              successCount++;
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'error';
+              failureCount++;
+            });
+          }
+          debugPrint('Premiumize Bulk: Failed to add ${torrent.name}: $e');
+        }
+
+        if (!cancelled) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (!cancelled && mounted) {
+        final parts = <String>[];
+        if (successCount > 0) parts.add('Added $successCount');
+        if (skippedCount > 0) parts.add('$skippedCount not cached');
+        if (failureCount > 0) parts.add('$failureCount failed');
+        final message = parts.join(', ');
+        _showPremiumizeSnack(
+          message.isEmpty ? 'No torrents added' : message,
+          isError:
+              failureCount > 0 || (successCount == 0 && skippedCount > 0),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (mounted) {
+        _showPremiumizeSnack(
+          'Bulk add failed: ${_formatPremiumizeError(e)}',
+          isError: true,
         );
       }
     } finally {

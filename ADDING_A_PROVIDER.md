@@ -144,8 +144,26 @@ on replay — no persistent transfer id needed.
   the `serviceLabel` switch in `catalog_browser.dart`,
   `trakt/trakt_results_view.dart`, and `aggregated_search_results.dart`.
 
+## 13. Bulk add (DONE for Premiumize)
+Multi-select torrents → add all to the provider at once.
+- Add a chooser tile + enabled-gate in `_showBulkAddDialog` and a dispatch
+  branch (`result == 'premiumize' → _bulkAddToPremiumize()`).
+- `_bulkAddToPremiumize` mirrors `_bulkAddToRealDebrid` (progress dialog with
+  live Added/Not-cached/Failed counts, 300ms between adds, cancel, exit selection
+  mode in `finally`). It **batch cache-checks all selected infohashes first**
+  (free) and only `createTransfer`s the cached ones — uncached are skipped (not
+  queued as cloud downloads), matching RD/Torbox semantics.
+- Before running, picking Premiumize shows `_showPremiumizeFairUseDialog` (D-pad
+  friendly, responsive) warning that Premiumize uses fair-use points (~1000 max,
+  ~30/day, ~1pt/GB) so the user adds carefully. See "API limits" note below.
+
+> **Premiumize API limits to know:** `cache/check` is free; `transfer/create`
+> and `directdl` spend fair-use points (~1pt/GB, ~1000 cap, +30/day). No
+> documented request-rate limit (we still pace bulk add 300ms + cap cache-check
+> concurrency). Eager directdl resolves ALL files of a torrent on play — a known
+> point-cost/expiry trade-off; lazy per-file resolution is a future optimization.
+
 ## Not done yet (future steps)
-- [ ] **Bulk add** (`_bulkAddTo*`) for Premiumize.
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
 - [ ] **Backup/restore** of the new credentials (`settings_screen.dart`).
 
