@@ -14077,6 +14077,46 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               }
                             },
                           ),
+                          _DebridActionTile(
+                            icon: Icons.link,
+                            color: const Color(0xFFEC4899),
+                            title: 'Copy ZIP Link',
+                            subtitle: 'Copy ZIP download link to clipboard.',
+                            enabled: true,
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              final apiKey = await StorageService.getPremiumizeApiKey();
+                              if (apiKey == null || apiKey.isEmpty) return;
+                              if (!mounted) return;
+                              final magnetLink = _torrentAcquisitionUrl(
+                                infohash ?? torrent.infohash,
+                                torrentName,
+                              );
+                              DebridLoadingOverlay.showPremiumize(
+                                context,
+                                torrentName,
+                              );
+                              try {
+                                final zipUrl = await PremiumizeService.createTransferAndGenerateZip(
+                                  apiKey,
+                                  magnetLink,
+                                );
+                                if (!mounted) return;
+                                DebridLoadingOverlay.dismiss(context);
+                                await Clipboard.setData(ClipboardData(text: zipUrl));
+                                if (!mounted) return;
+                                _showPremiumizeSnack('ZIP download link copied to clipboard!');
+                              } catch (e) {
+                                if (!mounted) return;
+                                DebridLoadingOverlay.dismiss(context);
+                                _showPremiumizeSnack(
+                                  'Failed to generate ZIP link: ${_formatPremiumizeError(e)}',
+                                  isError: true,
+                                );
+                              }
+                            },
+                          ),
                         ],
                       ),
                     ),

@@ -180,10 +180,9 @@ class PremiumizeService {
     }
   }
 
-  /// Looks up a transfer by its [transferId] in the user's transfer list and
-  /// returns its cloud folder ID if the transfer has finished, else null.
-  /// Returns null (non-fatal) on any error so the caller can keep polling.
-  static Future<String?> _folderIdForTransfer(
+  /// Result of looking up a transfer: either a folder/file id is ready,
+  /// the transfer is still pending, or it's done but has no cloud item id.
+  static Future<_TransferLookup> _lookupTransfer(
     String apiKey,
     String transferId,
   ) async {
@@ -192,24 +191,33 @@ class PremiumizeService {
     ).replace(queryParameters: {'apikey': apiKey});
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) return const _TransferLookup.pending();
       final payload = json.decode(response.body);
       if (payload is! Map || payload['status']?.toString() != 'success') {
-        return null;
+        return const _TransferLookup.pending();
       }
       final transfers = payload['transfers'];
-      if (transfers is! List) return null;
+      if (transfers is! List) return const _TransferLookup.pending();
       for (final t in transfers) {
         if (t is! Map) continue;
         if (t['id']?.toString() != transferId) continue;
+        final status = t['status']?.toString() ?? '';
         final folderId = t['folder_id']?.toString();
-        if (folderId != null && folderId.isNotEmpty) return folderId;
-        return null;
+        final fileId = t['file_id']?.toString();
+        if (folderId != null && folderId.isNotEmpty) {
+          return _TransferLookup.folder(folderId);
+        }
+        if (fileId != null && fileId.isNotEmpty) {
+          return _TransferLookup.file(fileId);
+        }
+        // Transfer found but no cloud id yet — still processing unless done.
+        final done = status == 'finished' || status == 'seeding';
+        return done ? const _TransferLookup.doneNoId() : const _TransferLookup.pending();
       }
-      return null;
+      return const _TransferLookup.pending();
     } catch (e) {
-      debugPrint('PremiumizeService: _folderIdForTransfer failed: $e');
-      return null;
+      debugPrint('PremiumizeService: _lookupTransfer failed: $e');
+      return const _TransferLookup.pending();
     }
   }
 
@@ -228,31 +236,40 @@ class PremiumizeService {
       throw Exception('Premiumize did not return a transfer id');
     }
 
-    // Poll until the transfer has a folder ready.
-    String? folderId = await _folderIdForTransfer(apiKey, transferId);
+    // Poll until the transfer has a cloud folder/file id ready.
+    var lookup = await _lookupTransfer(apiKey, transferId);
     final deadline = DateTime.now().add(Duration(seconds: timeoutSeconds));
-    while (folderId == null && DateTime.now().isBefore(deadline)) {
+    while (lookup.isPending && DateTime.now().isBefore(deadline)) {
       await Future.delayed(const Duration(seconds: 4));
-      folderId = await _folderIdForTransfer(apiKey, transferId);
+      lookup = await _lookupTransfer(apiKey, transferId);
     }
 
-    if (folderId == null) {
-      throw Exception(
-        'Timed out waiting for transfer to complete. Try again in a moment.',
-      );
+    if (lookup.folderId != null) {
+      return _generateZip(apiKey, folderId: lookup.folderId!);
     }
-
-    return _generateZip(apiKey, folderId);
+    if (lookup.fileId != null) {
+      return _generateZip(apiKey, fileId: lookup.fileId!);
+    }
+    throw Exception(
+      lookup.isPending
+          ? 'Timed out waiting for transfer to complete. Try again in a moment.'
+          : 'Transfer completed but Premiumize returned no cloud item ID.',
+    );
   }
 
-  static Future<String> _generateZip(String apiKey, String folderId) async {
+  static Future<String> _generateZip(
+    String apiKey, {
+    String? folderId,
+    String? fileId,
+  }) async {
+    assert(folderId != null || fileId != null);
     final uri = Uri.parse('$_baseUrl/zip/generate');
     try {
+      final body = {'apikey': apiKey};
+      if (folderId != null) body['folders[]'] = folderId;
+      if (fileId != null) body['files[]'] = fileId;
       final response = await http
-          .post(uri, body: {
-            'apikey': apiKey,
-            'folders[]': folderId,
-          })
+          .post(uri, body: body)
           .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
@@ -302,4 +319,30 @@ class PremiumizeService {
       throw Exception('Premiumize transfer/create failed: $e');
     }
   }
+}
+
+class _TransferLookup {
+  final String? folderId;
+  final String? fileId;
+  final bool isPending;
+
+  const _TransferLookup.folder(String id)
+      : folderId = id,
+        fileId = null,
+        isPending = false;
+
+  const _TransferLookup.file(String id)
+      : folderId = null,
+        fileId = id,
+        isPending = false;
+
+  const _TransferLookup.doneNoId()
+      : folderId = null,
+        fileId = null,
+        isPending = false;
+
+  const _TransferLookup.pending()
+      : folderId = null,
+        fileId = null,
+        isPending = true;
 }
