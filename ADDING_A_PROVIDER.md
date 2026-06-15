@@ -220,6 +220,152 @@ Let the remote sender push credentials to a TV via UDP, just like RD/Torbox.
     configured (icon + brand color).
   - Add `case ConfigCommand.<provider>` in `_sendConfigItem()` switch.
 
+## 17. Debrify TV / Magic TV (DONE for Premiumize)
+Wire the provider into `lib/screens/magic_tv_screen.dart` so it can stream via
+both the channel-based auto-play flow and the Quick Play keyword flow.
+
+### Provider constant + availability state
+```dart
+static const String _providerPremiumize = 'premiumize';
+bool _premiumizeAvailable = false;
+```
+
+### `_determineDefaultProvider` (5th param)
+Add `bool premiumizeAvailable` after `pikpakAvailable`. Insert Premiumize in
+preferred-provider check and in the fallback order (after Torbox, before PikPak
+is a reasonable placement).
+
+### `_isProviderSelectable`
+```dart
+if (provider == _providerPremiumize) return _premiumizeAvailable;
+```
+
+### `_loadSettings` + `_syncProviderAvailability`
+Load `getPremiumizeIntegrationEnabled()` + `getPremiumizeApiKey()`, compute
+`premiumizeAvailable = enabled && key.isNotEmpty`, pass as 5th arg to
+`_determineDefaultProvider`, and set `_premiumizeAvailable` in `setState`.
+
+### `_providerDisplay`
+```dart
+if (provider == _providerPremiumize) return 'Premiumize';
+```
+
+### Provider chip in `_providerChoiceChips`
+Mirror the Torbox/PikPak `ChoiceChip` block, guarded by `_premiumizeAvailable`.
+Use `Icons.workspace_premium_rounded` and `Color(0xFFFB923C)` (orange) as the
+brand color.
+
+### `providerReady` switch
+```dart
+_providerPremiumize => _premiumizeAvailable,
+```
+
+### `_watchChannel` dispatch
+```dart
+else if (_provider == _providerPremiumize)
+  await _watchPremiumizeWithCachedTorrents(cachedTorrents, ...);
+```
+
+### Quick-play dispatch
+```dart
+if (_quickProvider == _providerPremiumize) {
+  await _watchWithPremiumize(keywords, _log);
+  return;
+}
+```
+
+### `requestNextChannel` conditions (all occurrences)
+Add `|| _quickProvider == _providerPremiumize` and
+`|| _provider == _providerPremiumize` to both guard expressions.
+
+### No-provider snack message
+Add `!_premiumizeAvailable` to the multi-`&&` guard.
+
+### Reset dialog
+Pass `_premiumizeAvailable` as the 5th arg to `_determineDefaultProvider`.
+
+---
+
+### New model classes
+- **`lib/models/debrify_tv/prepared_torrents.dart`**: Add
+  `PremiumizePreparedTorrent` (same shape as `TorboxPreparedTorrent` —
+  `streamUrl`, `title`, `hasMore`).
+- **`lib/models/debrify_tv/cache_results.dart`**: Add `PremiumizePlayableEntry`
+  (`file: PremiumizeFile`, `title`, `info: SeriesInfo`).
+
+---
+
+### New methods in `magic_tv_screen.dart`
+
+#### `_fetchPremiumizeCacheWindow`
+```dart
+Future<TorboxCacheWindowResult> _fetchPremiumizeCacheWindow({
+  required List<Torrent> candidates,
+  required int startIndex,
+  required String apiKey,
+})
+```
+- Slices `candidates[startIndex..]` into chunks of 100, up to 2 calls.
+- Calls `PremiumizeService.checkCache(apiKey, chunk.map(t => t.magnetLink))`.
+- Returns positional `List<bool>` — iterate by index: `if (i < cached.length && cached[i]) hits.add(chunk[i])`.
+- Returns `TorboxCacheWindowResult(cachedTorrents: hits, nextCursor: ..., exhausted: ...)`.
+
+#### `_preparePremiumizeTorrent`
+```dart
+Future<PremiumizePreparedTorrent?> _preparePremiumizeTorrent({
+  required Torrent candidate,
+  required String apiKey,
+  required List<String> Function() log,
+})
+```
+- Calls `PremiumizeService.directDownload(apiKey, magnet)` → `List<PremiumizeFile>`.
+- Feeds files to `_buildPremiumizePlayableEntries` for filtering/sorting.
+- Tracks seen files via `_seenLinkWithTorrentId` using `'$infohash|${file.path}'` key.
+- Returns first unseen entry's URL (`file.streamLink ?? file.link`).
+- `hasMore = entries.length > 1`.
+
+#### `_buildPremiumizePlayableEntries`
+```dart
+List<PremiumizePlayableEntry> _buildPremiumizePlayableEntries(
+  List<PremiumizeFile> files,
+  String fallbackTitle,
+)
+```
+- Filters: `_premiumizeFileLooksLikeVideo(file)` + min size (reuse Torbox threshold).
+- Parses series info via `SeriesParser`, sorts episodes, random-shuffles movies.
+
+#### `_premiumizeFileLooksLikeVideo`
+```dart
+bool _premiumizeFileLooksLikeVideo(PremiumizeFile file) =>
+    FileUtils.isVideoFile(file.fileName);
+```
+`PremiumizeFile.fileName` is a computed getter derived from `file.path`.
+
+#### `_watchPremiumizeWithCachedTorrents`
+Full channel-based flow mirroring `_watchTorboxWithCachedTorrents`:
+1. `_fetchPremiumizeCacheWindow` — get cached batch.
+2. For each hit: `_preparePremiumizeTorrent`.
+3. Launch via `_launchPikPakOnAndroidTv(streamUrl, title)` — Premiumize returns
+   plain HTTPS URLs, same as PikPak, so the same launcher works.
+4. On `MagicNext`: advance cursor, fetch next window when exhausted.
+
+#### `_watchWithPremiumize`
+Quick Play keyword flow mirroring `_watchWithTorbox`:
+1. DB lookup + network search for candidates.
+2. `_fetchPremiumizeCacheWindow` to narrow to cached.
+3. `_preparePremiumizeTorrent` → `_launchPikPakOnAndroidTv`.
+4. `MagicNext` retry loop.
+
+---
+
+### Key differences vs Torbox
+| | Torbox | Premiumize |
+|---|---|---|
+| Cache check | `checkCachedTorrents` → `Set<String>` of hashes | `checkCache` → `List<bool>` positional |
+| Prepare | createTorrent → poll → requestFileDownloadLink (3 steps) | `directDownload` (1 step) |
+| Launch | `_launchTorboxOnAndroidTv` | `_launchPikPakOnAndroidTv` (HTTPS URLs) |
+| Seen-key | `torrentId|fileId` | `infohash|file.path` |
+
 ## Not done yet (future steps)
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
 
