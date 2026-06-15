@@ -180,6 +180,98 @@ class PremiumizeService {
     }
   }
 
+  /// Looks up a transfer by its [transferId] in the user's transfer list and
+  /// returns its cloud folder ID if the transfer has finished, else null.
+  /// Returns null (non-fatal) on any error so the caller can keep polling.
+  static Future<String?> _folderIdForTransfer(
+    String apiKey,
+    String transferId,
+  ) async {
+    final uri = Uri.parse(
+      '$_baseUrl/transfer/list',
+    ).replace(queryParameters: {'apikey': apiKey});
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return null;
+      final payload = json.decode(response.body);
+      if (payload is! Map || payload['status']?.toString() != 'success') {
+        return null;
+      }
+      final transfers = payload['transfers'];
+      if (transfers is! List) return null;
+      for (final t in transfers) {
+        if (t is! Map) continue;
+        if (t['id']?.toString() != transferId) continue;
+        final folderId = t['folder_id']?.toString();
+        if (folderId != null && folderId.isNotEmpty) return folderId;
+        return null;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('PremiumizeService: _folderIdForTransfer failed: $e');
+      return null;
+    }
+  }
+
+  /// Transfers [magnet] to the user's Premiumize cloud, waits up to
+  /// [timeoutSeconds] for it to finish, then generates and returns a ZIP
+  /// download URL. Throws on error or timeout.
+  static Future<String> createTransferAndGenerateZip(
+    String apiKey,
+    String magnet, {
+    int timeoutSeconds = 120,
+  }) async {
+    // Add to cloud — for cached content Premiumize fills the folder quickly.
+    // (Premiumize dedupes, so re-adding an existing item is harmless.)
+    final transferId = await createTransfer(apiKey, magnet);
+    if (transferId.isEmpty) {
+      throw Exception('Premiumize did not return a transfer id');
+    }
+
+    // Poll until the transfer has a folder ready.
+    String? folderId = await _folderIdForTransfer(apiKey, transferId);
+    final deadline = DateTime.now().add(Duration(seconds: timeoutSeconds));
+    while (folderId == null && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(seconds: 4));
+      folderId = await _folderIdForTransfer(apiKey, transferId);
+    }
+
+    if (folderId == null) {
+      throw Exception(
+        'Timed out waiting for transfer to complete. Try again in a moment.',
+      );
+    }
+
+    return _generateZip(apiKey, folderId);
+  }
+
+  static Future<String> _generateZip(String apiKey, String folderId) async {
+    final uri = Uri.parse('$_baseUrl/zip/generate');
+    try {
+      final response = await http
+          .post(uri, body: {
+            'apikey': apiKey,
+            'folders[]': folderId,
+          })
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+      final zipUrl = payload['location']?.toString() ?? '';
+      if (zipUrl.isEmpty) throw Exception('No zip URL in response');
+      return zipUrl;
+    } catch (e) {
+      debugPrint('PremiumizeService: generateZip failed: $e');
+      throw Exception('Premiumize zip generation failed: $e');
+    }
+  }
+
   /// Adds [src] (a magnet link) to the user's Premiumize cloud for asynchronous
   /// fetching (used when the content is not yet cached). Returns the transfer
   /// id on success. Throws on error.

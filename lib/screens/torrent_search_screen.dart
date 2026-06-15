@@ -14032,6 +14032,51 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               }
                             },
                           ),
+                          _DebridActionTile(
+                            icon: Icons.folder_zip_rounded,
+                            color: const Color(0xFFA78BFA),
+                            title: 'Download as ZIP',
+                            subtitle: 'Transfer to cloud and download all files as a ZIP.',
+                            enabled: true,
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              final apiKey = await StorageService.getPremiumizeApiKey();
+                              if (apiKey == null || apiKey.isEmpty) return;
+                              if (!mounted) return;
+                              final magnetLink = _torrentAcquisitionUrl(
+                                infohash ?? torrent.infohash,
+                                torrentName,
+                              );
+                              DebridLoadingOverlay.showPremiumize(
+                                context,
+                                torrentName,
+                              );
+                              try {
+                                final zipUrl = await PremiumizeService.createTransferAndGenerateZip(
+                                  apiKey,
+                                  magnetLink,
+                                );
+                                if (!mounted) return;
+                                DebridLoadingOverlay.dismiss(context);
+                                await DownloadService.instance.enqueueDownload(
+                                  url: zipUrl,
+                                  fileName: '$torrentName.zip',
+                                  torrentName: torrentName,
+                                  context: context,
+                                );
+                                if (!mounted) return;
+                                _showPremiumizeSnack('ZIP download queued successfully');
+                              } catch (e) {
+                                if (!mounted) return;
+                                DebridLoadingOverlay.dismiss(context);
+                                _showPremiumizeSnack(
+                                  'Failed to generate ZIP: ${_formatPremiumizeError(e)}',
+                                  isError: true,
+                                );
+                              }
+                            },
+                          ),
                         ],
                       ),
                     ),
