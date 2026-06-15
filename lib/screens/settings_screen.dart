@@ -857,7 +857,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 .map((line) => Text('• $line')),
             const SizedBox(height: 12),
             const Text(
-              'Saved credentials (Real-Debrid, Torbox, PikPak, Trakt) will '
+              'Saved credentials (Real-Debrid, Torbox, Premiumize, PikPak, Trakt) will '
               'be overwritten. Addons, search engines, WebDAV servers, and '
               'indexer managers you already have are kept as-is.',
               style: TextStyle(fontSize: 12),
@@ -952,6 +952,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // re-fetches it for the newly-restored keys.
     if (report.realDebrid) AccountService.clearUserInfo();
     if (report.torbox) TorboxAccountService.clearUserInfo();
+    if (report.premiumize) PremiumizeAccountService.clearUserInfo();
 
     // Re-run the summary loader so the connection cards reflect the newly
     // restored services (and kick off background account refresh).
@@ -967,6 +968,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final lines = <String>[];
     if (s.hasRealDebrid) lines.add('Real-Debrid');
     if (s.hasTorbox) lines.add('Torbox');
+    if (s.hasPremiumize) lines.add('Premiumize');
     if (s.hasPikpak) lines.add('PikPak');
     if (s.hasTrakt) lines.add('Trakt');
     if (s.searchEngineCount > 0) {
@@ -986,6 +988,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final parts = <String>[];
     if (r.realDebrid) parts.add('Real-Debrid');
     if (r.torbox) parts.add('Torbox');
+    if (r.premiumize) parts.add('Premiumize');
     if (r.pikpak) parts.add('PikPak');
     if (r.trakt) parts.add('Trakt');
     if (r.searchEnginesImported > 0) {

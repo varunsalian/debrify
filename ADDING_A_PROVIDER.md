@@ -176,7 +176,7 @@ add-to-channel), settable per provider — same as RD/Torbox.
 
 ## Not done yet (future steps)
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
-- [ ] **Backup/restore** of the new credentials (`settings_screen.dart`).
+- [x] **Backup/restore** of the new credentials (`backup_restore_service.dart` + `settings_screen.dart`).
 
 ---
 

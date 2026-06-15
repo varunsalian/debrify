@@ -10,6 +10,7 @@ import '../../services/stremio_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../services/torbox_account_service.dart';
+import '../../services/premiumize_account_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
@@ -242,6 +243,9 @@ class RemoteCommandRouter {
       case ConfigCommand.torbox:
         await _handleTorboxConfig(data);
         break;
+      case ConfigCommand.premiumize:
+        await _handlePremiumizeConfig(data);
+        break;
       case ConfigCommand.pikpak:
         await _handlePikPakConfig(data);
         break;
@@ -316,6 +320,28 @@ class RemoteCommandRouter {
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure Torbox: $e');
       _showSnackBar('Torbox: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle Premiumize API key config
+  Future<void> _handlePremiumizeConfig(String apiKey) async {
+    try {
+      debugPrint('RemoteCommandRouter: Validating Premiumize API key...');
+
+      final isValid = await PremiumizeAccountService.validateAndGetUserInfo(apiKey);
+      if (!isValid) {
+        _showSnackBar('Premiumize: Invalid API key', isError: true);
+        return;
+      }
+
+      await StorageService.savePremiumizeApiKey(apiKey);
+      await StorageService.setPremiumizeIntegrationEnabled(true);
+
+      debugPrint('RemoteCommandRouter: Premiumize configured successfully');
+      _showSnackBar('Premiumize configured successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure Premiumize: $e');
+      _showSnackBar('Premiumize: Configuration failed', isError: true);
     }
   }
 

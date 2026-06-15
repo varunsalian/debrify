@@ -42,6 +42,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   // Config items
   _ConfigItem? _realDebrid;
   _ConfigItem? _torbox;
+  _ConfigItem? _premiumize;
   _ConfigItem? _pikpak;
   _ConfigItem? _trakt;
   _ConfigItem? _searchEngines;
@@ -49,6 +50,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   // API keys (loaded from storage)
   String? _realDebridApiKey;
   String? _torboxApiKey;
+  String? _premiumizeApiKey;
   String? _pikpakEmail;
 
   // Trakt session bundle (loaded from storage)
@@ -94,6 +96,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       final hasTb =
           _torboxApiKey != null && _torboxApiKey!.isNotEmpty && tbEnabled;
 
+      // Load Premiumize
+      _premiumizeApiKey = await StorageService.getPremiumizeApiKey();
+      final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
+      final hasPm =
+          _premiumizeApiKey != null && _premiumizeApiKey!.isNotEmpty && pmEnabled;
+
       // Load PikPak
       _pikpakEmail = await StorageService.getPikPakEmail();
       final ppEnabled = await StorageService.getPikPakEnabled();
@@ -133,6 +141,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: hasTb,
         );
 
+        _premiumize = _ConfigItem(
+          id: ConfigCommand.premiumize,
+          name: 'Premiumize',
+          icon: 'pm',
+          isConfigured: hasPm,
+          selected: hasPm,
+        );
+
         _pikpak = _ConfigItem(
           id: ConfigCommand.pikpak,
           name: 'PikPak',
@@ -169,6 +185,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   bool get _hasAnyConfigured {
     return (_realDebrid?.isConfigured ?? false) ||
         (_torbox?.isConfigured ?? false) ||
+        (_premiumize?.isConfigured ?? false) ||
         (_pikpak?.isConfigured ?? false) ||
         (_trakt?.isConfigured ?? false) ||
         (_searchEngines?.isConfigured ?? false);
@@ -177,6 +194,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   bool get _hasAnySelected {
     return (_realDebrid?.selected ?? false) ||
         (_torbox?.selected ?? false) ||
+        (_premiumize?.selected ?? false) ||
         (_pikpak?.selected ?? false) ||
         (_trakt?.selected ?? false) ||
         (_searchEngines?.selected ?? false);
@@ -236,6 +254,21 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         if (success) {
           successCount++;
           results.add('Torbox');
+        } else {
+          failCount++;
+        }
+      }
+
+      // Send Premiumize
+      if (_premiumize?.selected == true && _premiumizeApiKey != null) {
+        final success = await state.sendConfigCommandToDevice(
+          ConfigCommand.premiumize,
+          targetIp,
+          configData: _premiumizeApiKey,
+        );
+        if (success) {
+          successCount++;
+          results.add('Premiumize');
         } else {
           failCount++;
         }
@@ -406,12 +439,15 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         else ...[
           // Debrid providers section
           if (_realDebrid?.isConfigured == true ||
-              _torbox?.isConfigured == true) ...[
+              _torbox?.isConfigured == true ||
+              _premiumize?.isConfigured == true) ...[
             _buildSectionHeader('DEBRID PROVIDERS'),
             const SizedBox(height: 8),
             if (_realDebrid?.isConfigured == true)
               _buildConfigTile(_realDebrid!),
             if (_torbox?.isConfigured == true) _buildConfigTile(_torbox!),
+            if (_premiumize?.isConfigured == true)
+              _buildConfigTile(_premiumize!),
             const SizedBox(height: 16),
           ],
 
@@ -797,6 +833,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.speed;
       case ConfigCommand.torbox:
         return Icons.inventory_2;
+      case ConfigCommand.premiumize:
+        return Icons.workspace_premium_rounded;
       case ConfigCommand.pikpak:
         return Icons.cloud;
       case ConfigCommand.trakt:
@@ -814,6 +852,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFF10B981); // Green
       case ConfigCommand.torbox:
         return const Color(0xFFF59E0B); // Amber
+      case ConfigCommand.premiumize:
+        return const Color(0xFFFB923C); // Orange
       case ConfigCommand.pikpak:
         return const Color(0xFF3B82F6); // Blue
       case ConfigCommand.trakt:

@@ -19,6 +19,7 @@ import 'stremio_service.dart';
 /// for writing to a file. Categories covered:
 ///   - Real-Debrid API key
 ///   - Torbox API key
+///   - Premiumize API key
 ///   - PikPak credentials (email + password)
 ///   - Trakt session (access, refresh, expiry, username)
 ///   - Search engine IDs (restore re-downloads YAML from the remote registry)
@@ -36,6 +37,7 @@ class BackupRestoreService {
   static Future<Map<String, dynamic>> buildBackup() async {
     final realDebridKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
     final pikpakEmail = await StorageService.getPikPakEmail();
     final pikpakPassword = await StorageService.getPikPakPassword();
     final traktAccess = await StorageService.getTraktAccessToken();
@@ -78,6 +80,8 @@ class BackupRestoreService {
       if (realDebridKey != null && realDebridKey.isNotEmpty)
         'realDebridApiKey': realDebridKey,
       if (torboxKey != null && torboxKey.isNotEmpty) 'torboxApiKey': torboxKey,
+      if (premiumizeKey != null && premiumizeKey.isNotEmpty)
+        'premiumizeApiKey': premiumizeKey,
       if (pikpakEmail != null && pikpakEmail.isNotEmpty)
         'pikpak': <String, dynamic>{
           'email': pikpakEmail,
@@ -110,6 +114,7 @@ class BackupRestoreService {
       hasRealDebrid:
           (map['realDebridApiKey'] as String?)?.isNotEmpty ?? false,
       hasTorbox: (map['torboxApiKey'] as String?)?.isNotEmpty ?? false,
+      hasPremiumize: (map['premiumizeApiKey'] as String?)?.isNotEmpty ?? false,
       hasPikpak: (map['pikpak'] is Map) &&
           ((map['pikpak'] as Map)['email'] as String?)?.isNotEmpty == true,
       hasTrakt: (map['trakt'] is Map) &&
@@ -179,6 +184,19 @@ class BackupRestoreService {
           report.torbox = true;
         } catch (e) {
           report.errors.add('Torbox: $e');
+        }
+      }
+    }
+
+    if (selection.premiumize) {
+      final key = map['premiumizeApiKey'] as String?;
+      if (key != null && key.isNotEmpty) {
+        try {
+          await StorageService.savePremiumizeApiKey(key);
+          await StorageService.setPremiumizeIntegrationEnabled(true);
+          report.premiumize = true;
+        } catch (e) {
+          report.errors.add('Premiumize: $e');
         }
       }
     }
@@ -470,6 +488,7 @@ class BackupSummary {
   final String? createdAt;
   final bool hasRealDebrid;
   final bool hasTorbox;
+  final bool hasPremiumize;
   final bool hasPikpak;
   final bool hasTrakt;
   final int searchEngineCount;
@@ -482,6 +501,7 @@ class BackupSummary {
     required this.createdAt,
     required this.hasRealDebrid,
     required this.hasTorbox,
+    required this.hasPremiumize,
     required this.hasPikpak,
     required this.hasTrakt,
     required this.searchEngineCount,
@@ -493,6 +513,7 @@ class BackupSummary {
   bool get isEmpty =>
       !hasRealDebrid &&
       !hasTorbox &&
+      !hasPremiumize &&
       !hasPikpak &&
       !hasTrakt &&
       searchEngineCount == 0 &&
@@ -505,6 +526,7 @@ class BackupSummary {
 class BackupSelection {
   final bool realDebrid;
   final bool torbox;
+  final bool premiumize;
   final bool pikpak;
   final bool trakt;
   final bool searchEngines;
@@ -515,6 +537,7 @@ class BackupSelection {
   const BackupSelection({
     required this.realDebrid,
     required this.torbox,
+    required this.premiumize,
     required this.pikpak,
     required this.trakt,
     required this.searchEngines,
@@ -526,6 +549,7 @@ class BackupSelection {
   const BackupSelection.all()
       : realDebrid = true,
         torbox = true,
+        premiumize = true,
         pikpak = true,
         trakt = true,
         searchEngines = true,
@@ -536,6 +560,7 @@ class BackupSelection {
   BackupSelection copyWith({
     bool? realDebrid,
     bool? torbox,
+    bool? premiumize,
     bool? pikpak,
     bool? trakt,
     bool? searchEngines,
@@ -546,6 +571,7 @@ class BackupSelection {
     return BackupSelection(
       realDebrid: realDebrid ?? this.realDebrid,
       torbox: torbox ?? this.torbox,
+      premiumize: premiumize ?? this.premiumize,
       pikpak: pikpak ?? this.pikpak,
       trakt: trakt ?? this.trakt,
       searchEngines: searchEngines ?? this.searchEngines,
@@ -560,6 +586,7 @@ class BackupSelection {
 class RestoreReport {
   bool realDebrid = false;
   bool torbox = false;
+  bool premiumize = false;
   bool pikpak = false;
   // True if PikPak credentials were saved but logging in failed (offline,
   // wrong password, etc.). Saved credentials remain usable from settings.
@@ -582,6 +609,7 @@ class RestoreReport {
   int get totalSuccess =>
       (realDebrid ? 1 : 0) +
       (torbox ? 1 : 0) +
+      (premiumize ? 1 : 0) +
       (pikpak ? 1 : 0) +
       (trakt ? 1 : 0) +
       searchEnginesImported +

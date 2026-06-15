@@ -73,6 +73,7 @@ class TextCommand {
 class ConfigCommand {
   static const String realDebrid = 'real_debrid';
   static const String torbox = 'torbox';
+  static const String premiumize = 'premiumize';
   static const String pikpak = 'pikpak';
   static const String trakt = 'trakt';
   static const String searchEngines = 'search_engines';
