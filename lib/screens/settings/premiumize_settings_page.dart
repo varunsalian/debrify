@@ -30,6 +30,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   bool _loading = true;
   bool _saving = false;
   bool _integrationEnabled = true;
+  bool _checkCacheBeforeSearch = false;
 
   @override
   void initState() {
@@ -41,9 +42,11 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     final apiKey = await StorageService.getPremiumizeApiKey();
     final integrationEnabled =
         await StorageService.getPremiumizeIntegrationEnabled();
+    final cachePref = await StorageService.getPremiumizeCacheCheckEnabled();
     setState(() {
       _savedApiKey = apiKey;
       _integrationEnabled = integrationEnabled;
+      _checkCacheBeforeSearch = cachePref;
       _loading = false;
     });
 
@@ -62,6 +65,11 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     _addApiKeyButtonFocusNode.dispose();
     _logoutButtonFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _updateCacheCheck(bool value) async {
+    setState(() => _checkCacheBeforeSearch = value);
+    await StorageService.setPremiumizeCacheCheckEnabled(value);
   }
 
   void _snack(String message, {bool err = false}) {
@@ -375,6 +383,42 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                           ],
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile.adaptive(
+                          value: _checkCacheBeforeSearch,
+                          onChanged: _updateCacheCheck,
+                          title: const Text(
+                            'Check Premiumize cache during searches',
+                          ),
+                          subtitle: const Text(
+                            'Show a "PM" badge on torrent search results that are '
+                            'already cached on Premiumize, so you know which ones '
+                            'play instantly.',
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            'Cache checks are free (no fair-use cost). If a check '
+                            'fails, results stay usable.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

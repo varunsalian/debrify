@@ -23,6 +23,7 @@ class TorrentResultRow extends StatefulWidget {
     required this.qualityTier,
     this.isCached = false,
     this.cacheService,
+    this.cacheLabels = const [],
     this.isSelectionMode = false,
     this.isSelected = false,
     required this.onTap,
@@ -38,6 +39,10 @@ class TorrentResultRow extends StatefulWidget {
   final QualityTier qualityTier;
   final bool isCached;
   final String? cacheService; // 'torbox', 'realdebrid', or null
+  // Short provider labels for which this torrent is cached (e.g. ['TB', 'PM']).
+  // Rendered as a single badge joined by ' | '. Takes precedence over
+  // [cacheService] when non-empty.
+  final List<String> cacheLabels;
   final bool isSelectionMode;
   final bool isSelected;
 
@@ -337,6 +342,27 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
     );
   }
 
+  /// Returns the cache badge text (e.g. "TB", "PM", or "TB | PM"), or null
+  /// when there's nothing cached to show.
+  String? _cacheBadgeLabel() {
+    if (widget.cacheLabels.isNotEmpty) {
+      return widget.cacheLabels.join(' | ');
+    }
+    if (widget.isCached && widget.cacheService != null) {
+      switch (widget.cacheService) {
+        case 'torbox':
+          return 'TB';
+        case 'realdebrid':
+          return 'RD';
+        case 'premiumize':
+          return 'PM';
+        default:
+          return 'Cached';
+      }
+    }
+    return null;
+  }
+
   Widget _buildMetadataRow() {
     return Wrap(
       spacing: 8,
@@ -382,8 +408,10 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
             ),
           ),
 
-        // Cache indicator - only show when we know which service has it cached
-        if (widget.isCached && widget.cacheService != null)
+        // Cache indicator - only show when we know which service(s) have it cached.
+        // Prefer the multi-provider label list; fall back to the legacy single
+        // cacheService for backwards compatibility.
+        if (_cacheBadgeLabel() != null)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -400,11 +428,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
                 ),
                 const SizedBox(width: 2),
                 Text(
-                  widget.cacheService == 'torbox'
-                      ? 'TB'
-                      : widget.cacheService == 'realdebrid'
-                          ? 'RD'
-                          : 'Cached',
+                  _cacheBadgeLabel()!,
                   style: const TextStyle(
                     color: Color(0xFF10B981),
                     fontSize: 10,

@@ -28,6 +28,8 @@ class StorageService {
       'premiumize_integration_enabled';
   static const String _premiumizePostTorrentActionKey =
       'premiumize_post_torrent_action';
+  static const String _premiumizeCacheCheckPref =
+      'premiumize_check_cache_before_search';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -475,6 +477,16 @@ class StorageService {
   static Future<void> savePremiumizePostTorrentAction(String action) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_premiumizePostTorrentActionKey, action);
+  }
+
+  static Future<bool> getPremiumizeCacheCheckEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_premiumizeCacheCheckPref) ?? false;
+  }
+
+  static Future<void> setPremiumizeCacheCheckEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_premiumizeCacheCheckPref, enabled);
   }
 
   // Battery optimization status

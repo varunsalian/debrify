@@ -128,6 +128,7 @@ class _TorrentSearchPreservedState {
   bool? seriesControlsExpanded;
   bool? imdbControlsCollapsed;
   Map<String, bool>? torboxCacheStatus;
+  Map<String, bool>? premiumizeCacheStatus;
   Map<String, _TorrentMetadata>? torrentMetadata;
   bool? showingTorboxCachedOnly;
   double? scrollOffset;
@@ -161,6 +162,7 @@ class _TorrentSearchPreservedState {
     seriesControlsExpanded = null;
     imdbControlsCollapsed = null;
     torboxCacheStatus = null;
+    premiumizeCacheStatus = null;
     torrentMetadata = null;
     showingTorboxCachedOnly = null;
     scrollOffset = null;
@@ -276,6 +278,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String? _premiumizeApiKey;
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
+  bool _premiumizeCacheCheckEnabled = false;
+  Map<String, bool>? _premiumizeCacheStatus;
   bool _realDebridIntegrationEnabled = true;
   bool _rdSkipBlockedTorrents = false;
   bool _torboxIntegrationEnabled = true;
@@ -1225,6 +1229,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxCacheCheckEnabled = enabled;
       });
     });
+    StorageService.getPremiumizeCacheCheckEnabled().then((enabled) {
+      if (!mounted) return;
+      setState(() {
+        _premiumizeCacheCheckEnabled = enabled;
+      });
+    });
 
     // Load Trakt sync state
     Future.wait([
@@ -1285,6 +1295,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _seriesControlsExpanded = _preservedState.seriesControlsExpanded ?? false;
     _imdbControlsCollapsed = _preservedState.imdbControlsCollapsed ?? false;
     _torboxCacheStatus = _preservedState.torboxCacheStatus;
+    _premiumizeCacheStatus = _preservedState.premiumizeCacheStatus;
     _torrentMetadata = _preservedState.torrentMetadata ?? {};
     _showingTorboxCachedOnly = _preservedState.showingTorboxCachedOnly ?? false;
 
@@ -2545,6 +2556,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _preservedState.torboxCacheStatus = _torboxCacheStatus != null
         ? Map.from(_torboxCacheStatus!)
         : null;
+    _preservedState.premiumizeCacheStatus = _premiumizeCacheStatus != null
+        ? Map.from(_premiumizeCacheStatus!)
+        : null;
     _preservedState.torrentMetadata = Map.from(_torrentMetadata);
     _preservedState.showingTorboxCachedOnly = _showingTorboxCachedOnly;
     // Use last known offset since controller may not have clients during dispose
@@ -2694,6 +2708,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _errorMessage = '';
       _hasSearched = true;
       _torboxCacheStatus = null;
+      _premiumizeCacheStatus = null;
       _showingTorboxCachedOnly = false;
       _selectedEngineFilter = null; // Reset engine filter on new search
       // Reset stream type provider filters on new search
@@ -2716,6 +2731,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       StorageService.getRdSkipBlockedTorrents(),
       StorageService.getPremiumizeApiKey(),
       StorageService.getPremiumizeIntegrationEnabled(),
+      StorageService.getPremiumizeCacheCheckEnabled(),
     ]);
     final bool cacheCheckPreference = results[0] as bool;
     final String? torboxKey = results[1] as String?;
@@ -2726,6 +2742,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final bool rdSkipBlocked = results[6] as bool;
     final String? premiumizeKey = results[7] as String?;
     final bool premiumizeEnabled = results[8] as bool;
+    final bool premiumizeCachePreference = results[9] as bool;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
@@ -2737,6 +2754,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _pikpakEnabled = pikpakEnabled;
         _premiumizeApiKey = premiumizeKey;
         _premiumizeIntegrationEnabled = premiumizeEnabled;
+        _premiumizeCacheCheckEnabled = premiumizeCachePreference;
       });
     }
 
@@ -2837,6 +2855,43 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           } catch (e) {
             debugPrint('TorrentSearchScreen: Torbox cache check failed: $e');
             torboxCacheMap = null;
+          }
+        }
+      }
+
+      Map<String, bool>? premiumizeCacheMap;
+      final String? premiumizeKeyValue = premiumizeKey;
+      if (premiumizeCachePreference &&
+          premiumizeEnabled &&
+          premiumizeKeyValue != null &&
+          premiumizeKeyValue.isNotEmpty &&
+          combinedTorrents.isNotEmpty) {
+        if (mounted && requestId == _activeSearchRequestId) {
+          setState(() => _searchPhase = SearchPhase.checkingCache);
+        }
+        final uniqueHashes = combinedTorrents
+            .where((torrent) => torrent.hasRealInfoHash)
+            .map((torrent) => torrent.infohash.trim().toLowerCase())
+            .where((hash) => hash.isNotEmpty)
+            .toSet()
+            .toList();
+
+        if (uniqueHashes.isNotEmpty) {
+          try {
+            // cache/check accepts bare infohashes; one call (chunked internally).
+            final results = await PremiumizeService.checkCache(
+              premiumizeKeyValue,
+              uniqueHashes,
+            );
+            premiumizeCacheMap = {
+              for (var i = 0; i < uniqueHashes.length; i++)
+                uniqueHashes[i]: i < results.length && results[i],
+            };
+          } catch (e) {
+            debugPrint(
+              'TorrentSearchScreen: Premiumize cache check failed: $e',
+            );
+            premiumizeCacheMap = null;
           }
         }
       }
@@ -3093,6 +3148,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _engineCounts = finalEngineCounts;
         _engineErrors = engineErrors;
         _torboxCacheStatus = torboxCacheMap;
+        _premiumizeCacheStatus = premiumizeCacheMap;
         _isLoading = false;
         _searchPhase = SearchPhase.idle;
         _showingTorboxCachedOnly = showOnlyCached;
@@ -14628,6 +14684,27 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return true;
   }
 
+  /// Short provider labels for which [torrent] is *confirmed* cached, for the
+  /// search-result badge (e.g. ['TB'], ['PM'], or ['TB', 'PM']). Only includes
+  /// a provider when its cache check ran and reported a hit.
+  List<String> _cacheLabelsForResult(Torrent torrent) {
+    final labels = <String>[];
+    if (!torrent.hasRealInfoHash) return labels;
+    final hash = torrent.infohash.trim().toLowerCase();
+    if (hash.isEmpty) return labels;
+    if (_torboxCacheCheckEnabled &&
+        _torboxCacheStatus != null &&
+        (_torboxCacheStatus![hash] ?? false)) {
+      labels.add('TB');
+    }
+    if (_premiumizeCacheCheckEnabled &&
+        _premiumizeCacheStatus != null &&
+        (_premiumizeCacheStatus![hash] ?? false)) {
+      labels.add('PM');
+    }
+    return labels;
+  }
+
   String _formatTorboxError(Object error) {
     final raw = error.toString();
 
@@ -20545,13 +20622,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       isTelevision: _isTelevision,
       qualityTier: torrent.qualityTier,
       isCached: _torboxResultIsCached(torrent),
-      // Only show cache badge if we actually checked cache status (not just assuming cached)
-      cacheService:
-          (_torboxCacheCheckEnabled &&
-              _torboxCacheStatus != null &&
-              _torboxResultIsCached(torrent))
-          ? 'torbox'
-          : null,
+      // Confirmed-cached provider badges (TB / PM / "TB | PM").
+      cacheLabels: _cacheLabelsForResult(torrent),
       isSelectionMode: _isSelectionMode,
       isSelected: _selectedInfohashes.contains(torrent.infohash),
       onTap: () {

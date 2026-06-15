@@ -89,6 +89,26 @@ real URLs and downloads enqueue those URLs directly.
   switching (`_resolveSourceViaPremiumize`), not-cached "add anyway".
 - Loading overlay: `DebridLoadingOverlay.showPremiumize`.
 
+## 10. Cache check during search (DONE for Premiumize)
+Show a provider "cached" badge on search results (mirrors Torbox).
+- **API:** Premiumize `/cache/check` accepts a repeated `items[]` array of
+  infohashes/magnets, is free (no fair-use), and returns a parallel `response[]`
+  of booleans. `PremiumizeService.checkCache(apiKey, items)` is **POST**, with a
+  manually-built urlencoded body (package:http's Map body can't do repeated
+  keys), **chunked** (100/req) with capped concurrency, results reassembled by
+  index. Send **infohashes** (short), not full magnets.
+- **Setting:** `get/setPremiumizeCacheCheckEnabled` (key
+  `premiumize_check_cache_before_search`, default off) + a SwitchListTile on the
+  settings page.
+- **Search wiring (torrent_search_screen.dart):** state
+  `_premiumizeCacheCheckEnabled` + `_premiumizeCacheStatus` (keyed by lowercased
+  infohash), saved/restored in preserved state, cleared per search, loaded in
+  init + the search `Future.wait`; a cache-check block after the Torbox one,
+  request-id stale-guarded.
+- **Badge:** `TorrentResultRow.cacheLabels` (List<String>) renders confirmed
+  providers joined by ` | ` (e.g. `TB | PM`); `_cacheLabelsForResult` builds it.
+  Badge-only — does NOT gate the provider button (cache verified on tap).
+
 ## Not done yet (future steps)
 - [ ] **Bound sources / "Edit Source"** (series source binding + replay):
       `_handleSelectSourceTorrentPicked` (select-source mode) and

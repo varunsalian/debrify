@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/premiumize_user.dart';
@@ -48,45 +49,78 @@ class PremiumizeService {
   /// cached. Returns a list of booleans aligned to [items]. This call does NOT
   /// consume fair-use quota. Returns all-false on any error (so the caller can
   /// degrade gracefully rather than blocking the flow).
+  // cache/check is sent as POST (no URL-length ceiling) and chunked so a large
+  // batch of search results is split across several requests run with limited
+  // concurrency. items may be magnet links OR bare infohashes.
+  static const int _cacheChunkSize = 100;
+  static const int _cacheMaxConcurrent = 6;
+
   static Future<List<bool>> checkCache(String apiKey, List<String> items) async {
     if (items.isEmpty) return const [];
-    try {
-      final queryParameters = <String, dynamic>{
-        'apikey': apiKey,
-        'items[]': items,
-      };
-      final uri = Uri.parse(
-        '$_baseUrl/cache/check',
-      ).replace(queryParameters: queryParameters);
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
-        debugPrint(
-          'PremiumizeService: cache/check status ${response.statusCode}. Body: ${response.body}',
-        );
-        return List<bool>.filled(items.length, false);
+    // Default to false; each successful chunk fills in its slots.
+    final result = List<bool>.filled(items.length, false);
+
+    Future<void> processChunk(int start) async {
+      final end = math.min(start + _cacheChunkSize, items.length);
+      final chunk = items.sublist(start, end);
+      try {
+        // Build the form body manually: package:http's Map body only supports
+        // Map<String,String> (no repeated keys / list values), but cache/check
+        // needs a repeated items[] array. Keep apikey in the body too so it
+        // stays out of the URL.
+        final body = StringBuffer('apikey=${Uri.encodeQueryComponent(apiKey)}');
+        for (final item in chunk) {
+          body.write('&items%5B%5D=${Uri.encodeQueryComponent(item)}');
+        }
+        final response = await http
+            .post(
+              Uri.parse('$_baseUrl/cache/check'),
+              headers: const {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: body.toString(),
+            )
+            .timeout(const Duration(seconds: 20));
+        if (response.statusCode != 200) {
+          debugPrint(
+            'PremiumizeService: cache/check status ${response.statusCode} (chunk @$start)',
+          );
+          return;
+        }
+        final payload = json.decode(response.body);
+        if (payload is! Map || payload['status']?.toString() != 'success') {
+          return;
+        }
+        final responseList = payload['response'];
+        if (responseList is List) {
+          for (var i = 0; i < chunk.length; i++) {
+            if (i < responseList.length && responseList[i] == true) {
+              result[start + i] = true;
+            }
+          }
+        }
+      } catch (e) {
+        // Non-fatal: leave this chunk's slots false so the flow continues.
+        debugPrint('PremiumizeService: cache/check chunk @$start failed: $e');
       }
-      final Map<String, dynamic> payload =
-          json.decode(response.body) as Map<String, dynamic>;
-      if (payload['status']?.toString() != 'success') {
-        return List<bool>.filled(items.length, false);
-      }
-      final responseList = payload['response'];
-      if (responseList is List) {
-        final result = List<bool>.generate(
-          items.length,
-          (i) => i < responseList.length && responseList[i] == true,
-        );
-        debugPrint('PremiumizeService: cache/check result=$result');
-        return result;
-      }
-      debugPrint('PremiumizeService: cache/check unexpected payload shape.');
-      return List<bool>.filled(items.length, false);
-    } catch (e) {
-      debugPrint('PremiumizeService: cache/check failed: $e');
-      return List<bool>.filled(items.length, false);
     }
+
+    final futures = <Future<void>>[];
+    for (int start = 0; start < items.length; start += _cacheChunkSize) {
+      futures.add(processChunk(start));
+      if (futures.length == _cacheMaxConcurrent) {
+        await Future.wait(futures);
+        futures.clear();
+      }
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+
+    debugPrint(
+      'PremiumizeService: cache/check ${result.where((c) => c).length}/${items.length} cached',
+    );
+    return result;
   }
 
   /// Convenience for a single item.
