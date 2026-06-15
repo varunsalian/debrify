@@ -9097,10 +9097,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final List<Torrent> chunk = candidates.sublist(cursor, end);
       cursor = end;
 
-      final List<String> hashes = chunk
-          .map((t) => _normalizeInfohash(t.infohash))
-          .where((h) => h.isNotEmpty)
+      final List<Torrent> validChunk = chunk
+          .where((t) => _normalizeInfohash(t.infohash).isNotEmpty)
           .toList();
+      final List<String> hashes =
+          validChunk.map((t) => _normalizeInfohash(t.infohash)).toList();
 
       if (hashes.isEmpty) continue;
 
@@ -9108,9 +9109,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final List<bool> cached =
           await PremiumizeService.checkCache(apiKey, hashes);
 
-      for (int i = 0; i < chunk.length; i++) {
+      for (int i = 0; i < validChunk.length; i++) {
         if (i < cached.length && cached[i]) {
-          hits.add(chunk[i]);
+          hits.add(validChunk[i]);
         }
       }
     }
