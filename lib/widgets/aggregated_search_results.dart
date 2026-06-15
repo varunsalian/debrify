@@ -1046,6 +1046,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       case 'pikpak':
         serviceColor = const Color(0xFFF59E0B);
         serviceLabel = 'PikPak';
+      case 'premiumize':
+        serviceColor = const Color(0xFFFB923C);
+        serviceLabel = 'Premiumize';
       case SeriesSource.localService:
         serviceColor = const Color(0xFF60A5FA);
         serviceLabel = 'Local';

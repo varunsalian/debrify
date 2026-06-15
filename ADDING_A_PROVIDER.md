@@ -125,12 +125,26 @@ source → play. Two things were needed for a new provider:
 - Dispatch itself already works via the `forcePlay` branches wired in step 9
   (`_handleTorrentCardActivated`, `_tryNextQuickPlayTorrent`).
 
+## 12. Bound sources / "Edit Source" (DONE for Premiumize)
+Bind a torrent to a movie/series once, then replay instantly ("Edit Source").
+Premiumize is stateless by magnet, so we store only the infohash in
+`SeriesSource.torrentHash` (debridTorrentId empty) and re-resolve via directdl
+on replay — no persistent transfer id needed.
+- **Movie auto-save:** in `_addToPremiumize` (cached path), `setSources` a
+  `SeriesSource(debridService:'premiumize', torrentHash:infohash)` for movies.
+- **Select-source mode:** add the provider to the `_handleSelectSourceTorrentPicked`
+  chain + `_addToPremiumizeAndBindSource` (cache-check → bind via `_saveSource`
+  → exit mode). Movies overwrite (`setSources`), series append (`addSource`).
+- **Replay:** add a `case 'premiumize'` to the `_tryPlayFromBoundSource` switch +
+  `_tryPlayFromBoundSourcePremiumize` (rebuild magnet from `torrentHash` →
+  directdl → find episode via `_findEpisodeInFilenames` / largest for movie →
+  playlist of direct links → `_launchBoundSourcePlayer`). Removes the bound
+  source if it no longer resolves.
+- **Edit Source UI label:** add a `case 'premiumize'` (color + 'Premiumize') to
+  the `serviceLabel` switch in `catalog_browser.dart`,
+  `trakt/trakt_results_view.dart`, and `aggregated_search_results.dart`.
+
 ## Not done yet (future steps)
-- [ ] **Bound sources / "Edit Source"** (series source binding + replay):
-      `_handleSelectSourceTorrentPicked` (select-source mode) and
-      `_tryPlayFromBoundSource*` have no `premiumize` branch yet. Premiumize
-      movie sources are intentionally NOT auto-saved to avoid a dangling
-      un-replayable source.
 - [ ] **Bulk add** (`_bulkAddTo*`) for Premiumize.
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
 - [ ] **Backup/restore** of the new credentials (`settings_screen.dart`).

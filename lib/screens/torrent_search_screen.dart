@@ -3988,6 +3988,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       debridService = 'torbox';
     } else if (defaultProvider == 'pikpak' && _pikpakEnabled) {
       debridService = 'pikpak';
+    } else if (defaultProvider == 'premiumize' &&
+        _premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      debridService = 'premiumize';
     } else if (_realDebridIntegrationEnabled &&
         _apiKey != null &&
         _apiKey!.isNotEmpty) {
@@ -3998,6 +4003,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       debridService = 'torbox';
     } else if (_pikpakEnabled) {
       debridService = 'pikpak';
+    } else if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      debridService = 'premiumize';
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4082,6 +4091,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } else if (debridService == 'torbox') {
       // For TorBox, use existing flow but store binding
       await _addToTorboxAndBindSource(infohash, torrentName, imdbId);
+    } else if (debridService == 'premiumize') {
+      await _addToPremiumizeAndBindSource(infohash, torrentName, imdbId);
     } else {
       // PikPak — use existing flow but store binding
       await _addToPikPakAndBindSource(infohash, torrentName, imdbId);
@@ -4239,6 +4250,75 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     } catch (e) {
       if (mounted && Navigator.of(context).canPop())
         Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to set source: $e'),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Add torrent to Premiumize and store as bound source.
+  /// Only binds when the torrent is cached (free check). Premiumize is stateless
+  /// by magnet, so we store just the infohash and re-resolve via directdl later.
+  Future<void> _addToPremiumizeAndBindSource(
+    String infohash,
+    String torrentName,
+    String imdbId,
+  ) async {
+    if (!mounted) return;
+    final apiKey = _premiumizeApiKey!;
+    final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
+
+    _showSelectSourceLoadingDialog(torrentName);
+    try {
+      final cached = await PremiumizeService.isCached(apiKey, magnetLink);
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+
+      if (!cached) {
+        // Don't bind uncached sources — they can't be played immediately.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Torrent is not cached on Premiumize. Try another torrent.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      await _saveSource(
+        imdbId,
+        SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'premiumize',
+          debridTorrentId: '',
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+        isMovie: _selectSourceShow?.type == 'movie',
+      );
+      if (!mounted) return;
+      _exitSelectSourceMode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Source set: $torrentName'),
+          backgroundColor: const Color(0xFF34D399),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      _goBackAndRefreshSources();
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -5129,6 +5209,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 showNotFoundHint: isLastSource,
                 showUnavailableHint: isLastSource,
               );
+            case 'premiumize':
+              result = await _tryPlayFromBoundSourcePremiumize(
+                selection,
+                source,
+                showNotFoundHint: isLastSource,
+                showUnavailableHint: isLastSource,
+              );
             case SeriesSource.localService:
               result = await _tryPlayFromLocalBoundSource(
                 selection,
@@ -5760,6 +5847,114 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       startIndex: targetIndex,
       selection: selection,
       torboxTorrentId: torrentId.toString(),
+    );
+    return true;
+  }
+
+  // ── Premiumize bound source playback ──────────────────────────────────────
+
+  Future<bool> _tryPlayFromBoundSourcePremiumize(
+    AdvancedSearchSelection selection,
+    SeriesSource source, {
+    bool showNotFoundHint = true,
+    bool showUnavailableHint = true,
+  }) async {
+    final apiKey = _premiumizeApiKey;
+    if (apiKey == null || apiKey.isEmpty) return false;
+
+    // Premiumize is stateless by magnet — rebuild it from the stored infohash
+    // and re-resolve direct links.
+    final magnet = _torrentAcquisitionUrl(source.torrentHash, source.torrentName);
+
+    final List<PremiumizeFile> files;
+    try {
+      files = await PremiumizeService.directDownload(apiKey, magnet);
+    } catch (_) {
+      // Transient failure (timeout / 5xx / network) — fall back to search but
+      // do NOT delete the binding; the source may still be valid.
+      return false;
+    }
+    if (!mounted) return false;
+
+    // Empty content from a successful call means the source is no longer
+    // cached/available — safe to drop the binding.
+    if (files.isEmpty) {
+      await SeriesSourceService.removeSourceByHash(
+        selection.imdbId,
+        source.torrentHash,
+      );
+      if (!mounted) return false;
+      if (showUnavailableHint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved source is no longer available. Falling back to search.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final videoFiles = files.where(_premiumizeFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) return false;
+
+    final filenames = videoFiles.map((f) => f.fileName).toList();
+
+    int? targetIndex;
+    if (selection.isSeries) {
+      targetIndex = _findEpisodeInFilenames(
+        filenames,
+        selection.season!,
+        selection.episode!,
+        showHint: showNotFoundHint,
+      );
+    } else {
+      // For movies, pick the largest video file.
+      int largestIdx = 0;
+      int largestSize = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i].size > largestSize) {
+          largestSize = videoFiles[i].size;
+          largestIdx = i;
+        }
+      }
+      targetIndex = largestIdx;
+    }
+    if (targetIndex == null) return false;
+
+    final videoUrl = videoFiles[targetIndex].link;
+    if (videoUrl.isEmpty) return false;
+
+    // Premiumize hands back direct links for every file, so populate them all.
+    final playlist = <PlaylistEntry>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      String relativePath = videoFiles[i].path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+      playlist.add(
+        PlaylistEntry(
+          url: videoFiles[i].link,
+          title: filenames[i],
+          relativePath: relativePath,
+          sizeBytes: videoFiles[i].size,
+          torrentHash: source.torrentHash.isNotEmpty
+              ? source.torrentHash
+              : null,
+        ),
+      );
+    }
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
     );
     return true;
   }
@@ -13020,6 +13215,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       }
 
       if (!mounted) return;
+
+      // Auto-save movie source for quick reuse (overrides any previous source).
+      // Premiumize is stateless by magnet, so we only need the infohash to
+      // re-resolve later — no persistent transfer id required.
+      final sel = _activeAdvancedSelection;
+      if (sel != null && !sel.isSeries && sel.contentType == 'movie') {
+        await SeriesSourceService.setSources(sel.imdbId, [
+          SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'premiumize',
+            debridTorrentId: '',
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        ]);
+      }
 
       final torrent = _findTorrentByInfohash(infohash, torrentName);
       await _showPremiumizePostAddOptions(
