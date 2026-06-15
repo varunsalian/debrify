@@ -271,11 +271,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   int _activeSearchRequestId = 0;
   String? _apiKey;
   String? _torboxApiKey;
+  String? _premiumizeApiKey;
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
   bool _realDebridIntegrationEnabled = true;
   bool _rdSkipBlockedTorrents = false;
   bool _torboxIntegrationEnabled = true;
+  bool _premiumizeIntegrationEnabled = true;
   bool _pikpakEnabled = false;
   String _defaultTorrentProvider = 'none';
   bool _showingTorboxCachedOnly = false;
@@ -2152,18 +2154,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   Future<void> _loadApiKeys() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
+    final premiumizeEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
     if (!mounted) return;
     setState(() {
       _apiKey = rdKey;
       _torboxApiKey = torboxKey;
+      _premiumizeApiKey = premiumizeKey;
       _realDebridIntegrationEnabled = rdEnabled;
       _rdSkipBlockedTorrents = rdSkipBlocked;
       _torboxIntegrationEnabled = torboxEnabled;
+      _premiumizeIntegrationEnabled = premiumizeEnabled;
       _pikpakEnabled = pikpakEnabled;
       _defaultTorrentProvider = defaultProvider;
       _apiKeysLoaded = true;
@@ -2670,6 +2677,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       StorageService.getApiKey(),
       StorageService.getPikPakEnabled(),
       StorageService.getRdSkipBlockedTorrents(),
+      StorageService.getPremiumizeApiKey(),
+      StorageService.getPremiumizeIntegrationEnabled(),
     ]);
     final bool cacheCheckPreference = results[0] as bool;
     final String? torboxKey = results[1] as String?;
@@ -2678,6 +2687,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final String? rdKey = results[4] as String?;
     final bool pikpakEnabled = results[5] as bool;
     final bool rdSkipBlocked = results[6] as bool;
+    final String? premiumizeKey = results[7] as String?;
+    final bool premiumizeEnabled = results[8] as bool;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
@@ -2687,6 +2698,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _torboxIntegrationEnabled = torboxEnabled;
         _apiKey = rdKey;
         _pikpakEnabled = pikpakEnabled;
+        _premiumizeApiKey = premiumizeKey;
+        _premiumizeIntegrationEnabled = premiumizeEnabled;
       });
     }
 
@@ -6786,6 +6799,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         color: Color(0xFFE50914),
       );
     }
+    if (p == 'premiumize' &&
+        _premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      return const _ProviderOption(
+        id: 'premiumize',
+        name: 'PM',
+        icon: Icons.workspace_premium_rounded,
+        color: Color(0xFFF59E0B),
+      );
+    }
     if (p == 'pikpak' && _pikpakEnabled) {
       return const _ProviderOption(
         id: 'pikpak',
@@ -6813,6 +6837,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         name: 'TB',
         icon: Icons.flash_on_rounded,
         color: Color(0xFF7C3AED),
+      );
+    }
+    if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      return const _ProviderOption(
+        id: 'premiumize',
+        name: 'PM',
+        icon: Icons.workspace_premium_rounded,
+        color: Color(0xFFF59E0B),
       );
     }
     if (_pikpakEnabled) {
@@ -6849,6 +6883,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           name: 'TB',
           icon: Icons.flash_on_rounded,
           color: Color(0xFF7C3AED),
+        ),
+      );
+    }
+    if (_premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty) {
+      list.add(
+        const _ProviderOption(
+          id: 'premiumize',
+          name: 'PM',
+          icon: Icons.workspace_premium_rounded,
+          color: Color(0xFFF59E0B),
         ),
       );
     }
@@ -6929,6 +6975,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     switch (providerId) {
       case 'torbox':
         return 'Torbox';
+      case 'premiumize':
+        return 'Premiumize';
       case 'pikpak':
         return 'PikPak';
       case 'debrid':
@@ -7040,6 +7088,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                           ? 'Real-Debrid'
                                           : p.id == 'torbox'
                                           ? 'TorBox'
+                                          : p.id == 'premiumize'
+                                          ? 'Premiumize'
                                           : 'PikPak',
                                       style: TextStyle(
                                         fontSize: 13,

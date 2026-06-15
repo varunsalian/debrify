@@ -23,6 +23,9 @@ class StorageService {
   static const String _torboxIntegrationEnabledKey =
       'torbox_integration_enabled';
   static const String _torboxHiddenFromNavKey = 'torbox_hidden_from_nav';
+  static const String _premiumizeApiKey = 'premiumize_api_key';
+  static const String _premiumizeIntegrationEnabledKey =
+      'premiumize_integration_enabled';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -378,6 +381,32 @@ class StorageService {
   static Future<void> clearTorboxHiddenFromNav() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_torboxHiddenFromNavKey);
+  }
+
+  // Premiumize API key helpers
+  static Future<String?> getPremiumizeApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_premiumizeApiKey);
+  }
+
+  static Future<void> savePremiumizeApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_premiumizeApiKey, apiKey);
+  }
+
+  static Future<void> deletePremiumizeApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_premiumizeApiKey);
+  }
+
+  static Future<bool> getPremiumizeIntegrationEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_premiumizeIntegrationEnabledKey) ?? true;
+  }
+
+  static Future<void> setPremiumizeIntegrationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_premiumizeIntegrationEnabledKey, enabled);
   }
 
   static Future<bool> isInitialSetupComplete() async {

@@ -22,6 +22,7 @@ import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
+import '../services/premiumize_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
@@ -37,6 +38,7 @@ import 'settings/iptv_settings_page.dart';
 import 'settings/home_page_settings_page.dart';
 import 'settings/startup_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
+import 'settings/premiumize_settings_page.dart';
 import 'settings/torrent_settings_page.dart';
 import 'settings/filter_settings_page.dart';
 import 'settings/indexer_managers_settings_page.dart';
@@ -71,6 +73,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _torboxConnected = false;
   String _torboxStatus = 'Not connected';
   String _torboxCaption = 'Tap to connect';
+
+  bool _premiumizeConnected = false;
+  String _premiumizeStatus = 'Not connected';
+  String _premiumizeCaption = 'Tap to connect';
 
   bool _pikpakConnected = false;
   String _pikpakStatus = 'Not connected';
@@ -140,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
       StorageService.getIndexerManagerConfigs(),
+      StorageService.getPremiumizeApiKey(),
     ]);
 
     if (!mounted) return;
@@ -156,10 +163,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isAndroidTv = results[9] as bool;
     final autoCheckEnabled = results[10] as bool;
     final indexerManagers = results[11] as List;
+    final premiumizeKey = results[12] as String?;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
     final torConnected = torboxKey != null && torboxKey.isNotEmpty;
+    final premiumizeConnected =
+        premiumizeKey != null && premiumizeKey.isNotEmpty;
 
     // Use cached account info if available
     if (rdConnected) {
@@ -181,6 +191,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         _torboxStatus = 'Connected';
         _torboxCaption = 'Loading account info...';
+      }
+    }
+
+    if (premiumizeConnected) {
+      final premiumizeUser = PremiumizeAccountService.currentUser;
+      _premiumizeConnected = true;
+      if (premiumizeUser != null) {
+        _applyPremiumizeUserInfo(premiumizeUser);
+      } else {
+        _premiumizeStatus = 'Connected';
+        _premiumizeCaption = 'Loading account info...';
       }
     }
 
@@ -256,6 +277,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
     }
+
+    if (premiumizeConnected) {
+      PremiumizeAccountService.refreshUserInfo().then((_) {
+        if (!mounted) return;
+        final premiumizeUser = PremiumizeAccountService.currentUser;
+        if (premiumizeUser != null) {
+          setState(() => _applyPremiumizeUserInfo(premiumizeUser));
+        }
+      });
+    }
   }
 
   Future<void> _loadSupportConfig() async {
@@ -320,6 +351,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _applyPremiumizeUserInfo(dynamic premiumizeUser) {
+    final expiry = premiumizeUser.premiumUntil;
+    final bool active = premiumizeUser.hasActivePremium;
+    _premiumizeStatus = active ? 'Active' : 'Inactive';
+    if (active && expiry != null) {
+      _premiumizeCaption = 'Expires ${_formatDate(expiry)}';
+    } else if (active) {
+      _premiumizeCaption = 'Premium account';
+    } else if (expiry != null && expiry.isBefore(DateTime.now())) {
+      _premiumizeCaption = 'Expired ${_formatDate(expiry)}';
+    } else {
+      _premiumizeCaption = 'Premium not active';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -343,6 +389,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           caption: _torboxCaption,
           icon: Icons.flash_on_rounded,
           onTap: _openTorboxSettings,
+        ),
+        premiumize: _ConnectionInfo(
+          title: 'Premiumize',
+          connected: _premiumizeConnected,
+          status: _premiumizeStatus,
+          caption: _premiumizeCaption,
+          icon: Icons.workspace_premium_rounded,
+          onTap: _openPremiumizeSettings,
         ),
         pikpak: _ConnectionInfo(
           title: 'PikPak',
@@ -570,6 +624,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final loggedOut = await Navigator.of(
       context,
     ).push<bool>(MaterialPageRoute(builder: (_) => const TorboxSettingsPage()));
+    if (!mounted) return;
+    await _loadSummaries();
+    if (loggedOut == true) {
+      _focusFirstCard();
+    }
+  }
+
+  Future<void> _openPremiumizeSettings() async {
+    final loggedOut = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const PremiumizeSettingsPage()),
+    );
     if (!mounted) return;
     await _loadSummaries();
     if (loggedOut == true) {
@@ -1830,6 +1895,7 @@ class _SettingsHeader extends StatelessWidget {
 class _ConnectionsSummary extends StatefulWidget {
   final _ConnectionInfo realDebrid;
   final _ConnectionInfo torbox;
+  final _ConnectionInfo premiumize;
   final _ConnectionInfo pikpak;
   final _ConnectionInfo webDav;
   final _ConnectionInfo indexerManagers;
@@ -1841,6 +1907,7 @@ class _ConnectionsSummary extends StatefulWidget {
   const _ConnectionsSummary({
     required this.realDebrid,
     required this.torbox,
+    required this.premiumize,
     required this.pikpak,
     required this.webDav,
     required this.indexerManagers,
@@ -1856,10 +1923,14 @@ class _ConnectionsSummary extends StatefulWidget {
 
 class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   // Focus nodes for grid navigation
-  // Layout: [realDebrid, torbox]
-  //         [pikpak,     reddit]
-  //         [iptv]
+  // Layout (wide):
+  // [realDebrid,  torbox]
+  // [premiumize,  pikpak]
+  // [webDav,      indexerManagers]
+  // [reddit,      iptv]
+  // [trakt]
   late final FocusNode _torboxFocusNode;
+  late final FocusNode _premiumizeFocusNode;
   late final FocusNode _pikpakFocusNode;
   late final FocusNode _webDavFocusNode;
   late final FocusNode _indexerManagersFocusNode;
@@ -1871,6 +1942,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   void initState() {
     super.initState();
     _torboxFocusNode = FocusNode(debugLabel: 'settings-torbox');
+    _premiumizeFocusNode = FocusNode(debugLabel: 'settings-premiumize');
     _pikpakFocusNode = FocusNode(debugLabel: 'settings-pikpak');
     _webDavFocusNode = FocusNode(debugLabel: 'settings-webdav');
     _indexerManagersFocusNode = FocusNode(
@@ -1884,6 +1956,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
   @override
   void dispose() {
     _torboxFocusNode.dispose();
+    _premiumizeFocusNode.dispose();
     _pikpakFocusNode.dispose();
     _webDavFocusNode.dispose();
     _indexerManagersFocusNode.dispose();
@@ -1914,10 +1987,11 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                 ? (constraints.maxWidth - 12) / 2
                 : constraints.maxWidth;
             // Grid layout (wide):
-            // [RD]      [Torbox]
-            // [PikPak]  [WebDAV]
-            // [Indexers] [Reddit]
-            // [IPTV]    [Trakt]
+            // [RD]         [Torbox]
+            // [Premiumize] [PikPak]
+            // [WebDAV]     [Indexers]
+            // [Reddit]     [IPTV]
+            // [Trakt]
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -1930,7 +2004,7 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     focusNode: widget.firstCardFocusNode,
                     isLeftColumn: true,
                     rightNeighbor: wide ? _torboxFocusNode : null,
-                    downNeighbor: _pikpakFocusNode,
+                    downNeighbor: wide ? _premiumizeFocusNode : _torboxFocusNode,
                   ),
                 ),
                 SizedBox(
@@ -1940,81 +2014,96 @@ class _ConnectionsSummaryState extends State<_ConnectionsSummary> {
                     focusNode: _torboxFocusNode,
                     isLeftColumn: !wide,
                     leftNeighbor: wide ? widget.firstCardFocusNode : null,
+                    upNeighbor: wide ? null : widget.firstCardFocusNode,
+                    downNeighbor: wide ? _pikpakFocusNode : _premiumizeFocusNode,
+                  ),
+                ),
+                // Row 2: Premiumize (left), PikPak (right)
+                SizedBox(
+                  width: itemWidth,
+                  child: _ConnectionCard(
+                    info: widget.premiumize,
+                    focusNode: _premiumizeFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _pikpakFocusNode : null,
+                    upNeighbor: wide
+                        ? widget.firstCardFocusNode
+                        : _torboxFocusNode,
                     downNeighbor: wide ? _webDavFocusNode : _pikpakFocusNode,
                   ),
                 ),
-                // Row 2: PikPak (left), WebDAV (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.pikpak,
                     focusNode: _pikpakFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _webDavFocusNode : null,
-                    upNeighbor: widget.firstCardFocusNode,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _premiumizeFocusNode : null,
+                    upNeighbor: wide ? _torboxFocusNode : _premiumizeFocusNode,
                     downNeighbor: wide
                         ? _indexerManagersFocusNode
                         : _webDavFocusNode,
                   ),
                 ),
+                // Row 3: WebDAV (left), indexer managers (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.webDav,
                     focusNode: _webDavFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _pikpakFocusNode : null,
-                    upNeighbor: wide ? _torboxFocusNode : _pikpakFocusNode,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _indexerManagersFocusNode : null,
+                    upNeighbor: wide ? _premiumizeFocusNode : _pikpakFocusNode,
                     downNeighbor: wide
                         ? _redditFocusNode
                         : _indexerManagersFocusNode,
                   ),
                 ),
-                // Row 3: indexer managers (left), Reddit (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.indexerManagers,
                     focusNode: _indexerManagersFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _redditFocusNode : null,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _webDavFocusNode : null,
                     upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
-                    downNeighbor: _iptvFocusNode,
+                    downNeighbor: wide ? _iptvFocusNode : _redditFocusNode,
                   ),
                 ),
+                // Row 4: Reddit (left), IPTV (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.reddit,
                     focusNode: _redditFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _indexerManagersFocusNode : null,
+                    isLeftColumn: true,
+                    rightNeighbor: wide ? _iptvFocusNode : null,
                     upNeighbor: wide
                         ? _webDavFocusNode
                         : _indexerManagersFocusNode,
                     downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
                   ),
                 ),
-                // Row 4: IPTV (left), Trakt (right)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.iptv,
                     focusNode: _iptvFocusNode,
-                    isLeftColumn: true,
-                    rightNeighbor: wide ? _traktFocusNode : null,
+                    isLeftColumn: !wide,
+                    leftNeighbor: wide ? _redditFocusNode : null,
                     upNeighbor: wide
                         ? _indexerManagersFocusNode
                         : _redditFocusNode,
+                    downNeighbor: _traktFocusNode,
                   ),
                 ),
+                // Row 5: Trakt (left)
                 SizedBox(
                   width: itemWidth,
                   child: _ConnectionCard(
                     info: widget.trakt,
                     focusNode: _traktFocusNode,
-                    isLeftColumn: !wide,
-                    leftNeighbor: wide ? _iptvFocusNode : null,
+                    isLeftColumn: true,
                     upNeighbor: wide ? _redditFocusNode : _iptvFocusNode,
                   ),
                 ),
