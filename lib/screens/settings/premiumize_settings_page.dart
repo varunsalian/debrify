@@ -31,6 +31,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   bool _saving = false;
   bool _integrationEnabled = true;
   bool _checkCacheBeforeSearch = false;
+  String _postTorrentAction = 'choose';
 
   @override
   void initState() {
@@ -43,10 +44,12 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     final integrationEnabled =
         await StorageService.getPremiumizeIntegrationEnabled();
     final cachePref = await StorageService.getPremiumizeCacheCheckEnabled();
+    final postAction = await StorageService.getPremiumizePostTorrentAction();
     setState(() {
       _savedApiKey = apiKey;
       _integrationEnabled = integrationEnabled;
       _checkCacheBeforeSearch = cachePref;
+      _postTorrentAction = postAction;
       _loading = false;
     });
 
@@ -70,6 +73,12 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   Future<void> _updateCacheCheck(bool value) async {
     setState(() => _checkCacheBeforeSearch = value);
     await StorageService.setPremiumizeCacheCheckEnabled(value);
+  }
+
+  Future<void> _savePostAction(String value) async {
+    setState(() => _postTorrentAction = value);
+    await StorageService.savePremiumizePostTorrentAction(value);
+    _snack('Preference saved');
   }
 
   void _snack(String message, {bool err = false}) {
@@ -419,6 +428,99 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.play_circle_outline,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Post-Torrent Action',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Choose what happens after adding a torrent to Premiumize',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 12),
+                          RadioListTile<String>(
+                            title: const Text('None'),
+                            subtitle: const Text(
+                              'Do nothing - just add the torrent to Premiumize',
+                            ),
+                            value: 'none',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Let me choose'),
+                            subtitle: const Text(
+                              'Show a quick Play/Download picker after adding',
+                            ),
+                            value: 'choose',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Play video'),
+                            subtitle: const Text(
+                              'Automatically open the video player',
+                            ),
+                            value: 'play',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Download to device'),
+                            subtitle: const Text(
+                              'If the torrent contains only video files, all '
+                              'videos will download immediately',
+                            ),
+                            value: 'download',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
+                            title: const Text('Add to channel'),
+                            subtitle: const Text(
+                              'Cache this torrent in a Debrify TV channel',
+                            ),
+                            value: 'channel',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

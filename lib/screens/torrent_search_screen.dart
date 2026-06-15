@@ -7297,6 +7297,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   List<String> _postTorrentActionOptionsForProvider(String providerId) {
+    if (providerId == 'premiumize') {
+      // Premiumize has no dedicated nav tab ('open') and no playlist support yet.
+      return const ['none', 'choose', 'play', 'download', 'channel'];
+    }
     return const [
       'none',
       'choose',

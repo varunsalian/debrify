@@ -163,6 +163,17 @@ Multi-select torrents → add all to the provider at once.
 > concurrency). Eager directdl resolves ALL files of a torrent on play — a known
 > point-cost/expiry trade-off; lazy per-file resolution is a future optimization.
 
+## 14. Post-torrent action (DONE for Premiumize)
+What happens after adding a torrent (none / let-me-choose / play / download /
+add-to-channel), settable per provider — same as RD/Torbox.
+- Storage: `get/savePremiumizePostTorrentAction` (default 'choose').
+- Settings page: a "Post-Torrent Action" RadioListTile card (Premiumize excludes
+  'open' — no nav tab — and 'playlist' — not supported yet).
+- Helpers: `_get/_savePostTorrentActionForProvider` already route 'premiumize';
+  `_postTorrentActionOptionsForProvider` returns the Premiumize subset so the
+  home **quick-controls** dialog shows the right options. `_addToPremiumize`'s
+  `_showPremiumizePostAddOptions` reads the pref and dispatches all 5 actions.
+
 ## Not done yet (future steps)
 - [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
 - [ ] **Backup/restore** of the new credentials (`settings_screen.dart`).
