@@ -5921,7 +5921,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _apiKey!.isNotEmpty) ||
         (_torboxIntegrationEnabled &&
             _torboxApiKey != null &&
-            _torboxApiKey!.isNotEmpty);
+            _torboxApiKey!.isNotEmpty) ||
+        (_premiumizeIntegrationEnabled &&
+            _premiumizeApiKey != null &&
+            _premiumizeApiKey!.isNotEmpty);
 
     // Decide which source type to use:
     // - If debrid configured and torrents available → use torrents
@@ -6048,6 +6051,69 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           torrentsForQuickPlay = cachedOnly;
           debugPrint(
             'TorrentSearchScreen: Quick Play - filtered to ${cachedOnly.length} cached Torbox torrents',
+          );
+        }
+      }
+    }
+
+    // For Premiumize: batch cache-check the candidates and filter to cached-only
+    // so Quick Play picks a known-cached source on the first try (instead of
+    // probing torrents one at a time). Only when Premiumize is the provider
+    // Quick Play will actually use.
+    final bool pmAvailForQp = _premiumizeIntegrationEnabled &&
+        _premiumizeApiKey != null &&
+        _premiumizeApiKey!.isNotEmpty;
+    final bool rdAvailForQp = _realDebridIntegrationEnabled &&
+        _apiKey != null &&
+        _apiKey!.isNotEmpty;
+    final bool tbAvailForQp = _torboxIntegrationEnabled &&
+        _torboxApiKey != null &&
+        _torboxApiKey!.isNotEmpty;
+    final bool premiumizeIsQuickPlayProvider = pmAvailForQp &&
+        (_defaultTorrentProvider == 'premiumize' ||
+            (_defaultTorrentProvider == 'none' &&
+                !rdAvailForQp &&
+                !tbAvailForQp &&
+                !_pikpakEnabled));
+    if (premiumizeIsQuickPlayProvider) {
+      if (_premiumizeCacheStatus == null) {
+        final hashes = torrentsForQuickPlay
+            .map((t) => t.infohash.trim().toLowerCase())
+            .where((h) => h.isNotEmpty)
+            .toSet()
+            .toList();
+        if (hashes.isNotEmpty) {
+          try {
+            final results = await PremiumizeService.checkCache(
+              _premiumizeApiKey!,
+              hashes,
+            );
+            if (!mounted) return;
+            setState(() {
+              _premiumizeCacheStatus = {
+                for (var i = 0; i < hashes.length; i++)
+                  hashes[i]: i < results.length && results[i],
+              };
+            });
+          } catch (e) {
+            debugPrint(
+              'TorrentSearchScreen: Quick Play Premiumize cache check failed: $e',
+            );
+          }
+        }
+      }
+      if (_premiumizeCacheStatus != null) {
+        final cachedOnly = torrentsForQuickPlay
+            .where(
+              (t) =>
+                  _premiumizeCacheStatus![t.infohash.trim().toLowerCase()] ==
+                  true,
+            )
+            .toList();
+        if (cachedOnly.isNotEmpty) {
+          torrentsForQuickPlay = cachedOnly;
+          debugPrint(
+            'TorrentSearchScreen: Quick Play - filtered to ${cachedOnly.length} cached Premiumize torrents',
           );
         }
       }

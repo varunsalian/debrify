@@ -109,6 +109,22 @@ Show a provider "cached" badge on search results (mirrors Torbox).
   providers joined by ` | ` (e.g. `TB | PM`); `_cacheLabelsForResult` builds it.
   Badge-only — does NOT gate the provider button (cache verified on tap).
 
+## 11. Quick Play (detail-screen "Play" button) (DONE for Premiumize)
+The catalog/detail Play button runs Quick Play: search → auto-pick a cached
+source → play. Two things were needed for a new provider:
+- **`hasDebridProvider`** (torrent_search_screen.dart, in the quick-play
+  handler ~line 5918) must include the provider, else `useTorrents` is false and
+  Quick Play falls back to direct-stream — i.e. a provider-only setup would
+  never use it. Add the provider's availability check there.
+- **Cache pre-filter:** mirror the Torbox block — when the provider is the one
+  Quick Play will use (`_defaultTorrentProvider == '<id>'`, or it's the sole
+  fallback), batch `checkCache` the candidate hashes and narrow
+  `torrentsForQuickPlay` to cached-only (reusing `_<provider>CacheStatus` if the
+  search already populated it). Guard with `cachedOnly.isNotEmpty` so it
+  degrades to the sequential retry when nothing is cached.
+- Dispatch itself already works via the `forcePlay` branches wired in step 9
+  (`_handleTorrentCardActivated`, `_tryNextQuickPlayTorrent`).
+
 ## Not done yet (future steps)
 - [ ] **Bound sources / "Edit Source"** (series source binding + replay):
       `_handleSelectSourceTorrentPicked` (select-source mode) and
