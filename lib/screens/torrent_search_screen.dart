@@ -14002,6 +14002,36 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               _addTorrentToChannel(torrent, keyword);
                             },
                           ),
+                          _DebridActionTile(
+                            icon: Icons.cloud_upload_rounded,
+                            color: const Color(0xFFF59E0B),
+                            title: 'Transfer to Premiumize',
+                            subtitle: 'Add this torrent to your Premiumize cloud.',
+                            enabled: true,
+                            onTap: () async {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              final apiKey = await StorageService.getPremiumizeApiKey();
+                              if (apiKey == null || apiKey.isEmpty) return;
+                              final magnetLink = _torrentAcquisitionUrl(
+                                infohash ?? torrent.infohash,
+                                torrentName,
+                              );
+                              try {
+                                await PremiumizeService.createTransfer(apiKey, magnetLink);
+                                if (!mounted) return;
+                                _showPremiumizeSnack(
+                                  'Added to Premiumize. It will be available once the download finishes.',
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                _showPremiumizeSnack(
+                                  'Failed to transfer: ${_formatPremiumizeError(e)}',
+                                  isError: true,
+                                );
+                              }
+                            },
+                          ),
                         ],
                       ),
                     ),
