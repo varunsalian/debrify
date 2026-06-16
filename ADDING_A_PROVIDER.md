@@ -604,6 +604,40 @@ the search-added hash+path path, not a replacement.
 
 ---
 
+## 21. Onboarding setup flow (DONE for Premiumize)
+
+Add the provider as a selectable chip on the welcome screen of
+`lib/widgets/initial_setup_flow.dart`.
+
+- **Enum:** add `premiumize` to `_IntegrationType`.
+- **Meta:** add an `_IntegrationMeta` entry in `_integrationMeta` with
+  `title`, `url` (API-key page), `linkLabel`, `steps`, `inputLabel`, `hint`,
+  `gradient` (brand colours), `icon`.
+- **Controller:** `_premiumizeController = TextEditingController()` — dispose
+  it in `dispose()`.
+- **Focus node:** `_premiumizeChipFocusNode` — add to `_addFocusListeners()`
+  list and dispose in `dispose()`.
+- **Welcome chip:** extend the focus-node and traversal-order ternary chains
+  in `_buildWelcomeStep`. Bump the Skip/Continue button traversal orders if
+  needed (with 4 chips: Skip=5, Continue=6).
+- **`_buildIntegrationStep` controller lookup:** add a `premiumize` branch
+  before the PikPak fallback; Premiumize is API-key (not email/password), so
+  it must resolve to `_premiumizeController` and take the non-PikPak path.
+- **`_startIntegrationFlow`:** add `premiumize` to the `ordered` list.
+- **`_submitCurrent`:** route `premiumize` to
+  `PremiumizeAccountService.validateAndGetUserInfo(value)` (key is saved
+  automatically; `getPremiumizeIntegrationEnabled` defaults to `true` so no
+  separate enable call is required). Add `premiumize` to the `nonav:` prefix
+  block → `StorageService.setPremiumizeHiddenFromNav(true)`. Update analytics
+  ternary to emit `'premiumize'`.
+- **`_requestFocusForCurrentStep`:** Premiumize falls through to the shared
+  `_textFieldFocusNode` (same as RD/Torbox).
+- **D-pad:** fully compatible — Premiumize reuses `_TvFriendlyTextField` with
+  `_textFieldFocusNode`, which already handles arrow-key escape and hardware
+  back.
+
+---
+
 ### Quick verify
 ```
 flutter analyze lib/screens/settings_screen.dart \
