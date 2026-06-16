@@ -683,3 +683,101 @@ flutter analyze lib/screens/settings_screen.dart \
   lib/models/<provider>_user.dart \
   lib/widgets/<provider>_account_status_widget.dart
 ```
+
+---
+
+## 23. Parity gap fixes (DONE for Premiumize)
+
+After the core integration is complete, audit every surface where other providers appear and ensure the new provider is wired in consistently.
+
+### Storage resets (`lib/services/storage_service.dart`)
+
+`clearAllIntegrationStates()` removes all provider keys on factory-reset. Add:
+```dart
+await prefs.remove(_premiumizeIntegrationEnabledKey);
+await prefs.remove(_premiumizeHiddenFromNavKey);
+```
+
+`clearAllPostTorrentActions()` removes all post-action preferences. Add:
+```dart
+await prefs.remove(_premiumizePostTorrentActionKey);
+```
+
+### "Open in Provider" bridge (`lib/services/main_page_bridge.dart`)
+
+Every provider with a dedicated tab gets a `static void Function()?` callback so `torrent_search_screen.dart` can navigate to it after adding a torrent:
+```dart
+static void Function()? openPremiumizeFolder;
+```
+
+Premiumize takes no arguments (unlike `openTorboxFolder(TorboxTorrent)`) because transfers take time to appear so there is no specific item to highlight.
+
+### Wiring the bridge callback (`lib/main.dart`)
+
+In `initState` (alongside the other `MainPageBridge.openXxxFolder` assignments):
+```dart
+MainPageBridge.openPremiumizeFolder = () {
+  if (!mounted) return;
+  if (!_premiumizeEnabled) {
+    _showMissingApiKeySnack('Premiumize');
+    return;
+  }
+  Navigator.of(context).push(MaterialPageRoute(
+    builder: (ctx) => PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (!MainPageBridge.handleBackNavigation()) Navigator.of(ctx).pop();
+      },
+      child: const PremiumizeFilesScreen(isPushedRoute: true),
+    ),
+  ));
+};
+```
+
+In `dispose()`:
+```dart
+MainPageBridge.openPremiumizeFolder = null;
+```
+
+### Post-torrent action — search screen (`lib/screens/torrent_search_screen.dart`)
+
+In `_postTorrentActionOptionsForProvider('premiumize')`, add `'open'` to the options list:
+```dart
+return const ['none', 'choose', 'open', 'play', 'download', 'playlist', 'channel'];
+```
+
+In `_showPremiumizePostAddOptions`, add the `'open'` case:
+```dart
+case 'open':
+  MainPageBridge.openPremiumizeFolder?.call();
+  return;
+```
+
+### Post-torrent action — settings page (`lib/screens/settings/premiumize_settings_page.dart`)
+
+Add a `RadioListTile` for `'open'` between `'choose'` and `'play'`:
+```dart
+RadioListTile<String>(
+  title: const Text('Open in Premiumize'),
+  subtitle: const Text('Navigate to your Premiumize cloud library'),
+  value: 'open',
+  groupValue: _postTorrentAction,
+  onChanged: (v) => v == null ? null : _savePostAction(v),
+  contentPadding: EdgeInsets.zero,
+),
+```
+
+### UI text — provider lists
+
+Any hardcoded provider list in UI strings must include the new provider:
+
+- **`lib/main.dart`** snackbar: `'Connect Real Debrid, Torbox, Premiumize, PikPak, or WebDAV in Settings to unlock more tabs.'`
+- **`lib/widgets/provider_status_cards.dart`** empty-state text: `'Add Real-Debrid, Torbox, Premiumize, or PikPak in Settings'`
+
+### Deferred gaps
+
+Two gaps identified during the Premiumize audit that require model changes before they can be implemented:
+
+1. **`AddSourcePickerDialog`** — `SeriesSource` uses `torrentHash`; Premiumize cloud items have no infohash. Requires a `premiumizeItemId` field on `SeriesSource`.
+2. **"Add to Debrify TV" in `PremiumizeFilesScreen`** — `DebrifyTvChannelAddService` requires an infohash which `PremiumizeFolderItem` doesn't carry.
