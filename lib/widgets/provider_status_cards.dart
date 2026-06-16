@@ -661,7 +661,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Add Real-Debrid, Torbox, or PikPak in Settings',
+                  'Add Real-Debrid, Torbox, Premiumize, or PikPak in Settings',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.6),

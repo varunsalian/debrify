@@ -656,6 +656,17 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                             contentPadding: EdgeInsets.zero,
                           ),
                           RadioListTile<String>(
+                            title: const Text('Open in Premiumize'),
+                            subtitle: const Text(
+                              'Navigate to your Premiumize cloud library',
+                            ),
+                            value: 'open',
+                            groupValue: _postTorrentAction,
+                            onChanged: (v) =>
+                                v == null ? null : _savePostAction(v),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          RadioListTile<String>(
                             title: const Text('Play video'),
                             subtitle: const Text(
                               'Automatically open the video player',

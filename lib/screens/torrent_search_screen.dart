@@ -7298,8 +7298,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   List<String> _postTorrentActionOptionsForProvider(String providerId) {
     if (providerId == 'premiumize') {
-      // Premiumize has no dedicated nav tab ('open').
-      return const ['none', 'choose', 'play', 'download', 'playlist', 'channel'];
+      return const ['none', 'choose', 'open', 'play', 'download', 'playlist', 'channel'];
     }
     return const [
       'none',
@@ -13825,6 +13824,9 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     switch (postAction) {
       case 'none':
         _showPremiumizeSnack('Torrent added to Premiumize successfully');
+        return;
+      case 'open':
+        MainPageBridge.openPremiumizeFolder?.call();
         return;
       case 'channel':
         final keyword = _searchController.text.trim();

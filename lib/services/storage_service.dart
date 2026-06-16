@@ -1978,6 +1978,8 @@ class StorageService {
     await prefs.remove(_realDebridHiddenFromNavKey);
     await prefs.remove(_torboxIntegrationEnabledKey);
     await prefs.remove(_torboxHiddenFromNavKey);
+    await prefs.remove(_premiumizeIntegrationEnabledKey);
+    await prefs.remove(_premiumizeHiddenFromNavKey);
     await prefs.remove(_webDavEnabledKey);
     await prefs.remove(_webDavHiddenFromNavKey);
   }
@@ -2018,6 +2020,7 @@ class StorageService {
     await prefs.remove(_postTorrentActionKey);
     await prefs.remove(_torboxPostTorrentActionKey);
     await prefs.remove(_pikpakPostTorrentActionKey);
+    await prefs.remove(_premiumizePostTorrentActionKey);
   }
 
   /// Clear all Debrify TV display and engine settings

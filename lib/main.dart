@@ -712,6 +712,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ),
       );
     };
+    MainPageBridge.openPremiumizeFolder = () {
+      if (!mounted) return;
+      if (!_premiumizeEnabled) {
+        _showMissingApiKeySnack('Premiumize');
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => PopScope(
+            canPop: false,
+            onPopInvoked: (didPop) {
+              if (didPop) return;
+              if (!MainPageBridge.handleBackNavigation()) {
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: const PremiumizeFilesScreen(isPushedRoute: true),
+          ),
+        ),
+      );
+    };
     MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadIntegrationState();
@@ -767,6 +788,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
+    MainPageBridge.openPremiumizeFolder = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     MainPageBridge.focusTvSidebar = null;
     _animationController.dispose();
@@ -2162,7 +2184,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Connect Real Debrid, Torbox, PikPak, or WebDAV in Settings to unlock more tabs.',
+          'Connect Real Debrid, Torbox, Premiumize, PikPak, or WebDAV in Settings to unlock more tabs.',
         ),
       ),
     );
