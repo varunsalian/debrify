@@ -347,21 +347,23 @@ class DeepLinkService {
   static Future<ConfiguredServices> getConfiguredServices() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
+    final premiumizeKey = await StorageService.getPremiumizeApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final premiumizeEnabled = await StorageService.getPremiumizeIntegrationEnabled();
 
-    final hasRealDebrid = rdKey != null &&
-                          rdKey.isNotEmpty &&
-                          rdEnabled;
-    final hasTorbox = torboxKey != null &&
-                      torboxKey.isNotEmpty &&
-                      torboxEnabled;
+    final hasRealDebrid = rdKey != null && rdKey.isNotEmpty && rdEnabled;
+    final hasTorbox = torboxKey != null && torboxKey.isNotEmpty && torboxEnabled;
+    final hasPremiumize = premiumizeKey != null &&
+        premiumizeKey.isNotEmpty &&
+        premiumizeEnabled;
 
     return ConfiguredServices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
       hasPikPak: pikpakEnabled,
+      hasPremiumize: hasPremiumize,
     );
   }
 
@@ -381,19 +383,27 @@ class ConfiguredServices {
   final bool hasRealDebrid;
   final bool hasTorbox;
   final bool hasPikPak;
+  final bool hasPremiumize;
 
   ConfiguredServices({
     required this.hasRealDebrid,
     required this.hasTorbox,
     required this.hasPikPak,
+    this.hasPremiumize = false,
   });
 
-  bool get hasAny => hasRealDebrid || hasTorbox || hasPikPak;
-  bool get hasMultiple => [hasRealDebrid, hasTorbox, hasPikPak].where((e) => e).length > 1;
-  bool get hasOnlyRealDebrid => hasRealDebrid && !hasTorbox && !hasPikPak;
-  bool get hasOnlyTorbox => !hasRealDebrid && hasTorbox && !hasPikPak;
-  bool get hasOnlyPikPak => !hasRealDebrid && !hasTorbox && hasPikPak;
+  bool get hasAny => hasRealDebrid || hasTorbox || hasPikPak || hasPremiumize;
+  bool get hasMultiple =>
+      [hasRealDebrid, hasTorbox, hasPikPak, hasPremiumize].where((e) => e).length > 1;
+  bool get hasOnlyRealDebrid =>
+      hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize;
+  bool get hasOnlyTorbox =>
+      !hasRealDebrid && hasTorbox && !hasPikPak && !hasPremiumize;
+  bool get hasOnlyPikPak =>
+      !hasRealDebrid && !hasTorbox && hasPikPak && !hasPremiumize;
+  bool get hasOnlyPremiumize =>
+      !hasRealDebrid && !hasTorbox && !hasPikPak && hasPremiumize;
 
-  // Legacy getters for backward compatibility
+  // Legacy getter for backward compatibility
   bool get hasBoth => hasRealDebrid && hasTorbox;
 }

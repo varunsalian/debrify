@@ -842,6 +842,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           // Fallback: Navigate to PikPak tab
           MainPageBridge.switchTab?.call(6); // PikPak tab index
         },
+        onPremiumizeAdded: () {
+          MainPageBridge.switchTab?.call(11); // Premiumize tab index
+        },
       );
 
       // Handle the magnet link
@@ -896,6 +899,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         },
         onPikPakAdded: () {
           MainPageBridge.switchTab?.call(6); // PikPak tab index
+        },
+        onPremiumizeAdded: () {
+          MainPageBridge.switchTab?.call(11); // Premiumize tab index
         },
       );
 

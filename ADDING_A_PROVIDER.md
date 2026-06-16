@@ -638,6 +638,41 @@ Add the provider as a selectable chip on the welcome screen of
 
 ---
 
+## 22. Deeplink / share intent handler (DONE for Premiumize)
+
+Wire the provider into `lib/services/deep_link_service.dart` and
+`lib/services/magnet_link_handler.dart` so incoming magnet links and
+shared HTTP URLs can be sent to the provider.
+
+**`deep_link_service.dart` — `ConfiguredServices`:**
+- `getConfiguredServices()`: read `getPremiumizeApiKey()` +
+  `getPremiumizeIntegrationEnabled()`; compute `hasPremiumize`.
+- `ConfiguredServices`: add `hasPremiumize` field (default `false` for
+  backward compat); update `hasAny`, `hasMultiple`, all `hasOnlyXxx`
+  getters to include it; add `hasOnlyPremiumize`.
+
+**`magnet_link_handler.dart`:**
+- Import `premiumize_service.dart`.
+- Add `onPremiumizeAdded: Function()?` callback to class + constructor.
+- `handleMagnetLink` / `handleSharedUrl`: update the "no service" error
+  string; add `else if (services.hasOnlyPremiumize)` auto-select branch.
+- Both selection dialogs (magnet + URL): add a Premiumize
+  `TextButton.icon` guarded by `if (services.hasPremiumize)`, using
+  `Icons.workspace_premium_rounded`.
+- Add `_addToPremiumize(magnetUri, torrentName)`: get API key, show
+  loading dialog, call `PremiumizeService.createTransfer(apiKey, magnetUri)`,
+  pop dialog, show success snackbar, call `onPremiumizeAdded?.call()`.
+- Add `_addUrlToPremiumize(url, displayName)`: identical pattern —
+  `createTransfer` accepts both magnets and HTTP URLs via the same `src`
+  param so no separate unrestrict call is needed.
+
+**`main.dart`:**
+- Both `MagnetLinkHandler` instantiations (magnet handler + URL handler):
+  add `onPremiumizeAdded: () => MainPageBridge.switchTab?.call(11)` to
+  navigate to the Premiumize cloud library tab after a successful add.
+
+---
+
 ### Quick verify
 ```
 flutter analyze lib/screens/settings_screen.dart \
