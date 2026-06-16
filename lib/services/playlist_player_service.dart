@@ -8,7 +8,9 @@ import 'torbox_service.dart';
 import 'video_player_launcher.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
+import 'premiumize_service.dart';
 import 'webdav_service.dart';
+import '../models/premiumize_file.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -68,6 +70,15 @@ class PlaylistPlayerService {
     }
     if (provider == 'webdav') {
       await _playWebDavItem(
+        context,
+        freshItem,
+        fallbackTitle: title,
+        playRandom: playRandom,
+      );
+      return;
+    }
+    if (provider == 'premiumize') {
+      await _playPremiumizeItem(
         context,
         freshItem,
         fallbackTitle: title,
@@ -1077,6 +1088,572 @@ class PlaylistPlayerService {
     }
   }
 
+  // ── Premiumize ─────────────────────────────────────────────────────────────
+
+  static Future<void> _playPremiumizeItem(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    required String fallbackTitle,
+    bool playRandom = false,
+  }) async {
+    final String? apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add your Premiumize API key in Settings to play playlist items.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final String? infohash = (item['torrent_hash'] as String?)?.trim();
+
+    // Items saved from the Premiumize cloud browser carry cloud item ids
+    // instead of a torrent hash — route them to the cloud-item player.
+    final bool hasCloudIds = (item['premiumizeItemId'] != null &&
+            item['premiumizeItemId'].toString().isNotEmpty) ||
+        (item['premiumizeItemIds'] is List &&
+            (item['premiumizeItemIds'] as List).isNotEmpty);
+    if ((infohash == null || infohash.isEmpty) && hasCloudIds) {
+      await _playPremiumizeCloudItem(
+        context,
+        item,
+        fallbackTitle: fallbackTitle,
+        playRandom: playRandom,
+      );
+      return;
+    }
+
+    if (infohash == null || infohash.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing Premiumize torrent information.')),
+      );
+      return;
+    }
+
+    final String kind = (item['kind'] as String?) ?? 'single';
+
+    if (!context.mounted) return;
+    bool dialogOpen = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogOpen = true;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final allFiles = await PremiumizeService.resolveFilesByHash(
+        apiKey,
+        infohash,
+      );
+      final videoFiles = allFiles
+          .where((f) => FileUtils.isVideoFile(f.fileName))
+          .toList();
+
+      if (videoFiles.isEmpty) {
+        if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          dialogOpen = false;
+        }
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable Premiumize video files found.'),
+          ),
+        );
+        return;
+      }
+
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+        item,
+      );
+
+      if (kind == 'single') {
+        final String? storedPath = item['premiumizePath'] as String?;
+        final PremiumizeFile file = videoFiles.firstWhere(
+          (f) => f.path == storedPath,
+          orElse: () => videoFiles.first,
+        );
+        final String resolvedTitle =
+            (item['title'] as String?)?.isNotEmpty == true
+            ? item['title'] as String
+            : fallbackTitle;
+        final int? sizeBytes = file.size > 0 ? file.size : null;
+
+        if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          dialogOpen = false;
+        }
+        if (!context.mounted) return;
+        MainPageBridge.notifyPlayerLaunching();
+        final viewMode = PlaylistViewModeStorage.fromStorageString(
+          savedViewModeString,
+        );
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: file.link,
+            title: resolvedTitle,
+            subtitle: sizeBytes != null
+                ? Formatters.formatFileSize(sizeBytes)
+                : null,
+            playlist: [
+              PlaylistEntry(
+                url: file.link,
+                title: resolvedTitle,
+                relativePath: file.path,
+                provider: 'premiumize',
+                premiumizeHash: infohash,
+                premiumizePath: file.path,
+                torrentHash: infohash,
+                sizeBytes: sizeBytes,
+              ),
+            ],
+            startIndex: 0,
+            viewMode: viewMode,
+            contentImdbId: item['imdbId'] as String?,
+            contentType: item['contentType'] as String?,
+            suppressTraktAutoSync: true,
+          ),
+        );
+        return;
+      }
+
+      // Collection
+      final candidates = videoFiles
+          .map(
+            (f) => _PremiumizePlaylistCandidate(
+              file: f,
+              info: SeriesParser.parseFilename(f.fileName),
+              displayName: f.fileName,
+            ),
+          )
+          .toList();
+
+      final filenames = candidates.map((c) => c.displayName).toList();
+      final bool isSeriesCollection =
+          candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+      if (savedViewModeString == 'sortedAZ') {
+        candidates.sort(
+          (a, b) =>
+              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      } else if (isSeriesCollection) {
+        candidates.sort((a, b) {
+          final seasonCompare = (a.info.season ?? 0).compareTo(
+            b.info.season ?? 0,
+          );
+          if (seasonCompare != 0) return seasonCompare;
+          final episodeCompare = (a.info.episode ?? 0).compareTo(
+            b.info.episode ?? 0,
+          );
+          if (episodeCompare != 0) return episodeCompare;
+          return a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
+        });
+      } else {
+        candidates.sort(
+          (a, b) =>
+              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      }
+
+      int startIndex = 0;
+      if (isSeriesCollection) {
+        startIndex = _findFirstEpisodeIndex(
+          candidates.map((c) => c.info).toList(),
+        );
+      }
+      if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
+      if (playRandom && candidates.length > 1) {
+        startIndex = Random().nextInt(candidates.length);
+      }
+
+      final playlistEntries = <PlaylistEntry>[];
+      for (final candidate in candidates) {
+        final file = candidate.file;
+        final episodeLabel = _formatPikPakPlaylistTitle(
+          info: candidate.info,
+          fallback: candidate.displayName,
+          isSeriesCollection: isSeriesCollection,
+        );
+        final title = _composePikPakEntryTitle(
+          seriesTitle: candidate.info.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: candidate.displayName,
+        );
+        // Strip the first folder level (torrent name) from path for display.
+        String relativePath = file.path;
+        final firstSlash = relativePath.indexOf('/');
+        if (firstSlash > 0) {
+          relativePath = relativePath.substring(firstSlash + 1);
+        }
+        playlistEntries.add(
+          PlaylistEntry(
+            url: file.link, // direct link, already resolved
+            title: title,
+            relativePath: relativePath,
+            provider: 'premiumize',
+            premiumizeHash: infohash,
+            premiumizePath: file.path,
+            torrentHash: infohash,
+            sizeBytes: file.size > 0 ? file.size : null,
+          ),
+        );
+      }
+
+      final totalBytes = candidates.fold<int>(
+        0,
+        (sum, c) => sum + c.file.size,
+      );
+      final subtitle =
+          '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+      if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        dialogOpen = false;
+      }
+      if (!context.mounted) return;
+      MainPageBridge.notifyPlayerLaunching();
+      final viewMode = PlaylistViewModeStorage.fromStorageString(
+        savedViewModeString,
+      );
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: playlistEntries[startIndex].url,
+          title: fallbackTitle,
+          subtitle: subtitle,
+          playlist: playlistEntries,
+          startIndex: startIndex,
+          viewMode: viewMode,
+          disableAutoResume: playRandom,
+          contentImdbId: item['imdbId'] as String?,
+          contentType: item['contentType'] as String?,
+          suppressTraktAutoSync: true,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to prepare Premiumize playlist: ${e.toString()}'),
+        ),
+      );
+    } finally {
+      if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  /// Plays a Premiumize playlist item that was saved from the cloud browser
+  /// (keyed by cloud item id rather than a torrent hash). Direct links are
+  /// re-resolved lazily via `/item/details`, so saved items keep working even
+  /// after their original links expire.
+  static Future<void> _playPremiumizeCloudItem(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    required String fallbackTitle,
+    bool playRandom = false,
+  }) async {
+    final String? apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add your Premiumize API key in Settings to play playlist items.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final String kind = (item['kind'] as String?) ?? 'single';
+
+    if (!context.mounted) return;
+    bool dialogOpen = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogOpen = true;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      },
+    );
+
+    void closeDialog() {
+      if (dialogOpen && context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        dialogOpen = false;
+      }
+    }
+
+    try {
+      final savedViewModeString =
+          await StorageService.getPlaylistItemViewMode(item);
+
+      if (kind == 'single') {
+        final fileMeta = item['premiumizeFile'] as Map<String, dynamic>?;
+        final String? itemId =
+            (item['premiumizeItemId'] ?? fileMeta?['id'])?.toString();
+        if (itemId == null || itemId.isEmpty) {
+          closeDialog();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Missing Premiumize file information.')),
+          );
+          return;
+        }
+        final resolved =
+            await PremiumizeService.resolveItemById(apiKey, itemId);
+        if (resolved == null || resolved.link.isEmpty) {
+          closeDialog();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This file is no longer in your Premiumize cloud.'),
+            ),
+          );
+          return;
+        }
+        final String resolvedTitle =
+            (item['title'] as String?)?.isNotEmpty == true
+                ? item['title'] as String
+                : (fileMeta?['name']?.toString() ?? fallbackTitle);
+        final int? sizeBytes = resolved.size > 0
+            ? resolved.size
+            : int.tryParse(fileMeta?['size']?.toString() ?? '');
+
+        closeDialog();
+        if (!context.mounted) return;
+        MainPageBridge.notifyPlayerLaunching();
+        final viewMode =
+            PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: resolved.link,
+            title: resolvedTitle,
+            subtitle:
+                sizeBytes != null ? Formatters.formatFileSize(sizeBytes) : null,
+            playlist: [
+              PlaylistEntry(
+                url: resolved.link,
+                title: resolvedTitle,
+                provider: 'premiumize',
+                premiumizeItemId: itemId,
+                sizeBytes: sizeBytes,
+              ),
+            ],
+            startIndex: 0,
+            viewMode: viewMode,
+            contentImdbId: item['imdbId'] as String?,
+            contentType: item['contentType'] as String?,
+            suppressTraktAutoSync: true,
+          ),
+        );
+        return;
+      }
+
+      // Collection — metadata for each file is stored alongside its item id.
+      final filesRaw = item['premiumizeFiles'] as List<dynamic>?;
+      final idsRaw = item['premiumizeItemIds'] as List<dynamic>?;
+      final metas = <Map<String, dynamic>>[];
+      if (filesRaw != null && filesRaw.isNotEmpty) {
+        for (final f in filesRaw) {
+          if (f is Map) {
+            metas.add(Map<String, dynamic>.from(f));
+          }
+        }
+      } else if (idsRaw != null) {
+        for (final id in idsRaw) {
+          metas.add({'id': id.toString(), 'name': 'File ${id.toString()}'});
+        }
+      }
+
+      // Keep only video files (when names are available to tell).
+      var videoMetas = metas
+          .where((m) => FileUtils.isVideoFile(m['name']?.toString() ?? ''))
+          .toList();
+      if (videoMetas.isEmpty) videoMetas = metas;
+
+      if (videoMetas.isEmpty) {
+        closeDialog();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable Premiumize video files found.'),
+          ),
+        );
+        return;
+      }
+
+      final candidates = videoMetas.map((m) {
+        final name = m['name']?.toString() ?? '';
+        return _PremiumizeCloudCandidate(
+          id: m['id']?.toString() ?? '',
+          displayName: name.isNotEmpty ? name : 'File ${m['id']}',
+          sizeBytes: int.tryParse(m['size']?.toString() ?? '') ?? 0,
+          info: SeriesParser.parseFilename(name),
+        );
+      }).where((c) => c.id.isNotEmpty).toList();
+
+      if (candidates.isEmpty) {
+        closeDialog();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable Premiumize video files found.'),
+          ),
+        );
+        return;
+      }
+
+      final filenames = candidates.map((c) => c.displayName).toList();
+      final bool isSeriesCollection =
+          candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+      if (savedViewModeString == 'sortedAZ') {
+        candidates.sort(
+          (a, b) =>
+              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      } else if (isSeriesCollection) {
+        candidates.sort((a, b) {
+          final seasonCompare =
+              (a.info.season ?? 0).compareTo(b.info.season ?? 0);
+          if (seasonCompare != 0) return seasonCompare;
+          final episodeCompare =
+              (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
+          if (episodeCompare != 0) return episodeCompare;
+          return a.displayName.toLowerCase().compareTo(
+                b.displayName.toLowerCase(),
+              );
+        });
+      } else {
+        candidates.sort(
+          (a, b) =>
+              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+        );
+      }
+
+      int startIndex = 0;
+      if (isSeriesCollection) {
+        startIndex =
+            _findFirstEpisodeIndex(candidates.map((c) => c.info).toList());
+      }
+      if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
+      if (playRandom && candidates.length > 1) {
+        startIndex = Random().nextInt(candidates.length);
+      }
+
+      // Resolve only the starting item's URL up front; the rest resolve lazily.
+      final resolvedStart =
+          await PremiumizeService.resolveItemById(apiKey, candidates[startIndex].id);
+      if (resolvedStart == null || resolvedStart.link.isEmpty) {
+        closeDialog();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get Premiumize streaming URL.'),
+          ),
+        );
+        return;
+      }
+
+      final playlistEntries = <PlaylistEntry>[];
+      for (int i = 0; i < candidates.length; i++) {
+        final candidate = candidates[i];
+        final episodeLabel = _formatPikPakPlaylistTitle(
+          info: candidate.info,
+          fallback: candidate.displayName,
+          isSeriesCollection: isSeriesCollection,
+        );
+        final title = _composePikPakEntryTitle(
+          seriesTitle: candidate.info.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: candidate.displayName,
+        );
+        playlistEntries.add(
+          PlaylistEntry(
+            url: i == startIndex ? resolvedStart.link : '',
+            title: title,
+            provider: 'premiumize',
+            premiumizeItemId: candidate.id,
+            sizeBytes: candidate.sizeBytes > 0 ? candidate.sizeBytes : null,
+          ),
+        );
+      }
+
+      final totalBytes =
+          candidates.fold<int>(0, (sum, c) => sum + c.sizeBytes);
+      final subtitle =
+          '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+      closeDialog();
+      if (!context.mounted) return;
+      MainPageBridge.notifyPlayerLaunching();
+      final viewMode =
+          PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: playlistEntries[startIndex].url,
+          title: fallbackTitle,
+          subtitle: subtitle,
+          playlist: playlistEntries,
+          startIndex: startIndex,
+          viewMode: viewMode,
+          disableAutoResume: playRandom,
+          contentImdbId: item['imdbId'] as String?,
+          contentType: item['contentType'] as String?,
+          suppressTraktAutoSync: true,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Failed to prepare Premiumize playlist: ${e.toString()}'),
+        ),
+      );
+    } finally {
+      closeDialog();
+    }
+  }
+
   // ── WebDAV ─────────────────────────────────────────────────────────────────
 
   static Future<void> _playWebDavItem(
@@ -2034,6 +2611,30 @@ class _WebDavPlaylistCandidate {
   final SeriesInfo info;
   final String displayName;
   _WebDavPlaylistCandidate({
+    required this.file,
+    required this.info,
+    required this.displayName,
+  });
+}
+
+class _PremiumizeCloudCandidate {
+  final String id;
+  final String displayName;
+  final int sizeBytes;
+  final SeriesInfo info;
+  _PremiumizeCloudCandidate({
+    required this.id,
+    required this.displayName,
+    required this.sizeBytes,
+    required this.info,
+  });
+}
+
+class _PremiumizePlaylistCandidate {
+  final PremiumizeFile file;
+  final SeriesInfo info;
+  final String displayName;
+  _PremiumizePlaylistCandidate({
     required this.file,
     required this.info,
     required this.displayName,

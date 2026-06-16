@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/premiumize_user.dart';
 import '../models/premiumize_file.dart';
+import '../models/premiumize_folder_item.dart';
+import '../models/premiumize_transfer.dart';
 
 class PremiumizeService {
   static const String _baseUrl = 'https://www.premiumize.me/api';
@@ -127,6 +129,16 @@ class PremiumizeService {
   static Future<bool> isCached(String apiKey, String item) async {
     final results = await checkCache(apiKey, [item]);
     return results.isNotEmpty && results.first;
+  }
+
+  /// Re-resolves ready-to-use direct download links for the torrent identified
+  /// by [infohash]. Convenience wrapper around [directDownload] that builds the
+  /// magnet for the caller. Used to refresh playlist links at playback time.
+  static Future<List<PremiumizeFile>> resolveFilesByHash(
+    String apiKey,
+    String infohash,
+  ) {
+    return directDownload(apiKey, 'magnet:?xt=urn:btih:$infohash');
   }
 
   /// Resolves [src] (a magnet link / supported link) into ready-to-use direct
@@ -290,16 +302,25 @@ class PremiumizeService {
   }
 
   /// Adds [src] (a magnet link) to the user's Premiumize cloud for asynchronous
-  /// fetching (used when the content is not yet cached). Returns the transfer
-  /// id on success. Throws on error.
-  static Future<String> createTransfer(String apiKey, String src) async {
+  /// fetching (used when the content is not yet cached). When [folderId] is
+  /// supplied the content is placed inside that cloud folder. Returns the
+  /// transfer id on success. Throws on error.
+  static Future<String> createTransfer(
+    String apiKey,
+    String src, {
+    String? folderId,
+  }) async {
     final uri = Uri.parse(
       '$_baseUrl/transfer/create',
     ).replace(queryParameters: {'apikey': apiKey});
     try {
       debugPrint('PremiumizeService: Creating transfer…');
+      final body = {'src': src};
+      if (folderId != null && folderId.isNotEmpty) {
+        body['folder_id'] = folderId;
+      }
       final response = await http
-          .post(uri, body: {'src': src})
+          .post(uri, body: body)
           .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) {
         debugPrint(
@@ -317,6 +338,249 @@ class PremiumizeService {
     } catch (e) {
       debugPrint('PremiumizeService: transfer/create failed: $e');
       throw Exception('Premiumize transfer/create failed: $e');
+    }
+  }
+
+  // ── Cloud library browsing ─────────────────────────────────────────────────
+
+  /// Lists the contents of a cloud folder. Pass a null/empty [folderId] for the
+  /// root. Throws on error.
+  static Future<PremiumizeFolderListing> listFolder(
+    String apiKey, {
+    String? folderId,
+  }) async {
+    final params = <String, String>{'apikey': apiKey};
+    if (folderId != null && folderId.isNotEmpty) params['id'] = folderId;
+    final uri =
+        Uri.parse('$_baseUrl/folder/list').replace(queryParameters: params);
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to list folder: ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+      final content = payload['content'];
+      final items = content is List
+          ? content
+              .whereType<Map<String, dynamic>>()
+              .map(PremiumizeFolderItem.fromJson)
+              .where((i) => i.id.isNotEmpty)
+              .toList()
+          : <PremiumizeFolderItem>[];
+      return PremiumizeFolderListing(
+        items: items,
+        folderName: payload['name']?.toString(),
+        parentId: payload['parent_id']?.toString(),
+      );
+    } catch (e) {
+      debugPrint('PremiumizeService: folder/list failed: $e');
+      throw Exception('Premiumize folder/list failed: $e');
+    }
+  }
+
+  /// Recursively lists every file (no folders) under [folderId], stamping each
+  /// with a [PremiumizeFolderItem.relativePath] preserving the folder
+  /// structure. Used for folder play/download.
+  static Future<List<PremiumizeFolderItem>> listFolderRecursive(
+    String apiKey,
+    String folderId, {
+    String basePath = '',
+    int depth = 0,
+  }) async {
+    // Guard against pathological/cyclic structures.
+    if (depth > 12) return const [];
+    final result = <PremiumizeFolderItem>[];
+    final listing = await listFolder(apiKey, folderId: folderId);
+    for (final item in listing.items) {
+      if (item.isFolder) {
+        final childBase =
+            basePath.isEmpty ? item.name : '$basePath/${item.name}';
+        result.addAll(
+          await listFolderRecursive(
+            apiKey,
+            item.id,
+            basePath: childBase,
+            depth: depth + 1,
+          ),
+        );
+      } else {
+        final rel = basePath.isEmpty ? item.name : '$basePath/${item.name}';
+        result.add(item.copyWith(relativePath: rel));
+      }
+    }
+    return result;
+  }
+
+  /// Searches the user's entire cloud by name (server-side, recursive across
+  /// all folders). Returns matching folders and files in the same shape as
+  /// [listFolder]. Free (no fair-use cost). Throws on error.
+  static Future<List<PremiumizeFolderItem>> searchCloud(
+    String apiKey,
+    String query,
+  ) async {
+    final uri = Uri.parse('$_baseUrl/folder/search')
+        .replace(queryParameters: {'apikey': apiKey, 'q': query});
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('Search failed: ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+      final content = payload['content'];
+      return content is List
+          ? content
+              .whereType<Map<String, dynamic>>()
+              .map(PremiumizeFolderItem.fromJson)
+              .where((i) => i.id.isNotEmpty)
+              .toList()
+          : <PremiumizeFolderItem>[];
+    } catch (e) {
+      debugPrint('PremiumizeService: folder/search failed: $e');
+      throw Exception('Premiumize search failed: $e');
+    }
+  }
+
+  /// Fetches fresh details (and a fresh direct [PremiumizeFile.link]) for a
+  /// cloud file by its item id. Used to re-resolve playlist links that were
+  /// saved from the cloud browser. Returns null if the item no longer exists.
+  static Future<PremiumizeFile?> resolveItemById(
+    String apiKey,
+    String itemId,
+  ) async {
+    final uri = Uri.parse('$_baseUrl/item/details')
+        .replace(queryParameters: {'apikey': apiKey, 'id': itemId});
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) return null;
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') return null;
+      final link = payload['link']?.toString() ?? '';
+      final stream = payload['stream_link']?.toString();
+      if (link.isEmpty) return null;
+      return PremiumizeFile(
+        path: payload['name']?.toString() ?? '',
+        size: _intFrom(payload['size']),
+        link: link,
+        streamLink: (stream != null && stream.isNotEmpty) ? stream : null,
+      );
+    } catch (e) {
+      debugPrint('PremiumizeService: item/details failed: $e');
+      return null;
+    }
+  }
+
+  static int _intFrom(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  /// Deletes a cloud folder. Throws on error.
+  static Future<void> deleteFolder(String apiKey, String folderId) =>
+      _deleteByEndpoint(apiKey, '/folder/delete', folderId);
+
+  /// Deletes a single cloud file. Throws on error.
+  static Future<void> deleteItem(String apiKey, String itemId) =>
+      _deleteByEndpoint(apiKey, '/item/delete', itemId);
+
+  static Future<void> _deleteByEndpoint(
+    String apiKey,
+    String endpoint,
+    String id,
+  ) async {
+    final uri = Uri.parse('$_baseUrl$endpoint');
+    try {
+      final response = await http
+          .post(uri, body: {'apikey': apiKey, 'id': id})
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+    } catch (e) {
+      debugPrint('PremiumizeService: delete ($endpoint) failed: $e');
+      throw Exception('Premiumize delete failed: $e');
+    }
+  }
+
+  /// Generates a ZIP download URL for an entire cloud folder.
+  static Future<String> generateFolderZip(String apiKey, String folderId) =>
+      _generateZip(apiKey, folderId: folderId);
+
+  /// Generates a ZIP download URL for a single cloud file.
+  static Future<String> generateItemZip(String apiKey, String fileId) =>
+      _generateZip(apiKey, fileId: fileId);
+
+  // ── Transfers ───────────────────────────────────────────────────────────────
+
+  /// Lists all transfers (queued/running/finished) on the account.
+  static Future<List<PremiumizeTransfer>> listTransfers(String apiKey) async {
+    final uri = Uri.parse('$_baseUrl/transfer/list')
+        .replace(queryParameters: {'apikey': apiKey});
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to list transfers: ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+      final transfers = payload['transfers'];
+      if (transfers is! List) return const [];
+      return transfers
+          .whereType<Map<String, dynamic>>()
+          .map(PremiumizeTransfer.fromJson)
+          .where((t) => t.id.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('PremiumizeService: transfer/list failed: $e');
+      throw Exception('Premiumize transfer/list failed: $e');
+    }
+  }
+
+  /// Deletes a single transfer by id. Throws on error.
+  static Future<void> deleteTransfer(String apiKey, String transferId) =>
+      _deleteByEndpoint(apiKey, '/transfer/delete', transferId);
+
+  /// Clears all finished transfers from the list. Throws on error.
+  static Future<void> clearFinishedTransfers(String apiKey) async {
+    final uri = Uri.parse('$_baseUrl/transfer/clearfinished');
+    try {
+      final response = await http
+          .post(uri, body: {'apikey': apiKey})
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+      final Map<String, dynamic> payload =
+          json.decode(response.body) as Map<String, dynamic>;
+      if (payload['status']?.toString() != 'success') {
+        final message = payload['message']?.toString() ?? 'unknown error';
+        throw Exception(message);
+      }
+    } catch (e) {
+      debugPrint('PremiumizeService: transfer/clearfinished failed: $e');
+      throw Exception('Premiumize clear finished failed: $e');
     }
   }
 }

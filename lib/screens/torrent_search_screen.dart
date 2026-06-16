@@ -7298,8 +7298,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   List<String> _postTorrentActionOptionsForProvider(String providerId) {
     if (providerId == 'premiumize') {
-      // Premiumize has no dedicated nav tab ('open') and no playlist support yet.
-      return const ['none', 'choose', 'play', 'download', 'channel'];
+      // Premiumize has no dedicated nav tab ('open').
+      return const ['none', 'choose', 'play', 'download', 'playlist', 'channel'];
     }
     return const [
       'none',
@@ -13857,6 +13857,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           return;
         }
         break; // fall through to the chooser
+      case 'playlist':
+        if (hasVideo) {
+          await _addPremiumizeToPlaylist(
+            files,
+            torrentName,
+            infohash: infohash ?? torrent.infohash,
+          );
+          return;
+        }
+        break; // fall through to the chooser
       case 'choose':
       default:
         break;
@@ -13972,6 +13982,24 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 torrentName,
                                 torrent,
                                 infohash: infohash,
+                              );
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.playlist_add_rounded,
+                            color: const Color(0xFF818CF8),
+                            title: 'Add to playlist',
+                            subtitle: hasVideo
+                                ? 'Save to your Debrify playlist.'
+                                : 'Available for torrents with video files.',
+                            enabled: hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              _addPremiumizeToPlaylist(
+                                files,
+                                torrentName,
+                                infohash: infohash ?? torrent.infohash,
                               );
                             },
                           ),
@@ -14425,6 +14453,71 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         isError: true,
       );
     }
+  }
+
+  Future<void> _addPremiumizeToPlaylist(
+    List<PremiumizeFile> files,
+    String torrentName, {
+    required String infohash,
+  }) async {
+    final videoFiles = files.where(_premiumizeFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) {
+      _showPremiumizeSnack(
+        'No playable Premiumize video files found.',
+        isError: true,
+      );
+      return;
+    }
+    if (infohash.isEmpty) {
+      _showPremiumizeSnack(
+        'Cannot add to playlist: missing torrent hash.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'premiumize',
+        'title': FileUtils.cleanPlaylistTitle(torrentName),
+        'kind': 'single',
+        'torrent_hash': infohash,
+        'premiumizePath': file.path,
+        'sizeBytes': file.size,
+        if (_activeAdvancedSelection?.imdbId != null)
+          'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null)
+          'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null)
+          'posterUrl': _activeAdvancedSelection!.posterUrl,
+      });
+      if (!mounted) return;
+      _showPremiumizeSnack(
+        added ? 'Added to playlist' : 'Already in playlist',
+        isError: !added,
+      );
+      return;
+    }
+
+    final added = await StorageService.addPlaylistItemRaw({
+      'provider': 'premiumize',
+      'title': FileUtils.cleanPlaylistTitle(torrentName),
+      'kind': 'collection',
+      'torrent_hash': infohash,
+      'count': videoFiles.length,
+      if (_activeAdvancedSelection?.imdbId != null)
+        'imdbId': _activeAdvancedSelection!.imdbId,
+      if (_activeAdvancedSelection?.contentType != null)
+        'contentType': _activeAdvancedSelection!.contentType,
+      if (_activeAdvancedSelection?.posterUrl != null)
+        'posterUrl': _activeAdvancedSelection!.posterUrl,
+    });
+    if (!mounted) return;
+    _showPremiumizeSnack(
+      added ? 'Added collection to playlist' : 'Already in playlist',
+      isError: !added,
+    );
   }
 
   void _showTorboxLoadingDialog(String torrentName) {

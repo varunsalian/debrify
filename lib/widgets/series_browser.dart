@@ -293,11 +293,22 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           final rdId = widget.playlistItem?['rdTorrentId'] as String?;
           final torboxId = widget.playlistItem?['torboxTorrentId']?.toString();
           final pikpakId = widget.playlistItem?['pikpakFileId'] as String?;
+          final isPremiumize =
+              (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+              'premiumize';
+          final premiumizeHash = isPremiumize
+              ? (widget.playlistItem?['torrent_hash'] as String?)
+              : null;
+          final premiumizeItemId = isPremiumize
+              ? (widget.playlistItem?['premiumizeItemId']?.toString())
+              : null;
           await StorageService.updatePlaylistItemImdbId(
             imdbId,
             rdTorrentId: rdId,
             torboxTorrentId: torboxId,
             pikpakCollectionId: pikpakId,
+            premiumizeHash: premiumizeHash,
+            premiumizeItemId: premiumizeItemId,
             force: true,
           );
         }
@@ -390,6 +401,21 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
             pikpakCollectionId: pikpakCollectionId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'premiumize') {
+        final premiumizeHash = widget.playlistItem!['torrent_hash'] as String?;
+        final premiumizeItemId =
+            widget.playlistItem!['premiumizeItemId']?.toString();
+        if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            premiumizeHash: premiumizeHash,
+          );
+        } else if (premiumizeItemId != null && premiumizeItemId.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            premiumizeItemId: premiumizeItemId,
           );
         }
       }

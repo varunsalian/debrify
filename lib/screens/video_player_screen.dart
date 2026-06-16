@@ -13,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
+import '../services/premiumize_service.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -3220,6 +3221,57 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return url;
       } catch (e) {
         throw Exception('PikPak link failed: $e');
+      }
+    }
+
+    // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
+    // cloud item id (items saved from the cloud browser have no infohash).
+    if (entry.premiumizeItemId != null &&
+        entry.premiumizeItemId!.isNotEmpty) {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('Missing Premiumize API key');
+      }
+      try {
+        final file = await PremiumizeService.resolveItemById(
+          apiKey,
+          entry.premiumizeItemId!,
+        );
+        if (file == null || file.link.isEmpty) {
+          throw Exception('File not found in Premiumize cloud');
+        }
+        return file.link;
+      } catch (e) {
+        throw Exception('Premiumize link failed: $e');
+      }
+    }
+
+    // Premiumize lazy resolution: re-fetch direct links by infohash and match
+    // the file by its stored path (Premiumize direct links eventually expire).
+    final hasPremiumizeMetadata =
+        entry.premiumizeHash != null && entry.premiumizePath != null;
+    if (provider == 'premiumize' || hasPremiumizeMetadata) {
+      final hash = entry.premiumizeHash;
+      final path = entry.premiumizePath;
+      if (hash == null || hash.isEmpty || path == null || path.isEmpty) {
+        throw Exception('Premiumize file metadata missing');
+      }
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('Missing Premiumize API key');
+      }
+      try {
+        final files = await PremiumizeService.resolveFilesByHash(apiKey, hash);
+        final match = files.firstWhere(
+          (f) => f.path == path,
+          orElse: () => throw Exception('File not found in Premiumize cloud'),
+        );
+        if (match.link.isEmpty) {
+          throw Exception('Premiumize returned an empty stream URL');
+        }
+        return match.link;
+      } catch (e) {
+        throw Exception('Premiumize link failed: $e');
       }
     }
 

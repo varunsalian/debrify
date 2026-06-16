@@ -25,6 +25,7 @@ import '../services/aptabase_service.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/premiumize_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
@@ -2119,6 +2120,48 @@ class VideoPlayerLauncher {
       return url;
     }
 
+    // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
+    // cloud item id (items saved from the cloud browser have no infohash).
+    if (entry.premiumizeItemId != null &&
+        entry.premiumizeItemId!.isNotEmpty) {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('Missing Premiumize API key');
+      }
+      final file = await PremiumizeService.resolveItemById(
+        apiKey,
+        entry.premiumizeItemId!,
+      );
+      if (file == null || file.link.isEmpty) {
+        throw Exception('File not found in Premiumize cloud');
+      }
+      return file.link;
+    }
+
+    // Premiumize lazy resolution: re-fetch direct links by infohash and match
+    // the file by its stored path (Premiumize direct links eventually expire).
+    final hasPremiumizeMetadata =
+        entry.premiumizeHash != null && entry.premiumizePath != null;
+    if (provider == 'premiumize' || hasPremiumizeMetadata) {
+      final hash = entry.premiumizeHash;
+      final path = entry.premiumizePath;
+      if (hash != null && hash.isNotEmpty && path != null && path.isNotEmpty) {
+        final apiKey = await StorageService.getPremiumizeApiKey();
+        if (apiKey == null || apiKey.isEmpty) {
+          throw Exception('Missing Premiumize API key');
+        }
+        final files = await PremiumizeService.resolveFilesByHash(apiKey, hash);
+        final match = files.firstWhere(
+          (f) => f.path == path,
+          orElse: () => throw Exception('File not found in Premiumize cloud'),
+        );
+        if (match.link.isEmpty) {
+          throw Exception('Premiumize returned an empty stream URL');
+        }
+        return match.link;
+      }
+    }
+
     if (entry.restrictedLink != null && entry.restrictedLink!.isNotEmpty) {
       final apiKey = await StorageService.getApiKey();
       if (apiKey == null || apiKey.isEmpty) {
@@ -2771,6 +2814,9 @@ class _AndroidTvPlaybackPayloadBuilder {
               pikpakFileId: entry.pikpakFileId,
               rdTorrentId: entry.rdTorrentId,
               rdLinkIndex: entry.rdLinkIndex,
+              premiumizeHash: entry.premiumizeHash,
+              premiumizePath: entry.premiumizePath,
+              premiumizeItemId: entry.premiumizeItemId,
             ),
           );
         } else {

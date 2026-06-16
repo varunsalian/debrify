@@ -30,6 +30,8 @@ class StorageService {
       'premiumize_post_torrent_action';
   static const String _premiumizeCacheCheckPref =
       'premiumize_check_cache_before_search';
+  static const String _premiumizeHiddenFromNavKey =
+      'premiumize_hidden_from_nav';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -411,6 +413,21 @@ class StorageService {
   static Future<void> setPremiumizeIntegrationEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_premiumizeIntegrationEnabledKey, enabled);
+  }
+
+  static Future<bool> getPremiumizeHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_premiumizeHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setPremiumizeHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_premiumizeHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearPremiumizeHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_premiumizeHiddenFromNavKey);
   }
 
   static Future<bool> isInitialSetupComplete() async {
@@ -1764,6 +1781,18 @@ class StorageService {
       final joined = pikpakFileIds.map((e) => e.toString()).join(',');
       return '$provider|pikpak:files:${joined.toLowerCase()}';
     }
+    // Premiumize cloud-browser items are keyed by cloud item id (they have no
+    // torrent hash, unlike items added from search).
+    final dynamic premiumizeItemId = item['premiumizeItemId'];
+    if (premiumizeItemId != null &&
+        premiumizeItemId.toString().isNotEmpty) {
+      return '$provider|premiumize:item:${premiumizeItemId.toString().toLowerCase()}';
+    }
+    final dynamic premiumizeItemIds = item['premiumizeItemIds'];
+    if (premiumizeItemIds is List && premiumizeItemIds.isNotEmpty) {
+      final joined = premiumizeItemIds.map((e) => e.toString()).join(',');
+      return '$provider|premiumize:items:${joined.toLowerCase()}';
+    }
     final String? rdId = (item['rdTorrentId'] as String?);
     if (rdId != null && rdId.isNotEmpty) {
       return '$provider|rd:${rdId.toLowerCase()}';
@@ -2028,6 +2057,8 @@ class StorageService {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? premiumizeHash,
+    String? premiumizeItemId,
     String? webDavServerId,
     String? webDavBaseUrl,
     String? webDavPath,
@@ -2102,6 +2133,36 @@ class StorageService {
       }
     }
 
+    // Search by Premiumize infohash if provided and not found yet (Premiumize)
+    if (itemIndex == -1 &&
+        premiumizeHash != null &&
+        premiumizeHash.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'premiumize') &&
+            (item['torrent_hash'] as String?)?.toLowerCase() ==
+                premiumizeHash.toLowerCase(),
+      );
+      if (itemIndex != -1) {
+        print('  ✅ Found item by premiumizeHash at index $itemIndex');
+      }
+    }
+
+    // Search by Premiumize cloud item id if provided and not found yet
+    // (cloud-browser items have no torrent hash).
+    if (itemIndex == -1 &&
+        premiumizeItemId != null &&
+        premiumizeItemId.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'premiumize') &&
+            (item['premiumizeItemId']?.toString() == premiumizeItemId),
+      );
+      if (itemIndex != -1) {
+        print('  ✅ Found item by premiumizeItemId at index $itemIndex');
+      }
+    }
+
     if (itemIndex == -1 &&
         webDavPath != null &&
         webDavPath.isNotEmpty &&
@@ -2140,6 +2201,8 @@ class StorageService {
     String? rdTorrentId,
     String? torboxTorrentId,
     String? pikpakCollectionId,
+    String? premiumizeHash,
+    String? premiumizeItemId,
     bool force = false,
   }) async {
     final items = await getPlaylistItemsRaw();
@@ -2148,6 +2211,27 @@ class StorageService {
     if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
       itemIndex = items.indexWhere(
         (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
+      );
+    }
+
+    if (itemIndex == -1 &&
+        premiumizeHash != null &&
+        premiumizeHash.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'premiumize') &&
+            (item['torrent_hash'] as String?)?.toLowerCase() ==
+                premiumizeHash.toLowerCase(),
+      );
+    }
+
+    if (itemIndex == -1 &&
+        premiumizeItemId != null &&
+        premiumizeItemId.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'premiumize') &&
+            (item['premiumizeItemId']?.toString() == premiumizeItemId),
       );
     }
 

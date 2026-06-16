@@ -67,6 +67,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
 
   final List<FocusNode> _itemFocusNodes = [];
   final List<bool> _itemFocusStates = [];
+  final ScrollController _scrollController = ScrollController();
   final FocusNode _selectAllFocusNode = FocusNode();
   final FocusNode _downloadButtonFocusNode = FocusNode();
   final FocusNode _cancelButtonFocusNode = FocusNode();
@@ -180,9 +181,23 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
     for (int i = 0; i < itemCount; i++) {
       final node = FocusNode(debugLabel: 'item-$i');
       node.addListener(() {
-        if (mounted) {
-          setState(() {
-            _itemFocusStates[i] = node.hasFocus;
+        if (!mounted) return;
+        setState(() {
+          _itemFocusStates[i] = node.hasFocus;
+        });
+        // Keep the focused row visible when navigating with a D-pad / arrows.
+        if (node.hasFocus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final ctx = node.context;
+            if (ctx != null) {
+              Scrollable.ensureVisible(
+                ctx,
+                // Match TvFocusScrollWrapper's convention used elsewhere.
+                alignment: 0.2,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
           });
         }
       });
@@ -363,6 +378,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
     _downloadButtonFocusNode.dispose();
     _cancelButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
+    _scrollController.dispose();
     for (final node in _itemFocusNodes) {
       node.dispose();
     }
@@ -538,7 +554,11 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
               // Folder and file list
               Flexible(
                 child: ListView.builder(
+                  controller: _scrollController,
                   shrinkWrap: true,
+                  // Keep a few off-screen rows built so ensureVisible can scroll
+                  // to the next focused item during D-pad navigation.
+                  cacheExtent: 600,
                   itemCount: _currentFolder.subfolders.length + _currentFolder.files.length,
                   itemBuilder: (context, index) {
                     final isFolder = index < _currentFolder.subfolders.length;

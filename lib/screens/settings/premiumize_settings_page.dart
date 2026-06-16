@@ -31,6 +31,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   bool _saving = false;
   bool _integrationEnabled = true;
   bool _checkCacheBeforeSearch = false;
+  bool _hiddenFromNav = false;
   String _postTorrentAction = 'choose';
 
   @override
@@ -45,11 +46,13 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
         await StorageService.getPremiumizeIntegrationEnabled();
     final cachePref = await StorageService.getPremiumizeCacheCheckEnabled();
     final postAction = await StorageService.getPremiumizePostTorrentAction();
+    final hiddenFromNav = await StorageService.getPremiumizeHiddenFromNav();
     setState(() {
       _savedApiKey = apiKey;
       _integrationEnabled = integrationEnabled;
       _checkCacheBeforeSearch = cachePref;
       _postTorrentAction = postAction;
+      _hiddenFromNav = hiddenFromNav;
       _loading = false;
     });
 
@@ -125,11 +128,106 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
 
   Future<void> _deleteKey() async {
     await StorageService.deletePremiumizeApiKey();
+    // Reset the hide-from-nav flag so the tab reappears after re-login
+    // (matches the Torbox/PikPak logout-to-unhide security model).
+    await StorageService.clearPremiumizeHiddenFromNav();
     PremiumizeAccountService.clearUserInfo();
+    if (mounted) {
+      setState(() => _hiddenFromNav = false);
+    }
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
     if (mounted) {
       Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _toggleHideFromNav(bool value) async {
+    if (value) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Hide Premiumize?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will hide the Premiumize tab from navigation.',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: Colors.amber.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To show Premiumize again, you must logout and login. This is a security measure.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      await StorageService.setPremiumizeHiddenFromNav(true);
+      setState(() => _hiddenFromNav = true);
+      MainPageBridge.notifyIntegrationChanged();
+      _snack('Premiumize hidden from navigation', err: false);
+    } else {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Security Restriction'),
+          content: SingleChildScrollView(
+            child: Text(
+              'To show Premiumize in navigation again, you must logout and login. This is a security measure to prevent unauthorized changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -392,6 +490,78 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                           ],
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Hide from Navigation Toggle
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _hiddenFromNav,
+                          onChanged:
+                              _savedApiKey != null ? _toggleHideFromNav : null,
+                          title: const Text(
+                            'Hide from Navigation',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            _savedApiKey == null
+                                ? 'Login to enable this option'
+                                : _hiddenFromNav
+                                ? 'Premiumize is hidden from navigation'
+                                : 'Show/hide Premiumize tab from navigation bar',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          secondary: Icon(
+                            _hiddenFromNav
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: _hiddenFromNav ? Colors.amber : null,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                        ),
+                        if (_hiddenFromNav)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'To show Premiumize in navigation again, please logout and login',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

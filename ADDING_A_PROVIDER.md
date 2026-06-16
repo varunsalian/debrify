@@ -168,11 +168,13 @@ What happens after adding a torrent (none / let-me-choose / play / download /
 add-to-channel), settable per provider — same as RD/Torbox.
 - Storage: `get/savePremiumizePostTorrentAction` (default 'choose').
 - Settings page: a "Post-Torrent Action" RadioListTile card (Premiumize excludes
-  'open' — no nav tab — and 'playlist' — not supported yet).
+  'open' — no nav tab; 'playlist' IS supported, see step 19).
 - Helpers: `_get/_savePostTorrentActionForProvider` already route 'premiumize';
-  `_postTorrentActionOptionsForProvider` returns the Premiumize subset so the
-  home **quick-controls** dialog shows the right options. `_addToPremiumize`'s
-  `_showPremiumizePostAddOptions` reads the pref and dispatches all 5 actions.
+  `_postTorrentActionOptionsForProvider` returns the Premiumize subset
+  (`none`, `choose`, `play`, `download`, `playlist`, `channel`) so the home
+  **quick-controls** dialog shows the right options. `_addToPremiumize`'s
+  `_showPremiumizePostAddOptions` reads the pref and dispatches all of them
+  (the `playlist` action → `_addPremiumizeToPlaylist`, see step 19).
 
 ## 15. Backup/restore (DONE for Premiumize)
 Include the provider's API key in the file backup and restore it on import.
@@ -415,8 +417,190 @@ on `f.path`; falls back to largest file on miss. This is better than the Torbox 
 | URL type | HTTPS download link | `streamLink` (HLS) preferred, `link` fallback |
 | Episode selection in `_resolve*` | `findLargestFileIndex` + `findEpisodeFileIndex` | same, but on `f.path` |
 
-## Not done yet (future steps)
-- [ ] **Navigation tab** (browse Premiumize cloud library) + hide-from-nav.
+## 19. Add to playlist (DONE for Premiumize)
+Save a torrent to a user playlist (single video or whole collection), then replay
+it later from the playlist UI on **all three playback surfaces**: the in-app Dart
+player, the native Android TV player, and the external player. Premiumize stores
+only the infohash + per-file path and **re-resolves direct links via `directdl`**
+at play time (links expire / spend points eagerly), so nothing stale is persisted.
+
+### Data model — what gets saved
+- **Single:** `{provider:'premiumize', kind:'single', title, torrent_hash:<infohash>,
+  premiumizePath:<file path>, sizeBytes}`.
+- **Collection:** `{provider:'premiumize', kind:'collection', title,
+  torrent_hash:<infohash>, count}`.
+- **Lazy-resolution fields** on `PlaylistEntry`
+  (`lib/screens/video_player/models/playlist_entry.dart`): add
+  `premiumizeHash` (infohash) + `premiumizePath` (matched on re-resolve). These
+  must be carried through **every** entry-reconstruction path or playback silently
+  loses the ability to refresh expired links.
+
+### Re-resolution helper
+- **`lib/services/premiumize_service.dart`** — `resolveFilesByHash(apiKey, infohash)`
+  builds `magnet:?xt=urn:btih:$infohash` → `directDownload` → `List<PremiumizeFile>`.
+  Match the saved file by **exact `file.path` string equality** (single play has a
+  `firstWhere(... orElse: first)` fallback; collections fill all URLs eagerly from
+  the one call).
+
+### Save from torrent search (`torrent_search_screen.dart`)
+- `_postTorrentActionOptionsForProvider` includes `'playlist'` (step 14).
+- `_showPremiumizePostAddOptions`: add a `case 'playlist':` auto-action **and** an
+  "Add to playlist" `_DebridActionTile` (`Icons.playlist_add_rounded`,
+  `0xFF818CF8`) → `_addPremiumizeToPlaylist(files, torrentName, infohash:...)`.
+- `_addPremiumizeToPlaylist`: single (filter via `_premiumizeFileLooksLikeVideo` →
+  store `premiumizePath`) vs collection (store `count`); both attach
+  imdb/contentType/poster from `_activeAdvancedSelection`.
+
+### Storage (`storage_service.dart`)
+- `computePlaylistDedupeKey` already keys Premiumize off `torrent_hash`
+  (`premiumize|hash:<hash>`) — **no change needed**.
+- `updatePlaylistItemImdbId` / `updatePlaylistItemPoster`: add a `premiumizeHash`
+  param; match on `provider == 'premiumize'` AND case-insensitive `torrent_hash`.
+- `addPlaylistItemRaw` stores Premiumize items cleanly (no RD hash-fetch — there's
+  no `rdTorrentId`).
+
+### Playback dispatch — wire ALL THREE surfaces
+1. **In-app Dart player** — `lib/screens/video_player_screen.dart`
+   `_resolvePlaylistEntryUrl`: add a Premiumize branch (before the
+   `restrictedLink` branch) → `resolveFilesByHash` → match `f.path == path` →
+   return `match.link`.
+2. **Native Android TV / external player** — `lib/services/video_player_launcher.dart`
+   - `_resolveEntryUrl`: same Premiumize branch (guard
+     `hash != null && hash.isNotEmpty && path != null && path.isNotEmpty`).
+   - `_prepareEntries` reconstruction: carry
+     `premiumizeHash: entry.premiumizeHash, premiumizePath: entry.premiumizePath`
+     (⚠️ easy to miss — drops re-resolution on TV/external).
+3. **Playlist launch service** — `lib/services/playlist_player_service.dart`
+   - `play()`: route `if (provider == 'premiumize') { await _playPremiumizeItem(...); return; }`.
+   - `_playPremiumizeItem`: single (match `premiumizePath`, fallback
+     `videoFiles.first`) + collection (series-aware sort, eager-fill all URLs from
+     one `resolveFilesByHash`, set `premiumizeHash`/`premiumizePath` on every
+     entry). Reuses `_findFirstEpisodeIndex`, `_formatPikPakPlaylistTitle`,
+     `_composePikPakEntryTitle`. Add `_PremiumizePlaylistCandidate` helper.
+
+### Playlist content browsing (`playlist_content_view_screen.dart`)
+- `_loadContent`: add `else if (provider == 'premiumize') _loadPremiumizeContent()`.
+- `_loadPremiumizeContent` + `_buildPremiumizeFileTree`: flat `RDFileNode` tree —
+  `name=fileName`, `path=file.path`, **`relativePath` = path with the first
+  (torrent) folder stripped**, `bytes=size`.
+- `_playFile` / `_playEpisode`: add `else if (provider == 'premiumize')
+  _playPremiumizePlaylist(...)` → re-resolve, build a `linkByPath` map, build
+  entries with `url` + `premiumizeHash` + `premiumizePath`.
+- `_saveImdbIdToPlaylist` / `_updatePlaylistPoster`: pass `premiumizeHash` (the
+  saved `torrent_hash`) to the storage updaters.
+
+### Sorting — no Premiumize-specific branch
+`_applySortedPlaylistOrder` groups folders off `node.relativePath ?? node.path`.
+Because `_buildPremiumizeFileTree` **pre-strips** the torrent folder into
+`relativePath`, the default branch is correct. Do **NOT** copy Torbox's runtime
+first-folder-skip (Torbox needs it only because it doesn't pre-strip).
+
+### Resume keys — RD-tier (filename-hash), by design
+Premiumize has **no** resume-key branch in `video_player_screen._resumeIdForEntry`,
+`video_player_launcher.resumeIdForEntry`, or
+`movie_collection_browser._resumeIdForEntry` — it falls to the shared
+`nameWithoutExt.hashCode` filename-hash, **identical to Real-Debrid**. Only Torbox
+(and PikPak in some paths) use ID-based keys because their file IDs are a stable
+identity Premiumize lacks. Adding ID-based keys here would *diverge* from RD and
+risk inconsistency with the search-playback path — leave it as filename-hash.
+
+### Series enrichment (`lib/widgets/series_browser.dart`)
+imdb update + `_updatePlaylistPoster`: add the `isPremiumize` flag + `premiumizeHash`
+and pass them to the storage updaters (mirror the PikPak/RD calls).
+
+### Provider badges (UI)
+- `home_playlist_section.dart` / `home_favorites_section.dart` `_providerInfo`:
+  `case 'premiumize': return ('PM', Color(0xFFFB923C), 'Premiumize');`.
+- `playlist_grid_card.dart` / `playlist_landscape_card.dart` badge fn:
+  `case 'premiumize': return 'PM';`.
+
+### Key differences vs Real-Debrid
+| | Real-Debrid | Premiumize |
+|---|---|---|
+| Saved link | restrictedLink (lazy unrestrict) | infohash + path (lazy `directdl`) |
+| Re-resolve | `unrestrictLink` per file | `resolveFilesByHash` (1 call, all files) |
+| Match key | restrictedLink string | `file.path` exact equality |
+| Resume key | filename-hash | filename-hash (same) |
+| Dedupe key | `torrent_hash` | `torrent_hash` (same) |
+
+## 20. Navigation tab — cloud library browser (DONE for Premiumize)
+A full-screen tab to browse the provider's cloud and act on items, mirroring the
+Torbox/PikPak pages. Premiumize's cloud is a **server-side folder hierarchy**
+(like PikPak/WebDAV), so the browser navigates folders by id rather than building
+a virtual tree. The closest template is
+`lib/screens/pikpak/pikpak_files_screen.dart`.
+
+### Cloud API (`lib/services/premiumize_service.dart`)
+Added: `listFolder(apiKey, {folderId})` (GET `/folder/list`, omit `id` for root),
+`listFolderRecursive` (depth-guarded, stamps `relativePath`), `resolveItemById`
+(GET `/item/details` → fresh `PremiumizeFile` for playlist re-resolution),
+`deleteFolder`/`deleteItem` (POST `/folder/delete` · `/item/delete`),
+`listTransfers` (GET `/transfer/list`), `deleteTransfer` (POST `/transfer/delete`),
+`clearFinishedTransfers` (POST `/transfer/clearfinished`),
+`generateFolderZip`/`generateItemZip`; and `createTransfer` gained an optional
+`folderId` (so "Add link" lands in the current folder).
+
+### Models
+- **`lib/models/premiumize_folder_item.dart`** — `PremiumizeFolderItem`
+  (id, name, type folder/file, size, `link`, `streamLink`, mimeType, createdAt,
+  `relativePath`; `isVideo`, `playableUrl` link-first) + `PremiumizeFolderListing`.
+  Note: `/folder/list` already returns `link`/`stream_link` for files, so play
+  and download need **no** extra resolve call.
+- **`lib/models/premiumize_transfer.dart`** — `PremiumizeTransfer`
+  (id, name, status, progress 0–1, message, folderId/fileId; `isFinished`,
+  `isError`, `isRunning`, `progressPercent`).
+
+### Screen (`lib/screens/premiumize/premiumize_files_screen.dart`)
+Two views (a root toggle): **My Files** (folder browser) + **Transfers**
+(queued/running/finished, with per-transfer delete + "Clear finished").
+Per-item actions match PikPak: Open (folder), Play (file/folder, series-aware),
+Download (file direct / folder via `FileSelectionDialog`), Add to Playlist
+(file/folder), Delete; plus multi-select bulk delete, in-folder Search, Raw /
+Sort(A-Z) view modes, "Add to Premiumize" (magnet/link), pull-to-refresh, and
+full TV/D-pad focus (`TvFocusScrollWrapper`, `registerTvContentFocusHandler(11)`).
+
+### Add-to-Playlist needs cloud item ids (no infohash!)
+Cloud items have no torrent hash, so they're saved/resolved by **cloud item id**
+(`premiumizeItemId`), mirroring PikPak's `pikpakFileId` — a path **parallel** to
+the search-added hash+path path, not a replacement.
+- `PlaylistEntry.premiumizeItemId` added; carried through `_prepareEntries`.
+- Both player resolvers (`video_player_screen._resolvePlaylistEntryUrl`,
+  `video_player_launcher._resolveEntryUrl`) gained an item-id branch **before**
+  the hash branch (`resolveItemById` → fresh link).
+- `playlist_player_service`: `_playPremiumizeItem` routes to a new
+  `_playPremiumizeCloudItem` when there's no hash but cloud ids exist
+  (single via `premiumizeFile`, collection via `premiumizeFiles`/`premiumizeItemIds`).
+- `playlist_content_view_screen`: `_loadPremiumizeContent` builds the tree from
+  stored file metadata (item id in `RDFileNode.path`); `_playPremiumizePlaylist`
+  has a cloud branch resolving the start item via `resolveItemById`.
+- `storage_service.computePlaylistDedupeKey`: `premiumize:item:<id>` /
+  `premiumize:items:<joined>` cases; `updatePlaylistItemImdbId`/`Poster` gained a
+  `premiumizeItemId` match (content-view + series_browser pass it).
+- Saved shapes — single: `{provider, kind:'single', premiumizeItemId,
+  premiumizeFile:{id,name,size}}`; collection: `{provider, kind:'collection',
+  premiumizeItemId:<folderId>, premiumizeFiles:[{id,name,size}],
+  premiumizeItemIds:[…], count}`.
+
+### Hide-from-nav + main wiring
+- Storage: `premiumize_hidden_from_nav` key + `get/set/clearPremiumizeHiddenFromNav`.
+- Settings page: a "Hide from Navigation" `SwitchListTile` (confirm-to-hide,
+  logout-to-unhide); `_deleteKey` clears the flag.
+- `main.dart`: `_pages`/`_titles`/`_icons` index **11**
+  (`Icons.workspace_premium_rounded`); `_premiumizeEnabled` +
+  `_premiumizeHiddenFromNav` state; loaded in `_loadIntegrationState`; threaded
+  through `_applyIntegrationState` + `_computeVisibleNavIndices` (both TV and
+  non-TV branches, and the no-provider early-return); `_navSectionForIndex`
+  case 11 → 'Library'; `_onItemTapped` tab-key `case 11 → 'premiumize'` (⚠️
+  required or the global/TV back button is dead on the tab); switchTab
+  hidden-vs-missing snackbar branch for index 11.
+
+### Key differences vs PikPak
+| | PikPak | Premiumize |
+|---|---|---|
+| Play/download URL | `getFileDetails` per file (links expire fast) | `link`/`stream_link` already in `folder/list` (no extra call) |
+| Playlist re-resolve | `pikpakFileId` → `getFileDetails` | `premiumizeItemId` → `item/details` |
+| Pagination | page tokens | none (`folder/list` returns all) |
+| Second view | — | **Transfers** (`/transfer/list`) |
 
 ---
 

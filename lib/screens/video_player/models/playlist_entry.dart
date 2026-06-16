@@ -13,6 +13,9 @@ class PlaylistEntry {
   final String? pikpakFileId; // PikPak file identifier for lazy resolution
   final String? rdTorrentId; // Real-Debrid torrent ID for lazy resolution
   final int? rdLinkIndex; // Real-Debrid link index for file in torrent
+  final String? premiumizeHash; // Premiumize torrent infohash for lazy resolution
+  final String? premiumizePath; // Premiumize file path (matched on re-resolve)
+  final String? premiumizeItemId; // Premiumize cloud item id (lazy resolution from cloud browser)
   const PlaylistEntry({
     required this.url,
     required this.title,
@@ -27,5 +30,8 @@ class PlaylistEntry {
     this.pikpakFileId,
     this.rdTorrentId,
     this.rdLinkIndex,
+    this.premiumizeHash,
+    this.premiumizePath,
+    this.premiumizeItemId,
   });
 }

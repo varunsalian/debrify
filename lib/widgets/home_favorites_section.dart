@@ -320,6 +320,10 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection>
         return ('TB', const Color(0xFF3B82F6), 'Torbox');
       case 'pikpak':
         return ('PP', const Color(0xFFF59E0B), 'PikPak');
+      case 'premiumize':
+        return ('PM', const Color(0xFFFB923C), 'Premiumize');
+      case 'webdav':
+        return ('DV', const Color(0xFF8B5CF6), 'WebDAV');
       default:
         return ('RD', const Color(0xFF10B981), 'Real-Debrid');
     }

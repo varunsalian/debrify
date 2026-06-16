@@ -124,6 +124,10 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
       case 'pik-pak':
       case 'pik_pak':
         return 'PP';
+      case 'premiumize':
+        return 'PM';
+      case 'webdav':
+        return 'DV';
       case 'alldebrid':
       case 'all-debrid':
       case 'all_debrid':

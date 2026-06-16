@@ -16,6 +16,8 @@ import '../services/android_native_downloader.dart';
 import '../services/episode_info_service.dart';
 import '../services/tvmaze_service.dart';
 import '../services/webdav_service.dart';
+import '../services/premiumize_service.dart';
+import '../models/premiumize_file.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -302,6 +304,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _loadPikPakContent();
       } else if (normalizedProvider == 'webdav') {
         await _loadWebDavContent();
+      } else if (normalizedProvider == 'premiumize') {
+        await _loadPremiumizeContent();
       } else {
         await _loadRealDebridContent();
       }
@@ -509,6 +513,92 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
     }
 
+    return RDFileNode.folder(name: 'Root', children: nodes);
+  }
+
+  /// Load Premiumize content by re-resolving the torrent's files from its hash.
+  Future<void> _loadPremiumizeContent() async {
+    final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
+    if (infohash == null || infohash.isEmpty) {
+      // Collection saved from the cloud browser: build the tree from stored
+      // file metadata (each node carries its cloud item id for re-resolution).
+      final filesRaw = widget.playlistItem['premiumizeFiles'];
+      if (filesRaw is List && filesRaw.isNotEmpty) {
+        _rootContent = _buildPremiumizeCloudFileTree(filesRaw);
+        return;
+      }
+      // Single cloud item: build a one-node tree from its metadata.
+      final singleFile = widget.playlistItem['premiumizeFile'];
+      if (singleFile is Map) {
+        _rootContent = _buildPremiumizeCloudFileTree([singleFile]);
+        return;
+      }
+      throw Exception('No Premiumize torrent hash found');
+    }
+
+    final apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Premiumize API key in Settings');
+    }
+
+    final files = await PremiumizeService.resolveFilesByHash(apiKey, infohash);
+    if (files.isEmpty) {
+      throw Exception('No files found in torrent');
+    }
+
+    _rootContent = _buildPremiumizeFileTree(files);
+  }
+
+  /// Build a flat tree from cloud-browser collection metadata. Each node stores
+  /// the Premiumize cloud item id in its [RDFileNode.path] so playback can
+  /// re-resolve a fresh direct link via `/item/details`.
+  RDFileNode _buildPremiumizeCloudFileTree(List<dynamic> filesRaw) {
+    final List<RDFileNode> nodes = [];
+    int i = 0;
+    for (final raw in filesRaw) {
+      if (raw is! Map) continue;
+      final id = raw['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final name = raw['name']?.toString() ?? 'File $id';
+      final size = int.tryParse(raw['size']?.toString() ?? '') ?? 0;
+      nodes.add(
+        RDFileNode.file(
+          name: name,
+          fileId: i,
+          path: id, // cloud item id, used to re-resolve on playback
+          relativePath: name,
+          bytes: size,
+          linkIndex: i,
+        ),
+      );
+      i++;
+    }
+    return RDFileNode.folder(name: 'Root', children: nodes);
+  }
+
+  /// Build a flat file tree from Premiumize files. Each file node stores the
+  /// Premiumize file path so playback can re-resolve a fresh direct link.
+  RDFileNode _buildPremiumizeFileTree(List<PremiumizeFile> files) {
+    final List<RDFileNode> nodes = [];
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
+      // Strip the first folder level (torrent name) for a clean series path.
+      String relativePath = file.path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+      nodes.add(
+        RDFileNode.file(
+          name: file.fileName,
+          fileId: i,
+          path: file.path, // Premiumize file path, matched on re-resolve
+          relativePath: relativePath,
+          bytes: file.size,
+          linkIndex: i,
+        ),
+      );
+    }
     return RDFileNode.folder(name: 'Root', children: nodes);
   }
 
@@ -1028,6 +1118,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playPikPakPlaylist(videoFiles, startIndex);
       } else if (provider == 'webdav') {
         await _playWebDavPlaylist(videoFiles, startIndex);
+      } else if (provider == 'premiumize') {
+        await _playPremiumizePlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -1954,12 +2046,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final rdTorrentId = widget.playlistItem?['rdTorrentId'] as String?;
     final torboxTorrentId = widget.playlistItem?['torboxTorrentId']?.toString();
     final pikpakCollectionId = widget.playlistItem?['pikpakFileId'] as String?;
+    final isPremiumize =
+        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+        'premiumize';
+    final String? premiumizeHash = isPremiumize
+        ? (widget.playlistItem?['torrent_hash'] as String?)
+        : null;
+    final String? premiumizeItemId = isPremiumize
+        ? (widget.playlistItem?['premiumizeItemId']?.toString())
+        : null;
 
     await StorageService.updatePlaylistItemImdbId(
       imdbId,
       rdTorrentId: rdTorrentId,
       torboxTorrentId: torboxTorrentId,
       pikpakCollectionId: pikpakCollectionId,
+      premiumizeHash: premiumizeHash,
+      premiumizeItemId: premiumizeItemId,
       force: force,
     );
   }
@@ -2255,6 +2358,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
             pikpakCollectionId: pikpakCollectionId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'premiumize') {
+        final premiumizeHash = widget.playlistItem['torrent_hash'] as String?;
+        final premiumizeItemId =
+            widget.playlistItem['premiumizeItemId']?.toString();
+        if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            premiumizeHash: premiumizeHash,
+          );
+        } else if (premiumizeItemId != null && premiumizeItemId.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            premiumizeItemId: premiumizeItemId,
           );
         }
       }
@@ -3228,6 +3346,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playPikPakPlaylist(videoFiles, startIndex);
       } else if (provider == 'webdav') {
         await _playWebDavPlaylist(videoFiles, startIndex);
+      } else if (provider == 'premiumize') {
+        await _playPremiumizePlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -3570,6 +3690,130 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
+        contentImdbId: widget.playlistItem['imdbId'] as String?,
+        contentType: widget.playlistItem['contentType'] as String?,
+        suppressTraktAutoSync: true,
+      ),
+    );
+  }
+
+  /// Play Premiumize playlist
+  Future<void> _playPremiumizePlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
+    final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
+    final apiKey = await StorageService.getPremiumizeApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your Premiumize API key in Settings');
+    }
+
+    // Cloud-browser collection: nodes carry cloud item ids in `path`. Resolve
+    // only the starting item's link up front; the rest resolve lazily.
+    if (infohash == null || infohash.isEmpty) {
+      if (videoFiles.isEmpty) throw Exception('No playable files found');
+      if (startIndex < 0 || startIndex >= videoFiles.length) startIndex = 0;
+      final startId = videoFiles[startIndex].path;
+      final startFile = startId != null
+          ? await PremiumizeService.resolveItemById(apiKey, startId)
+          : null;
+      if (startFile == null || startFile.link.isEmpty) {
+        throw Exception('Could not get Premiumize streaming URL');
+      }
+      final List<PlaylistEntry> cloudEntries = [];
+      for (int i = 0; i < videoFiles.length; i++) {
+        final file = videoFiles[i];
+        final id = file.path;
+        if (id == null) continue;
+        cloudEntries.add(
+          PlaylistEntry(
+            url: i == startIndex ? startFile.link : '',
+            title: file.name,
+            relativePath: file.relativePath,
+            provider: 'premiumize',
+            premiumizeItemId: id,
+            sizeBytes: file.bytes,
+          ),
+        );
+      }
+      if (cloudEntries.isEmpty) throw Exception('No playable files found');
+      final String seriesTitleCloud = _seriesPlaylist?.seriesTitle ??
+          widget.playlistItem['title'] as String? ??
+          'Series';
+      if (!mounted) return;
+      widget.onPlaybackStarted?.call();
+      MainPageBridge.notifyPlayerLaunching();
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: cloudEntries[startIndex].url,
+          title: seriesTitleCloud,
+          subtitle: '${cloudEntries.length} episodes',
+          playlist: cloudEntries,
+          startIndex: startIndex,
+          disableAutoResume: true,
+          viewMode: _convertToPlaylistViewMode(_currentViewMode),
+          contentImdbId: widget.playlistItem['imdbId'] as String?,
+          contentType: widget.playlistItem['contentType'] as String?,
+          suppressTraktAutoSync: true,
+        ),
+      );
+      return;
+    }
+
+    // Re-resolve fresh direct links and index them by path for matching.
+    final resolved = await PremiumizeService.resolveFilesByHash(
+      apiKey,
+      infohash,
+    );
+    final linkByPath = <String, String>{
+      for (final f in resolved) f.path: f.link,
+    };
+
+    final List<PlaylistEntry> entries = [];
+    for (final file in videoFiles) {
+      final path = file.path;
+      if (path == null) continue;
+      entries.add(
+        PlaylistEntry(
+          url: linkByPath[path] ?? '',
+          title: file.name,
+          relativePath: file.relativePath,
+          provider: 'premiumize',
+          premiumizeHash: infohash,
+          premiumizePath: path,
+          torrentHash: infohash,
+          sizeBytes: file.bytes,
+        ),
+      );
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+    if (startIndex < 0 || startIndex >= entries.length) startIndex = 0;
+
+    final String initialVideoUrl = entries[startIndex].url;
+    final String seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
+
+    if (!mounted) return;
+
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialVideoUrl,
+        title: seriesTitle,
+        subtitle: '${entries.length} episodes',
+        playlist: entries,
+        startIndex: startIndex,
+        disableAutoResume: true,
+        viewMode: _convertToPlaylistViewMode(_currentViewMode),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
