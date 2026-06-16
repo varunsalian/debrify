@@ -13,6 +13,7 @@ import '../services/engine/local_engine_storage.dart';
 import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
 import '../services/pikpak_api_service.dart';
+import '../services/premiumize_account_service.dart';
 import '../utils/platform_util.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
@@ -51,7 +52,7 @@ class InitialSetupFlow extends StatefulWidget {
   State<InitialSetupFlow> createState() => _InitialSetupFlowState();
 }
 
-enum _IntegrationType { realDebrid, torbox, pikpak }
+enum _IntegrationType { realDebrid, torbox, pikpak, premiumize }
 
 class _IntegrationMeta {
   const _IntegrationMeta({
@@ -123,6 +124,21 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     gradient: <Color>[Color(0xFF10B981), Color(0xFF059669)],
     icon: Icons.cloud_queue_rounded,
   ),
+  _IntegrationType.premiumize: _IntegrationMeta(
+    type: _IntegrationType.premiumize,
+    title: 'Premiumize',
+    url: 'https://www.premiumize.me/account',
+    linkLabel: 'Open premiumize.me/account',
+    steps: <String>[
+      'Open your Premiumize account page.',
+      'Scroll to the "API" section at the bottom.',
+      'Copy your API key and paste it below.',
+    ],
+    inputLabel: 'Premiumize API Key',
+    hint: 'Paste your Premiumize API key here',
+    gradient: <Color>[Color(0xFFFB923C), Color(0xFFEA580C)],
+    icon: Icons.workspace_premium_rounded,
+  ),
 };
 
 class _InitialSetupFlowState extends State<InitialSetupFlow> {
@@ -132,6 +148,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final TextEditingController _pikpakEmailController = TextEditingController();
   final TextEditingController _pikpakPasswordController =
       TextEditingController();
+  final TextEditingController _premiumizeController = TextEditingController();
   int _stepIndex =
       0; // 0 => welcome, 1..n => integrations, n+1 => engines, n+2 => trakt
   List<_IntegrationType> _flow = const <_IntegrationType>[];
@@ -162,6 +179,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final FocusNode _realDebridChipFocusNode = FocusNode(debugLabel: 'rd-chip');
   final FocusNode _torboxChipFocusNode = FocusNode(debugLabel: 'torbox-chip');
   final FocusNode _pikpakChipFocusNode = FocusNode(debugLabel: 'pikpak-chip');
+  final FocusNode _premiumizeChipFocusNode = FocusNode(debugLabel: 'premiumize-chip');
   final FocusNode _skipButtonFocusNode = FocusNode(debugLabel: 'skip-button');
   final FocusNode _continueButtonFocusNode = FocusNode(
     debugLabel: 'continue-button',
@@ -312,6 +330,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _realDebridChipFocusNode,
       _torboxChipFocusNode,
       _pikpakChipFocusNode,
+      _premiumizeChipFocusNode,
       _skipButtonFocusNode,
       _continueButtonFocusNode,
       _backButtonFocusNode,
@@ -408,10 +427,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _torboxController.dispose();
     _pikpakEmailController.dispose();
     _pikpakPasswordController.dispose();
+    _premiumizeController.dispose();
     _dialogFocusNode.dispose();
     _realDebridChipFocusNode.dispose();
     _torboxChipFocusNode.dispose();
     _pikpakChipFocusNode.dispose();
+    _premiumizeChipFocusNode.dispose();
     _skipButtonFocusNode.dispose();
     _continueButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
@@ -638,12 +659,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ? _realDebridChipFocusNode
                     : meta.type == _IntegrationType.torbox
                     ? _torboxChipFocusNode
-                    : _pikpakChipFocusNode;
+                    : meta.type == _IntegrationType.pikpak
+                    ? _pikpakChipFocusNode
+                    : _premiumizeChipFocusNode;
                 final order = meta.type == _IntegrationType.realDebrid
                     ? 1.0
                     : meta.type == _IntegrationType.torbox
                     ? 2.0
-                    : 3.0;
+                    : meta.type == _IntegrationType.pikpak
+                    ? 3.0
+                    : 4.0;
                 return SizedBox(
                   width: isNarrow ? width : (width - 16) / 2,
                   child: FocusTraversalOrder(
@@ -679,7 +704,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   FocusTraversalOrder(
-                    order: const NumericFocusOrder(3),
+                    order: const NumericFocusOrder(5),
                     child: TextButton(
                       focusNode: _skipButtonFocusNode,
                       onPressed: _isProcessing ? null : _goToEngineSelection,
@@ -688,7 +713,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   ),
                   SizedBox(height: spacing1),
                   FocusTraversalOrder(
-                    order: const NumericFocusOrder(4),
+                    order: const NumericFocusOrder(6),
                     child: FilledButton.icon(
                       focusNode: _continueButtonFocusNode,
                       onPressed: _selection.isEmpty || _isProcessing
@@ -704,7 +729,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             return Row(
               children: <Widget>[
                 FocusTraversalOrder(
-                  order: const NumericFocusOrder(3),
+                  order: const NumericFocusOrder(5),
                   child: TextButton(
                     focusNode: _skipButtonFocusNode,
                     onPressed: _isProcessing ? null : _goToEngineSelection,
@@ -713,7 +738,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 ),
                 const Spacer(),
                 FocusTraversalOrder(
-                  order: const NumericFocusOrder(4),
+                  order: const NumericFocusOrder(6),
                   child: FilledButton.icon(
                     focusNode: _continueButtonFocusNode,
                     onPressed: _selection.isEmpty || _isProcessing
@@ -742,6 +767,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         ? _realDebridController
         : type == _IntegrationType.torbox
         ? _torboxController
+        : type == _IntegrationType.premiumize
+        ? _premiumizeController
         : _pikpakEmailController;
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
@@ -1601,6 +1628,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         _IntegrationType.realDebrid,
       if (_selection.contains(_IntegrationType.torbox)) _IntegrationType.torbox,
       if (_selection.contains(_IntegrationType.pikpak)) _IntegrationType.pikpak,
+      if (_selection.contains(_IntegrationType.premiumize))
+        _IntegrationType.premiumize,
     ];
 
     if (ordered.isEmpty) return;
@@ -1840,11 +1869,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         });
       }
     } else {
-      // Handle Real Debrid and Torbox (API key services)
+      // Handle Real Debrid, Torbox and Premiumize (API key services)
       final TextEditingController controller =
           current == _IntegrationType.realDebrid
           ? _realDebridController
-          : _torboxController;
+          : current == _IntegrationType.torbox
+          ? _torboxController
+          : _premiumizeController;
       String value = controller.text.trim();
 
       // Provisioning hack: a key entered as "nonav:<key>" is saved with the
@@ -1871,13 +1902,17 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       try {
         if (current == _IntegrationType.realDebrid) {
           success = await AccountService.validateAndGetUserInfo(value);
-        } else {
+        } else if (current == _IntegrationType.torbox) {
           success = await TorboxAccountService.validateAndGetUserInfo(value);
+        } else {
+          success = await PremiumizeAccountService.validateAndGetUserInfo(value);
         }
       } catch (e, stackTrace) {
         final serviceName = current == _IntegrationType.realDebrid
             ? 'Real Debrid'
-            : 'Torbox';
+            : current == _IntegrationType.torbox
+            ? 'Torbox'
+            : 'Premiumize';
         debugPrint('$serviceName API validation failed: $e');
         if (kDebugMode) {
           debugPrint('Stack trace: $stackTrace');
@@ -1893,6 +1928,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             await StorageService.setRealDebridHiddenFromNav(true);
           } else if (current == _IntegrationType.torbox) {
             await StorageService.setTorboxHiddenFromNav(true);
+          } else if (current == _IntegrationType.premiumize) {
+            await StorageService.setPremiumizeHiddenFromNav(true);
           }
         }
         setState(() {
@@ -1903,7 +1940,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         AptabaseService.trackInBackground('provider_connected', {
           'provider': current == _IntegrationType.realDebrid
               ? 'real_debrid'
-              : 'torbox',
+              : current == _IntegrationType.torbox
+              ? 'torbox'
+              : 'premiumize',
           'surface': 'onboarding',
         });
         MainPageBridge.notifyIntegrationChanged();
@@ -2219,11 +2258,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (currentType == _IntegrationType.pikpak) {
         // PikPak has email field first
         _pikpakEmailFieldFocusNode.requestFocus();
-      } else if (currentType == _IntegrationType.realDebrid) {
-        // Real Debrid uses the shared text field focus node
-        _textFieldFocusNode.requestFocus();
-      } else if (currentType == _IntegrationType.torbox) {
-        // TorBox uses the shared text field focus node
+      } else {
+        // RD, Torbox, Premiumize all use the shared text field
         _textFieldFocusNode.requestFocus();
       }
     } else if (_isEngineSelectionStep) {
