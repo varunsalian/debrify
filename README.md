@@ -46,6 +46,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Real--Debrid-Supported-4ade80?style=for-the-badge" alt="Real-Debrid">
   <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
+  <img src="https://img.shields.io/badge/Premiumize-Supported-fb923c?style=for-the-badge" alt="Premiumize">
   <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
   <img src="https://img.shields.io/badge/WebDAV-Supported-14b8a6?style=for-the-badge" alt="WebDAV">
   <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
@@ -86,7 +87,7 @@ If Debrify has been useful to you, you can support development here:
 <td width="50%">
 
 ### Debrid Management
-- **Multi-provider support** — Real-Debrid, Torbox, and PikPak
+- **Multi-provider support** — Real-Debrid, Torbox, Premiumize, and PikPak
 - **Full feature parity** — Stream, download, and manage files across all providers
 - **Account dashboard** — View status, expiration, and usage at a glance
 - **File browser** — Browse and manage your debrid cloud storage
@@ -157,7 +158,7 @@ If Debrify has been useful to you, you can support development here:
 <td width="50%">
 
 ### Debrify TV
-- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, and PikPak engines to auto-build always-on channels
+- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, Premiumize, and PikPak engines to auto-build always-on channels
 - **Quick Play & auto-launch** — Instant channel playback with random starts, resume buttons, and optional auto-launch overlay
 - **Smart filtering** — Automatically skips RD-blocked torrents so playback never stalls
 - **Smart caching & rotation** — Caches torrents per channel and rotates movies/series so the lineup stays fresh all day
@@ -320,14 +321,14 @@ Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See
 
 ## 🔌 Provider Support
 
-| Feature | Real-Debrid | Torbox | PikPak |
-|:--------|:-----------:|:------:|:------:|
-| Stream files | ✅ | ✅ | ✅ |
-| Download files | ✅ | ✅ | ✅ |
-| Browse cloud storage | ✅ | ✅ | ✅ |
-| Add magnets/links | ✅ | ✅ | ✅ |
-| Playlists | ✅ | ✅ | ✅ |
-| Episode tracking | ✅ | ✅ | ✅ |
+| Feature | Real-Debrid | Torbox | Premiumize | PikPak |
+|:--------|:-----------:|:------:|:----------:|:------:|
+| Stream files | ✅ | ✅ | ✅ | ✅ |
+| Download files | ✅ | ✅ | ✅ | ✅ |
+| Browse cloud storage | ✅ | ✅ | ✅ | ✅ |
+| Add magnets/links | ✅ | ✅ | ✅ | ✅ |
+| Playlists | ✅ | ✅ | ✅ | ✅ |
+| Episode tracking | ✅ | ✅ | ✅ | ✅ |
 
 ---
 

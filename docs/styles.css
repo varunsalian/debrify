@@ -439,6 +439,10 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
     background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
 }
 
+.provider-logo.pm {
+    background: linear-gradient(135deg, #fb923c 0%, #f59e0b 100%);
+}
+
 .provider-logo.pp {
     background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
 }
