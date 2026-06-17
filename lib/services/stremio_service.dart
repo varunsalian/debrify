@@ -30,6 +30,31 @@ class StremioAddonImportResult {
   bool get hasChanges => imported > 0;
 }
 
+/// Result of a bulk "update all" addon refresh.
+class StremioAddonRefreshResult {
+  /// Manifests that came back with a different version string.
+  final int updated;
+
+  /// Manifests refreshed successfully but with no version change.
+  final int unchanged;
+
+  /// Manifests that could not be fetched.
+  final int failed;
+
+  final List<String> updatedNames;
+  final List<String> failedNames;
+
+  const StremioAddonRefreshResult({
+    required this.updated,
+    required this.unchanged,
+    required this.failed,
+    this.updatedNames = const [],
+    this.failedNames = const [],
+  });
+
+  int get total => updated + unchanged + failed;
+}
+
 /// Service for managing Stremio addons and searching for streams.
 ///
 /// This service provides:
@@ -334,6 +359,48 @@ class StremioService {
       debugPrint('StremioService: Error refreshing addon: $e');
       return null;
     }
+  }
+
+  /// Re-fetch every installed addon's manifest, preserving each addon's
+  /// enabled state and original add date. Saves once at the end (a single
+  /// listener notification) instead of per-addon to avoid N UI reloads.
+  Future<StremioAddonRefreshResult> refreshAllAddons() async {
+    final addons = await getAddons();
+    var updated = 0;
+    var unchanged = 0;
+    var failed = 0;
+    final updatedNames = <String>[];
+    final failedNames = <String>[];
+
+    for (var i = 0; i < addons.length; i++) {
+      final old = addons[i];
+      try {
+        final fresh = await fetchManifest(old.manifestUrl);
+        addons[i] = fresh.copyWith(
+          enabled: old.enabled,
+          addedAt: old.addedAt,
+        );
+        if (fresh.version != old.version) {
+          updated++;
+          updatedNames.add(old.name);
+        } else {
+          unchanged++;
+        }
+      } catch (e) {
+        failed++;
+        failedNames.add(old.name);
+        debugPrint('StremioService: Failed to refresh ${old.name}: $e');
+      }
+    }
+
+    await _saveAddons(addons);
+    return StremioAddonRefreshResult(
+      updated: updated,
+      unchanged: unchanged,
+      failed: failed,
+      updatedNames: updatedNames,
+      failedNames: failedNames,
+    );
   }
 
   /// Clear all addons

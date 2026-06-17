@@ -41,11 +41,15 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
   final FocusNode _deleteAllButtonFocusNode = FocusNode(
     debugLabel: 'delete-all-stremio-addons-content',
   );
+  final FocusNode _updateAllButtonFocusNode = FocusNode(
+    debugLabel: 'update-all-stremio-addons-content',
+  );
 
   bool _isLoading = true;
   bool _isAdding = false;
   bool _isImporting = false;
   bool _isDeletingAll = false;
+  bool _isUpdatingAll = false;
   String? _error;
   List<StremioAddon> _addons = [];
   final Map<String, FocusNode> _addonFocusNodes = {};
@@ -78,6 +82,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     _addButtonFocusNode.dispose();
     _importButtonFocusNode.dispose();
     _deleteAllButtonFocusNode.dispose();
+    _updateAllButtonFocusNode.dispose();
     for (final node in _addonFocusNodes.values) {
       node.dispose();
     }
@@ -324,6 +329,63 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
 
   Future<void> _toggleAddon(StremioAddon addon) async {
     await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
+  }
+
+  Future<void> _updateAddon(StremioAddon addon) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final refreshed = await _stremioService.refreshAddon(addon.manifestUrl);
+    if (!mounted) return;
+    if (refreshed == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to update ${addon.name}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (refreshed.version != addon.version) {
+      final from = addon.version;
+      final to = refreshed.version;
+      final detail = (from != null && to != null) ? ' (v$from → v$to)' : '';
+      messenger.showSnackBar(
+        SnackBar(content: Text('${addon.name} updated$detail')),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(content: Text('${addon.name} is already up to date')),
+      );
+    }
+  }
+
+  Future<void> _updateAllAddons() async {
+    if (_addons.isEmpty || _isUpdatingAll) return;
+
+    setState(() => _isUpdatingAll = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await _stremioService.refreshAllAddons();
+      if (!mounted) return;
+      final parts = <String>[];
+      if (result.updated > 0) parts.add('${result.updated} updated');
+      if (result.unchanged > 0) parts.add('${result.unchanged} up to date');
+      if (result.failed > 0) parts.add('${result.failed} failed');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(parts.isEmpty ? 'No addons to update' : parts.join('  ·  ')),
+          backgroundColor: result.failed > 0 ? Colors.orange.shade800 : null,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Update failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingAll = false);
+    }
   }
 
   Future<void> _deleteAddon(StremioAddon addon) async {
@@ -886,8 +948,47 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
             ),
           );
 
-          final deleteBtn = FocusTraversalOrder(
+          final updateAllBtn = FocusTraversalOrder(
             order: const NumericFocusOrder(3),
+            child: _GlowFocusButton(
+              focusNode: _updateAllButtonFocusNode,
+              onPressed: _addons.isEmpty || _isUpdatingAll
+                  ? null
+                  : _updateAllAddons,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isUpdatingAll)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFED1C24),
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.refresh,
+                      color: Color(0xFFED1C24),
+                      size: 18,
+                    ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isUpdatingAll ? 'Updating' : 'Update all',
+                    style: const TextStyle(
+                      color: Color(0xFFED1C24),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          final deleteBtn = FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
             child: _GlowFocusButton(
               focusNode: _deleteAllButtonFocusNode,
               onPressed: _addons.isEmpty || _isDeletingAll
@@ -930,7 +1031,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
             spacing: 10,
             runSpacing: 8,
             alignment: compact ? WrapAlignment.start : WrapAlignment.end,
-            children: [importBtn, deleteBtn],
+            children: [importBtn, updateAllBtn, deleteBtn],
           );
 
           if (compact) {
@@ -1073,6 +1174,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                 focusNode: _addonFocusNodes[addon.manifestUrl]!,
                 onTap: () => _showAddonDetails(addon),
                 onToggle: () => _toggleAddon(addon),
+                onUpdate: () => _updateAddon(addon),
                 onDelete: () => _deleteAddon(addon),
               ),
             );
@@ -1152,6 +1254,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
   bool _isLoading = true;
   bool _isAdding = false;
+  bool _isUpdatingAll = false;
   String? _error;
   List<StremioAddon> _addons = [];
 
@@ -1272,6 +1375,63 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   Future<void> _toggleAddon(StremioAddon addon) async {
     await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
     // Note: _loadAddons() is called automatically via the addons changed listener
+  }
+
+  Future<void> _updateAddon(StremioAddon addon) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final refreshed = await _stremioService.refreshAddon(addon.manifestUrl);
+    if (!mounted) return;
+    if (refreshed == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to update ${addon.name}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (refreshed.version != addon.version) {
+      final from = addon.version;
+      final to = refreshed.version;
+      final detail = (from != null && to != null) ? ' (v$from → v$to)' : '';
+      messenger.showSnackBar(
+        SnackBar(content: Text('${addon.name} updated$detail')),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(content: Text('${addon.name} is already up to date')),
+      );
+    }
+  }
+
+  Future<void> _updateAllAddons() async {
+    if (_addons.isEmpty || _isUpdatingAll) return;
+
+    setState(() => _isUpdatingAll = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await _stremioService.refreshAllAddons();
+      if (!mounted) return;
+      final parts = <String>[];
+      if (result.updated > 0) parts.add('${result.updated} updated');
+      if (result.unchanged > 0) parts.add('${result.unchanged} up to date');
+      if (result.failed > 0) parts.add('${result.failed} failed');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(parts.isEmpty ? 'No addons to update' : parts.join('  ·  ')),
+          backgroundColor: result.failed > 0 ? Colors.orange.shade800 : null,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Update failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingAll = false);
+    }
   }
 
   Future<void> _deleteAddon(StremioAddon addon) async {
@@ -1401,9 +1561,22 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         title: const Text('Stremio Addons'),
         actions: [
           IconButton(
+            onPressed: _addons.isEmpty || _isUpdatingAll
+                ? null
+                : _updateAllAddons,
+            icon: _isUpdatingAll
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.system_update_alt),
+            tooltip: 'Update all addons',
+          ),
+          IconButton(
             onPressed: _isLoading ? null : _loadAddons,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: 'Reload',
           ),
         ],
       ),
@@ -1665,6 +1838,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           focusNode: _addonFocusNodes[addon.manifestUrl]!,
           onTap: () => _showAddonDetails(addon),
           onToggle: () => _toggleAddon(addon),
+          onUpdate: () => _updateAddon(addon),
           onDelete: () => _deleteAddon(addon),
         );
       },
@@ -1722,6 +1896,7 @@ class _AddonTile extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
   final VoidCallback onToggle;
+  final VoidCallback onUpdate;
   final VoidCallback onDelete;
 
   const _AddonTile({
@@ -1730,6 +1905,7 @@ class _AddonTile extends StatefulWidget {
     required this.focusNode,
     required this.onTap,
     required this.onToggle,
+    required this.onUpdate,
     required this.onDelete,
   });
 
@@ -1785,6 +1961,10 @@ class _AddonTileState extends State<_AddonTile> {
         onToggle: () {
           Navigator.of(context).pop();
           widget.onToggle();
+        },
+        onUpdate: () {
+          Navigator.of(context).pop();
+          widget.onUpdate();
         },
         onDetails: () {
           Navigator.of(context).pop();
@@ -2011,12 +2191,14 @@ class _StatusPill extends StatelessWidget {
 class _AddonOptionsSheet extends StatefulWidget {
   final StremioAddon addon;
   final VoidCallback onToggle;
+  final VoidCallback onUpdate;
   final VoidCallback onDetails;
   final VoidCallback onDelete;
 
   const _AddonOptionsSheet({
     required this.addon,
     required this.onToggle,
+    required this.onUpdate,
     required this.onDetails,
     required this.onDelete,
   });
@@ -2027,6 +2209,7 @@ class _AddonOptionsSheet extends StatefulWidget {
 
 class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
   final FocusNode _toggleFocusNode = FocusNode(debugLabel: 'toggle-option');
+  final FocusNode _updateFocusNode = FocusNode(debugLabel: 'update-option');
   final FocusNode _detailsFocusNode = FocusNode(debugLabel: 'details-option');
   final FocusNode _deleteFocusNode = FocusNode(debugLabel: 'delete-option');
 
@@ -2042,6 +2225,7 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
   @override
   void dispose() {
     _toggleFocusNode.dispose();
+    _updateFocusNode.dispose();
     _detailsFocusNode.dispose();
     _deleteFocusNode.dispose();
     super.dispose();
@@ -2111,6 +2295,15 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
             FocusTraversalOrder(
               order: const NumericFocusOrder(1),
               child: _OptionTile(
+                focusNode: _updateFocusNode,
+                icon: Icons.refresh,
+                label: 'Update',
+                onTap: widget.onUpdate,
+              ),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: _OptionTile(
                 focusNode: _detailsFocusNode,
                 icon: Icons.info_outline,
                 label: 'View Details',
@@ -2118,7 +2311,7 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
               ),
             ),
             FocusTraversalOrder(
-              order: const NumericFocusOrder(2),
+              order: const NumericFocusOrder(3),
               child: _OptionTile(
                 focusNode: _deleteFocusNode,
                 icon: Icons.delete_outline,
