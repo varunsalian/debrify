@@ -2706,17 +2706,24 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
   @override
   void initState() {
     super.initState();
-    // Safely add listener - focus node is guaranteed to exist in parent
     widget.focusNode.addListener(_handleFocusChange);
+    // Attach key handler directly to the focus node so it fires before
+    // EditableText's internal shortcuts, and so the node stays directly
+    // reachable by focusInDirection without an extra skipTraversal wrapper.
+    widget.focusNode.onKeyEvent = _handleKeyEvent;
   }
 
   @override
   void dispose() {
-    // Safely remove listener with try-catch
     try {
       widget.focusNode.removeListener(_handleFocusChange);
+      // Only clear the handler if we're still the owner — during
+      // AnimatedSwitcher transitions the same focus node may already be
+      // claimed by the incoming instance.
+      if (widget.focusNode.onKeyEvent == _handleKeyEvent) {
+        widget.focusNode.onKeyEvent = null;
+      }
     } catch (e) {
-      // Ignore if listener was already removed or node disposed
       debugPrint('_TvFriendlyTextField: Error removing listener: $e');
     }
     super.dispose();
@@ -2807,64 +2814,60 @@ class _TvFriendlyTextFieldState extends State<_TvFriendlyTextField> {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onKeyEvent: _handleKeyEvent,
-      skipTraversal: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _isFocused ? Border.all(color: Colors.white, width: 2) : null,
-          boxShadow: _isFocused
-              ? <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        child: TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          enabled: widget.enabled,
-          obscureText: widget.obscureText,
-          showCursor: true,
-          autofocus: false,
-          autofillHints: widget.obscureText
-              ? const <String>[AutofillHints.password]
-              : null,
-          decoration: InputDecoration(
-            labelText: widget.labelText.isEmpty ? null : widget.labelText,
-            labelStyle: const TextStyle(color: Colors.white70),
-            hintText: widget.hintText,
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-            prefixIcon: widget.prefixIcon,
-            prefixIconColor: Colors.white70,
-            errorText: widget.errorText,
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.08),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.2),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.2),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.white, width: 2),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: _isFocused ? Border.all(color: Colors.white, width: 2) : null,
+        boxShadow: _isFocused
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: TextField(
+        controller: widget.controller,
+        focusNode: widget.focusNode,
+        enabled: widget.enabled,
+        obscureText: widget.obscureText,
+        showCursor: true,
+        autofocus: false,
+        autofillHints: widget.obscureText
+            ? const <String>[AutofillHints.password]
+            : null,
+        decoration: InputDecoration(
+          labelText: widget.labelText.isEmpty ? null : widget.labelText,
+          labelStyle: const TextStyle(color: Colors.white70),
+          hintText: widget.hintText,
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+          prefixIcon: widget.prefixIcon,
+          prefixIconColor: Colors.white70,
+          errorText: widget.errorText,
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: 0.08),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: Colors.white.withValues(alpha: 0.2),
             ),
           ),
-          style: const TextStyle(color: Colors.white),
-          onSubmitted: widget.onSubmitted,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: Colors.white.withValues(alpha: 0.2),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white, width: 2),
+          ),
         ),
+        style: const TextStyle(color: Colors.white),
+        onSubmitted: widget.onSubmitted,
       ),
     );
   }
