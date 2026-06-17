@@ -49,6 +49,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   String? _realDebridApiKey;
   String? _torboxApiKey;
   String? _premiumizeApiKey;
+  String? _allDebridApiKey;
   String? _pikpakEmail;
   String? _traktAccessToken;
   String? _traktRefreshToken;
@@ -91,6 +92,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _premiumizeApiKey = await StorageService.getPremiumizeApiKey();
       final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
       final hasPm = (_premiumizeApiKey?.isNotEmpty ?? false) && pmEnabled;
+
+      _allDebridApiKey = await StorageService.getAllDebridApiKey();
+      final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
+      final hasAd = (_allDebridApiKey?.isNotEmpty ?? false) && adEnabled;
 
       _pikpakEmail = await StorageService.getPikPakEmail();
       final ppEnabled = await StorageService.getPikPakEnabled();
@@ -155,6 +160,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           label: 'Premiumize',
           icon: Icons.workspace_premium_rounded,
           color: const Color(0xFFFB923C),
+        ));
+      }
+      if (hasAd) {
+        items.add(_TransferItem(
+          key: ConfigCommand.allDebrid,
+          label: 'AllDebrid',
+          icon: Icons.all_inclusive_rounded,
+          color: const Color(0xFF26A69A),
         ));
       }
       if (hasPp) {
@@ -326,6 +339,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ConfigCommand.premiumize,
           targetIp,
           configData: _premiumizeApiKey,
+        );
+      case ConfigCommand.allDebrid:
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.allDebrid,
+          targetIp,
+          configData: _allDebridApiKey,
         );
       case ConfigCommand.pikpak:
         return state.sendConfigCommandToDevice(

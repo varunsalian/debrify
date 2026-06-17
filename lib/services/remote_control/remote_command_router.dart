@@ -11,6 +11,7 @@ import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/premiumize_account_service.dart';
+import '../../services/alldebrid_account_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
@@ -246,6 +247,9 @@ class RemoteCommandRouter {
       case ConfigCommand.premiumize:
         await _handlePremiumizeConfig(data);
         break;
+      case ConfigCommand.allDebrid:
+        await _handleAllDebridConfig(data);
+        break;
       case ConfigCommand.pikpak:
         await _handlePikPakConfig(data);
         break;
@@ -342,6 +346,28 @@ class RemoteCommandRouter {
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to configure Premiumize: $e');
       _showSnackBar('Premiumize: Configuration failed', isError: true);
+    }
+  }
+
+  /// Handle AllDebrid API key config
+  Future<void> _handleAllDebridConfig(String apiKey) async {
+    try {
+      debugPrint('RemoteCommandRouter: Validating AllDebrid API key...');
+
+      final isValid = await AllDebridAccountService.validateAndGetUserInfo(apiKey);
+      if (!isValid) {
+        _showSnackBar('AllDebrid: Invalid API key', isError: true);
+        return;
+      }
+
+      await StorageService.saveAllDebridApiKey(apiKey);
+      await StorageService.setAllDebridIntegrationEnabled(true);
+
+      debugPrint('RemoteCommandRouter: AllDebrid configured successfully');
+      _showSnackBar('AllDebrid configured successfully');
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: Failed to configure AllDebrid: $e');
+      _showSnackBar('AllDebrid: Configuration failed', isError: true);
     }
   }
 
