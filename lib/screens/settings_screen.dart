@@ -1133,6 +1133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AccountService.clearUserInfo();
     await StorageService.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
+    await StorageService.deletePremiumizeApiKey();
     await StorageService.clearPikPakAuth();
     await StorageService.clearWebDav();
     await StorageService.clearTraktAuth();
