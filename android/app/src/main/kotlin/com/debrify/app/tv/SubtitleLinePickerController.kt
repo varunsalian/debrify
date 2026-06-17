@@ -48,6 +48,14 @@ class SubtitleLinePickerController(
     private var cues: List<SubtitleCue> = emptyList()
     private var selectedIndex: Int = -1
     private var highlightedIndex: Int = -1
+    // Tracks whether the current OK hold already triggered a reset, so a single
+    // long-press resets once and the eventual key-up doesn't also sync.
+    private var centerResetFired: Boolean = false
+    // True once we've seen the key-down for an OK press that started while the
+    // picker was visible. Guards against the key-up of the very press that
+    // opened this overlay (whose key-down went to the subtitle panel) leaking
+    // through and triggering a spurious sync on open.
+    private var centerDownSeen: Boolean = false
     private var cueContainer: LinearLayout? = null
     private var scrollView: ScrollView? = null
     private var offsetLabel: TextView? = null
@@ -60,6 +68,8 @@ class SubtitleLinePickerController(
     fun show(subtitleUrl: String) {
         if (isVisible) return
         currentUrl = subtitleUrl
+        centerDownSeen = false
+        centerResetFired = false
 
         val overlay = buildOverlay()
         rootContainer.addView(overlay)
@@ -88,7 +98,7 @@ class SubtitleLinePickerController(
             hintLabel?.text = "Could not parse subtitle lines — use slider instead"
             return
         }
-        hintLabel?.text = "▲ ▼ navigate  ·  OK sync  ·  BACK close"
+        hintLabel?.text = "▲ ▼ navigate  ·  OK sync  ·  hold OK reset  ·  BACK close"
         buildCueRows()
 
         highlightedIndex = computeHighlightIndex()
@@ -131,6 +141,39 @@ class SubtitleLinePickerController(
 
     fun dispatchKey(event: KeyEvent): Boolean {
         if (!isVisible) return false
+
+        // OK/Center is special: a tap (act on key-up) syncs to the selected cue,
+        // while holding it resets the offset to 0. Handle both actions here so a
+        // long-press can suppress the sync that would otherwise fire on release.
+        if (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+            event.keyCode == KeyEvent.KEYCODE_ENTER
+        ) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        centerDownSeen = true
+                        centerResetFired = false
+                    } else if (centerDownSeen && !centerResetFired) {
+                        // First key-repeat means the button has been held past the
+                        // system long-press threshold.
+                        centerResetFired = true
+                        resetSync()
+                    }
+                }
+                KeyEvent.ACTION_UP -> {
+                    if (centerDownSeen &&
+                        !centerResetFired &&
+                        cues.isNotEmpty() &&
+                        selectedIndex in cues.indices
+                    ) {
+                        applySyncFromCue(selectedIndex)
+                    }
+                    centerDownSeen = false
+                }
+            }
+            return true
+        }
+
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
         return when (event.keyCode) {
@@ -141,12 +184,6 @@ class SubtitleLinePickerController(
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (cues.isNotEmpty()) moveSelection(1)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (cues.isNotEmpty() && selectedIndex in cues.indices) {
-                    applySyncFromCue(selectedIndex)
-                }
                 true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -194,6 +231,16 @@ class SubtitleLinePickerController(
         SubtitleSettings.setSyncOffsetMs(activity, current + deltaMs)
         onOffsetApplied(SubtitleSettings.getSyncOffsetMs(activity))
         updateOffsetLabel()
+    }
+
+    private fun resetSync() {
+        SubtitleSettings.setSyncOffsetMs(activity, 0L)
+        // Forget the remembered sync line so reopening doesn't restore it.
+        lastSyncedCueStartMs.remove(currentUrl)
+        onOffsetApplied(0L)
+        updateOffsetLabel()
+        // Recompute which cue is "now playing" at zero offset for instant feedback.
+        updateHighlight()
     }
 
     private fun startPositionTracking() {
