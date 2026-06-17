@@ -690,6 +690,13 @@ flutter analyze lib/screens/settings_screen.dart \
 
 After the core integration is complete, audit every surface where other providers appear and ensure the new provider is wired in consistently.
 
+### Reset Debrify (`lib/screens/settings_screen.dart`)
+
+`_resetAppData()` deletes provider credentials when the user taps **Settings → Reset Debrify**. Add the new provider's API key deletion alongside the others:
+```dart
+await StorageService.deleteNewProviderApiKey();
+```
+
 ### Storage resets (`lib/services/storage_service.dart`)
 
 `clearAllIntegrationStates()` removes all provider keys on factory-reset. Add:
