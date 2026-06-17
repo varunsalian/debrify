@@ -9,7 +9,6 @@ import '../../services/community/magnet_yaml_service.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
-import 'addon_install_dialog.dart';
 
 /// Widget for exporting Debrify TV channels to a TV via remote control
 class RemoteChannelExport extends StatefulWidget {
@@ -78,20 +77,22 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
   Future<void> _sendToTv() async {
     if (_selectedIds.isEmpty) return;
 
-    // Show TV picker dialog
-    final choice = await AddonInstallDialog.show(
-      context,
-      'channels',
-      title: 'Select TV',
-      subtitle: 'Send channels to',
-      showThisDevice: false,
-    );
-    if (choice == null || choice.target != 'tv' || choice.device == null) return;
+    final connectedDevice = RemoteControlState().connectedDevice;
+    if (connectedDevice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No TV connected'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
 
-    final targetIp = choice.device!.ip;
+    final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
     int successCount = 0;
     int failCount = 0;

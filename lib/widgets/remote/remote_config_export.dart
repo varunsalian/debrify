@@ -7,7 +7,6 @@ import '../../services/storage_service.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
-import 'addon_install_dialog.dart';
 
 /// Widget for exporting setup/credentials to TV
 class RemoteConfigExport extends StatefulWidget {
@@ -208,21 +207,22 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   Future<void> _sendToTv() async {
     if (!_hasAnySelected || !_isPikpakPasswordValid) return;
 
-    // Show TV picker dialog
-    final choice = await AddonInstallDialog.show(
-      context,
-      'config',
-      title: 'Select TV',
-      subtitle: 'Send configuration to',
-      showThisDevice: false,
-    );
-    if (choice == null || choice.target != 'tv' || choice.device == null)
+    final connectedDevice = RemoteControlState().connectedDevice;
+    if (connectedDevice == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No TV connected'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
+    }
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
 
-    final targetIp = choice.device!.ip;
+    final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
     int successCount = 0;
     int failCount = 0;
