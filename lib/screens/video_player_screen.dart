@@ -14,6 +14,7 @@ import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
+import '../services/alldebrid_service.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -3292,6 +3293,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return url;
       } catch (e) {
         throw Exception('Real Debrid link failed: $e');
+      }
+    }
+
+    // AllDebrid lazy resolution: unlock the stored locked link on demand
+    // (mirrors Real-Debrid's restrictedLink → unrestrict). The locked link is
+    // stable; only the unlocked CDN URL expires, so this is also more robust
+    // than resolving every episode up front.
+    if (provider == 'alldebrid' ||
+        (entry.allDebridLink != null && entry.allDebridLink!.isNotEmpty)) {
+      final lockedLink = entry.allDebridLink;
+      if (lockedLink == null || lockedLink.isEmpty) {
+        throw Exception('AllDebrid link metadata missing');
+      }
+      final apiKey = await StorageService.getAllDebridApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('Missing AllDebrid API key');
+      }
+      try {
+        final url = await AllDebridService.unlockLink(apiKey, lockedLink);
+        if (url.isEmpty) {
+          throw Exception('AllDebrid returned an empty stream URL');
+        }
+        return url;
+      } catch (e) {
+        throw Exception('AllDebrid link failed: $e');
       }
     }
 

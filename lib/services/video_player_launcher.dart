@@ -26,6 +26,7 @@ import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_service.dart';
+import '../services/alldebrid_service.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
@@ -2178,6 +2179,24 @@ class VideoPlayerLauncher {
       return url;
     }
 
+    // AllDebrid lazy resolution: unlock the stored locked link on demand.
+    if (provider == 'alldebrid' ||
+        (entry.allDebridLink != null && entry.allDebridLink!.isNotEmpty)) {
+      final lockedLink = entry.allDebridLink;
+      if (lockedLink == null || lockedLink.isEmpty) {
+        throw Exception('AllDebrid link metadata missing');
+      }
+      final apiKey = await StorageService.getAllDebridApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('Missing AllDebrid API key');
+      }
+      final url = await AllDebridService.unlockLink(apiKey, lockedLink);
+      if (url.isEmpty) {
+        throw Exception('AllDebrid returned an empty stream URL');
+      }
+      return url;
+    }
+
     if (args.videoUrl.isNotEmpty) {
       return args.videoUrl;
     }
@@ -2817,6 +2836,7 @@ class _AndroidTvPlaybackPayloadBuilder {
               premiumizeHash: entry.premiumizeHash,
               premiumizePath: entry.premiumizePath,
               premiumizeItemId: entry.premiumizeItemId,
+              allDebridLink: entry.allDebridLink,
             ),
           );
         } else {

@@ -38,6 +38,8 @@ import '../services/main_page_bridge.dart';
 import '../services/torbox_service.dart';
 import '../services/premiumize_service.dart';
 import '../models/premiumize_file.dart';
+import '../services/alldebrid_service.dart';
+import '../models/alldebrid_file.dart';
 import '../services/torrent_file_service.dart';
 import '../services/debrify_tv_channel_add_service.dart';
 import '../models/torbox_torrent.dart';
@@ -276,6 +278,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String? _apiKey;
   String? _torboxApiKey;
   String? _premiumizeApiKey;
+  String? _allDebridApiKey;
   bool _torboxCacheCheckEnabled = false;
   Map<String, bool>? _torboxCacheStatus;
   bool _premiumizeCacheCheckEnabled = false;
@@ -284,6 +287,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   bool _rdSkipBlockedTorrents = false;
   bool _torboxIntegrationEnabled = true;
   bool _premiumizeIntegrationEnabled = true;
+  bool _allDebridIntegrationEnabled = true;
   bool _pikpakEnabled = false;
   String _defaultTorrentProvider = 'none';
   bool _showingTorboxCachedOnly = false;
@@ -1460,6 +1464,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeApiKey!.isNotEmpty) {
       count++;
     }
+    if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      count++;
+    }
     return count;
   }
 
@@ -1529,6 +1538,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           forcePlay: isQuickPlay,
         );
         return;
+      } else if (defaultProvider == 'alldebrid' &&
+          _allDebridIntegrationEnabled &&
+          _allDebridApiKey != null &&
+          _allDebridApiKey!.isNotEmpty) {
+        _addToAllDebrid(
+          torrent.infohash,
+          torrent.name,
+          forcePlay: isQuickPlay,
+        );
+        return;
       }
       // If default provider is not available, fall through to show dialog or use available service
     }
@@ -1560,12 +1579,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeApiKey!.isNotEmpty) {
       // Direct to Premiumize
       _addToPremiumize(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
+    } else if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      // Direct to AllDebrid
+      _addToAllDebrid(torrent.infohash, torrent.name, forcePlay: isQuickPlay);
     } else {
       // No service configured
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please configure Real-Debrid, Torbox, Premiumize, or PikPak in Settings',
+            'Please configure Real-Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings',
           ),
         ),
       );
@@ -1979,6 +2003,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     }
 
+    if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      providers.add(
+        _ProviderOption(
+          id: 'alldebrid',
+          name: 'AllDebrid',
+          icon: Icons.all_inclusive_rounded,
+          color: const Color(0xFF26A69A),
+        ),
+      );
+    }
+
     final result = await showDialog<_ProviderDialogResult>(
       context: context,
       builder: (context) => _ProviderSelectionDialog(providers: providers),
@@ -1999,6 +2036,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _sendToPikPak(torrent.infohash, torrent.name);
       } else if (result.provider == 'premiumize') {
         _addToPremiumize(torrent.infohash, torrent.name);
+      } else if (result.provider == 'alldebrid') {
+        _addToAllDebrid(torrent.infohash, torrent.name);
       }
     }
   }
@@ -2203,11 +2242,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
     final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final premiumizeEnabled =
         await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final defaultProvider = await StorageService.getDefaultTorrentProvider();
     if (!mounted) return;
@@ -2215,10 +2257,12 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _apiKey = rdKey;
       _torboxApiKey = torboxKey;
       _premiumizeApiKey = premiumizeKey;
+      _allDebridApiKey = allDebridKey;
       _realDebridIntegrationEnabled = rdEnabled;
       _rdSkipBlockedTorrents = rdSkipBlocked;
       _torboxIntegrationEnabled = torboxEnabled;
       _premiumizeIntegrationEnabled = premiumizeEnabled;
+      _allDebridIntegrationEnabled = allDebridEnabled;
       _pikpakEnabled = pikpakEnabled;
       _defaultTorrentProvider = defaultProvider;
       _apiKeysLoaded = true;
@@ -2732,6 +2776,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       StorageService.getPremiumizeApiKey(),
       StorageService.getPremiumizeIntegrationEnabled(),
       StorageService.getPremiumizeCacheCheckEnabled(),
+      StorageService.getAllDebridApiKey(),
+      StorageService.getAllDebridIntegrationEnabled(),
     ]);
     final bool cacheCheckPreference = results[0] as bool;
     final String? torboxKey = results[1] as String?;
@@ -2743,6 +2789,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     final String? premiumizeKey = results[7] as String?;
     final bool premiumizeEnabled = results[8] as bool;
     final bool premiumizeCachePreference = results[9] as bool;
+    final String? allDebridKey = results[10] as String?;
+    final bool allDebridEnabled = results[11] as bool;
     if (mounted) {
       setState(() {
         _torboxCacheCheckEnabled = cacheCheckPreference;
@@ -2755,6 +2803,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeApiKey = premiumizeKey;
         _premiumizeIntegrationEnabled = premiumizeEnabled;
         _premiumizeCacheCheckEnabled = premiumizeCachePreference;
+        _allDebridApiKey = allDebridKey;
+        _allDebridIntegrationEnabled = allDebridEnabled;
       });
     }
 
@@ -3993,6 +4043,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeApiKey != null &&
         _premiumizeApiKey!.isNotEmpty) {
       debridService = 'premiumize';
+    } else if (defaultProvider == 'alldebrid' &&
+        _allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      debridService = 'alldebrid';
     } else if (_realDebridIntegrationEnabled &&
         _apiKey != null &&
         _apiKey!.isNotEmpty) {
@@ -4007,6 +4062,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeApiKey != null &&
         _premiumizeApiKey!.isNotEmpty) {
       debridService = 'premiumize';
+    } else if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      debridService = 'alldebrid';
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4093,6 +4152,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       await _addToTorboxAndBindSource(infohash, torrentName, imdbId);
     } else if (debridService == 'premiumize') {
       await _addToPremiumizeAndBindSource(infohash, torrentName, imdbId);
+    } else if (debridService == 'alldebrid') {
+      await _addToAllDebridAndBindSource(infohash, torrentName, imdbId);
     } else {
       // PikPak — use existing flow but store binding
       await _addToPikPakAndBindSource(infohash, torrentName, imdbId);
@@ -5216,6 +5277,13 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 showNotFoundHint: isLastSource,
                 showUnavailableHint: isLastSource,
               );
+            case 'alldebrid':
+              result = await _tryPlayFromBoundSourceAllDebrid(
+                selection,
+                source,
+                showNotFoundHint: isLastSource,
+                showUnavailableHint: isLastSource,
+              );
             case SeriesSource.localService:
               result = await _tryPlayFromLocalBoundSource(
                 selection,
@@ -6119,7 +6187,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _torboxApiKey!.isNotEmpty) ||
         (_premiumizeIntegrationEnabled &&
             _premiumizeApiKey != null &&
-            _premiumizeApiKey!.isNotEmpty);
+            _premiumizeApiKey!.isNotEmpty) ||
+        (_allDebridIntegrationEnabled &&
+            _allDebridApiKey != null &&
+            _allDebridApiKey!.isNotEmpty);
 
     // Decide which source type to use:
     // - If debrid configured and torrents available → use torrents
@@ -7164,6 +7235,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         color: Color(0xFFF59E0B),
       );
     }
+    if (p == 'alldebrid' &&
+        _allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      return const _ProviderOption(
+        id: 'alldebrid',
+        name: 'AD',
+        icon: Icons.all_inclusive_rounded,
+        color: Color(0xFF26A69A),
+      );
+    }
     if (p == 'pikpak' && _pikpakEnabled) {
       return const _ProviderOption(
         id: 'pikpak',
@@ -7201,6 +7283,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         name: 'PM',
         icon: Icons.workspace_premium_rounded,
         color: Color(0xFFF59E0B),
+      );
+    }
+    if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      return const _ProviderOption(
+        id: 'alldebrid',
+        name: 'AD',
+        icon: Icons.all_inclusive_rounded,
+        color: Color(0xFF26A69A),
       );
     }
     if (_pikpakEnabled) {
@@ -7252,6 +7344,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ),
       );
     }
+    if (_allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty) {
+      list.add(
+        const _ProviderOption(
+          id: 'alldebrid',
+          name: 'AD',
+          icon: Icons.all_inclusive_rounded,
+          color: Color(0xFF26A69A),
+        ),
+      );
+    }
     if (_pikpakEnabled) {
       list.add(
         const _ProviderOption(
@@ -7273,6 +7377,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return StorageService.getPikPakPostTorrentAction();
       case 'premiumize':
         return StorageService.getPremiumizePostTorrentAction();
+      case 'alldebrid':
+        return StorageService.getAllDebridPostTorrentAction();
       case 'debrid':
       default:
         return StorageService.getPostTorrentAction();
@@ -7290,6 +7396,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return StorageService.savePikPakPostTorrentAction(action);
       case 'premiumize':
         return StorageService.savePremiumizePostTorrentAction(action);
+      case 'alldebrid':
+        return StorageService.saveAllDebridPostTorrentAction(action);
       case 'debrid':
       default:
         return StorageService.savePostTorrentAction(action);
@@ -7299,6 +7407,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   List<String> _postTorrentActionOptionsForProvider(String providerId) {
     if (providerId == 'premiumize') {
       return const ['none', 'choose', 'open', 'play', 'download', 'playlist', 'channel'];
+    }
+    if (providerId == 'alldebrid') {
+      // AllDebrid (in this scope) supports the core add/play/download actions.
+      // 'channel' is offered in the chooser dialog but not as a default action.
+      return const ['none', 'choose', 'play', 'download'];
     }
     return const [
       'none',
@@ -7338,6 +7451,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return 'Torbox';
       case 'premiumize':
         return 'Premiumize';
+      case 'alldebrid':
+        return 'AllDebrid';
       case 'pikpak':
         return 'PikPak';
       case 'debrid':
@@ -9118,6 +9233,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _premiumizeIntegrationEnabled &&
         _premiumizeApiKey != null &&
         _premiumizeApiKey!.isNotEmpty;
+    final allDebridEnabled =
+        _allDebridIntegrationEnabled &&
+        _allDebridApiKey != null &&
+        _allDebridApiKey!.isNotEmpty;
 
     final result = await showDialog<String>(
       context: context,
@@ -9235,6 +9354,17 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               enabled: premiumizeEnabled,
               onTap: () => Navigator.of(context).pop('premiumize'),
             ),
+            const SizedBox(height: 8),
+            _buildBulkOptionTile(
+              icon: Icons.all_inclusive_rounded,
+              color: const Color(0xFF26A69A),
+              title: 'AllDebrid',
+              subtitle: allDebridEnabled
+                  ? 'Only cached torrents are added'
+                  : 'Not configured',
+              enabled: allDebridEnabled,
+              onTap: () => Navigator.of(context).pop('alldebrid'),
+            ),
             const SizedBox(height: 16),
             // Channel section header
             Padding(
@@ -9271,6 +9401,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       if (!mounted) return;
       final proceed = await _showPremiumizeFairUseDialog();
       if (proceed) _bulkAddToPremiumize();
+    } else if (result == 'alldebrid') {
+      _bulkAddToAllDebrid();
     } else if (result == 'create_channel') {
       _createChannelFromSelection();
     }
@@ -12640,6 +12772,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         ? 'Torbox'
         : provider == 'premiumize'
         ? 'Premiumize'
+        : provider == 'alldebrid'
+        ? 'AllDebrid'
         : 'Real-Debrid';
     final result = await showDialog<bool>(
       context: context,
@@ -13256,6 +13390,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       );
     } else if (provider == 'premiumize') {
       _addToPremiumize(nextTorrent.infohash, nextTorrent.name, forcePlay: true);
+    } else if (provider == 'alldebrid') {
+      _addToAllDebrid(nextTorrent.infohash, nextTorrent.name, forcePlay: true);
     }
 
     return true;
@@ -14519,6 +14655,1360 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     _showPremiumizeSnack(
       added ? 'Added collection to playlist' : 'Already in playlist',
       isError: !added,
+    );
+  }
+
+  // ── AllDebrid ──────────────────────────────────────────────────────────────
+  // AllDebrid is Real-Debrid-like: no cache-check endpoint, so we upload the
+  // magnet and poll its status. Resolved files carry *locked* links that must
+  // be unlocked via /link/unlock before playback/download.
+
+  void _showAllDebridApiKeyMissingMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please add your AllDebrid API key in Settings first!'),
+        backgroundColor: Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showAllDebridSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError
+            ? const Color(0xFFEF4444)
+            : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  String _formatAllDebridError(Object error) {
+    var message = error.toString();
+    message = message.replaceAll('Exception:', '').trim();
+    if (message.isEmpty) return 'Something went wrong.';
+    return message;
+  }
+
+  bool _allDebridFileLooksLikeVideo(AllDebridFile file) {
+    return FileUtils.isVideoFile(file.fileName);
+  }
+
+  /// Unlocks a single AllDebrid locked link into a ready-to-use direct URL,
+  /// returning '' on failure. Used to resolve only the starting episode up
+  /// front; the rest of a playlist is unlocked lazily by the player.
+  Future<String> _unlockAllDebridStart(String apiKey, String lockedLink) async {
+    try {
+      return await AllDebridService.unlockLink(apiKey, lockedLink);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _addToAllDebrid(
+    String infohash,
+    String torrentName, {
+    bool forcePlay = false,
+  }) async {
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showAllDebridApiKeyMissingMessage();
+      _clearQuickPlayMovieMask();
+      return;
+    }
+
+    DebridLoadingOverlay.showAllDebrid(
+      context,
+      torrentName,
+      suppressVisual: _quickPlayMovieMasking,
+    );
+
+    try {
+      final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
+
+      // No cache check on AllDebrid — the upload `ready` flag tells us instantly
+      // whether it's cached; not-cached throws AllDebridTorrentNotReadyException.
+      final result = await AllDebridService.addMagnetAndResolveFiles(
+        apiKey,
+        magnetLink,
+      );
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (result.files.isEmpty) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'alldebrid')) {
+          return;
+        }
+        _showAllDebridSnack(
+          'AllDebrid returned no files for this torrent.',
+          isError: true,
+        );
+        if (forcePlay) _resetQuickPlayState();
+        return;
+      }
+
+      if (!mounted) return;
+
+      // Auto-save movie source for quick reuse (overrides any previous source).
+      // Replay re-resolves by hash, so the stored magnet id is informational.
+      final sel = _activeAdvancedSelection;
+      if (sel != null && !sel.isSeries && sel.contentType == 'movie') {
+        await SeriesSourceService.setSources(sel.imdbId, [
+          SeriesSource(
+            torrentHash: infohash,
+            torrentName: torrentName,
+            debridService: 'alldebrid',
+            debridTorrentId: result.magnetId,
+            boundAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        ]);
+      }
+
+      final torrent = _findTorrentByInfohash(infohash, torrentName);
+      await _showAllDebridPostAddOptions(
+        result.files,
+        torrent,
+        torrentName,
+        infohash: infohash,
+        forcePlay: forcePlay,
+      );
+    } on AllDebridTorrentNotReadyException catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (forcePlay) {
+        // Quick Play probes torrents sequentially — don't leave the uncached
+        // magnet downloading on the account; delete it before trying the next.
+        await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+        if (_tryNextQuickPlayTorrent(provider: 'alldebrid')) {
+          return;
+        }
+        _resetQuickPlayState();
+        _showAllDebridSnack(
+          'This torrent is not cached on AllDebrid.',
+          isError: true,
+        );
+        return;
+      }
+      // Not a quick play — ask whether to add it anyway (mirrors Real-Debrid /
+      // Premiumize). AllDebrid already uploaded the magnet while polling, so
+      // "yes" just keeps it downloading and "no" deletes it.
+      if (!mounted) return;
+      final addAnyway = await _showNotCachedDialog('alldebrid');
+      if (!mounted) return;
+      final cardIndex = _torrents.indexWhere(
+        (t) => t.infohash.toLowerCase() == infohash.toLowerCase(),
+      );
+      _restoreFocusToCard(cardIndex);
+      if (addAnyway) {
+        _showAllDebridSnack(
+          'Added to AllDebrid. It will be available once the download finishes.',
+        );
+      } else {
+        await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+      }
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'alldebrid')) {
+        return;
+      }
+      _showAllDebridSnack(
+        'Failed to add torrent: ${_formatAllDebridError(e)}',
+        isError: true,
+      );
+      if (forcePlay) _resetQuickPlayState();
+    }
+  }
+
+  Future<void> _showAllDebridPostAddOptions(
+    List<AllDebridFile> files,
+    Torrent torrent,
+    String torrentName, {
+    String? infohash,
+    bool forcePlay = false,
+  }) async {
+    if (!mounted) return;
+    final videoFiles = files.where(_allDebridFileLooksLikeVideo).toList();
+    final hasVideo = videoFiles.isNotEmpty;
+    final isVideoOnly =
+        files.isNotEmpty && files.every(_allDebridFileLooksLikeVideo);
+
+    // Quick Play always plays; otherwise honour the user's preference.
+    final postAction = forcePlay
+        ? 'play'
+        : await StorageService.getAllDebridPostTorrentAction();
+
+    switch (postAction) {
+      case 'none':
+        _showAllDebridSnack('Torrent added to AllDebrid successfully');
+        return;
+      case 'play':
+        if (hasVideo) {
+          await _playAllDebridFiles(
+            files,
+            torrentName,
+            torrent,
+            infohash: infohash,
+            forcePlay: forcePlay,
+          );
+          if (_activeAdvancedSelection?.contentType == 'movie') {
+            _traktResultsKey.currentState?.refreshBoundSources();
+            _catalogBrowserKey.currentState?.refreshBoundSources();
+            _aggregatedResultsKey.currentState?.refreshBoundSources();
+          }
+          return;
+        }
+        if (forcePlay) {
+          if (_tryNextQuickPlayTorrent(provider: 'alldebrid')) return;
+          _resetQuickPlayState();
+        }
+        break; // fall through to the chooser
+      case 'download':
+        if (isVideoOnly) {
+          _showAllDebridDownloadOptions(files, torrentName);
+          return;
+        }
+        break; // fall through to the chooser
+      case 'choose':
+      default:
+        break;
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF26A69A), Color(0xFF00796B)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.all_inclusive_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                torrentName,
+                                maxLines: 5,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                hasVideo
+                                    ? 'Ready on AllDebrid. Choose your next step.'
+                                    : 'Available for download. No obvious videos detected.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            DialogTapGuard.markKeyAction();
+                            Navigator.of(ctx).pop();
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF1E293B)),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _DebridActionTile(
+                            icon: Icons.play_circle_fill_rounded,
+                            color: const Color(0xFF60A5FA),
+                            title: 'Play now',
+                            subtitle: hasVideo
+                                ? 'Stream instantly from AllDebrid.'
+                                : 'Available for torrents with video files.',
+                            enabled: hasVideo,
+                            autofocus: hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              _playAllDebridFiles(
+                                files,
+                                torrentName,
+                                torrent,
+                                infohash: infohash,
+                              );
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.download_rounded,
+                            color: const Color(0xFF4ADE80),
+                            title: 'Download to device',
+                            subtitle: 'Grab files via AllDebrid.',
+                            enabled: true,
+                            autofocus: !hasVideo,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              _showAllDebridDownloadOptions(files, torrentName);
+                            },
+                          ),
+                          _DebridActionTile(
+                            icon: Icons.connected_tv,
+                            color: const Color(0xFF10B981),
+                            title: 'Add to channel',
+                            subtitle:
+                                'Cache this torrent in a Debrify TV channel.',
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              _restoreFocusToCard(-1, torrent);
+                              final keyword = _searchController.text.trim();
+                              _addTorrentToChannel(torrent, keyword);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      DialogTapGuard.markKeyAction();
+                      Navigator.of(ctx).pop();
+                      _restoreFocusToCard(-1, torrent);
+                    },
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _playAllDebridFiles(
+    List<AllDebridFile> files,
+    String torrentName,
+    Torrent torrent, {
+    String? infohash,
+    bool forcePlay = false,
+  }) async {
+    final apiKey = _allDebridApiKey ?? await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showAllDebridApiKeyMissingMessage();
+      if (forcePlay) _resetQuickPlayState();
+      return;
+    }
+
+    final videoFiles = files.where(_allDebridFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'alldebrid')) return;
+      _showAllDebridSnack(
+        'No playable video files found in this torrent.',
+        isError: true,
+      );
+      if (forcePlay) _resetQuickPlayState();
+      return;
+    }
+
+    final int sourceIndex = infohash != null ? _findTorrentIndex(infohash) : 0;
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final String videoUrl = await AllDebridService.unlockLink(
+          apiKey,
+          file.link,
+        );
+        if (!mounted) return;
+        debugPrint('AllDebrid PLAY (single): title="$torrentName"');
+        final useDeoVR = await _shouldUseDeoVR(torrentName);
+        if (useDeoVR) {
+          await _launchWithDeoVR(videoUrl: videoUrl, filename: torrentName);
+          if (forcePlay) _resetQuickPlayState();
+          _returnToCatalogIfNeeded();
+          return;
+        }
+        if (!mounted) return;
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: videoUrl,
+            title: torrentName,
+            subtitle: Formatters.formatFileSize(file.size),
+            viewMode: PlaylistViewMode.sorted,
+            contentImdbId: _activeAdvancedSelection?.imdbId,
+            contentType: _activeAdvancedSelection?.contentType,
+            contentSeason: _activeAdvancedSelection?.season,
+            contentEpisode: _activeAdvancedSelection?.episode,
+            stremioSources: _torrents,
+            stremioCurrentSourceIndex: sourceIndex,
+            resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+            traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
+            traktProgressPercent:
+                _activeAdvancedSelection?.traktProgressPercent,
+            contentTitle: _activeAdvancedSelection?.title,
+            posterUrl: _activeAdvancedSelection?.posterUrl,
+            contentYear: _activeAdvancedSelection?.year,
+            addonId: _selectedSource.addon?.id,
+          ),
+          onQuickPlayNextEpisode: _quickPlayNextCallback,
+        );
+        if (forcePlay) _resetQuickPlayState();
+        _returnToCatalogIfNeeded();
+      } catch (e) {
+        if (forcePlay && _tryNextQuickPlayTorrent(provider: 'alldebrid')) {
+          return;
+        }
+        _showAllDebridSnack(
+          'Failed to play file: ${_formatAllDebridError(e)}',
+          isError: true,
+        );
+        if (forcePlay) _resetQuickPlayState();
+      }
+      return;
+    }
+
+    // Multi-file: build a sorted playlist (series-aware) of unlocked links.
+    final items = List<_AllDebridPlaylistItem>.generate(videoFiles.length, (
+      index,
+    ) {
+      final displayName = videoFiles[index].fileName;
+      final info = SeriesParser.parseFilename(displayName);
+      return _AllDebridPlaylistItem(
+        file: videoFiles[index],
+        seriesInfo: info,
+        displayName: displayName,
+      );
+    });
+
+    final filenames = items.map((e) => e.displayName).toList();
+    final bool isSeriesCollection =
+        items.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    final sortedEntries = [...items];
+    if (isSeriesCollection) {
+      sortedEntries.sort((a, b) {
+        final seasonCompare = (a.seriesInfo.season ?? 0).compareTo(
+          b.seriesInfo.season ?? 0,
+        );
+        if (seasonCompare != 0) return seasonCompare;
+        final episodeCompare = (a.seriesInfo.episode ?? 0).compareTo(
+          b.seriesInfo.episode ?? 0,
+        );
+        if (episodeCompare != 0) return episodeCompare;
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
+      });
+    } else {
+      sortedEntries.sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    }
+
+    final seriesInfos = sortedEntries.map((entry) => entry.seriesInfo).toList();
+    int startIndex = isSeriesCollection
+        ? _findFirstEpisodeIndex(seriesInfos)
+        : 0;
+    if (startIndex < 0 || startIndex >= sortedEntries.length) {
+      startIndex = 0;
+    }
+
+    // AllDebrid links are locked. Unlock ONLY the starting episode so playback
+    // begins immediately; the rest carry their (stable) locked link and are
+    // unlocked on demand by the player's lazy resolver — exactly like
+    // Real-Debrid's restrictedLink flow. This avoids unlocking every file of a
+    // large season pack up front.
+    String startUrl = await _unlockAllDebridStart(
+      apiKey,
+      sortedEntries[startIndex].file.link,
+    );
+    if (startUrl.isEmpty) {
+      // Couldn't unlock the desired start — probe the others for a playable one.
+      for (int i = 0; i < sortedEntries.length; i++) {
+        if (i == startIndex) continue;
+        final u = await _unlockAllDebridStart(apiKey, sortedEntries[i].file.link);
+        if (u.isNotEmpty) {
+          startUrl = u;
+          startIndex = i;
+          break;
+        }
+      }
+    }
+    if (!mounted) return;
+    if (startUrl.isEmpty) {
+      if (forcePlay && _tryNextQuickPlayTorrent(provider: 'alldebrid')) {
+        return;
+      }
+      _showAllDebridSnack(
+        'Failed to resolve playable links from AllDebrid.',
+        isError: true,
+      );
+      if (forcePlay) _resetQuickPlayState();
+      return;
+    }
+
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final seriesInfo = entry.seriesInfo;
+      final episodeLabel = _formatTorboxPlaylistTitle(
+        info: seriesInfo,
+        fallback: entry.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _combineSeriesAndEpisodeTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: entry.displayName,
+      );
+
+      // Strip the first folder level (torrent name) from path.
+      String relativePath = entry.file.path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+
+      playlistEntries.add(
+        PlaylistEntry(
+          // Start entry gets the unlocked URL; the rest resolve lazily.
+          url: i == startIndex ? startUrl : '',
+          title: combinedTitle,
+          relativePath: relativePath,
+          sizeBytes: entry.file.size,
+          provider: 'alldebrid',
+          allDebridLink: entry.file.link,
+          torrentHash: (infohash != null && infohash.isNotEmpty)
+              ? infohash
+              : null,
+        ),
+      );
+    }
+
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, entry) => sum + entry.file.size,
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    debugPrint(
+      'AllDebrid PLAY (multi): ${playlistEntries.length} files, '
+      'startIndex=$startIndex isSeries=$isSeriesCollection',
+    );
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: startUrl,
+        title: torrentName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+        viewMode: isSeriesCollection
+            ? PlaylistViewMode.series
+            : PlaylistViewMode.sorted,
+        contentImdbId: _activeAdvancedSelection?.imdbId,
+        contentType: _activeAdvancedSelection?.contentType,
+        contentSeason: _activeAdvancedSelection?.season,
+        contentEpisode: _activeAdvancedSelection?.episode,
+        stremioSources: _torrents,
+        stremioCurrentSourceIndex: sourceIndex,
+        resolveSourceToPlaylist: _createSourcePlaylistResolver(),
+        traktScrobble: _activeAdvancedSelection?.traktSource ?? false,
+        traktProgressPercent: _activeAdvancedSelection?.traktProgressPercent,
+        contentTitle: _activeAdvancedSelection?.title,
+        posterUrl: _activeAdvancedSelection?.posterUrl,
+        contentYear: _activeAdvancedSelection?.year,
+        addonId: _selectedSource.addon?.id,
+      ),
+      onQuickPlayNextEpisode: _quickPlayNextCallback,
+    );
+    if (forcePlay) _resetQuickPlayState();
+    _returnToCatalogIfNeeded();
+  }
+
+  Future<void> _showAllDebridDownloadOptions(
+    List<AllDebridFile> files,
+    String torrentName,
+  ) async {
+    if (files.isEmpty) {
+      _showAllDebridSnack('No files available to download.', isError: true);
+      return;
+    }
+
+    final formattedFiles = <Map<String, dynamic>>[];
+    for (int i = 0; i < files.length; i++) {
+      formattedFiles.add({
+        '_fullPath': files[i].path,
+        'name': files[i].path,
+        'size': files[i].size.toString(),
+        '_allDebridIndex': i,
+      });
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return FileSelectionDialog(
+          files: formattedFiles,
+          torrentName: torrentName,
+          onDownload: (selectedFiles) {
+            if (selectedFiles.isEmpty) return;
+            _downloadSelectedAllDebridFiles(
+              selectedFiles,
+              files,
+              torrentName,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _downloadSelectedAllDebridFiles(
+    List<Map<String, dynamic>> selectedFiles,
+    List<AllDebridFile> allFiles,
+    String torrentName,
+  ) async {
+    if (selectedFiles.isEmpty) return;
+    final apiKey = _allDebridApiKey ?? await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showAllDebridApiKeyMissingMessage();
+      return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+    for (final file in selectedFiles) {
+      try {
+        final index = file['_allDebridIndex'] as int? ?? -1;
+        if (index < 0 || index >= allFiles.length) {
+          failCount++;
+          continue;
+        }
+        final target = allFiles[index];
+        // AllDebrid links are locked — unlock to a direct URL before queuing.
+        final directUrl = await AllDebridService.unlockLink(apiKey, target.link);
+        await DownloadService.instance.enqueueDownload(
+          url: directUrl,
+          fileName: target.fileName,
+          torrentName: torrentName,
+          context: mounted ? context : null,
+        );
+        successCount++;
+      } catch (e) {
+        failCount++;
+      }
+    }
+
+    if (!mounted) return;
+    if (successCount > 0 && failCount == 0) {
+      _showAllDebridSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+      );
+    } else if (successCount > 0) {
+      _showAllDebridSnack(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        isError: true,
+      );
+    } else {
+      _showAllDebridSnack(
+        'Failed to queue any files for download',
+        isError: true,
+      );
+    }
+  }
+
+  /// Select-source mode: add to AllDebrid and store as a bound source.
+  Future<void> _addToAllDebridAndBindSource(
+    String infohash,
+    String torrentName,
+    String imdbId,
+  ) async {
+    if (!mounted) return;
+    final apiKey = _allDebridApiKey!;
+    final magnetLink = _torrentAcquisitionUrl(infohash, torrentName);
+
+    _showSelectSourceLoadingDialog(torrentName);
+    try {
+      final result = await AllDebridService.addMagnetAndResolveFiles(
+        apiKey,
+        magnetLink,
+      );
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+
+      await _saveSource(
+        imdbId,
+        SeriesSource(
+          torrentHash: infohash,
+          torrentName: torrentName,
+          debridService: 'alldebrid',
+          debridTorrentId: result.magnetId,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+        isMovie: _selectSourceShow?.type == 'movie',
+      );
+      if (!mounted) return;
+      _exitSelectSourceMode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Source set: $torrentName'),
+          backgroundColor: const Color(0xFF34D399),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      _goBackAndRefreshSources();
+    } on AllDebridTorrentNotReadyException catch (e) {
+      // Don't bind sources that aren't ready — and don't leave the just-uploaded
+      // magnet downloading on the account (it can't be played immediately).
+      await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+      if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Torrent is not cached on AllDebrid. Try another torrent.',
+          ),
+          backgroundColor: Color(0xFFF59E0B),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to set source: ${_formatAllDebridError(e)}'),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Replays a bound AllDebrid source: re-uploads by hash, polls until ready,
+  /// then unlocks the matching episode/movie and builds the playlist.
+  Future<bool> _tryPlayFromBoundSourceAllDebrid(
+    AdvancedSearchSelection selection,
+    SeriesSource source, {
+    bool showNotFoundHint = true,
+    bool showUnavailableHint = true,
+  }) async {
+    final apiKey = _allDebridApiKey;
+    if (apiKey == null || apiKey.isEmpty) return false;
+
+    final magnet =
+        _torrentAcquisitionUrl(source.torrentHash, source.torrentName);
+
+    final AllDebridAddResult result;
+    try {
+      result = await AllDebridService.addMagnetAndResolveFiles(
+        apiKey,
+        magnet,
+      );
+    } on AllDebridTorrentNotReadyException catch (e) {
+      // Keep the local binding (it may become cached later), but don't leave the
+      // just-uploaded magnet downloading on the account each replay attempt.
+      await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+      if (showUnavailableHint && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved source is not ready on AllDebrid. Falling back to search.',
+            ),
+            backgroundColor: Color(0xFFF59E0B),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+    if (!mounted) return false;
+
+    final videoFiles =
+        result.files.where(_allDebridFileLooksLikeVideo).toList();
+    if (videoFiles.isEmpty) return false;
+
+    final filenames = videoFiles.map((f) => f.fileName).toList();
+
+    int? targetIndex;
+    if (selection.isSeries) {
+      targetIndex = _findEpisodeInFilenames(
+        filenames,
+        selection.season!,
+        selection.episode!,
+        showHint: showNotFoundHint,
+      );
+    } else {
+      int largestIdx = 0;
+      int largestSize = 0;
+      for (int i = 0; i < videoFiles.length; i++) {
+        if (videoFiles[i].size > largestSize) {
+          largestSize = videoFiles[i].size;
+          largestIdx = i;
+        }
+      }
+      targetIndex = largestIdx;
+    }
+    if (targetIndex == null) return false;
+
+    // Unlock only the target episode/file up front; the rest are unlocked
+    // lazily by the player from their stored locked link.
+    final videoUrl = await _unlockAllDebridStart(
+      apiKey,
+      videoFiles[targetIndex].link,
+    );
+    if (!mounted) return false;
+    // For a series we must play the matched episode — don't silently substitute
+    // a different file. For a movie, the largest file failing is a hard error.
+    if (videoUrl.isEmpty) return false;
+
+    final playlist = <PlaylistEntry>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      String relativePath = videoFiles[i].path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+      playlist.add(
+        PlaylistEntry(
+          url: i == targetIndex ? videoUrl : '',
+          title: filenames[i],
+          relativePath: relativePath,
+          sizeBytes: videoFiles[i].size,
+          provider: 'alldebrid',
+          allDebridLink: videoFiles[i].link,
+          torrentHash:
+              source.torrentHash.isNotEmpty ? source.torrentHash : null,
+        ),
+      );
+    }
+
+    await _launchBoundSourcePlayer(
+      videoUrl: videoUrl,
+      title: source.torrentName,
+      playlist: playlist,
+      startIndex: targetIndex,
+      selection: selection,
+    );
+    return true;
+  }
+
+  /// In-player source switching: resolve an AllDebrid torrent to playlist
+  /// entries. Returns null if it can't be made ready/unlocked.
+  Future<List<PlaylistEntry>?> _resolveSourceViaAllDebrid(
+    Torrent torrent,
+    String magnet,
+  ) async {
+    try {
+      final apiKey = _allDebridApiKey;
+      if (apiKey == null || apiKey.isEmpty) return null;
+      final AllDebridAddResult result;
+      try {
+        result = await AllDebridService.addMagnetAndResolveFiles(
+          apiKey,
+          magnet,
+        );
+      } on AllDebridTorrentNotReadyException {
+        return null;
+      }
+      final videoFiles =
+          result.files.where(_allDebridFileLooksLikeVideo).toList();
+      if (videoFiles.isEmpty) return null;
+
+      final items = videoFiles
+          .map(
+            (f) => _AllDebridPlaylistItem(
+              file: f,
+              seriesInfo: SeriesParser.parseFilename(f.fileName),
+              displayName: f.fileName,
+            ),
+          )
+          .toList();
+      final isSeriesCollection = items.length > 1 &&
+          SeriesParser.isSeriesPlaylist(
+            items.map((e) => e.displayName).toList(),
+          );
+      if (isSeriesCollection) {
+        items.sort((a, b) {
+          final seasonCompare = (a.seriesInfo.season ?? 0).compareTo(
+            b.seriesInfo.season ?? 0,
+          );
+          if (seasonCompare != 0) return seasonCompare;
+          final episodeCompare = (a.seriesInfo.episode ?? 0).compareTo(
+            b.seriesInfo.episode ?? 0,
+          );
+          if (episodeCompare != 0) return episodeCompare;
+          return a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
+        });
+      } else {
+        items.sort(
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
+        );
+      }
+
+      // Lazy: carry each file's locked link; the player unlocks on demand when
+      // it switches to / advances through an entry.
+      final entries = <PlaylistEntry>[];
+      for (int i = 0; i < items.length; i++) {
+        final entry = items[i];
+        final episodeLabel = _formatTorboxPlaylistTitle(
+          info: entry.seriesInfo,
+          fallback: entry.displayName,
+          isSeriesCollection: isSeriesCollection,
+        );
+        final combinedTitle = _combineSeriesAndEpisodeTitle(
+          seriesTitle: entry.seriesInfo.title,
+          episodeLabel: episodeLabel,
+          isSeriesCollection: isSeriesCollection,
+          fallback: entry.displayName,
+        );
+        String relativePath = entry.file.path;
+        final firstSlash = relativePath.indexOf('/');
+        if (firstSlash > 0) {
+          relativePath = relativePath.substring(firstSlash + 1);
+        }
+        entries.add(
+          PlaylistEntry(
+            url: '',
+            title: combinedTitle,
+            relativePath: relativePath,
+            sizeBytes: entry.file.size,
+            provider: 'alldebrid',
+            allDebridLink: entry.file.link,
+            torrentHash: torrent.infohash.isNotEmpty ? torrent.infohash : null,
+          ),
+        );
+      }
+      return entries.isEmpty ? null : entries;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Bulk-add selected torrents to AllDebrid. AllDebrid has no cache-check API,
+  /// so each magnet is uploaded and polled; ones that don't become ready are
+  /// deleted (mirrors the Real-Debrid bulk-add semantics — nothing uncached
+  /// lingers on the account).
+  Future<void> _bulkAddToAllDebrid() async {
+    final apiKey = _allDebridApiKey;
+    if (apiKey == null || apiKey.isEmpty) {
+      _showAllDebridApiKeyMissingMessage();
+      return;
+    }
+
+    final torrentsToAdd = _isSelectionMode
+        ? _torrents
+              .where((t) => _selectedInfohashes.contains(t.infohash))
+              .toList()
+        : List<Torrent>.from(_torrents);
+
+    if (torrentsToAdd.isEmpty) return;
+
+    setState(() {
+      _isBulkAdding = true;
+    });
+
+    final totalTorrents = torrentsToAdd.length;
+    int successCount = 0;
+    int failureCount = 0;
+    int skippedCount = 0;
+    int currentIndex = 0;
+    bool cancelled = false;
+
+    final Map<String, String> torrentStatus = {};
+    for (final torrent in torrentsToAdd) {
+      torrentStatus[torrent.infohash] = 'pending';
+    }
+
+    try {
+      if (!mounted) return;
+
+      StateSetter? dialogSetState;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              dialogSetState = setDialogState;
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF26A69A).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.all_inclusive_rounded,
+                        color: Color(0xFF26A69A),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Adding to AllDebrid',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                content: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: totalTorrents > 0
+                            ? currentIndex / totalTorrents
+                            : 0,
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF26A69A),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Progress: $currentIndex of $totalTorrents',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          _bulkStatusChip(
+                            Icons.check_circle,
+                            const Color(0xFF10B981),
+                            'Success: $successCount',
+                          ),
+                          _bulkStatusChip(
+                            Icons.error,
+                            const Color(0xFFEF4444),
+                            'Failed: $failureCount',
+                          ),
+                          _bulkStatusChip(
+                            Icons.block,
+                            const Color(0xFFF59E0B),
+                            'Not cached: $skippedCount',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: torrentsToAdd.length,
+                          itemBuilder: (context, index) {
+                            final torrent = torrentsToAdd[index];
+                            final status =
+                                torrentStatus[torrent.infohash] ?? 'pending';
+
+                            IconData icon;
+                            Color iconColor;
+                            String? subtitle;
+
+                            if (status == 'success') {
+                              icon = Icons.check_circle;
+                              iconColor = const Color(0xFF10B981);
+                            } else if (status == 'error') {
+                              icon = Icons.error;
+                              iconColor = const Color(0xFFEF4444);
+                            } else if (status == 'not_cached') {
+                              icon = Icons.cancel;
+                              iconColor = const Color(0xFFF59E0B);
+                              subtitle = 'Not cached — removed';
+                            } else if (status == 'processing') {
+                              icon = Icons.hourglass_empty;
+                              iconColor = const Color(0xFF26A69A);
+                            } else {
+                              icon = Icons.circle_outlined;
+                              iconColor = Colors.white54;
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(icon, color: iconColor, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          torrent.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.7,
+                                            ),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (subtitle != null)
+                                          Text(
+                                            subtitle,
+                                            style: TextStyle(
+                                              color: iconColor.withValues(
+                                                alpha: 0.7,
+                                              ),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      DialogTapGuard.markKeyAction();
+                      cancelled = true;
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      // Process torrents one at a time (AllDebrid has no cache check API).
+      for (final torrent in torrentsToAdd) {
+        if (cancelled) break;
+
+        try {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'processing';
+              currentIndex++;
+            });
+          }
+
+          final magnetLink = _torrentAcquisitionUrlForTorrent(torrent);
+
+          await AllDebridService.addMagnetAndResolveFiles(
+            apiKey,
+            magnetLink,
+          );
+
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'success';
+              successCount++;
+            });
+          }
+        } on AllDebridTorrentNotReadyException catch (e) {
+          // Not ready/cached — remove the magnet from the account.
+          await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'not_cached';
+              skippedCount++;
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            dialogSetState?.call(() {
+              torrentStatus[torrent.infohash] = 'error';
+              failureCount++;
+            });
+          }
+        }
+
+        if (!cancelled) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (!cancelled && mounted) {
+        final parts = <String>[];
+        if (successCount > 0) parts.add('Added $successCount');
+        if (skippedCount > 0) parts.add('$skippedCount not cached');
+        if (failureCount > 0) parts.add('$failureCount failed');
+        final message = parts.join(', ');
+        final isError =
+            failureCount > 0 || (successCount == 0 && skippedCount > 0);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message.isEmpty ? 'No torrents added' : message),
+            backgroundColor: isError
+                ? const Color(0xFFEF4444)
+                : const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bulk add failed: ${_formatAllDebridError(e)}'),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBulkAdding = false;
+        });
+        if (_isSelectionMode) {
+          _exitSelectionMode();
+        }
+      }
+    }
+  }
+
+  Widget _bulkStatusChip(IconData icon, Color color, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -17822,6 +19312,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _premiumizeApiKey != null &&
           _premiumizeApiKey!.isNotEmpty) {
         return _resolveSourceViaPremiumize(torrent, magnet);
+      } else if (defaultProvider == 'alldebrid' &&
+          _allDebridIntegrationEnabled &&
+          _allDebridApiKey != null &&
+          _allDebridApiKey!.isNotEmpty) {
+        return _resolveSourceViaAllDebrid(torrent, magnet);
       }
 
       // Fallback: no default set or selected provider unavailable → first available
@@ -17839,6 +19334,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _premiumizeApiKey != null &&
           _premiumizeApiKey!.isNotEmpty) {
         return _resolveSourceViaPremiumize(torrent, magnet);
+      } else if (_allDebridIntegrationEnabled &&
+          _allDebridApiKey != null &&
+          _allDebridApiKey!.isNotEmpty) {
+        return _resolveSourceViaAllDebrid(torrent, magnet);
       }
       return null;
     };
@@ -22459,6 +23958,70 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           );
         }
 
+        Widget buildAllDebridButton() {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              focusColor: const Color(0xFF26A69A).withValues(alpha: 0.25),
+              onTap: () => _addToAllDebrid(torrent.infohash, torrent.name),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF26A69A), Color(0xFF00796B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF26A69A).withValues(alpha: 0.4),
+                      spreadRadius: 0,
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.all_inclusive_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'AllDebrid',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.expand_more_rounded,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
         final Widget? torboxButton =
             (_torboxIntegrationEnabled &&
                 _torboxApiKey != null &&
@@ -22480,12 +24043,19 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                 _premiumizeApiKey!.isNotEmpty)
             ? buildPremiumizeButton()
             : null;
+        final Widget? allDebridButton =
+            (_allDebridIntegrationEnabled &&
+                _allDebridApiKey != null &&
+                _allDebridApiKey!.isNotEmpty)
+            ? buildAllDebridButton()
+            : null;
 
         final List<Widget> providerButtons = [
           torboxButton,
           realDebridButton,
           pikpakButton,
           premiumizeButton,
+          allDebridButton,
         ].whereType<Widget>().toList();
 
         if (providerButtons.isEmpty) {
@@ -22553,6 +24123,18 @@ class _PremiumizePlaylistItem {
   final String displayName;
 
   const _PremiumizePlaylistItem({
+    required this.file,
+    required this.seriesInfo,
+    required this.displayName,
+  });
+}
+
+class _AllDebridPlaylistItem {
+  final AllDebridFile file;
+  final SeriesInfo seriesInfo;
+  final String displayName;
+
+  const _AllDebridPlaylistItem({
     required this.file,
     required this.seriesInfo,
     required this.displayName,

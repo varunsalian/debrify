@@ -32,6 +32,11 @@ class StorageService {
       'premiumize_check_cache_before_search';
   static const String _premiumizeHiddenFromNavKey =
       'premiumize_hidden_from_nav';
+  static const String _allDebridApiKey = 'alldebrid_api_key';
+  static const String _allDebridIntegrationEnabledKey =
+      'alldebrid_integration_enabled';
+  static const String _allDebridPostTorrentActionKey =
+      'alldebrid_post_torrent_action';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -428,6 +433,43 @@ class StorageService {
   static Future<void> clearPremiumizeHiddenFromNav() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_premiumizeHiddenFromNavKey);
+  }
+
+  // AllDebrid API key helpers
+  static Future<String?> getAllDebridApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_allDebridApiKey);
+  }
+
+  static Future<void> saveAllDebridApiKey(String apiKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_allDebridApiKey, apiKey);
+  }
+
+  static Future<void> deleteAllDebridApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_allDebridApiKey);
+  }
+
+  static Future<bool> getAllDebridIntegrationEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_allDebridIntegrationEnabledKey) ?? true;
+  }
+
+  static Future<void> setAllDebridIntegrationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_allDebridIntegrationEnabledKey, enabled);
+  }
+
+  // AllDebrid post-torrent action methods
+  static Future<String> getAllDebridPostTorrentAction() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_allDebridPostTorrentActionKey) ?? 'choose';
+  }
+
+  static Future<void> saveAllDebridPostTorrentAction(String action) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_allDebridPostTorrentActionKey, action);
   }
 
   static Future<bool> isInitialSetupComplete() async {
@@ -1986,6 +2028,7 @@ class StorageService {
     await prefs.remove(_torboxHiddenFromNavKey);
     await prefs.remove(_premiumizeIntegrationEnabledKey);
     await prefs.remove(_premiumizeHiddenFromNavKey);
+    await prefs.remove(_allDebridIntegrationEnabledKey);
     await prefs.remove(_webDavEnabledKey);
     await prefs.remove(_webDavHiddenFromNavKey);
   }
@@ -2027,6 +2070,7 @@ class StorageService {
     await prefs.remove(_torboxPostTorrentActionKey);
     await prefs.remove(_pikpakPostTorrentActionKey);
     await prefs.remove(_premiumizePostTorrentActionKey);
+    await prefs.remove(_allDebridPostTorrentActionKey);
   }
 
   /// Clear all Debrify TV display and engine settings

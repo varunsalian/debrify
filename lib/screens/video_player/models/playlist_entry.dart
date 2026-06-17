@@ -16,6 +16,7 @@ class PlaylistEntry {
   final String? premiumizeHash; // Premiumize torrent infohash for lazy resolution
   final String? premiumizePath; // Premiumize file path (matched on re-resolve)
   final String? premiumizeItemId; // Premiumize cloud item id (lazy resolution from cloud browser)
+  final String? allDebridLink; // AllDebrid locked link, unlocked on demand (lazy resolution)
   const PlaylistEntry({
     required this.url,
     required this.title,
@@ -33,5 +34,6 @@ class PlaylistEntry {
     this.premiumizeHash,
     this.premiumizePath,
     this.premiumizeItemId,
+    this.allDebridLink,
   });
 }

@@ -526,6 +526,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _webDavHiddenFromNav = false;
   bool _premiumizeEnabled = false;
   bool _premiumizeHiddenFromNav = false;
+  // AllDebrid has no dedicated nav tab (cloud-library browser not built yet),
+  // but it must count as a connected provider so the shared Downloads / Debrify
+  // TV tabs appear when it's the only provider enabled.
+  bool _allDebridEnabled = false;
   bool _isAndroidTv = false;
 
   // Auto-launch overlay state
@@ -1923,6 +1927,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final premiumizeEnabledPref =
         await StorageService.getPremiumizeIntegrationEnabled();
     final premiumizeHidden = await StorageService.getPremiumizeHiddenFromNav();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final allDebridEnabledPref =
+        await StorageService.getAllDebridIntegrationEnabled();
 
     if (!mounted) return;
 
@@ -1932,6 +1939,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final hasPremiumize = premiumizeEnabledPref &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
+    final hasAllDebrid = allDebridEnabledPref &&
+        allDebridKey != null &&
+        allDebridKey.isNotEmpty;
 
     _applyIntegrationState(
       hasRealDebrid: hasRealDebrid,
@@ -1946,6 +1956,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       webDavHidden: webDavHidden,
       premiumizeEnabled: hasPremiumize,
       premiumizeHidden: premiumizeHidden,
+      allDebridEnabled: hasAllDebrid,
     );
   }
 
@@ -1962,6 +1973,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool webDavHidden,
     required bool premiumizeEnabled,
     required bool premiumizeHidden,
+    required bool allDebridEnabled,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -1974,6 +1986,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       webDavHidden: webDavHidden,
       premiumizeEnabled: premiumizeEnabled,
       premiumizeHidden: premiumizeHidden,
+      allDebridEnabled: allDebridEnabled,
     );
 
     int nextIndex = _selectedIndex;
@@ -1993,6 +2006,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _webDavHiddenFromNav == webDavHidden &&
         _premiumizeEnabled == premiumizeEnabled &&
         _premiumizeHiddenFromNav == premiumizeHidden &&
+        _allDebridEnabled == allDebridEnabled &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -2010,6 +2024,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _webDavHiddenFromNav = webDavHidden;
       _premiumizeEnabled = premiumizeEnabled;
       _premiumizeHiddenFromNav = premiumizeHidden;
+      _allDebridEnabled = allDebridEnabled;
       _selectedIndex = nextIndex;
     });
   }
@@ -2025,6 +2040,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? webDavHidden,
     bool? premiumizeEnabled,
     bool? premiumizeHidden,
+    bool? allDebridEnabled,
   }) {
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
@@ -2037,6 +2053,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final wdHidden = webDavHidden ?? _webDavHiddenFromNav;
       final premiumize = premiumizeEnabled ?? _premiumizeEnabled;
       final pmHidden = premiumizeHidden ?? _premiumizeHiddenFromNav;
+      // AllDebrid has no dedicated TV tab; the TV base tabs (Downloads etc.)
+      // are always shown, so it needs no entry here.
       final indices = <int>[
         0,
         2,
@@ -2073,7 +2091,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final wdHidden = webDavHidden ?? _webDavHiddenFromNav;
     final premiumize = premiumizeEnabled ?? _premiumizeEnabled;
     final pmHidden = premiumizeHidden ?? _premiumizeHiddenFromNav;
-    if (!rd && !tb && !pikpak && !webDav && !premiumize) {
+    // AllDebrid has no dedicated nav tab, but it must count as a connected
+    // provider so the shared Downloads / Debrify TV tabs stay visible.
+    final allDebrid = allDebridEnabled ?? _allDebridEnabled;
+    if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
     }
 

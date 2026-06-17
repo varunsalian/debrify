@@ -147,6 +147,21 @@ class DebridLoadingOverlay {
       suppressVisual: suppressVisual,
     );
   }
+
+  static void showAllDebrid(
+    BuildContext context,
+    String torrentName, {
+    bool suppressVisual = false,
+  }) {
+    show(
+      context,
+      provider: 'AllDebrid',
+      torrentName: torrentName,
+      accentColor: const Color(0xFF26A69A),
+      icon: Icons.all_inclusive_rounded,
+      suppressVisual: suppressVisual,
+    );
+  }
 }
 
 class _DebridLoadingContent extends StatefulWidget {

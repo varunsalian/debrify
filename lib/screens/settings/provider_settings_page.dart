@@ -19,6 +19,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   bool _torboxAvailable = false;
   bool _realDebridAvailable = false;
   bool _premiumizeAvailable = false;
+  bool _allDebridAvailable = false;
   bool _pikpakAvailable = false;
 
   // Focus nodes for D-pad navigation
@@ -44,18 +45,23 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdKey = await StorageService.getApiKey();
     final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
     final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
 
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final premiumizeEnabled =
         await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
 
     final torboxAvailable =
         torboxEnabled && torboxKey != null && torboxKey.isNotEmpty;
     final rdAvailable = rdEnabled && rdKey != null && rdKey.isNotEmpty;
     final premiumizeAvailable =
         premiumizeEnabled && premiumizeKey != null && premiumizeKey.isNotEmpty;
+    final allDebridAvailable =
+        allDebridEnabled && allDebridKey != null && allDebridKey.isNotEmpty;
     final pikpakAvailable = pikpakAuth;
 
     // Load current setting
@@ -69,6 +75,9 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       currentProvider = 'none';
       await StorageService.setDefaultTorrentProvider('none');
     } else if (currentProvider == 'premiumize' && !premiumizeAvailable) {
+      currentProvider = 'none';
+      await StorageService.setDefaultTorrentProvider('none');
+    } else if (currentProvider == 'alldebrid' && !allDebridAvailable) {
       currentProvider = 'none';
       await StorageService.setDefaultTorrentProvider('none');
     } else if (currentProvider == 'pikpak' && !pikpakAvailable) {
@@ -85,6 +94,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
         (torboxAvailable ? 1 : 0) +
         (rdAvailable ? 1 : 0) +
         (premiumizeAvailable ? 1 : 0) +
+        (allDebridAvailable ? 1 : 0) +
         (pikpakAvailable ? 1 : 0);
     for (int i = 0; i < providerCount; i++) {
       final node = FocusNode(debugLabel: 'provider-$i');
@@ -97,6 +107,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
         _torboxAvailable = torboxAvailable;
         _realDebridAvailable = rdAvailable;
         _premiumizeAvailable = premiumizeAvailable;
+        _allDebridAvailable = allDebridAvailable;
         _pikpakAvailable = pikpakAvailable;
         _selectedProvider = currentProvider;
         _loading = false;
@@ -136,6 +147,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final hasAnyProvider = _torboxAvailable ||
         _realDebridAvailable ||
         _premiumizeAvailable ||
+        _allDebridAvailable ||
         _pikpakAvailable;
 
     return Scaffold(
@@ -323,6 +335,22 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       nodeIndex++;
     }
 
+    // AllDebrid option
+    if (_allDebridAvailable) {
+      options.add(const SizedBox(height: 8));
+      options.add(_ProviderOption(
+        focusNode: _providerFocusNodes[nodeIndex],
+        isFocused: _focusedIndex == nodeIndex,
+        icon: Icons.all_inclusive_rounded,
+        iconColor: const Color(0xFF26A69A),
+        title: 'AllDebrid',
+        subtitle: 'Premium link generator',
+        selected: _selectedProvider == 'alldebrid',
+        onSelected: () => _selectProvider('alldebrid'),
+      ));
+      nodeIndex++;
+    }
+
     // PikPak option
     if (_pikpakAvailable) {
       options.add(const SizedBox(height: 8));
@@ -375,7 +403,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Connect Real-Debrid, Torbox, Premiumize, or PikPak in Settings to use this feature.',
+                  'Connect Real-Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use this feature.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),

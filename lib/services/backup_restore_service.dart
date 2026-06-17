@@ -38,6 +38,7 @@ class BackupRestoreService {
     final realDebridKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
     final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
     final pikpakEmail = await StorageService.getPikPakEmail();
     final pikpakPassword = await StorageService.getPikPakPassword();
     final traktAccess = await StorageService.getTraktAccessToken();
@@ -82,6 +83,8 @@ class BackupRestoreService {
       if (torboxKey != null && torboxKey.isNotEmpty) 'torboxApiKey': torboxKey,
       if (premiumizeKey != null && premiumizeKey.isNotEmpty)
         'premiumizeApiKey': premiumizeKey,
+      if (allDebridKey != null && allDebridKey.isNotEmpty)
+        'allDebridApiKey': allDebridKey,
       if (pikpakEmail != null && pikpakEmail.isNotEmpty)
         'pikpak': <String, dynamic>{
           'email': pikpakEmail,
@@ -115,6 +118,7 @@ class BackupRestoreService {
           (map['realDebridApiKey'] as String?)?.isNotEmpty ?? false,
       hasTorbox: (map['torboxApiKey'] as String?)?.isNotEmpty ?? false,
       hasPremiumize: (map['premiumizeApiKey'] as String?)?.isNotEmpty ?? false,
+      hasAllDebrid: (map['allDebridApiKey'] as String?)?.isNotEmpty ?? false,
       hasPikpak: (map['pikpak'] is Map) &&
           ((map['pikpak'] as Map)['email'] as String?)?.isNotEmpty == true,
       hasTrakt: (map['trakt'] is Map) &&
@@ -197,6 +201,19 @@ class BackupRestoreService {
           report.premiumize = true;
         } catch (e) {
           report.errors.add('Premiumize: $e');
+        }
+      }
+    }
+
+    if (selection.allDebrid) {
+      final key = map['allDebridApiKey'] as String?;
+      if (key != null && key.isNotEmpty) {
+        try {
+          await StorageService.saveAllDebridApiKey(key);
+          await StorageService.setAllDebridIntegrationEnabled(true);
+          report.allDebrid = true;
+        } catch (e) {
+          report.errors.add('AllDebrid: $e');
         }
       }
     }
@@ -489,6 +506,7 @@ class BackupSummary {
   final bool hasRealDebrid;
   final bool hasTorbox;
   final bool hasPremiumize;
+  final bool hasAllDebrid;
   final bool hasPikpak;
   final bool hasTrakt;
   final int searchEngineCount;
@@ -502,6 +520,7 @@ class BackupSummary {
     required this.hasRealDebrid,
     required this.hasTorbox,
     required this.hasPremiumize,
+    required this.hasAllDebrid,
     required this.hasPikpak,
     required this.hasTrakt,
     required this.searchEngineCount,
@@ -514,6 +533,7 @@ class BackupSummary {
       !hasRealDebrid &&
       !hasTorbox &&
       !hasPremiumize &&
+      !hasAllDebrid &&
       !hasPikpak &&
       !hasTrakt &&
       searchEngineCount == 0 &&
@@ -527,6 +547,7 @@ class BackupSelection {
   final bool realDebrid;
   final bool torbox;
   final bool premiumize;
+  final bool allDebrid;
   final bool pikpak;
   final bool trakt;
   final bool searchEngines;
@@ -538,6 +559,7 @@ class BackupSelection {
     required this.realDebrid,
     required this.torbox,
     required this.premiumize,
+    required this.allDebrid,
     required this.pikpak,
     required this.trakt,
     required this.searchEngines,
@@ -550,6 +572,7 @@ class BackupSelection {
       : realDebrid = true,
         torbox = true,
         premiumize = true,
+        allDebrid = true,
         pikpak = true,
         trakt = true,
         searchEngines = true,
@@ -561,6 +584,7 @@ class BackupSelection {
     bool? realDebrid,
     bool? torbox,
     bool? premiumize,
+    bool? allDebrid,
     bool? pikpak,
     bool? trakt,
     bool? searchEngines,
@@ -572,6 +596,7 @@ class BackupSelection {
       realDebrid: realDebrid ?? this.realDebrid,
       torbox: torbox ?? this.torbox,
       premiumize: premiumize ?? this.premiumize,
+      allDebrid: allDebrid ?? this.allDebrid,
       pikpak: pikpak ?? this.pikpak,
       trakt: trakt ?? this.trakt,
       searchEngines: searchEngines ?? this.searchEngines,
@@ -587,6 +612,7 @@ class RestoreReport {
   bool realDebrid = false;
   bool torbox = false;
   bool premiumize = false;
+  bool allDebrid = false;
   bool pikpak = false;
   // True if PikPak credentials were saved but logging in failed (offline,
   // wrong password, etc.). Saved credentials remain usable from settings.
@@ -610,6 +636,7 @@ class RestoreReport {
       (realDebrid ? 1 : 0) +
       (torbox ? 1 : 0) +
       (premiumize ? 1 : 0) +
+      (allDebrid ? 1 : 0) +
       (pikpak ? 1 : 0) +
       (trakt ? 1 : 0) +
       searchEnginesImported +
