@@ -610,6 +610,12 @@ class StorageService {
     } catch (_) {}
   }
 
+  /// Clear all continue watching items.
+  static Future<void> clearContinueWatching() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_continueWatchingKey);
+  }
+
   // Enhanced Playback State methods
   static Future<Map<String, dynamic>> _getPlaybackStateMap() async {
     final prefs = await SharedPreferences.getInstance();

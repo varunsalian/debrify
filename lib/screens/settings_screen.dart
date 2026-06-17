@@ -1139,6 +1139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearTraktAuth();
     await DownloadService.instance.clearDownloadDatabase();
     await StorageService.clearAllPlaybackData();
+    await StorageService.clearContinueWatching();
     await StorageService.clearPlaylist();
     await StorageService.clearAllPlaylistMetadata();
     await StorageService.clearTorrentSearchHistory();
