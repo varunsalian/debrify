@@ -22,6 +22,7 @@ import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import '../services/debrify_tv_channel_add_service.dart';
 import '../widgets/file_selection_dialog.dart';
+import '../utils/tv_keys.dart';
 import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 class DebridDownloadsScreen extends StatefulWidget {
@@ -2505,8 +2506,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   final key = event.logicalKey;
 
                   // Select/Enter: clear search
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     setState(() {
                       _searchController.clear();
                       _searchResults.clear();
@@ -3144,8 +3144,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   ) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       onSelect();
       return KeyEventResult.handled;
     }
@@ -3544,8 +3543,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter ||
+                  if (isActivateKey(key) ||
                       key == LogicalKeyboardKey.space) {
                     _torrentSearchController.clear();
                     setState(() => _torrentSearchQuery = '');
@@ -3775,8 +3773,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       autofocus: autofocus,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

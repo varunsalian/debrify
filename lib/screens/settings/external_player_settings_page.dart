@@ -8,6 +8,7 @@ import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
+import '../../utils/tv_keys.dart';
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
   const ExternalPlayerSettingsPage({super.key});
@@ -2065,9 +2066,7 @@ class _ExternalPlayerSettingsPageState
                             child: Focus(
                               onKeyEvent: (node, event) {
                                 if (event is KeyDownEvent) {
-                                  if (event.logicalKey == LogicalKeyboardKey.select ||
-                                      event.logicalKey == LogicalKeyboardKey.enter ||
-                                      event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+                                  if (isActivateKey(event.logicalKey)) {
                                     _setNightModeIndex(index);
                                     return KeyEventResult.handled;
                                   }

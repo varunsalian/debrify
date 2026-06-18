@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/torrent_filter_state.dart';
+import '../utils/tv_keys.dart';
 
 class TorrentFiltersSheet extends StatefulWidget {
   final TorrentFilterState initialState;
@@ -177,8 +178,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                         focusNode: _clearButtonFocusNode,
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.select ||
-                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                              (isActivateKey(event.logicalKey) ||
                                   event.logicalKey == LogicalKeyboardKey.space)) {
                             if (_selectedQualities.isNotEmpty || _selectedSources.isNotEmpty || _selectedLanguages.isNotEmpty) {
                               _clearAll();
@@ -201,8 +201,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                         focusNode: _closeButtonFocusNode,
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.select ||
-                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                              (isActivateKey(event.logicalKey) ||
                                   event.logicalKey == LogicalKeyboardKey.space)) {
                             Navigator.of(context).pop();
                             return KeyEventResult.handled;
@@ -251,8 +250,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                                   focusNode: _qualityChipFocusNodes[index],
                                   onKeyEvent: (node, event) {
                                     if (event is KeyDownEvent &&
-                                        (event.logicalKey == LogicalKeyboardKey.select ||
-                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                        (isActivateKey(event.logicalKey) ||
                                             event.logicalKey == LogicalKeyboardKey.space)) {
                                       _toggleQuality(option.value);
                                       return KeyEventResult.handled;
@@ -317,8 +315,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                                   focusNode: _ripChipFocusNodes[index],
                                   onKeyEvent: (node, event) {
                                     if (event is KeyDownEvent &&
-                                        (event.logicalKey == LogicalKeyboardKey.select ||
-                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                        (isActivateKey(event.logicalKey) ||
                                             event.logicalKey == LogicalKeyboardKey.space)) {
                                       _toggleSource(option.value);
                                       return KeyEventResult.handled;
@@ -383,8 +380,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                                   focusNode: _languageChipFocusNodes[index],
                                   onKeyEvent: (node, event) {
                                     if (event is KeyDownEvent &&
-                                        (event.logicalKey == LogicalKeyboardKey.select ||
-                                            event.logicalKey == LogicalKeyboardKey.enter ||
+                                        (isActivateKey(event.logicalKey) ||
                                             event.logicalKey == LogicalKeyboardKey.space)) {
                                       _toggleLanguage(option.value);
                                       return KeyEventResult.handled;
@@ -425,8 +421,7 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                   focusNode: _applyButtonFocusNode,
                   onKeyEvent: (node, event) {
                     if (event is KeyDownEvent &&
-                        (event.logicalKey == LogicalKeyboardKey.select ||
-                            event.logicalKey == LogicalKeyboardKey.enter ||
+                        (isActivateKey(event.logicalKey) ||
                             event.logicalKey == LogicalKeyboardKey.space)) {
                       _apply();
                       return KeyEventResult.handled;

@@ -10,6 +10,7 @@ import '../../../services/storage_service.dart';
 import '../../../services/trakt/trakt_item_transformer.dart';
 import '../../../services/trakt/trakt_service.dart';
 import 'stremio_tv_repo_browser_dialog.dart';
+import '../../../utils/tv_keys.dart';
 
 class LocalCatalogExportPayload {
   final String name;
@@ -507,8 +508,7 @@ class _StremioTvLocalCatalogEditorDialogState
           Navigator.of(context).pop(_changed);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.select) {
+        if (isActivateKey(key)) {
           _handleActivate(node);
           return KeyEventResult.handled;
         }
@@ -1141,8 +1141,7 @@ class _StremioTvLocalCatalogsDialogState
           _scrollToNode(next);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.select) {
+        if (isActivateKey(key)) {
           _handleActivate(node);
           return KeyEventResult.handled;
         }
@@ -1446,8 +1445,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         _urlFocusNode.requestFocus();
         return KeyEventResult.handled;
@@ -1483,8 +1481,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         _importFocusNode.requestFocus();
         return KeyEventResult.handled;
@@ -1509,9 +1506,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       _importFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.space) {
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
       Navigator.of(context).pop();
       return KeyEventResult.handled;
     }
@@ -1534,9 +1529,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       _cancelFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.space) {
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
       if (!_loading) {
         _import();
       }
@@ -1738,8 +1731,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         _jsonFocusNode.requestFocus();
         return KeyEventResult.handled;
@@ -1775,8 +1767,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         _importFocusNode.requestFocus();
         return KeyEventResult.handled;
@@ -1801,9 +1792,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
       _importFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.space) {
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
       Navigator.of(context).pop();
       return KeyEventResult.handled;
     }
@@ -1826,9 +1815,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
       _cancelFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.space) {
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
       if (!_loading) {
         _import();
       }

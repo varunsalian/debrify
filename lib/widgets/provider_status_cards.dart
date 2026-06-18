@@ -7,6 +7,7 @@ import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/storage_service.dart';
 import 'home_focus_controller.dart';
+import '../utils/tv_keys.dart';
 
 // Callback type for notifier listeners
 typedef _VoidCallback = void Function();
@@ -993,9 +994,7 @@ class _ProviderCardWithFocusState extends State<_ProviderCardWithFocus> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       // Select/Enter/GameButtonA - activate the card
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+      if (isActivateKey(event.logicalKey)) {
         widget.onTap?.call();
         return KeyEventResult.handled;
       }

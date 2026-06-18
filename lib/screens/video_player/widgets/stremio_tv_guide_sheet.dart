@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
+import '../../../utils/tv_keys.dart';
 import '../../../widgets/shimmer.dart';
 
 /// Stremio TV channel guide overlay for the Flutter video player.
@@ -387,8 +388,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
         _scrollToFocused();
         _loadGuideDataForRange(_focusedIndex);
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       if (_filteredChannels.isNotEmpty) {
         _selectChannel(_filteredChannels[_focusedIndex]);
       }

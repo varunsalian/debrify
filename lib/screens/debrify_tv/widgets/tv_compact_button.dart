@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// TV-optimized compact button for top bar.
 ///
@@ -42,8 +43,7 @@ class _TvCompactButtonState extends State<TvCompactButton> {
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           // Handle both select and enter keys
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+          if (isActivateKey(event.logicalKey)) {
             widget.onPressed?.call();
             return KeyEventResult.handled;
           }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/storage_service.dart';
 
@@ -255,8 +256,7 @@ class _StremioTvCatalogPickerDialogState
       next.requestFocus();
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    if (isActivateKey(event.logicalKey)) {
       onActivate?.call();
       return KeyEventResult.handled;
     }
@@ -292,9 +292,7 @@ class _StremioTvCatalogPickerDialogState
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         if (filteredIndices.isNotEmpty) {
           _catalogFocusNodes[filteredIndices.first].requestFocus();
@@ -335,9 +333,7 @@ class _StremioTvCatalogPickerDialogState
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowDown ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select) {
+    if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
       if (isTextEmpty || isAtEnd) {
         _createConfirmFocusNode.requestFocus();
         return KeyEventResult.handled;
@@ -363,8 +359,7 @@ class _StremioTvCatalogPickerDialogState
       _createCancelFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    if (isActivateKey(event.logicalKey)) {
       if (node == _createConfirmFocusNode) {
         _createCatalog();
       } else {

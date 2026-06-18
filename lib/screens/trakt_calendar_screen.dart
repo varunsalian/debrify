@@ -6,6 +6,7 @@ import '../services/android_native_downloader.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
+import '../utils/tv_keys.dart';
 
 class TraktCalendarScreen extends StatefulWidget {
   const TraktCalendarScreen({super.key});
@@ -862,10 +863,7 @@ class _AiringDayCard extends StatelessWidget {
           onArrowDown?.call();
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.space ||
-            key == LogicalKeyboardKey.gameButtonA) {
+        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
           onOpen();
           return KeyEventResult.handled;
         }

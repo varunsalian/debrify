@@ -9,6 +9,7 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
+import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
 ///
@@ -1618,10 +1619,8 @@ class _RecCardState extends State<_RecCard> {
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space ||
-                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+            (isActivateKey(event.logicalKey) ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
           widget.onTap();
           return KeyEventResult.handled;
         }
@@ -1793,10 +1792,8 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space ||
-                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+            (isActivateKey(event.logicalKey) ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
           widget.onToggle();
           return KeyEventResult.handled;
         }
@@ -2048,10 +2045,8 @@ class _QuickActionState extends State<_QuickAction> {
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space ||
-                event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+            (isActivateKey(event.logicalKey) ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
           widget.onTap();
           return KeyEventResult.handled;
         }
@@ -2252,8 +2247,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
+          if (isActivateKey(event.logicalKey) ||
               event.logicalKey == LogicalKeyboardKey.space) {
             widget.onTap();
             return KeyEventResult.handled;

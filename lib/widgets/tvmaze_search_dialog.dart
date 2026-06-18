@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/tvmaze_service.dart';
+import '../utils/tv_keys.dart';
 
 class TVMazeSearchDialog extends StatefulWidget {
   final String initialQuery;
@@ -174,8 +175,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
         _searchFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       if (_selectedIndex >= 0 && _selectedIndex < _searchResults.length) {
         _selectShow(_searchResults[_selectedIndex]);
         return KeyEventResult.handled;
@@ -198,8 +198,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
         _searchFocusNode.requestFocus();
       }
       return KeyEventResult.handled;
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       Navigator.of(context).pop();
       return KeyEventResult.handled;
     }

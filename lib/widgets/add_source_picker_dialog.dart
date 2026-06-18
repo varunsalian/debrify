@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/tv_keys.dart';
+
 /// Shows a picker dialog for adding a new bound source.
 ///
 /// Options:
@@ -271,8 +273,7 @@ class _SourceOptionState extends State<_SourceOption> {
       onKeyEvent: (node, event) {
         if (enabled &&
             event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           widget.onTap!();
           return KeyEventResult.handled;
         }

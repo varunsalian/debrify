@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// Psychedelic full-screen loading overlay for Stremio TV playback resolution.
 ///
@@ -291,9 +292,7 @@ class _PsychLoadingOverlayState extends State<PsychLoadingOverlay>
           Focus(
             autofocus: true,
             onKeyEvent: (node, event) {
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.select ||
-                   event.logicalKey == LogicalKeyboardKey.enter)) {
+              if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
                 widget.onCancel!();
                 return KeyEventResult.handled;
               }

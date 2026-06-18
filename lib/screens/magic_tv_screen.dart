@@ -45,6 +45,7 @@ import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
 import '../utils/rd_blocked_filter.dart';
 import '../utils/series_parser.dart';
+import '../utils/tv_keys.dart';
 import 'video_player_screen.dart';
 import '../main.dart';
 import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
@@ -7548,8 +7549,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter ||
+        if (isActivateKey(key) ||
             key == LogicalKeyboardKey.space) {
           onPressed?.call();
           return KeyEventResult.handled;
@@ -7631,8 +7631,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter ||
+        if (isActivateKey(key) ||
             key == LogicalKeyboardKey.space) {
           _channelMenuController.open();
           return KeyEventResult.handled;
@@ -7810,8 +7809,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             _channelSearchButtonFocusNode.requestFocus();
                             return KeyEventResult.handled;
                           }
-                          if (key == LogicalKeyboardKey.select ||
-                              key == LogicalKeyboardKey.enter ||
+                          if (isActivateKey(key) ||
                               key == LogicalKeyboardKey.space) {
                             _clearChannelSearchAndRefocus();
                             return KeyEventResult.handled;

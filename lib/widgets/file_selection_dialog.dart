@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/formatters.dart';
+import '../utils/tv_keys.dart';
 
 /// Helper class to represent a folder item in the navigation
 class _FolderItem {
@@ -428,8 +429,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                     focusNode: _cancelButtonFocusNode,
                     onKeyEvent: (node, event) {
                       if (event is KeyDownEvent &&
-                          (event.logicalKey == LogicalKeyboardKey.select ||
-                              event.logicalKey == LogicalKeyboardKey.enter ||
+                          (isActivateKey(event.logicalKey) ||
                               event.logicalKey == LogicalKeyboardKey.space)) {
                         Navigator.of(context).pop();
                         return KeyEventResult.handled;
@@ -461,8 +461,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                         focusNode: _backButtonFocusNode,
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent &&
-                              (event.logicalKey == LogicalKeyboardKey.select ||
-                                  event.logicalKey == LogicalKeyboardKey.enter ||
+                              (isActivateKey(event.logicalKey) ||
                                   event.logicalKey == LogicalKeyboardKey.space)) {
                             _navigateBack();
                             return KeyEventResult.handled;
@@ -504,8 +503,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                   focusNode: _selectAllFocusNode,
                   onKeyEvent: (node, event) {
                     if (event is KeyDownEvent &&
-                        (event.logicalKey == LogicalKeyboardKey.select ||
-                            event.logicalKey == LogicalKeyboardKey.enter ||
+                        (isActivateKey(event.logicalKey) ||
                             event.logicalKey == LogicalKeyboardKey.space)) {
                       _toggleSelectAllInCurrentFolder();
                       return KeyEventResult.handled;
@@ -575,8 +573,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent) {
                             // Space/Enter/Select on folders should toggle selection, not navigate
-                            if (event.logicalKey == LogicalKeyboardKey.select ||
-                                event.logicalKey == LogicalKeyboardKey.enter ||
+                            if (isActivateKey(event.logicalKey) ||
                                 event.logicalKey == LogicalKeyboardKey.space) {
                               _toggleFolder(folder);
                               return KeyEventResult.handled;
@@ -692,8 +689,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                         onKeyEvent: (node, event) {
                           if (event is KeyDownEvent) {
                             // Space/Enter/Select to toggle file selection
-                            if (event.logicalKey == LogicalKeyboardKey.select ||
-                                event.logicalKey == LogicalKeyboardKey.enter ||
+                            if (isActivateKey(event.logicalKey) ||
                                 event.logicalKey == LogicalKeyboardKey.space) {
                               _toggleFile(file);
                               return KeyEventResult.handled;
@@ -799,8 +795,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                       focusNode: _downloadButtonFocusNode,
                       onKeyEvent: (node, event) {
                         if (event is KeyDownEvent &&
-                            (event.logicalKey == LogicalKeyboardKey.select ||
-                                event.logicalKey == LogicalKeyboardKey.enter ||
+                            (isActivateKey(event.logicalKey) ||
                                 event.logicalKey == LogicalKeyboardKey.space)) {
                           if (selectedFileCount > 0) {
                             _onDownloadPressed();

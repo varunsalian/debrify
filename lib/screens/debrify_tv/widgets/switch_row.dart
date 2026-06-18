@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// A switch row widget with Android TV focus support.
 ///
@@ -36,8 +37,7 @@ class _SwitchRowState extends State<SwitchRow> {
       },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
+          if (isActivateKey(event.logicalKey) ||
               event.logicalKey == LogicalKeyboardKey.space) {
             widget.onChanged(!widget.value);
             return KeyEventResult.handled;

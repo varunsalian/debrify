@@ -22,6 +22,7 @@ import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 import 'horizontal_mouse_wheel.dart';
+import '../utils/tv_keys.dart';
 
 /// Premium OTT-style Trakt Continue Watching section for the home screen.
 class HomeTraktContinueWatchingSection extends StatefulWidget {
@@ -1863,9 +1864,7 @@ class _TraktCardWithFocusState extends State<_TraktCardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _keyDownReceived = true;
         _longPressTriggered = false;

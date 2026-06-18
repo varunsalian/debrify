@@ -90,6 +90,7 @@ import '../models/stremio_addon.dart';
 import 'dart:async';
 
 import '../utils/dialog_tap_guard.dart';
+import '../utils/tv_keys.dart';
 
 // Search mode for torrent search
 enum SearchMode { keyword, catalog, browse }
@@ -6443,8 +6444,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         _availableSeasons != null && _availableSeasons!.isNotEmpty;
 
     // Open custom season picker dialog on Select/Enter/Space
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
+    if (isActivateKey(event.logicalKey) ||
         event.logicalKey == LogicalKeyboardKey.space) {
       debugPrint('Season dropdown: Opening custom picker dialog');
       _showSeasonPickerDialog();
@@ -6873,8 +6873,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           _homeFocusController.focusFirstHomeSection();
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           _showSourcesDialog(context);
           return KeyEventResult.handled;
         }
@@ -6948,8 +6947,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onFocusChange: (focused) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           _showQuickControlsDialog();
           return KeyEventResult.handled;
         }
@@ -7116,8 +7114,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onFocusChange: (focused) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           _openTraktCalendar();
           return KeyEventResult.handled;
         }
@@ -7532,10 +7529,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             },
                             onKeyEvent: (node, event) {
                               if (event is KeyDownEvent &&
-                                  (event.logicalKey ==
-                                          LogicalKeyboardKey.enter ||
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.select)) {
+                                  isActivateKey(event.logicalKey)) {
                                 Navigator.of(context).pop(p.id);
                                 return KeyEventResult.handled;
                               }
@@ -7648,8 +7642,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           }
           return KeyEventResult.handled;
         }
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           _showProviderSwitchMenu();
           return KeyEventResult.handled;
         }
@@ -20492,8 +20485,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             },
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent) {
-                if (event.logicalKey == LogicalKeyboardKey.select ||
-                    event.logicalKey == LogicalKeyboardKey.enter ||
+                if (isActivateKey(event.logicalKey) ||
                     event.logicalKey == LogicalKeyboardKey.space) {
                   toggleFilter();
                   return KeyEventResult.handled;
@@ -20843,10 +20835,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                       _focusBelowSourceBar();
                                       return KeyEventResult.handled;
                                     }
-                                    if (event.logicalKey ==
-                                            LogicalKeyboardKey.enter ||
-                                        event.logicalKey ==
-                                            LogicalKeyboardKey.select) {
+                                    if (isActivateKey(event.logicalKey)) {
                                       setState(() {
                                         _showSearchField = !_showSearchField;
                                       });
@@ -23318,8 +23307,7 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
           // Handle select/enter to activate
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
+          if (isActivateKey(event.logicalKey) ||
               event.logicalKey == LogicalKeyboardKey.space) {
             DialogTapGuard.markKeyAction();
             _handleTorrentCardActivated(torrent, index);
@@ -24270,8 +24258,7 @@ class _GlassOptionCardState extends State<_GlassOptionCard> {
       },
       onKeyEvent: (node, event) {
         final isSelect =
-            event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter ||
+            isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
         // Consume KeyDown to prevent stock activation, fire on KeyUp so
@@ -24380,9 +24367,7 @@ class _DebridActionTileState extends State<_DebridActionTile> {
   /// Consume Select/Enter on both KeyDown and KeyUp so they don't propagate
   /// to the underlying torrent row (which would otherwise re-open this dialog).
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    final isSelect =
-        event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter;
+    final isSelect = isActivateKey(event.logicalKey);
     if (!isSelect) return KeyEventResult.ignored;
     if (event is KeyDownEvent) {
       return KeyEventResult.handled;
@@ -24490,9 +24475,7 @@ class _DpadSafeButtonState extends State<_DpadSafeButton> {
   bool _focused = false;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    final isSelect =
-        event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter;
+    final isSelect = isActivateKey(event.logicalKey);
     if (!isSelect) return KeyEventResult.ignored;
     if (event is KeyDownEvent) {
       return KeyEventResult.handled;
@@ -24793,8 +24776,7 @@ class _SearchTextFieldState extends State<_SearchTextField> {
                       }
                     }
                     // Enter/Select: trigger clear
-                    if (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.select ||
+                    if (isActivateKey(event.logicalKey) ||
                         event.logicalKey == LogicalKeyboardKey.space) {
                       widget.onClearPressed();
                       return KeyEventResult.handled;
@@ -25477,8 +25459,7 @@ class _QuickControlTileState extends State<_QuickControlTile> {
       },
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed?.call();
           return KeyEventResult.handled;
         }
@@ -25703,8 +25684,7 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                     focusNode: _providerFocusNodes[index],
                     onKeyEvent: (node, event) {
                       final isSelect =
-                          event.logicalKey == LogicalKeyboardKey.select ||
-                          event.logicalKey == LogicalKeyboardKey.enter ||
+                          isActivateKey(event.logicalKey) ||
                           event.logicalKey == LogicalKeyboardKey.space;
                       if (!isSelect) return KeyEventResult.ignored;
                       // Fire on KeyUp so we're guaranteed to still own focus.
@@ -25773,8 +25753,7 @@ class _ProviderSelectionDialogState extends State<_ProviderSelectionDialog> {
                   focusNode: _checkboxFocusNode,
                   onKeyEvent: (node, event) {
                     final isSelect =
-                        event.logicalKey == LogicalKeyboardKey.select ||
-                        event.logicalKey == LogicalKeyboardKey.enter ||
+                        isActivateKey(event.logicalKey) ||
                         event.logicalKey == LogicalKeyboardKey.space;
                     if (!isSelect) return KeyEventResult.ignored;
                     if (event is KeyDownEvent) {
@@ -26014,8 +25993,7 @@ class _StreamTypeDropdownState extends State<_StreamTypeDropdown> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter) {
+      if (isActivateKey(event.logicalKey)) {
         _toggleDropdown();
         return KeyEventResult.handled;
       }
@@ -26213,8 +26191,7 @@ class _StreamTypeDropdownMenuState extends State<_StreamTypeDropdownMenu> {
   ) {
     if (event is KeyDownEvent) {
       // Select/Enter/Space toggles the item
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
+      if (isActivateKey(event.logicalKey) ||
           event.logicalKey == LogicalKeyboardKey.space) {
         if (index == 0) {
           widget.onToggleAll();

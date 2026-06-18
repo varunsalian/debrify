@@ -5,6 +5,7 @@ import '../services/debrify_tv_repository.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../models/debrify_tv_cache.dart';
 import '../utils/dialog_tap_guard.dart';
+import '../utils/tv_keys.dart';
 
 /// Result returned when user selects or creates a channel
 class ChannelPickerResult {
@@ -408,8 +409,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
               }
 
               // Arrow Down OR Enter: Move to Confirm button when at end or empty
-              if (key == LogicalKeyboardKey.arrowDown ||
-                  key == LogicalKeyboardKey.enter) {
+              if (key == LogicalKeyboardKey.arrowDown || isActivateKey(key)) {
                 if (isTextEmpty || isAtEnd) {
                   _confirmButtonFocusNode.requestFocus();
                   return KeyEventResult.handled;
@@ -469,8 +469,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                 },
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.select ||
-                          event.logicalKey == LogicalKeyboardKey.enter ||
+                      (isActivateKey(event.logicalKey) ||
                           event.logicalKey == LogicalKeyboardKey.space)) {
                     DialogTapGuard.markKeyAction();
                     _cancelCreate();
@@ -513,8 +512,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                 },
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
-                      (event.logicalKey == LogicalKeyboardKey.select ||
-                          event.logicalKey == LogicalKeyboardKey.enter ||
+                      (isActivateKey(event.logicalKey) ||
                           event.logicalKey == LogicalKeyboardKey.space)) {
                     DialogTapGuard.markKeyAction();
                     _createChannel();
@@ -601,8 +599,7 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
       },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
+            (isActivateKey(event.logicalKey) ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
           DialogTapGuard.markKeyAction();
           widget.onTap();

@@ -13,6 +13,7 @@ import 'home/home_section_skeleton.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 import 'horizontal_mouse_wheel.dart';
+import '../utils/tv_keys.dart';
 
 /// Horizontal scrollable playlist section for the home screen.
 /// Shows all playlist items (not just favorites).
@@ -1003,9 +1004,7 @@ class _PlaylistCardWithFocusState extends State<_PlaylistCardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _keyDownReceived = true;
         _longPressTriggered = false;

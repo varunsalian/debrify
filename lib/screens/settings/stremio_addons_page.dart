@@ -8,6 +8,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../addons_screen.dart';
+import '../../utils/tv_keys.dart';
 
 /// Page for managing Stremio addons (with Scaffold wrapper)
 class StremioAddonsPage extends StatefulWidget {
@@ -1989,8 +1990,7 @@ class _AddonTileState extends State<_AddonTile> {
         focusNode: widget.focusNode,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
-          if (event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.select) {
+          if (isActivateKey(event.logicalKey)) {
             _showOptionsSheet();
             return KeyEventResult.handled;
           }
@@ -2381,8 +2381,7 @@ class _OptionTileState extends State<_OptionTile> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }
@@ -2484,8 +2483,7 @@ class _GlowFocusButtonState extends State<_GlowFocusButton> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           if (!disabled) widget.onPressed!();
           return KeyEventResult.handled;
         }

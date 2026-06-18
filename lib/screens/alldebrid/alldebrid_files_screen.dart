@@ -14,6 +14,7 @@ import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
 import '../../widgets/file_selection_dialog.dart';
+import '../../utils/tv_keys.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
 /// Cloud-library browser for AllDebrid. AllDebrid's cloud is a flat list of
@@ -1153,8 +1154,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     _searchController.clear();
                     setState(() => _searchQuery = '');
                     _searchFocusNode.requestFocus();
@@ -1588,8 +1588,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

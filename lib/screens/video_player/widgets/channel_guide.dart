@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 import '../models/channel_entry.dart';
 
 /// Callback when a channel is selected from the guide
@@ -149,8 +150,7 @@ class _ChannelGuideState extends State<ChannelGuide>
         setState(() => _focusedIndex++);
         _scrollToFocused();
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       if (_filteredChannels.isNotEmpty) {
         widget.onChannelSelected(_filteredChannels[_focusedIndex]);
       }

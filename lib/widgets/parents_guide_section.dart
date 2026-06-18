@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../services/imdb_parents_guide_service.dart';
 import 'home/home_theme.dart';
+import '../utils/tv_keys.dart';
 
 class ParentsGuideSection extends StatefulWidget {
   final ParentsGuideResult guide;
@@ -95,8 +96,7 @@ class _CategoryRowState extends State<_CategoryRow> {
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent &&
               hasItems &&
-              (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
+              (isActivateKey(event.logicalKey) ||
                   event.logicalKey == LogicalKeyboardKey.space)) {
             widget.onToggle();
             return KeyEventResult.handled;

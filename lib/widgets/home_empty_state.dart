@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../utils/tv_keys.dart';
 import 'home_focus_controller.dart';
 
 class HomeEmptyAction {
@@ -151,10 +152,7 @@ class _HomeEmptyStateState extends State<HomeEmptyState> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
       widget.actions[index].onActivate();
       return KeyEventResult.handled;
     }

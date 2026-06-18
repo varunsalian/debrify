@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/trakt/trakt_episode_model.dart';
+import '../utils/tv_keys.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import 'home/home_theme.dart';
 
@@ -131,10 +132,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
           if (_sel > 0) setState(() => _sel--);
           return KeyEventResult.handled;
         }
-        if (k == LogicalKeyboardKey.select ||
-            k == LogicalKeyboardKey.enter ||
-            k == LogicalKeyboardKey.space ||
-            k == LogicalKeyboardKey.gameButtonA) {
+        if (isActivateKey(k) || k == LogicalKeyboardKey.space) {
           acts[_sel.clamp(0, acts.length - 1)].onTap();
           return KeyEventResult.handled;
         }

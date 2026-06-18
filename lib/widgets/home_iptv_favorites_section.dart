@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/iptv_playlist.dart';
+import '../utils/tv_keys.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import 'home/home_theme.dart';
@@ -632,9 +633,7 @@ class _ChannelCardWithFocusState extends State<_ChannelCardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _keyDownReceived = true;
         _longPressTriggered = false;

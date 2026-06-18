@@ -195,6 +195,8 @@ class _AddonsScreenState extends State<AddonsScreen>
         break;
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.select:
+      case LogicalKeyboardKey.numpadEnter:
+      case LogicalKeyboardKey.gameButtonA:
         _tabController.animateTo(tabIndex);
         return KeyEventResult.handled;
     }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../utils/tv_keys.dart';
 
 /// Compact torrent result row with quality color accent
 ///
@@ -106,8 +107,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    final isSelectKey = event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter;
+    final isSelectKey = isActivateKey(event.logicalKey);
 
     // Handle Select/Enter key with long press support
     if (isSelectKey) {

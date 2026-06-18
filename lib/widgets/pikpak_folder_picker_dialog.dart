@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/android_native_downloader.dart';
+import '../utils/tv_keys.dart';
 
 class PikPakFolderPickerDialog extends StatefulWidget {
   final String? initialFolderId;
@@ -799,8 +800,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
           }
 
           // Select/Enter: Select folder for restriction
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+          if (isActivateKey(event.logicalKey)) {
             _selectFolder(folder.id, folder.name);
             return KeyEventResult.handled;
           }
@@ -918,8 +918,7 @@ class _NewFolderDialogState extends State<_NewFolderDialog> {
           return KeyEventResult.handled;
         }
         // Enter/Select: Submit the form
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           _validateAndSubmit();
           return KeyEventResult.handled;
         }

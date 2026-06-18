@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/advanced_search_selection.dart';
+import '../utils/tv_keys.dart';
 import '../services/storage_service.dart';
 import '../services/series_source_service.dart';
 import 'home/home_section_skeleton.dart';
@@ -1383,9 +1384,7 @@ class _CardWithFocusState extends State<_CardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _keyDownReceived = true;
         _longPressTriggered = false;

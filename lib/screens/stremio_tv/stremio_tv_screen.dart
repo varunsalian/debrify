@@ -34,6 +34,7 @@ import 'widgets/stremio_tv_channel_filter_sheet.dart';
 import 'widgets/stremio_tv_guide_sheet.dart';
 import 'widgets/psych_loading_overlay.dart';
 import 'widgets/stremio_tv_local_catalogs_dialog.dart';
+import '../../utils/tv_keys.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -3093,10 +3094,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 _focusDialFromHeader();
                                 return KeyEventResult.handled;
                               }
-                              if (event.logicalKey ==
-                                      LogicalKeyboardKey.select ||
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.enter) {
+                              if (isActivateKey(event.logicalKey)) {
                                 setState(() {
                                   _showSearchField = !_showSearchField;
                                 });
@@ -3185,10 +3183,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                 _focusDialFromHeader();
                                 return KeyEventResult.handled;
                               }
-                              if (event.logicalKey ==
-                                      LogicalKeyboardKey.select ||
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.enter) {
+                              if (isActivateKey(event.logicalKey)) {
                                 _menuController.open();
                                 return KeyEventResult.handled;
                               }
@@ -3340,10 +3335,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   _focusDialFromHeader();
                                   return KeyEventResult.handled;
                                 }
-                                if (event.logicalKey ==
-                                        LogicalKeyboardKey.select ||
-                                    event.logicalKey ==
-                                        LogicalKeyboardKey.enter) {
+                                if (isActivateKey(event.logicalKey)) {
                                   _providerMenuController.open();
                                   return KeyEventResult.handled;
                                 }
@@ -3916,9 +3908,7 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       widget.onTap();
       return KeyEventResult.handled;
     }
@@ -4020,9 +4010,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       widget.onTap?.call();
       return KeyEventResult.handled;
     }

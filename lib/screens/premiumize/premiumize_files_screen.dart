@@ -14,6 +14,7 @@ import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../utils/tv_keys.dart';
 
 /// Cloud-library browser for Premiumize, mirroring the Torbox/PikPak navigation
 /// pages. Premiumize's cloud is a real server-side folder hierarchy, so this
@@ -1689,8 +1690,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     setState(() {
                       _searchController.clear();
                       _searchResults = [];
@@ -2132,9 +2132,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       focusNode: focusNode,
       autofocus: autofocus,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

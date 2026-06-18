@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../utils/tv_keys.dart';
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -481,8 +482,7 @@ class _ProviderOption extends StatelessWidget {
       focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
+            (isActivateKey(event.logicalKey) ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
           onSelected();
           return KeyEventResult.handled;

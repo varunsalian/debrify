@@ -5,6 +5,7 @@ import '../../models/webdav_item.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/webdav_service.dart';
+import '../../utils/tv_keys.dart';
 
 class WebDavSettingsPage extends StatefulWidget {
   const WebDavSettingsPage({super.key});
@@ -544,8 +545,7 @@ class _PasswordVisibilityButton extends StatelessWidget {
           saveFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter ||
+        if (isActivateKey(key) ||
             key == LogicalKeyboardKey.space) {
           onToggle();
           return KeyEventResult.handled;

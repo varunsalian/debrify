@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/reddit_service.dart';
+import '../../utils/tv_keys.dart';
 
 /// Card widget for displaying a Reddit video post
 class RedditVideoCard extends StatefulWidget {
@@ -80,8 +81,7 @@ class _RedditVideoCardState extends State<RedditVideoCard> {
       focusNode: _focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

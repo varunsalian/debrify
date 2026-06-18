@@ -6,6 +6,7 @@ import '../models/advanced_search_selection.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/storage_service.dart';
+import '../utils/tv_keys.dart';
 import 'debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../widgets/episode_tile.dart';
 import '../widgets/home/home_theme.dart';
@@ -498,8 +499,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
                   }
                   return KeyEventResult.handled;
                 }
-                if (event.logicalKey == LogicalKeyboardKey.select ||
-                    event.logicalKey == LogicalKeyboardKey.enter ||
+                if (isActivateKey(event.logicalKey) ||
                     event.logicalKey == LogicalKeyboardKey.escape ||
                     event.logicalKey == LogicalKeyboardKey.goBack) {
                   Navigator.of(context).pop();
@@ -781,8 +781,7 @@ class _CatalogSelectSourceButtonState
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

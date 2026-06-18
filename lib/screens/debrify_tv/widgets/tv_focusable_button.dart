@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// TV-optimized focusable button.
 ///
@@ -38,8 +39,7 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
       },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           widget.onPressed?.call();
           return KeyEventResult.handled;
         }

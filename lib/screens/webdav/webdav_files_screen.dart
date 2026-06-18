@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/playlist_view_mode.dart';
+import '../../utils/tv_keys.dart';
 import '../../models/webdav_item.dart';
 import '../../screens/video_player/models/playlist_entry.dart';
 import '../../services/download_service.dart';
@@ -845,7 +846,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       _focusFirstItem();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+    if (isActivateKey(key)) {
       _toggleSearch();
       return KeyEventResult.handled;
     }
@@ -1108,9 +1109,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
           upFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

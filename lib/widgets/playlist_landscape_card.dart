@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/tv_keys.dart';
 
 /// Landscape playlist card optimized for Android TV horizontal scrolling.
 ///
@@ -214,8 +215,7 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
         onKeyEvent: (node, event) {
           // On Android TV, pressing Select/Enter shows action menu
           if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter) {
+            if (isActivateKey(event.logicalKey)) {
               _showActionMenu(context);
               return KeyEventResult.handled;
             }
@@ -792,8 +792,7 @@ class _LandscapeGlassButtonState extends State<_LandscapeGlassButton> {
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+          if (isActivateKey(event.logicalKey)) {
             widget.onTap();
             return KeyEventResult.handled;
           }

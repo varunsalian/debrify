@@ -6,6 +6,7 @@ import '../../services/engine/remote_engine_manager.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
+import '../../utils/tv_keys.dart';
 
 /// Page for importing and managing torrent search engines (with Scaffold wrapper)
 class EngineImportPage extends StatefulWidget {
@@ -1694,8 +1695,7 @@ class _EnginePillButtonState extends State<_EnginePillButton> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }

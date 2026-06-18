@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// Import mode selection for channels
 enum ImportChannelsMode { device, url, community }
@@ -99,10 +100,8 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
       focusNode: focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.space ||
-              event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+          if (isActivateKey(event.logicalKey) ||
+              event.logicalKey == LogicalKeyboardKey.space) {
             onSelect();
             return KeyEventResult.handled;
           }
@@ -398,10 +397,8 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                   focusNode: _cancelFocusNode,
                   onKeyEvent: (node, event) {
                     if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.select ||
-                          event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.space ||
-                          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+                      if (isActivateKey(event.logicalKey) ||
+                          event.logicalKey == LogicalKeyboardKey.space) {
                         Navigator.of(context).pop();
                         return KeyEventResult.handled;
                       }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../utils/tv_keys.dart';
 import '../services/main_page_bridge.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
@@ -484,8 +485,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
   KeyEventResult _handleKeywordCardKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       widget.onKeywordSearch();
       return KeyEventResult.handled;
     }

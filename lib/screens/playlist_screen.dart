@@ -8,6 +8,7 @@ import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../widgets/adaptive_playlist_section.dart';
 import 'playlist_content_view_screen.dart';
+import '../utils/tv_keys.dart';
 
 class PlaylistScreen extends StatefulWidget {
   const PlaylistScreen({super.key});
@@ -697,8 +698,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             }
             return KeyEventResult.handled;
           }
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+          if (isActivateKey(event.logicalKey)) {
             _toggleSearchField();
             return KeyEventResult.handled;
           }

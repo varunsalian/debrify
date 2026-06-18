@@ -218,6 +218,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
 
       case LogicalKeyboardKey.select:
       case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.numpadEnter:
       case LogicalKeyboardKey.gameButtonA:
         // Select this menu item and navigate to its content
         _selectMenuItem(index);

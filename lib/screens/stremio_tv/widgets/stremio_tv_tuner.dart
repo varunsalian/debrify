@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/stremio_addon.dart';
+import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../stremio_tv_service.dart';
@@ -1413,9 +1414,7 @@ class _DialCardState extends State<_DialCard> {
       widget.onLongPress();
       return KeyEventResult.handled;
     }
-    if (k == LogicalKeyboardKey.select ||
-        k == LogicalKeyboardKey.enter ||
-        k == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(k)) {
       widget.onSelect();
       return KeyEventResult.handled;
     }

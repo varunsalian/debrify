@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/stremio_addon.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../utils/tv_keys.dart';
 
 /// Represents a search source type
 enum SearchSourceType {
@@ -257,8 +258,7 @@ class _SearchSourceDropdownState extends State<SearchSourceDropdown> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyDownEvent) {
       // Select/Enter opens dropdown or selects if expanded
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter) {
+      if (isActivateKey(event.logicalKey)) {
         _toggleDropdown();
         return KeyEventResult.handled;
       }
@@ -433,8 +433,7 @@ class _DropdownMenuState extends State<_DropdownMenu> {
   KeyEventResult _handleItemKeyEvent(FocusNode node, KeyEvent event, int index) {
     if (event is KeyDownEvent) {
       // Select/Enter picks the option
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter) {
+      if (isActivateKey(event.logicalKey)) {
         widget.onSelected(widget.options[index]);
         return KeyEventResult.handled;
       }

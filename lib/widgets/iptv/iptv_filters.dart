@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
+import '../../utils/tv_keys.dart';
 
 /// IPTV filter bar with playlist and category dropdowns
 class IptvFiltersBar extends StatelessWidget {
@@ -216,8 +217,7 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           _showPlaylistPicker();
           return KeyEventResult.handled;
         }
@@ -359,8 +359,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           _showCategoryPicker();
           return KeyEventResult.handled;
         }
@@ -488,8 +487,7 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           _toggle();
           return KeyEventResult.handled;
         }
@@ -646,8 +644,7 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, VoidCallback onSelect) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       onSelect();
       return KeyEventResult.handled;
     }
@@ -833,8 +830,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, VoidCallback onSelect) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       onSelect();
       return KeyEventResult.handled;
     }

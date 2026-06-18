@@ -7,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
+import '../utils/tv_keys.dart';
 import '../screens/playlist_content_view_screen.dart';
 import 'home/home_theme.dart';
 import 'home/home_section_skeleton.dart';
@@ -1155,9 +1156,7 @@ class _FavoriteCardWithFocusState extends State<_FavoriteCardWithFocus> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+    if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _keyDownReceived = true;
         _longPressTriggered = false;

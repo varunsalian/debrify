@@ -10,6 +10,7 @@ import '../../services/main_page_bridge.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../utils/tv_keys.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
@@ -1724,8 +1725,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   final key = event.logicalKey;
 
                   // Select/Enter: clear search
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     setState(() {
                       _searchController.clear();
                       _searchResults.clear();
@@ -2260,8 +2260,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       autofocus: autofocus,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }

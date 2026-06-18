@@ -9,6 +9,7 @@ import 'home/home_theme.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
 import 'home_trakt_now_playing_card.dart';
+import '../utils/tv_keys.dart';
 
 /// "Today" card at the top of Home showing upcoming Trakt episodes.
 ///
@@ -312,10 +313,8 @@ class _HomeTodayCalendarCardState extends State<HomeTodayCalendarCard>
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
           final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.select ||
-              key == LogicalKeyboardKey.enter ||
-              key == LogicalKeyboardKey.space ||
-              key == LogicalKeyboardKey.gameButtonA) {
+          if (isActivateKey(key) ||
+              key == LogicalKeyboardKey.space) {
             _openFullCalendar();
             return KeyEventResult.handled;
           }

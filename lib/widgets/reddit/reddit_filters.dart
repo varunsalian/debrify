@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/reddit_service.dart';
 import '../../services/storage_service.dart';
+import '../../utils/tv_keys.dart';
 
 /// Popular subreddits for suggestions
 const List<String> kPopularSubreddits = [
@@ -178,8 +179,7 @@ class _SubredditDropdownState extends State<_SubredditDropdown> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           _showSubredditPicker();
           return KeyEventResult.handled;
         }
@@ -298,8 +298,7 @@ class _SortDropdownState extends State<_SortDropdown> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           _showSortPicker();
           return KeyEventResult.handled;
         }
@@ -400,8 +399,7 @@ class _TimeFilterDropdownState extends State<_TimeFilterDropdown> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           _showTimePicker();
           return KeyEventResult.handled;
         }
@@ -622,7 +620,7 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
     final key = event.logicalKey;
 
     // Select/Enter: Select this subreddit
-    if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+    if (isActivateKey(key)) {
       onSelect();
       return KeyEventResult.handled;
     }
@@ -1061,8 +1059,7 @@ class _TvFocusableIconButtonState extends State<_TvFocusableIconButton> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1154,8 +1151,7 @@ class _SortPickerSheetState extends State<_SortPickerSheet> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, RedditSort sort) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       Navigator.of(context).pop(sort);
       return KeyEventResult.handled;
     }
@@ -1284,8 +1280,7 @@ class _TimePickerSheetState extends State<_TimePickerSheet> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index, RedditTimeFilter filter) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       Navigator.of(context).pop(filter);
       return KeyEventResult.handled;
     }
@@ -1525,8 +1520,7 @@ class _RandomButtonState extends State<_RandomButton> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-             event.logicalKey == LogicalKeyboardKey.enter)) {
+            isActivateKey(event.logicalKey)) {
           if (!widget.isLoading) widget.onPressed();
           return KeyEventResult.handled;
         }

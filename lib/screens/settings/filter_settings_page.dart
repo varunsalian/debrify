@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/torrent_filter_state.dart';
 import '../../services/storage_service.dart';
+import '../../utils/tv_keys.dart';
 
 class FilterSettingsPage extends StatefulWidget {
   const FilterSettingsPage({super.key});
@@ -183,8 +184,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
               focusNode: _clearAllFocusNode,
               onKeyEvent: (node, event) {
                 if (event is KeyDownEvent &&
-                    (event.logicalKey == LogicalKeyboardKey.select ||
-                        event.logicalKey == LogicalKeyboardKey.enter ||
+                    (isActivateKey(event.logicalKey) ||
                         event.logicalKey == LogicalKeyboardKey.space)) {
                   _clearAll();
                   return KeyEventResult.handled;
@@ -462,8 +462,7 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
+            (isActivateKey(event.logicalKey) ||
                 event.logicalKey == LogicalKeyboardKey.space)) {
           widget.onSelected();
           return KeyEventResult.handled;

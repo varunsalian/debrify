@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../utils/tv_keys.dart';
 import 'home/home_theme.dart';
 
 /// Poster-first grid tile for catalog and search results.
@@ -260,10 +261,8 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         }
       },
       onKeyEvent: (node, event) {
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.space ||
-            event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        if (isActivateKey(event.logicalKey) ||
+            event.logicalKey == LogicalKeyboardKey.space) {
           if (event is KeyDownEvent) {
             _keyDownReceived = true;
             _longPressTriggered = false;

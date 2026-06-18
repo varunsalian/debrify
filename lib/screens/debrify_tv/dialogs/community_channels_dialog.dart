@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/community/community_channel_model.dart';
 import '../../../services/community/community_channels_service.dart';
+import '../../../utils/tv_keys.dart';
 
 /// Dialog for browsing and selecting community shared channels
 class CommunityChannelsDialog extends StatefulWidget {
@@ -102,7 +103,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         _channelFocusNodes.values.first.requestFocus();
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+      if (isActivateKey(key)) {
         setState(() {
           _toggleSelectAll();
         });
@@ -152,7 +153,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         _cancelButtonFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+      if (isActivateKey(key)) {
         // Trigger import action if there are selected channels
         final selectedChannels = _getSelectedChannels();
         if (selectedChannels.isNotEmpty) {
@@ -414,8 +415,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         }
 
         // Toggle selection with Enter/Select
-        if (key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.enter) {
+        if (isActivateKey(key)) {
           _toggleChannelSelection(channel);
           return KeyEventResult.handled;
         }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../home/home_theme.dart';
+import '../../utils/tv_keys.dart';
 
 /// Logo-forward grid tile for an IPTV channel — mirrors the catalog grid's
 /// focus/hover language (scale + gold ring/glow) but sized for channel logos
@@ -213,10 +214,8 @@ class _IptvChannelTileState extends State<IptvChannelTile> {
         }
       },
       onKeyEvent: (node, event) {
-        final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.space ||
-            event.logicalKey == LogicalKeyboardKey.gameButtonA;
+        final isSelect = isActivateKey(event.logicalKey) ||
+            event.logicalKey == LogicalKeyboardKey.space;
         if (!isSelect) return KeyEventResult.ignored;
 
         // Without a favorite action (or off-TV), keep the original

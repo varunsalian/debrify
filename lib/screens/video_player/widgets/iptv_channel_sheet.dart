@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 import '../../../models/iptv_playlist.dart';
 
 /// Premium IPTV channel sheet overlay for the video player.
@@ -194,8 +195,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
         setState(() => _focusedIndex++);
         _scrollToFocused();
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       if (_filteredChannels.isNotEmpty) {
         final ch = _filteredChannels[_focusedIndex];
         final oi = widget.channels

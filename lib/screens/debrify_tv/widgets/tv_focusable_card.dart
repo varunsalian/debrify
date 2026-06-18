@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 
 /// TV-optimized focusable card.
 ///
@@ -52,8 +53,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
       },
       onKeyEvent: (node, event) {
         // Handle Select/Enter button press
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           if (event is KeyDownEvent) {
             _keyDownReceived = true; // Mark that we received KeyDown while focused
             _longPressTriggered = false;

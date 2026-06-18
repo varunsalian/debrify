@@ -6,6 +6,7 @@ import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/m3u_parser.dart';
+import '../../utils/tv_keys.dart';
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key});
@@ -949,8 +950,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1094,8 +1094,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-                  if (event.logicalKey == LogicalKeyboardKey.select ||
-                      event.logicalKey == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(event.logicalKey)) {
                     widget.tabController.animateTo(0);
                     return KeyEventResult.handled;
                   }
@@ -1181,8 +1180,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-                  if (event.logicalKey == LogicalKeyboardKey.select ||
-                      event.logicalKey == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(event.logicalKey)) {
                     widget.tabController.animateTo(1);
                     return KeyEventResult.handled;
                   }
@@ -1274,8 +1272,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                   onKeyEvent: (node, event) {
                     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-                    if (event.logicalKey == LogicalKeyboardKey.select ||
-                        event.logicalKey == LogicalKeyboardKey.enter) {
+                    if (isActivateKey(event.logicalKey)) {
                       widget.tabController.animateTo(2);
                       return KeyEventResult.handled;
                     }
@@ -1426,8 +1423,7 @@ class _TvFocusableOutlinedButtonState extends State<_TvFocusableOutlinedButton> 
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1736,8 +1732,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -1847,8 +1842,7 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         // Select/Enter to go back
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           _goBack();
           return KeyEventResult.handled;
         }

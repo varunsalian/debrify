@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
+import '../../utils/tv_keys.dart';
 
 class RedditSettingsPage extends StatefulWidget {
   const RedditSettingsPage({super.key});
@@ -553,8 +554,7 @@ class _FocusableSwitchCardState extends State<_FocusableSwitchCard> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onChanged(!widget.value);
           return KeyEventResult.handled;
         }
@@ -668,8 +668,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }
@@ -887,8 +886,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onPressed();
           return KeyEventResult.handled;
         }

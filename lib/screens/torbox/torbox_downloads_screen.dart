@@ -24,6 +24,7 @@ import '../../widgets/stat_chip.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../video_player_screen.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../utils/tv_keys.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
@@ -5743,8 +5744,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   final key = event.logicalKey;
 
                   // Select/Enter: clear search
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     setState(() {
                       _searchController.clear();
                       _searchResults.clear();
@@ -6190,9 +6190,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       focusNode: focusNode,
       autofocus: autofocus,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
           onTap();
           return KeyEventResult.handled;
         }
@@ -6946,9 +6944,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter ||
-                      key == LogicalKeyboardKey.space) {
+                  if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
                     _torrentSearchController.clear();
                     setState(() => _torrentSearchQuery = '');
                     _torrentSearchFocusNode.requestFocus();

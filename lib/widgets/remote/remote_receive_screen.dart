@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_control_state.dart';
+import '../../utils/tv_keys.dart';
 
 /// Shown when the user picks **Receive** in the role picker. The device is
 /// already in receiver mode (the picker switched roles before navigating
@@ -316,8 +317,7 @@ class _StopButtonState extends State<_StopButton> {
       focusNode: _node,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.select) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

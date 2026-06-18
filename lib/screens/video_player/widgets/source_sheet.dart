@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../utils/tv_keys.dart';
 import '../../../models/torrent.dart';
 
 /// Premium Stremio source sheet overlay for the video player.
@@ -325,8 +326,7 @@ class _SourceSheetState extends State<SourceSheet>
         setState(() => _focusedIndex++);
         _scrollToFocused();
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.select) {
+    } else if (isActivateKey(event.logicalKey)) {
       if (_filteredSources.isNotEmpty && _resolvingIndex == null) {
         _selectSource(_filteredSources[_focusedIndex]);
       }

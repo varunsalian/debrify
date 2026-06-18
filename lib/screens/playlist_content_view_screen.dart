@@ -29,6 +29,7 @@ import '../widgets/view_mode_dropdown.dart';
 import '../widgets/tvmaze_search_dialog.dart';
 import '../models/webdav_item.dart';
 import 'video_player/models/playlist_entry.dart';
+import '../utils/tv_keys.dart';
 
 /// Screen for viewing contents of a playlist item
 /// Supports Raw, Sort, and Series Arrange view modes
@@ -1339,8 +1340,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   final key = event.logicalKey;
 
                   // Select/Enter: clear search
-                  if (key == LogicalKeyboardKey.select ||
-                      key == LogicalKeyboardKey.enter) {
+                  if (isActivateKey(key)) {
                     setState(() {
                       _searchController.clear();
                       _searchResults.clear();
@@ -2684,8 +2684,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       },
       onKeyEvent: (node, event) {
         // Handle Select/Enter button press for D-pad long press detection
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           if (event is KeyDownEvent) {
             _episodeKeyDownReceived = true;
             _episodeLongPressTriggered = false;

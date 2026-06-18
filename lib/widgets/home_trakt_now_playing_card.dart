@@ -11,6 +11,7 @@ import '../services/trakt/trakt_item_transformer.dart';
 import 'home/home_theme.dart';
 import 'home/home_section_reveal.dart';
 import 'home_focus_controller.dart';
+import '../utils/tv_keys.dart';
 
 /// Compact "Now Playing" bar — slim music-player style with poster art.
 /// Self-hides when nothing is playing.
@@ -304,9 +305,7 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard>
             }
             return KeyEventResult.ignored;
           }
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+          if (isActivateKey(event.logicalKey)) {
             widget.onItemSelected?.call(data.meta);
             return KeyEventResult.handled;
           }

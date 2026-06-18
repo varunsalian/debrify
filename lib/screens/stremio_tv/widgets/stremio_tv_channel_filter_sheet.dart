@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/storage_service.dart';
 
@@ -315,8 +316,7 @@ class _StremioTvChannelFilterSheetState
       }
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.select ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    if (isActivateKey(event.logicalKey)) {
       _toggle(node);
       return KeyEventResult.handled;
     }

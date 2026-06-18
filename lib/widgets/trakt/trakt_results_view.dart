@@ -20,6 +20,7 @@ import '../../screens/torbox/torbox_downloads_screen.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../add_source_picker_dialog.dart';
+import '../../utils/tv_keys.dart';
 
 /// Trakt list type options
 enum TraktListType {
@@ -2543,8 +2544,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                       ? KeyEventResult.handled
                       : KeyEventResult.ignored;
                 }
-                if (event.logicalKey == LogicalKeyboardKey.select ||
-                    event.logicalKey == LogicalKeyboardKey.enter ||
+                if (isActivateKey(event.logicalKey) ||
                     event.logicalKey == LogicalKeyboardKey.escape ||
                     event.logicalKey == LogicalKeyboardKey.goBack) {
                   _exitEpisodeMode();
@@ -2884,8 +2884,7 @@ class _SelectSourceButtonState extends State<_SelectSourceButton> {
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.select ||
-            event.logicalKey == LogicalKeyboardKey.enter) {
+        if (isActivateKey(event.logicalKey)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

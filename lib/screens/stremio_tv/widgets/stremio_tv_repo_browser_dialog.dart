@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../utils/tv_keys.dart';
 import '../../../services/catalog_repo_service.dart';
 import '../../../services/storage_service.dart';
 
@@ -211,8 +212,7 @@ class _StremioTvRepoBrowserDialogState
           _scrollToFocusNode(next);
           return KeyEventResult.handled;
         }
-        if (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.select) {
+        if (isActivateKey(key)) {
           _handleActivate(node);
           return KeyEventResult.handled;
         }

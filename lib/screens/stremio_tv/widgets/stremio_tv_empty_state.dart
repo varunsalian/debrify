@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../utils/tv_keys.dart';
 import '../../../services/main_page_bridge.dart';
 
 class StremioTvEmptyState extends StatelessWidget {
@@ -57,8 +58,7 @@ class StremioTvEmptyState extends StatelessWidget {
               autofocus: true,
               onKeyEvent: (node, event) {
                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                if (event.logicalKey == LogicalKeyboardKey.select ||
-                    event.logicalKey == LogicalKeyboardKey.enter) {
+                if (isActivateKey(event.logicalKey)) {
                   MainPageBridge.switchTab?.call(7);
                   return KeyEventResult.handled;
                 }

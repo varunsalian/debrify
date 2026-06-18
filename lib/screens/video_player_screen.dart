@@ -70,6 +70,7 @@ import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
 import '../services/trakt/trakt_service.dart';
 import 'package:http/http.dart' as http;
+import '../utils/tv_keys.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -5135,9 +5136,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             }
 
             // Center/Enter toggles play or shows controls
-            if (key == LogicalKeyboardKey.select ||
-                key == LogicalKeyboardKey.enter ||
-                key == LogicalKeyboardKey.gameButtonA) {
+            if (isActivateKey(key)) {
               if (_controlsVisible.value) {
                 _togglePlay();
               } else {

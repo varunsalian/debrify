@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../utils/tv_keys.dart';
 
 /// Portrait playlist card optimized for grid layouts on desktop/tablet/mobile.
 ///
@@ -171,8 +172,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
             final key = event.logicalKey;
 
             // Handle selection (Enter/Select)
-            if (key == LogicalKeyboardKey.select ||
-                key == LogicalKeyboardKey.enter) {
+            if (isActivateKey(key)) {
               _showActionMenu(context);
               return KeyEventResult.handled;
             }
@@ -836,8 +836,7 @@ class _GlassButtonState extends State<_GlassButton> {
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+          if (isActivateKey(event.logicalKey)) {
             widget.onTap();
             return KeyEventResult.handled;
           }
