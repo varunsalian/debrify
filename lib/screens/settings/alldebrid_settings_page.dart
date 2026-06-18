@@ -31,6 +31,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
   bool _saving = false;
   bool _integrationEnabled = true;
   String _postTorrentAction = 'choose';
+  bool _hiddenFromNav = false;
 
   @override
   void initState() {
@@ -43,10 +44,12 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
     final integrationEnabled =
         await StorageService.getAllDebridIntegrationEnabled();
     final postAction = await StorageService.getAllDebridPostTorrentAction();
+    final hiddenFromNav = await StorageService.getAllDebridHiddenFromNav();
     setState(() {
       _savedApiKey = apiKey;
       _integrationEnabled = integrationEnabled;
       _postTorrentAction = postAction;
+      _hiddenFromNav = hiddenFromNav;
       _loading = false;
     });
 
@@ -117,12 +120,49 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
 
   Future<void> _deleteKey() async {
     await StorageService.deleteAllDebridApiKey();
+    await StorageService.clearAllDebridHiddenFromNav();
     AllDebridAccountService.clearUserInfo();
+    if (mounted) {
+      setState(() => _hiddenFromNav = false);
+    }
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
     if (mounted) {
       Navigator.of(context).pop(true);
     }
+  }
+
+  Future<void> _toggleHideFromNav(bool value) async {
+    // Mirrors the other providers: hiding is confirm-gated, and the only way to
+    // unhide is to log out and back in (so a hidden tab can't be silently
+    // re-shown).
+    if (value) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Hide AllDebrid from navigation?'),
+          content: const Text(
+            'The AllDebrid tab will be removed from the navigation bar. To show '
+            'it again you will need to log out and log back in.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Hide'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    await StorageService.setAllDebridHiddenFromNav(value);
+    if (!mounted) return;
+    setState(() => _hiddenFromNav = value);
+    MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _updateIntegrationEnabled(bool value) async {
@@ -384,6 +424,78 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
                           ],
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _hiddenFromNav,
+                          onChanged: _savedApiKey != null
+                              ? _toggleHideFromNav
+                              : null,
+                          title: const Text(
+                            'Hide from Navigation',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            _savedApiKey == null
+                                ? 'Login to enable this option'
+                                : _hiddenFromNav
+                                    ? 'AllDebrid is hidden from navigation'
+                                    : 'Show/hide the AllDebrid tab in the navigation bar',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          secondary: Icon(
+                            _hiddenFromNav
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: _hiddenFromNav ? Colors.amber : null,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                        ),
+                        if (_hiddenFromNav)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 16,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'To show AllDebrid in navigation again, please logout and login',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

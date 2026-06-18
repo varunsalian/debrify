@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/alldebrid_user.dart';
 import '../models/alldebrid_file.dart';
+import '../models/alldebrid_magnet.dart';
 
 /// Thrown when a magnet is added to AllDebrid but is not ready (not cached) yet.
 /// AllDebrid has no cache-check endpoint, so the only way to know is to upload
@@ -135,6 +136,33 @@ class AllDebridService {
       if (e is Exception) rethrow;
       throw Exception('AllDebrid magnet/upload failed: $e');
     }
+  }
+
+  /// Lists every magnet on the account (the AllDebrid "cloud" library).
+  /// Calls `/v4.1/magnet/status` with no id, which returns all magnets.
+  static Future<List<AllDebridMagnet>> listMagnets(String apiKey) async {
+    final response = await http
+        .post(
+          Uri.parse(_statusUrl),
+          headers: _authHeaders(apiKey),
+          body: const <String, String>{},
+        )
+        .timeout(const Duration(seconds: 30));
+    final data = _decode(response);
+    final magnets = data['magnets'];
+    final out = <AllDebridMagnet>[];
+    if (magnets is List) {
+      for (final m in magnets) {
+        if (m is Map<String, dynamic>) {
+          out.add(AllDebridMagnet.fromJson(m));
+        }
+      }
+    } else if (magnets is Map<String, dynamic>) {
+      // A single-magnet account can come back as one object.
+      out.add(AllDebridMagnet.fromJson(magnets));
+    }
+    debugPrint('AllDebridService: listMagnets returned ${out.length} magnets');
+    return out;
   }
 
   /// Fetches the status of a single magnet by [magnetId]. Returns the magnet

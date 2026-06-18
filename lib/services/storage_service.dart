@@ -37,6 +37,8 @@ class StorageService {
       'alldebrid_integration_enabled';
   static const String _allDebridPostTorrentActionKey =
       'alldebrid_post_torrent_action';
+  static const String _allDebridHiddenFromNavKey =
+      'alldebrid_hidden_from_nav';
   static const String _pikpakHiddenFromNavKey = 'pikpak_hidden_from_nav';
   static const String _postTorrentActionKey = 'post_torrent_action';
   static const String _torboxPostTorrentActionKey =
@@ -470,6 +472,22 @@ class StorageService {
   static Future<void> saveAllDebridPostTorrentAction(String action) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_allDebridPostTorrentActionKey, action);
+  }
+
+  // AllDebrid hide-from-navigation
+  static Future<bool> getAllDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_allDebridHiddenFromNavKey) ?? false;
+  }
+
+  static Future<void> setAllDebridHiddenFromNav(bool hidden) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_allDebridHiddenFromNavKey, hidden);
+  }
+
+  static Future<void> clearAllDebridHiddenFromNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_allDebridHiddenFromNavKey);
   }
 
   static Future<bool> isInitialSetupComplete() async {
@@ -2029,6 +2047,7 @@ class StorageService {
     await prefs.remove(_premiumizeIntegrationEnabledKey);
     await prefs.remove(_premiumizeHiddenFromNavKey);
     await prefs.remove(_allDebridIntegrationEnabledKey);
+    await prefs.remove(_allDebridHiddenFromNavKey);
     await prefs.remove(_webDavEnabledKey);
     await prefs.remove(_webDavHiddenFromNavKey);
   }
