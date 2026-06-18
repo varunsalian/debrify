@@ -12,6 +12,7 @@ class MainPageBridge {
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
   static void Function()? openPremiumizeFolder;
+  static void Function()? openAllDebridFolder;
 
   /// Flag to track if user came from torrent search "Open in xxx" flow.
   /// When true, back navigation should return to torrent search instead of folder navigation.

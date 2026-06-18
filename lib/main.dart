@@ -745,6 +745,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ),
       );
     };
+    MainPageBridge.openAllDebridFolder = () {
+      if (!mounted) return;
+      if (!_allDebridEnabled) {
+        _showMissingApiKeySnack('AllDebrid');
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => PopScope(
+            canPop: false,
+            onPopInvoked: (didPop) {
+              if (didPop) return;
+              if (!MainPageBridge.handleBackNavigation()) {
+                Navigator.of(ctx).pop();
+              }
+            },
+            child: const AllDebridFilesScreen(isPushedRoute: true),
+          ),
+        ),
+      );
+    };
     MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadIntegrationState();
@@ -801,6 +822,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
     MainPageBridge.openPremiumizeFolder = null;
+    MainPageBridge.openAllDebridFolder = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     MainPageBridge.focusTvSidebar = null;
     _animationController.dispose();
@@ -879,6 +901,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         onPremiumizeAdded: () {
           MainPageBridge.switchTab?.call(11); // Premiumize tab index
         },
+        onAllDebridAdded: () {
+          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
+        },
       );
 
       // Handle the magnet link
@@ -936,6 +961,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         },
         onPremiumizeAdded: () {
           MainPageBridge.switchTab?.call(11); // Premiumize tab index
+        },
+        onAllDebridAdded: () {
+          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
         },
       );
 

@@ -356,6 +356,8 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
           return 'RD';
         case 'premiumize':
           return 'PM';
+        case 'alldebrid':
+          return 'AD';
         default:
           return 'Cached';
       }

@@ -1456,6 +1456,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case 'premiumize':
         serviceColor = const Color(0xFFFB923C);
         serviceLabel = 'Premiumize';
+      case 'alldebrid':
+        serviceColor = const Color(0xFF26A69A);
+        serviceLabel = 'AllDebrid';
       case SeriesSource.localService:
         serviceColor = const Color(0xFF60A5FA);
         serviceLabel = 'Local';

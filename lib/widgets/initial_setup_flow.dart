@@ -14,6 +14,7 @@ import '../services/engine/config_loader.dart';
 import '../services/engine/engine_registry.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_account_service.dart';
+import '../services/alldebrid_account_service.dart';
 import '../utils/platform_util.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_account_service.dart';
@@ -52,7 +53,7 @@ class InitialSetupFlow extends StatefulWidget {
   State<InitialSetupFlow> createState() => _InitialSetupFlowState();
 }
 
-enum _IntegrationType { realDebrid, torbox, pikpak, premiumize }
+enum _IntegrationType { realDebrid, torbox, pikpak, premiumize, allDebrid }
 
 class _IntegrationMeta {
   const _IntegrationMeta({
@@ -139,6 +140,21 @@ const Map<_IntegrationType, _IntegrationMeta> _integrationMeta = {
     gradient: <Color>[Color(0xFFFB923C), Color(0xFFEA580C)],
     icon: Icons.workspace_premium_rounded,
   ),
+  _IntegrationType.allDebrid: _IntegrationMeta(
+    type: _IntegrationType.allDebrid,
+    title: 'AllDebrid',
+    url: 'https://alldebrid.com/apikeys',
+    linkLabel: 'Open alldebrid.com/apikeys',
+    steps: <String>[
+      'Open your AllDebrid API keys page.',
+      'Create a new API key (or copy an existing one).',
+      'Paste your API key below.',
+    ],
+    inputLabel: 'AllDebrid API Key',
+    hint: 'Paste your AllDebrid API key here',
+    gradient: <Color>[Color(0xFF26A69A), Color(0xFF00796B)],
+    icon: Icons.all_inclusive_rounded,
+  ),
 };
 
 class _InitialSetupFlowState extends State<InitialSetupFlow> {
@@ -149,6 +165,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final TextEditingController _pikpakPasswordController =
       TextEditingController();
   final TextEditingController _premiumizeController = TextEditingController();
+  final TextEditingController _allDebridController = TextEditingController();
   int _stepIndex =
       0; // 0 => welcome, 1..n => integrations, n+1 => engines, n+2 => trakt
   List<_IntegrationType> _flow = const <_IntegrationType>[];
@@ -180,6 +197,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final FocusNode _torboxChipFocusNode = FocusNode(debugLabel: 'torbox-chip');
   final FocusNode _pikpakChipFocusNode = FocusNode(debugLabel: 'pikpak-chip');
   final FocusNode _premiumizeChipFocusNode = FocusNode(debugLabel: 'premiumize-chip');
+  final FocusNode _allDebridChipFocusNode = FocusNode(debugLabel: 'alldebrid-chip');
   final FocusNode _skipButtonFocusNode = FocusNode(debugLabel: 'skip-button');
   final FocusNode _continueButtonFocusNode = FocusNode(
     debugLabel: 'continue-button',
@@ -331,6 +349,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       _torboxChipFocusNode,
       _pikpakChipFocusNode,
       _premiumizeChipFocusNode,
+      _allDebridChipFocusNode,
       _skipButtonFocusNode,
       _continueButtonFocusNode,
       _backButtonFocusNode,
@@ -428,11 +447,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _pikpakEmailController.dispose();
     _pikpakPasswordController.dispose();
     _premiumizeController.dispose();
+    _allDebridController.dispose();
     _dialogFocusNode.dispose();
     _realDebridChipFocusNode.dispose();
     _torboxChipFocusNode.dispose();
     _pikpakChipFocusNode.dispose();
     _premiumizeChipFocusNode.dispose();
+    _allDebridChipFocusNode.dispose();
     _skipButtonFocusNode.dispose();
     _continueButtonFocusNode.dispose();
     _backButtonFocusNode.dispose();
@@ -661,14 +682,18 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                     ? _torboxChipFocusNode
                     : meta.type == _IntegrationType.pikpak
                     ? _pikpakChipFocusNode
-                    : _premiumizeChipFocusNode;
+                    : meta.type == _IntegrationType.premiumize
+                    ? _premiumizeChipFocusNode
+                    : _allDebridChipFocusNode;
                 final order = meta.type == _IntegrationType.realDebrid
                     ? 1.0
                     : meta.type == _IntegrationType.torbox
                     ? 2.0
                     : meta.type == _IntegrationType.pikpak
                     ? 3.0
-                    : 4.0;
+                    : meta.type == _IntegrationType.premiumize
+                    ? 4.0
+                    : 5.0;
                 return SizedBox(
                   width: isNarrow ? width : (width - 16) / 2,
                   child: FocusTraversalOrder(
@@ -704,7 +729,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   FocusTraversalOrder(
-                    order: const NumericFocusOrder(5),
+                    order: const NumericFocusOrder(6),
                     child: TextButton(
                       focusNode: _skipButtonFocusNode,
                       onPressed: _isProcessing ? null : _goToEngineSelection,
@@ -713,7 +738,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                   ),
                   SizedBox(height: spacing1),
                   FocusTraversalOrder(
-                    order: const NumericFocusOrder(6),
+                    order: const NumericFocusOrder(7),
                     child: FilledButton.icon(
                       focusNode: _continueButtonFocusNode,
                       onPressed: _selection.isEmpty || _isProcessing
@@ -729,7 +754,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             return Row(
               children: <Widget>[
                 FocusTraversalOrder(
-                  order: const NumericFocusOrder(5),
+                  order: const NumericFocusOrder(6),
                   child: TextButton(
                     focusNode: _skipButtonFocusNode,
                     onPressed: _isProcessing ? null : _goToEngineSelection,
@@ -738,7 +763,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
                 ),
                 const Spacer(),
                 FocusTraversalOrder(
-                  order: const NumericFocusOrder(6),
+                  order: const NumericFocusOrder(7),
                   child: FilledButton.icon(
                     focusNode: _continueButtonFocusNode,
                     onPressed: _selection.isEmpty || _isProcessing
@@ -769,6 +794,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         ? _torboxController
         : type == _IntegrationType.premiumize
         ? _premiumizeController
+        : type == _IntegrationType.allDebrid
+        ? _allDebridController
         : _pikpakEmailController;
     final int currentStep = _stepIndex;
     final int totalSteps = _flow.length;
@@ -1630,6 +1657,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (_selection.contains(_IntegrationType.pikpak)) _IntegrationType.pikpak,
       if (_selection.contains(_IntegrationType.premiumize))
         _IntegrationType.premiumize,
+      if (_selection.contains(_IntegrationType.allDebrid))
+        _IntegrationType.allDebrid,
     ];
 
     if (ordered.isEmpty) return;
@@ -1869,13 +1898,15 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         });
       }
     } else {
-      // Handle Real Debrid, Torbox and Premiumize (API key services)
+      // Handle Real Debrid, Torbox, Premiumize and AllDebrid (API key services)
       final TextEditingController controller =
           current == _IntegrationType.realDebrid
           ? _realDebridController
           : current == _IntegrationType.torbox
           ? _torboxController
-          : _premiumizeController;
+          : current == _IntegrationType.premiumize
+          ? _premiumizeController
+          : _allDebridController;
       String value = controller.text.trim();
 
       // Provisioning hack: a key entered as "nonav:<key>" is saved with the
@@ -1904,15 +1935,19 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           success = await AccountService.validateAndGetUserInfo(value);
         } else if (current == _IntegrationType.torbox) {
           success = await TorboxAccountService.validateAndGetUserInfo(value);
-        } else {
+        } else if (current == _IntegrationType.premiumize) {
           success = await PremiumizeAccountService.validateAndGetUserInfo(value);
+        } else {
+          success = await AllDebridAccountService.validateAndGetUserInfo(value);
         }
       } catch (e, stackTrace) {
         final serviceName = current == _IntegrationType.realDebrid
             ? 'Real Debrid'
             : current == _IntegrationType.torbox
             ? 'Torbox'
-            : 'Premiumize';
+            : current == _IntegrationType.premiumize
+            ? 'Premiumize'
+            : 'AllDebrid';
         debugPrint('$serviceName API validation failed: $e');
         if (kDebugMode) {
           debugPrint('Stack trace: $stackTrace');
@@ -1930,6 +1965,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             await StorageService.setTorboxHiddenFromNav(true);
           } else if (current == _IntegrationType.premiumize) {
             await StorageService.setPremiumizeHiddenFromNav(true);
+          } else if (current == _IntegrationType.allDebrid) {
+            await StorageService.setAllDebridHiddenFromNav(true);
           }
         }
         setState(() {
@@ -1942,7 +1979,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
               ? 'real_debrid'
               : current == _IntegrationType.torbox
               ? 'torbox'
-              : 'premiumize',
+              : current == _IntegrationType.premiumize
+              ? 'premiumize'
+              : 'alldebrid',
           'surface': 'onboarding',
         });
         MainPageBridge.notifyIntegrationChanged();

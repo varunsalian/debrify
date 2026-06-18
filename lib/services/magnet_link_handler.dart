@@ -4,6 +4,7 @@ import 'debrid_service.dart';
 import 'torbox_service.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
+import 'alldebrid_service.dart';
 import 'storage_service.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
@@ -15,6 +16,7 @@ class MagnetLinkHandler {
   final Function(TorboxTorrent torrent)? onTorboxAdded;
   final Function()? onPikPakAdded;
   final Function()? onPremiumizeAdded;
+  final Function()? onAllDebridAdded;
   final Function(Map<String, dynamic> result, String torrentName, String apiKey)? onRealDebridResult;
   final Function(TorboxTorrent torrent)? onTorboxResult;
   final Function(String fileId, String fileName)? onPikPakResult;
@@ -28,6 +30,7 @@ class MagnetLinkHandler {
     this.onTorboxAdded,
     this.onPikPakAdded,
     this.onPremiumizeAdded,
+    this.onAllDebridAdded,
     this.onRealDebridResult,
     this.onTorboxResult,
     this.onPikPakResult,
@@ -51,7 +54,7 @@ class MagnetLinkHandler {
     final services = await DeepLinkService.getConfiguredServices();
 
     if (!services.hasAny) {
-      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, or Premiumize in Settings.');
+      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.');
       return;
     }
 
@@ -66,6 +69,8 @@ class MagnetLinkHandler {
       await _addToPikPak(magnetUri, infohash, torrentName);
     } else if (services.hasOnlyPremiumize) {
       await _addToPremiumize(magnetUri, torrentName);
+    } else if (services.hasOnlyAllDebrid) {
+      await _addToAllDebrid(magnetUri, torrentName);
     }
   }
 
@@ -89,7 +94,7 @@ class MagnetLinkHandler {
     final services = await DeepLinkService.getConfiguredServices();
 
     if (!services.hasAny) {
-      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, or Premiumize in Settings.');
+      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.');
       return;
     }
 
@@ -104,6 +109,8 @@ class MagnetLinkHandler {
       await _addUrlToPikPak(url, displayName);
     } else if (services.hasOnlyPremiumize) {
       await _addUrlToPremiumize(url, displayName);
+    } else if (services.hasOnlyAllDebrid) {
+      await _addUrlToAllDebrid(url, displayName);
     }
   }
 
@@ -170,6 +177,15 @@ class MagnetLinkHandler {
               },
               icon: const Icon(Icons.workspace_premium_rounded),
               label: const Text('Premiumize'),
+            ),
+          if (services.hasAllDebrid)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addUrlToAllDebrid(url, displayName);
+              },
+              icon: const Icon(Icons.all_inclusive_rounded),
+              label: const Text('AllDebrid'),
             ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -415,6 +431,15 @@ class MagnetLinkHandler {
               },
               icon: const Icon(Icons.workspace_premium_rounded),
               label: const Text('Premiumize'),
+            ),
+          if (services.hasAllDebrid)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _addToAllDebrid(magnetUri, torrentName);
+              },
+              icon: const Icon(Icons.all_inclusive_rounded),
+              label: const Text('AllDebrid'),
             ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -690,6 +715,60 @@ class MagnetLinkHandler {
       if (!context.mounted) return;
       Navigator.of(context).pop();
       _showError('Error adding to Premiumize: $e');
+    }
+  }
+
+  /// Add magnet link to AllDebrid
+  Future<void> _addToAllDebrid(String magnetUri, String torrentName) async {
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showError('AllDebrid API key not configured');
+      return;
+    }
+
+    _showLoadingDialog(torrentName, 'AllDebrid');
+
+    try {
+      await AllDebridService.uploadMagnet(apiKey, magnetUri);
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+
+      _showSuccess('Added to AllDebrid: $torrentName');
+      onAllDebridAdded?.call();
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      _showError('Error adding to AllDebrid: $e');
+    }
+  }
+
+  /// Add URL to AllDebrid (unlock hoster link)
+  Future<void> _addUrlToAllDebrid(String url, String displayName) async {
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _showError('AllDebrid API key not configured');
+      return;
+    }
+
+    _showLoadingDialog(displayName, 'AllDebrid');
+
+    try {
+      final downloadUrl = await AllDebridService.unlockLink(apiKey, url);
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+
+      if (downloadUrl.isEmpty) {
+        _showError('AllDebrid could not unlock this link');
+        return;
+      }
+      _showSuccess('Link unlocked on AllDebrid: $displayName');
+      onAllDebridAdded?.call();
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      _showError('Error adding to AllDebrid: $e');
     }
   }
 

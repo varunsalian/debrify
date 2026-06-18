@@ -352,18 +352,25 @@ class DeepLinkService {
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final premiumizeEnabled = await StorageService.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final allDebridEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
 
     final hasRealDebrid = rdKey != null && rdKey.isNotEmpty && rdEnabled;
     final hasTorbox = torboxKey != null && torboxKey.isNotEmpty && torboxEnabled;
     final hasPremiumize = premiumizeKey != null &&
         premiumizeKey.isNotEmpty &&
         premiumizeEnabled;
+    final hasAllDebrid = allDebridKey != null &&
+        allDebridKey.isNotEmpty &&
+        allDebridEnabled;
 
     return ConfiguredServices(
       hasRealDebrid: hasRealDebrid,
       hasTorbox: hasTorbox,
       hasPikPak: pikpakEnabled,
       hasPremiumize: hasPremiumize,
+      hasAllDebrid: hasAllDebrid,
     );
   }
 
@@ -384,25 +391,33 @@ class ConfiguredServices {
   final bool hasTorbox;
   final bool hasPikPak;
   final bool hasPremiumize;
+  final bool hasAllDebrid;
 
   ConfiguredServices({
     required this.hasRealDebrid,
     required this.hasTorbox,
     required this.hasPikPak,
     this.hasPremiumize = false,
+    this.hasAllDebrid = false,
   });
 
-  bool get hasAny => hasRealDebrid || hasTorbox || hasPikPak || hasPremiumize;
+  bool get hasAny =>
+      hasRealDebrid || hasTorbox || hasPikPak || hasPremiumize || hasAllDebrid;
   bool get hasMultiple =>
-      [hasRealDebrid, hasTorbox, hasPikPak, hasPremiumize].where((e) => e).length > 1;
+      [hasRealDebrid, hasTorbox, hasPikPak, hasPremiumize, hasAllDebrid]
+          .where((e) => e)
+          .length >
+      1;
   bool get hasOnlyRealDebrid =>
-      hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize;
+      hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize && !hasAllDebrid;
   bool get hasOnlyTorbox =>
-      !hasRealDebrid && hasTorbox && !hasPikPak && !hasPremiumize;
+      !hasRealDebrid && hasTorbox && !hasPikPak && !hasPremiumize && !hasAllDebrid;
   bool get hasOnlyPikPak =>
-      !hasRealDebrid && !hasTorbox && hasPikPak && !hasPremiumize;
+      !hasRealDebrid && !hasTorbox && hasPikPak && !hasPremiumize && !hasAllDebrid;
   bool get hasOnlyPremiumize =>
-      !hasRealDebrid && !hasTorbox && !hasPikPak && hasPremiumize;
+      !hasRealDebrid && !hasTorbox && !hasPikPak && hasPremiumize && !hasAllDebrid;
+  bool get hasOnlyAllDebrid =>
+      !hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize && hasAllDebrid;
 
   // Legacy getter for backward compatibility
   bool get hasBoth => hasRealDebrid && hasTorbox;
