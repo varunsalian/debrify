@@ -41,13 +41,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
 
   late TabController _tabController;
 
-  // Focus nodes for playlist items (2 per item: star + delete)
+  // Focus nodes for playlist items (3 per item: star + refresh + delete)
   final List<FocusNode> _playlistFocusNodes = [];
 
   List<IptvPlaylist> _playlists = [];
   String? _defaultPlaylistId;
   bool _loading = true;
   bool _isAdding = false;
+  // Ids of playlists currently being refreshed (re-fetched from source)
+  final Set<String> _refreshingIds = {};
 
   @override
   void initState() {
@@ -83,8 +85,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
   }
 
   void _ensureFocusNodes() {
-    // 2 focus nodes per playlist (star button + delete button)
-    final needed = _playlists.length * 2;
+    // 3 focus nodes per playlist (star button + refresh button + delete button)
+    final needed = _playlists.length * 3;
 
     while (_playlistFocusNodes.length > needed) {
       _playlistFocusNodes.removeLast().dispose();
@@ -388,6 +390,43 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     );
   }
 
+  /// Re-fetch a URL or Xtream Codes playlist from its source, clearing the
+  /// cache first so updated channels are picked up. Local-file playlists are
+  /// static snapshots and cannot be refreshed.
+  Future<void> _refreshPlaylist(IptvPlaylist playlist) async {
+    if (playlist.isLocalFile) return;
+    if (_refreshingIds.contains(playlist.id)) return;
+
+    setState(() => _refreshingIds.add(playlist.id));
+    _showSnackBar('Refreshing "${playlist.name}"…', isError: false);
+
+    IptvParseResult result;
+    if (playlist.isXtreamCodes) {
+      XtreamCodesService.instance.clearCache(playlist.serverUrl);
+      result = await XtreamCodesService.instance.fetchLiveStreams(
+        playlist.serverUrl!,
+        playlist.username!,
+        playlist.password!,
+      );
+    } else {
+      IptvService.instance.clearCache(playlist.url);
+      result = await IptvService.instance
+          .fetchPlaylist(playlist.url, forceRefresh: true);
+    }
+
+    if (!mounted) return;
+    setState(() => _refreshingIds.remove(playlist.id));
+
+    if (result.hasError) {
+      _showSnackBar('Failed to refresh "${playlist.name}": ${result.error}');
+    } else {
+      _showSnackBar(
+        'Updated "${playlist.name}" — ${result.channels.length} channels',
+        isError: false,
+      );
+    }
+  }
+
   void _showSnackBar(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -404,8 +443,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     for (int i = 0; i < _playlists.length; i++) {
       final playlist = _playlists[i];
       final isDefault = _defaultPlaylistId == playlist.id;
-      final starFocusIndex = i * 2;
-      final deleteFocusIndex = i * 2 + 1;
+      final starFocusIndex = i * 3;
+      final refreshFocusIndex = i * 3 + 1;
+      final deleteFocusIndex = i * 3 + 2;
+      // URL and Xtream Codes playlists can be re-fetched; local files cannot.
+      final canRefresh = !playlist.isLocalFile;
 
       items.add(
         FocusTraversalOrder(
@@ -413,13 +455,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
           child: _FocusablePlaylistTile(
             playlist: playlist,
             isDefault: isDefault,
+            isRefreshing: _refreshingIds.contains(playlist.id),
             starFocusNode: starFocusIndex < _playlistFocusNodes.length
                 ? _playlistFocusNodes[starFocusIndex]
+                : null,
+            refreshFocusNode: refreshFocusIndex < _playlistFocusNodes.length
+                ? _playlistFocusNodes[refreshFocusIndex]
                 : null,
             deleteFocusNode: deleteFocusIndex < _playlistFocusNodes.length
                 ? _playlistFocusNodes[deleteFocusIndex]
                 : null,
             onSetDefault: () => _setDefaultPlaylist(isDefault ? null : playlist),
+            onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
             onDelete: () => _removePlaylist(playlist),
           ),
         ),
@@ -1489,17 +1536,24 @@ class _FocusablePlaylistTile extends StatefulWidget {
   const _FocusablePlaylistTile({
     required this.playlist,
     required this.isDefault,
+    this.isRefreshing = false,
     this.starFocusNode,
+    this.refreshFocusNode,
     this.deleteFocusNode,
     required this.onSetDefault,
+    this.onRefresh,
     required this.onDelete,
   });
 
   final IptvPlaylist playlist;
   final bool isDefault;
+  final bool isRefreshing;
   final FocusNode? starFocusNode;
+  final FocusNode? refreshFocusNode;
   final FocusNode? deleteFocusNode;
   final VoidCallback onSetDefault;
+  // Null when the playlist cannot be refreshed (local-file playlists).
+  final VoidCallback? onRefresh;
   final VoidCallback onDelete;
 
   @override
@@ -1508,12 +1562,14 @@ class _FocusablePlaylistTile extends StatefulWidget {
 
 class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   bool _starFocused = false;
+  bool _refreshFocused = false;
   bool _deleteFocused = false;
 
   @override
   void initState() {
     super.initState();
     widget.starFocusNode?.addListener(_onStarFocusChange);
+    widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
     widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
   }
 
@@ -1524,6 +1580,10 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
       oldWidget.starFocusNode?.removeListener(_onStarFocusChange);
       widget.starFocusNode?.addListener(_onStarFocusChange);
     }
+    if (oldWidget.refreshFocusNode != widget.refreshFocusNode) {
+      oldWidget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
+      widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
+    }
     if (oldWidget.deleteFocusNode != widget.deleteFocusNode) {
       oldWidget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
       widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
@@ -1533,6 +1593,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   @override
   void dispose() {
     widget.starFocusNode?.removeListener(_onStarFocusChange);
+    widget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
     widget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
     super.dispose();
   }
@@ -1541,6 +1602,14 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
     if (mounted) {
       final hasFocus = widget.starFocusNode?.hasFocus ?? false;
       setState(() => _starFocused = hasFocus);
+      if (hasFocus) _ensureVisible();
+    }
+  }
+
+  void _onRefreshFocusChange() {
+    if (mounted) {
+      final hasFocus = widget.refreshFocusNode?.hasFocus ?? false;
+      setState(() => _refreshFocused = hasFocus);
       if (hasFocus) _ensureVisible();
     }
   }
@@ -1568,7 +1637,8 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isAnyFocused = _starFocused || _deleteFocused;
+    final isAnyFocused = _starFocused || _refreshFocused || _deleteFocused;
+    final canRefresh = widget.onRefresh != null;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
@@ -1653,14 +1723,30 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
               color: widget.isDefault ? Colors.amber : null,
               tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
               onPressed: widget.onSetDefault,
-              onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
+              onRightArrow: () => (canRefresh
+                      ? widget.refreshFocusNode
+                      : widget.deleteFocusNode)
+                  ?.requestFocus(),
             ),
+            if (canRefresh)
+              _FocusableIconButton(
+                focusNode: widget.refreshFocusNode,
+                icon: Icons.refresh,
+                tooltip: 'Refresh playlist',
+                isBusy: widget.isRefreshing,
+                onPressed: widget.onRefresh!,
+                onLeftArrow: () => widget.starFocusNode?.requestFocus(),
+                onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
+              ),
             _FocusableIconButton(
               focusNode: widget.deleteFocusNode,
               icon: Icons.delete_outline,
               tooltip: 'Remove playlist',
               onPressed: widget.onDelete,
-              onLeftArrow: () => widget.starFocusNode?.requestFocus(),
+              onLeftArrow: () => (canRefresh
+                      ? widget.refreshFocusNode
+                      : widget.starFocusNode)
+                  ?.requestFocus(),
             ),
           ],
         ),
@@ -1676,6 +1762,7 @@ class _FocusableIconButton extends StatefulWidget {
     required this.icon,
     this.color,
     this.tooltip,
+    this.isBusy = false,
     required this.onPressed,
     this.onLeftArrow,
     this.onRightArrow,
@@ -1685,6 +1772,7 @@ class _FocusableIconButton extends StatefulWidget {
   final IconData icon;
   final Color? color;
   final String? tooltip;
+  final bool isBusy;
   final VoidCallback onPressed;
   final VoidCallback? onLeftArrow;
   final VoidCallback? onRightArrow;
@@ -1733,7 +1821,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         if (isActivateKey(event.logicalKey)) {
-          widget.onPressed();
+          if (!widget.isBusy) widget.onPressed();
           return KeyEventResult.handled;
         }
 
@@ -1767,12 +1855,21 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
               : null,
         ),
         child: IconButton(
-          icon: Icon(
-            widget.icon,
-            color: _isFocused ? colorScheme.primary : widget.color,
-          ),
+          icon: widget.isBusy
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _isFocused ? colorScheme.primary : widget.color,
+                  ),
+                )
+              : Icon(
+                  widget.icon,
+                  color: _isFocused ? colorScheme.primary : widget.color,
+                ),
           tooltip: widget.tooltip,
-          onPressed: widget.onPressed,
+          onPressed: widget.isBusy ? null : widget.onPressed,
           style: IconButton.styleFrom(
             backgroundColor: _isFocused ? colorScheme.primaryContainer : null,
           ),
