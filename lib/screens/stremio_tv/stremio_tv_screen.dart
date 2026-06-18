@@ -19,6 +19,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../services/pikpak_tv_service.dart';
 import '../../services/premiumize_service.dart';
 import '../../models/premiumize_file.dart';
+import '../../services/alldebrid_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
@@ -215,6 +216,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final pmKey = await StorageService.getPremiumizeApiKey();
     if (pmEnabled && pmKey != null && pmKey.isNotEmpty) {
       providers.add(const MapEntry('premiumize', 'Premiumize'));
+    }
+    final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
+    final adKey = await StorageService.getAllDebridApiKey();
+    if (adEnabled && adKey != null && adKey.isNotEmpty) {
+      providers.add(const MapEntry('alldebrid', 'AllDebrid'));
     }
     return providers;
   }
@@ -458,6 +464,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return 'PP';
       case 'premiumize':
         return 'PM';
+      case 'alldebrid':
+        return 'AD';
       default:
         return 'AUTO';
     }
@@ -473,6 +481,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         return 'PikPak';
       case 'premiumize':
         return 'Premiumize';
+      case 'alldebrid':
+        return 'AllDebrid';
       default:
         if (_availableProviders.isEmpty) return 'Auto';
         return 'Auto (${_availableProviders.first.value})';
@@ -1388,6 +1398,11 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (pmKey != null && pmKey.isNotEmpty) {
         return _playViaPremiumize(torrent, item, pmKey);
       }
+    } else if (_debridProvider == 'alldebrid') {
+      final adKey = await StorageService.getAllDebridApiKey();
+      if (adKey != null && adKey.isNotEmpty) {
+        return _playViaAllDebrid(torrent, item, adKey);
+      }
     }
 
     // Auto or fallback if selected provider is unavailable
@@ -1411,11 +1426,16 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return _playViaPremiumize(torrent, item, pmKey);
     }
 
+    final adKey = await StorageService.getAllDebridApiKey();
+    if (adKey != null && adKey.isNotEmpty) {
+      return _playViaAllDebrid(torrent, item, adKey);
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'No debrid provider configured. Connect Real Debrid, Torbox, PikPak, or Premiumize in Settings.',
+            'No debrid provider configured. Connect Real Debrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.',
           ),
         ),
       );
@@ -1504,6 +1524,78 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       if (!mounted) return false;
       if (dialogShown) Navigator.of(context).pop();
       debugPrint('StremioTV: Real Debrid error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _playViaAllDebrid(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey,
+  ) async {
+    bool dialogShown = false;
+    try {
+      if (!mounted) return false;
+      showPsychLoading(context, 'Unlocking your stream on AllDebrid...');
+      dialogShown = true;
+
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+
+      AllDebridAddResult result;
+      try {
+        result = await AllDebridService.addMagnetAndResolveFiles(apiKey, magnet);
+      } on AllDebridTorrentNotReadyException catch (e) {
+        // Not cached/ready — don't leave it downloading on the account.
+        await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+        if (!mounted) return false;
+        Navigator.of(context).pop();
+        dialogShown = false;
+        return false;
+      }
+
+      if (!mounted) return false;
+      Navigator.of(context).pop();
+      dialogShown = false;
+
+      final videoFiles = result.files
+          .where((f) => FileUtils.isVideoFile(f.fileName))
+          .toList();
+      if (videoFiles.isEmpty) return false;
+
+      // For movies, pick the largest file; otherwise use the first.
+      String targetLink = videoFiles.first.link;
+      if (item.type.toLowerCase() == 'movie' && videoFiles.length > 1) {
+        final largestIndex = StremioEpisodeSelector.findLargestFileIndex(
+          videoFiles.map<int?>((f) => f.size).toList(),
+        );
+        if (largestIndex < videoFiles.length) {
+          targetLink = videoFiles[largestIndex].link;
+        }
+      }
+
+      if (targetLink.isEmpty) return false;
+      final videoUrl = await AllDebridService.unlockLink(apiKey, targetLink);
+
+      if (videoUrl.isNotEmpty && mounted) {
+        await VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: videoUrl,
+            title: _currentPlayTitle ?? item.name,
+            startAtPercent: _currentSlotProgress,
+            contentImdbId: item.effectiveImdbId,
+            contentTitle: item.name,
+            contentType: item.type,
+          ),
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (!mounted) return false;
+      if (dialogShown) Navigator.of(context).pop();
+      debugPrint('StremioTV: AllDebrid error: $e');
       return false;
     }
   }
@@ -2104,6 +2196,17 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           episode: episode,
         );
       }
+    } else if (debridProvider == 'alldebrid') {
+      final adKey = await StorageService.getAllDebridApiKey();
+      if (adKey != null && adKey.isNotEmpty) {
+        return _resolveViaAllDebrid(
+          torrent,
+          item,
+          adKey,
+          season: season,
+          episode: episode,
+        );
+      }
     }
 
     // Auto fallback
@@ -2134,6 +2237,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final pmKey = await StorageService.getPremiumizeApiKey();
     if (pmKey != null && pmKey.isNotEmpty) {
       return _resolveViaPremiumize(torrent, item, pmKey, season: season, episode: episode);
+    }
+    final adKey = await StorageService.getAllDebridApiKey();
+    if (adKey != null && adKey.isNotEmpty) {
+      return _resolveViaAllDebrid(torrent, item, adKey, season: season, episode: episode);
     }
 
     return null;
@@ -2213,6 +2320,71 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       return unrestrictResult['download'] as String?;
     } catch (e) {
       debugPrint('StremioTV: RD resolve error: $e');
+      return null;
+    }
+  }
+
+  /// Resolves a torrent to a playable URL via AllDebrid. Follows the
+  /// Real-Debrid model (no cache-check API): adds the magnet trusting the
+  /// `ready` flag (no polling), and on not-ready deletes the magnet and
+  /// returns null so the caller probes the next source. Picks the episode
+  /// (series) or largest file (movie), then unlocks that locked link.
+  Future<String?> _resolveViaAllDebrid(
+    Torrent torrent,
+    StremioMeta item,
+    String apiKey, {
+    int? season,
+    int? episode,
+  }) async {
+    try {
+      final magnet =
+          'magnet:?xt=urn:btih:${torrent.infohash}&dn=${Uri.encodeComponent(torrent.name)}';
+      AllDebridAddResult result;
+      try {
+        result = await AllDebridService.addMagnetAndResolveFiles(apiKey, magnet);
+      } on AllDebridTorrentNotReadyException catch (e) {
+        // Not cached/ready — don't leave it downloading on the account.
+        await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+        return null;
+      }
+
+      final videoFiles = result.files
+          .where((f) => FileUtils.isVideoFile(f.fileName))
+          .toList();
+      if (videoFiles.isEmpty) return null;
+
+      String targetLink = videoFiles.first.link;
+
+      final isSeries = item.type.toLowerCase() == 'series';
+      if (isSeries && season != null && episode != null) {
+        final candidateNames = videoFiles.map((f) => f.path).toList();
+        final targetIndex = StremioEpisodeSelector.findEpisodeFileIndex(
+          candidateNames,
+          season: season,
+          episode: episode,
+        );
+        if (targetIndex == null || targetIndex >= videoFiles.length) {
+          debugPrint(
+            'StremioTV: AllDebrid could not match S${season}E$episode in '
+            '${torrent.name}, falling back to default file selection',
+          );
+        } else {
+          targetLink = videoFiles[targetIndex].link;
+        }
+      } else if (item.type.toLowerCase() == 'movie' && videoFiles.length > 1) {
+        final targetIndex = StremioEpisodeSelector.findLargestFileIndex(
+          videoFiles.map<int?>((f) => f.size).toList(),
+        );
+        if (targetIndex < videoFiles.length) {
+          targetLink = videoFiles[targetIndex].link;
+        }
+      }
+
+      if (targetLink.isEmpty) return null;
+      final url = await AllDebridService.unlockLink(apiKey, targetLink);
+      return url.isEmpty ? null : url;
+    } catch (e) {
+      debugPrint('StremioTV: AllDebrid resolve error: $e');
       return null;
     }
   }
