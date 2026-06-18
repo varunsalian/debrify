@@ -29,6 +29,8 @@ import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/premiumize_file.dart';
 import '../services/premiumize_service.dart';
+import '../models/alldebrid_file.dart';
+import '../services/alldebrid_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
 import '../services/engine/engine_registry.dart';
@@ -160,6 +162,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   static const String _providerTorbox = 'torbox';
   static const String _providerPikPak = 'pikpak';
   static const String _providerPremiumize = 'premiumize';
+  static const String _providerAllDebrid = 'alldebrid';
   static const String _torboxFileEntryType = 'torbox_file';
   static const int _torboxMinVideoSizeBytes =
       50 * 1024 * 1024; // 50 MB filter threshold
@@ -221,6 +224,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _torboxAvailable = false;
   bool _pikpakAvailable = false;
   bool _premiumizeAvailable = false;
+  bool _allDebridAvailable = false;
   // De-dupe sets for RD-restricted entries
   final Set<String> _seenRestrictedLinks = {};
   final Set<String> _seenLinkWithTorrentId = {};
@@ -231,6 +235,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _prefetchStopRequested = false;
   Future<void>? _prefetchTask;
   String? _activeApiKey;
+  // Which provider the active prefetch run resolves through. RD and AllDebrid
+  // are the two cache-check-less providers that use the background prefetcher;
+  // this tells _prefetchOneAtIndex / requestMagicNext which add+resolve path to
+  // use against _activeApiKey.
+  String _activeProvider = _providerRealDebrid;
   final Set<String> _inflightInfohashes = {};
   bool _isAndroidTv = false;
   bool _showSearchBar = false;
@@ -560,10 +569,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     bool torboxAvailable,
     bool pikpakAvailable,
     bool premiumizeAvailable,
+    bool allDebridAvailable,
   ) {
     // If user has a preferred provider that's available, use it
     if (preferred == _providerPremiumize && premiumizeAvailable) {
       return _providerPremiumize;
+    }
+    if (preferred == _providerAllDebrid && allDebridAvailable) {
+      return _providerAllDebrid;
     }
     if (preferred == _providerPikPak && pikpakAvailable) {
       return _providerPikPak;
@@ -585,6 +598,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (premiumizeAvailable) {
       return _providerPremiumize;
     }
+    if (allDebridAvailable) {
+      return _providerAllDebrid;
+    }
     if (pikpakAvailable) {
       return _providerPikPak;
     }
@@ -602,6 +618,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     if (provider == _providerPremiumize) {
       return _premiumizeAvailable;
+    }
+    if (provider == _providerAllDebrid) {
+      return _allDebridAvailable;
     }
     return _rdAvailable;
   }
@@ -687,12 +706,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final premiumizeAvailable = premiumizeIntegrationEnabled &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
+    final allDebridIntegrationEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final allDebridAvailable = allDebridIntegrationEnabled &&
+        allDebridKey != null &&
+        allDebridKey.isNotEmpty;
     final defaultProvider = _determineDefaultProvider(
       hasStoredProvider ? storedProvider : null,
       rdAvailable,
       torboxAvailable,
       pikpakAvailable,
       premiumizeAvailable,
+      allDebridAvailable,
     );
     final isTv = await AndroidNativeDownloader.isTelevision();
 
@@ -709,6 +735,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _torboxAvailable = torboxAvailable;
         _pikpakAvailable = pikpakAvailable;
         _premiumizeAvailable = premiumizeAvailable;
+        _allDebridAvailable = allDebridAvailable;
         _provider = defaultProvider;
         _isAndroidTv = isTv;
 
@@ -1243,6 +1270,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final premiumizeAvailable = premiumizeIntegrationEnabled &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
+    final allDebridIntegrationEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
+    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final allDebridAvailable = allDebridIntegrationEnabled &&
+        allDebridKey != null &&
+        allDebridKey.isNotEmpty;
 
     final rdAvailable =
         rdIntegrationEnabled && rdKey != null && rdKey.isNotEmpty;
@@ -1255,6 +1288,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       torboxAvailable,
       pikpakAvailable,
       premiumizeAvailable,
+      allDebridAvailable,
     );
     final nextQuickProvider = _determineDefaultProvider(
       _quickProvider,
@@ -1262,6 +1296,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       torboxAvailable,
       pikpakAvailable,
       premiumizeAvailable,
+      allDebridAvailable,
     );
 
     if (!mounted) return;
@@ -1271,6 +1306,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _torboxAvailable = torboxAvailable;
       _pikpakAvailable = pikpakAvailable;
       _premiumizeAvailable = premiumizeAvailable;
+      _allDebridAvailable = allDebridAvailable;
       _provider = nextChannelProvider;
       _quickProvider = nextQuickProvider;
     });
@@ -1526,6 +1562,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (provider == _providerTorbox) return 'Torbox';
     if (provider == _providerPikPak) return 'PikPak';
     if (provider == _providerPremiumize) return 'Premiumize';
+    if (provider == _providerAllDebrid) return 'AllDebrid';
     return 'Real Debrid';
   }
 
@@ -1629,6 +1666,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 : (selected) {
                     if (selected) {
                       handleSelection(_providerPremiumize);
+                    }
+                  },
+          ),
+        ),
+        Tooltip(
+          message: _allDebridAvailable
+              ? 'Use AllDebrid for Debrify TV'
+              : 'Enable AllDebrid and add an API key in Settings to use this option.',
+          child: ChoiceChip(
+            label: const Text('AllDebrid'),
+            selected: currentProvider == _providerAllDebrid,
+            disabledColor: Colors.white12,
+            onSelected: (!_allDebridAvailable || _isBusy)
+                ? null
+                : (selected) {
+                    if (selected) {
+                      handleSelection(_providerAllDebrid);
                     }
                   },
           ),
@@ -3662,6 +3716,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _providerTorbox => _torboxAvailable,
       _providerPikPak => _pikpakAvailable,
       _providerPremiumize => _premiumizeAvailable,
+      _providerAllDebrid => _allDebridAvailable,
       _ => _rdAvailable,
     };
     if (!providerReady) {
@@ -3756,6 +3811,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
       );
+    } else if (_provider == _providerAllDebrid) {
+      debugPrint('🎬 [WATCH] Launching AllDebrid flow...');
+      await _watchAllDebridWithCachedTorrents(
+        cachedTorrents,
+        applyNsfwFilter: channel.avoidNsfw,
+        channelName: channel.name,
+        channelId: channel.id,
+        channelNumber: resolvedChannelNumber,
+      );
     } else {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
@@ -3787,15 +3851,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     await _syncProviderAvailability();
-    if (!_rdAvailable && !_torboxAvailable && !_pikpakAvailable && !_premiumizeAvailable) {
+    if (!_rdAvailable &&
+        !_torboxAvailable &&
+        !_pikpakAvailable &&
+        !_premiumizeAvailable &&
+        !_allDebridAvailable) {
       if (mounted) {
         setState(() {
           _status =
-              'Connect Real Debrid, Torbox, Premiumize, or PikPak in Settings to use Debrify TV.';
+              'Connect Real Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use Debrify TV.';
         });
       }
       _showSnack(
-        'Connect Real Debrid, Torbox, Premiumize, or PikPak in Settings to use Debrify TV.',
+        'Connect Real Debrid, Torbox, Premiumize, AllDebrid, or PikPak in Settings to use Debrify TV.',
         color: Colors.orange,
       );
       return;
@@ -3853,6 +3921,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ? 'PikPak'
         : _quickProvider == _providerPremiumize
         ? 'Premiumize'
+        : _quickProvider == _providerAllDebrid
+        ? 'AllDebrid'
         : 'Real Debrid';
     // ignore: unawaited_futures
     showDialog(
@@ -4082,6 +4152,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (_quickProvider == _providerPremiumize) {
       await _watchWithPremiumize(keywords, _log);
+      return;
+    }
+
+    if (_quickProvider == _providerAllDebrid) {
+      await _watchWithAllDebrid(keywords, _log);
       return;
     }
 
@@ -4367,6 +4442,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 // Start background prefetch only while player is active
                 if (!_watchCancelled) {
                   _activeApiKey = apiKeyEarly;
+                  _activeProvider = _providerRealDebrid;
                   _startPrefetch();
 
                   final String? activeChannelId = _currentWatchingChannelId;
@@ -4696,6 +4772,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Start background prefetch while player is active
       _activeApiKey = apiKey;
+      _activeProvider = _providerRealDebrid;
       _startPrefetch();
 
       if (_progressOpen && _progressSheetContext != null) {
@@ -5642,6 +5719,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (!mounted) return;
       _activeApiKey = apiKey;
+      _activeProvider = _providerRealDebrid;
       _startPrefetch();
       _closeProgressDialog();
 
@@ -5704,6 +5782,250 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _status = '';
       });
       debugPrint('DebrifyTV: Cached watch flow finished.');
+    }
+  }
+
+  /// AllDebrid channel playback. Mirrors the Real-Debrid cached flow
+  /// (sequential add-and-probe, no cache-check API) but resolves each candidate
+  /// through AllDebrid's `ready`-flag add (no polling) and lazily unlocks links
+  /// on demand. The background prefetcher keeps upcoming items prepared.
+  Future<void> _watchAllDebridWithCachedTorrents(
+    List<Torrent> cachedTorrents, {
+    required bool applyNsfwFilter,
+    String? channelName,
+    String? channelId,
+    int? channelNumber,
+  }) async {
+    if (cachedTorrents.isEmpty) {
+      MainPageBridge.notifyAutoLaunchFailed('No cached torrents');
+      _showSnack(
+        'Cached channel has no torrents yet. Please wait a moment.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final List<Map<String, dynamic>>? channelDirectory = _channels.isNotEmpty
+        ? _androidTvChannelMetadata(
+            activeChannelId: channelId ?? _currentWatchingChannelId,
+          )
+        : null;
+
+    _launchedPlayer = false;
+    await _stopPrefetch();
+    _prefetchStopRequested = false;
+    _originalMaxCap = null;
+    _seenRestrictedLinks.clear();
+    _seenLinkWithTorrentId.clear();
+
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!mounted) return;
+      MainPageBridge.notifyAutoLaunchFailed('No AllDebrid API key');
+      _showSnack(
+        'Please add your AllDebrid API key in Settings first!',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    _showCachedPlaybackDialog();
+
+    // Apply NSFW filter to cached torrents if enabled
+    List<Torrent> torrentsToUse = cachedTorrents;
+    if (applyNsfwFilter) {
+      final beforeCount = cachedTorrents.length;
+      torrentsToUse = cachedTorrents.where((torrent) {
+        if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
+          debugPrint(
+            'DebrifyTV: Filtered cached NSFW torrent: ${torrent.name}',
+          );
+          return false;
+        }
+        return true;
+      }).toList();
+      if (beforeCount != torrentsToUse.length) {
+        debugPrint(
+          'DebrifyTV: NSFW filter on cached: $beforeCount → ${torrentsToUse.length} torrents',
+        );
+      }
+    }
+
+    _queue
+      ..clear()
+      ..addAll(List<Torrent>.from(torrentsToUse)..shuffle(Random()));
+    _lastQueueSize = _queue.length;
+    _lastSearchAt = DateTime.now();
+
+    String _inferTitleFromUrl(String url) {
+      final uri = Uri.tryParse(url);
+      final last = (uri != null && uri.pathSegments.isNotEmpty)
+          ? uri.pathSegments.last
+          : url;
+      return Uri.decodeComponent(last);
+    }
+
+    String firstTitle = 'Debrify TV';
+
+    Future<Map<String, String>?> requestMagicNext() async {
+      debugPrint(
+        'DebrifyTV/AD: requestMagicNext() queueSize=${_queue.length}',
+      );
+      while (_queue.isNotEmpty) {
+        final item = _queue.removeAt(0);
+        if (item is Map && item['type'] == 'ad_locked') {
+          final String link = item['allDebridLink'] as String? ?? '';
+          if (link.isEmpty) continue;
+          try {
+            final videoUrl = await AllDebridService.unlockLink(apiKey, link);
+            if (videoUrl.isNotEmpty) {
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final display = (item['displayName'] as String?)?.trim();
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (display ?? 'Debrify TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
+            }
+          } catch (e) {
+            debugPrint('DebrifyTV/AD: Cached unlock failed: $e');
+            continue;
+          }
+        }
+
+        if (item is Torrent) {
+          debugPrint(
+            'DebrifyTV/AD: Cached trying torrent name="${item.name}" hash=${item.infohash}',
+          );
+          final prepared = await _resolveAllDebridLinks(item, apiKey);
+          if (prepared == null || prepared.lockedLinks.isEmpty) {
+            continue;
+          }
+          final links = List<String>.from(prepared.lockedLinks);
+          final String headLink = links.removeAt(0);
+          // AllDebrid returns every file at once: enqueue the remaining video
+          // files (still locked) so siblings aren't lost if the head fails.
+          for (final link in links) {
+            _queue.add({
+              'type': 'ad_locked',
+              'allDebridLink': link,
+              'magnetId': prepared.magnetId,
+              'displayName': item.name,
+            });
+          }
+          try {
+            final videoUrl = await AllDebridService.unlockLink(apiKey, headLink);
+            if (videoUrl.isNotEmpty) {
+              final inferred = _inferTitleFromUrl(videoUrl).trim();
+              final chosenTitle = inferred.isNotEmpty
+                  ? inferred
+                  : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
+              firstTitle = chosenTitle;
+              return {'url': videoUrl, 'title': chosenTitle};
+            }
+          } catch (e) {
+            debugPrint('DebrifyTV/AD: Cached add/unlock failed: $e');
+            continue;
+          }
+        }
+      }
+      debugPrint('DebrifyTV/AD: Cached queue exhausted.');
+      return null;
+    }
+
+    setState(() {
+      _status = 'Finding a playable stream...';
+      _isBusy = true;
+    });
+
+    try {
+      final first = await requestMagicNext();
+      if (first == null) {
+        _closeProgressDialog();
+        if (!mounted) return;
+        setState(() {
+          _isBusy = false;
+          _status =
+              'No cached torrents played successfully. Try refreshing the channel.';
+        });
+        MainPageBridge.notifyAutoLaunchFailed('No cached streams available');
+        _showSnack(
+          'No cached torrents played successfully. Try refreshing the channel.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      final firstUrl = first['url'] ?? '';
+      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty
+          ? (first['title'] ?? firstTitle)
+          : firstTitle;
+
+      if (!mounted) return;
+      _activeApiKey = apiKey;
+      _activeProvider = _providerAllDebrid;
+      _startPrefetch();
+      _closeProgressDialog();
+
+      // Try to launch on Android TV first (reuses the generic direct-URL
+      // launcher; AllDebrid streams are ready URLs just like Real-Debrid's).
+      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+        firstStream: first,
+        requestNext: requestMagicNext,
+        channelName: channelName,
+        channelId: channelId,
+        channelNumber: channelNumber,
+        channelDirectory: channelDirectory,
+      );
+
+      if (launchedOnTv) {
+        debugPrint(
+          'DebrifyTV: Cached flow - AllDebrid playback started on Android TV',
+        );
+        return;
+      }
+
+      // Hide auto-launch overlay before launching player
+      MainPageBridge.notifyPlayerLaunching();
+
+      // Fall back to Flutter video player
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            videoUrl: firstUrl,
+            title: firstTitle,
+            startFromRandom: _startRandom,
+            randomStartMaxPercent: _randomStartPercent,
+            hideSeekbar: _hideSeekbar,
+            showChannelName: _showChannelName,
+            channelName: channelName,
+            channelNumber: channelNumber,
+            showVideoTitle: _showVideoTitle,
+            hideOptions: _hideOptions,
+            requestMagicNext: requestMagicNext,
+            requestNextChannel:
+                _channels.length > 1 &&
+                    (_provider == _providerRealDebrid ||
+                        _provider == _providerTorbox ||
+                        _provider == _providerPikPak ||
+                        _provider == _providerPremiumize ||
+                        _provider == _providerAllDebrid)
+                ? _requestNextChannel
+                : null,
+            channelDirectory: channelDirectory,
+            requestChannelById: _channels.length > 1 ? _requestChannelById : null,
+          ),
+        ),
+      );
+      await _stopPrefetch();
+    } finally {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _status = '';
+      });
+      debugPrint('DebrifyTV: AllDebrid cached watch flow finished.');
     }
   }
 
@@ -5904,7 +6226,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final keywords = await _getChannelKeywords(targetChannel.id);
     if (keywords.isEmpty) {
       debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
-      if (_provider == _providerRealDebrid) {
+      if (_provider == _providerRealDebrid ||
+          _provider == _providerAllDebrid) {
         _startPrefetch();
       }
       return null;
@@ -5918,7 +6241,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     if (playbackSelection.isEmpty) {
       debugPrint('DebrifyTV: No torrents matched in selected channel');
-      if (_provider == _providerRealDebrid) {
+      if (_provider == _providerRealDebrid ||
+          _provider == _providerAllDebrid) {
         _startPrefetch();
       }
       return null;
@@ -5929,7 +6253,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         .toList();
     if (allTorrents.isEmpty) {
       debugPrint('DebrifyTV: No playable torrents resolved for channel');
-      if (_provider == _providerRealDebrid) {
+      if (_provider == _providerRealDebrid ||
+          _provider == _providerAllDebrid) {
         _startPrefetch();
       }
       return null;
@@ -6083,6 +6408,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _keywordsController.text = keywords.join(', ');
           }
 
+          _activeApiKey = apiKey;
+          _activeProvider = _providerRealDebrid;
           _startPrefetch();
           debugPrint(
             'DebrifyTV: Started Real-Debrid prefetcher for new channel',
@@ -6099,6 +6426,86 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         }
 
         debugPrint('DebrifyTV: All Real-Debrid candidates failed for channel');
+        return null;
+      }
+
+      if (_provider == _providerAllDebrid) {
+        debugPrint('DebrifyTV: Selected channel uses AllDebrid provider');
+        final apiKey = await StorageService.getAllDebridApiKey();
+        if (apiKey == null || apiKey.isEmpty) {
+          debugPrint('DebrifyTV: ❌ No AllDebrid API key configured');
+          return null;
+        }
+
+        for (var index = 0; index < filteredTorrents.length; index++) {
+          final candidate = filteredTorrents[index];
+
+          final prepared = await _resolveAllDebridLinks(candidate, apiKey);
+          if (prepared == null || prepared.lockedLinks.isEmpty) {
+            // Not cached/ready or no usable video; try the next candidate.
+            continue;
+          }
+
+          final links = List<String>.from(prepared.lockedLinks);
+          final String headLink = links.removeAt(0);
+
+          String videoUrl;
+          try {
+            videoUrl = await AllDebridService.unlockLink(apiKey, headLink);
+          } catch (error) {
+            debugPrint(
+              'DebrifyTV: AllDebrid unlock failed for candidate ${candidate.infohash}: $error',
+            );
+            continue;
+          }
+          if (videoUrl.isEmpty) {
+            continue;
+          }
+
+          String title = candidate.name;
+          final uri = Uri.tryParse(videoUrl);
+          if (uri != null && uri.pathSegments.isNotEmpty) {
+            final inferred = Uri.decodeComponent(uri.pathSegments.last);
+            if (inferred.isNotEmpty) {
+              title = inferred;
+            }
+          }
+
+          if (mounted) {
+            final remaining = filteredTorrents.skip(index + 1).toList();
+            setState(() {
+              _currentWatchingChannelId = targetChannel.id;
+              _queue
+                ..clear()
+                // Remaining video files of this torrent first (already
+                // resolved, still locked), then the other candidates.
+                ..addAll(links.map((link) => {
+                      'type': 'ad_locked',
+                      'allDebridLink': link,
+                      'magnetId': prepared.magnetId,
+                      'displayName': candidate.name,
+                    }))
+                ..addAll(remaining);
+            });
+            _keywordsController.text = keywords.join(', ');
+          }
+
+          _activeApiKey = apiKey;
+          _activeProvider = _providerAllDebrid;
+          _startPrefetch();
+          debugPrint('DebrifyTV: Started AllDebrid prefetcher for new channel');
+          debugPrint('DebrifyTV: Successfully got stream from channel: $title');
+
+          return {
+            'channelId': targetChannel.id,
+            'channelName': targetChannel.name,
+            'channelNumber': targetChannelNumber,
+            'firstUrl': videoUrl,
+            'firstTitle': title,
+          };
+        }
+
+        debugPrint('DebrifyTV: All AllDebrid candidates failed for channel');
         return null;
       }
 
@@ -6217,10 +6624,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     debugPrint('DebrifyTV: Channel switch failed');
-    if (_provider == _providerRealDebrid) {
+    if (_provider == _providerRealDebrid || _provider == _providerAllDebrid) {
       _startPrefetch();
       debugPrint(
-        'DebrifyTV: Restarted Real-Debrid prefetcher for current channel',
+        'DebrifyTV: Restarted prefetcher for current channel',
       );
     }
     return null;
@@ -6299,7 +6706,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final bool canSwitchChannels =
           _currentWatchingChannelId != null &&
           _channels.length > 1 &&
-          _provider == _providerRealDebrid;
+          (_provider == _providerRealDebrid ||
+              _provider == _providerAllDebrid);
 
       // Hide auto-launch overlay before launching player
       MainPageBridge.notifyPlayerLaunching();
@@ -8162,6 +8570,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     _torboxAvailable,
                     _pikpakAvailable,
                     _premiumizeAvailable,
+                    _allDebridAvailable,
                   );
 
                   setState(() {
@@ -9717,6 +10126,267 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
+  /// AllDebrid Quick Play. Self-contained like [_watchWithPremiumize] for the
+  /// search phase, but follows Real-Debrid's resolve model (sequential
+  /// add-and-probe + background prefetcher) since AllDebrid has no cache-check
+  /// API. Each candidate is added trusting the `ready` flag (no polling) and
+  /// links are unlocked lazily on demand.
+  Future<void> _watchWithAllDebrid(
+    List<String> keywords,
+    void Function(String message) log,
+  ) async {
+    final integrationEnabled =
+        await StorageService.getAllDebridIntegrationEnabled();
+    if (!integrationEnabled) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status = 'Enable AllDebrid in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Enable AllDebrid in Settings to use this provider.',
+        color: Colors.orange,
+      );
+      return;
+    }
+
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      _closeProgressDialog();
+      if (!mounted) return;
+      setState(() {
+        _status =
+            'Add your AllDebrid API key in Settings to use this provider.';
+        _isBusy = false;
+      });
+      _showSnack(
+        'Please add your AllDebrid API key in Settings first!',
+        color: Colors.red,
+      );
+      return;
+    }
+
+    log('🌐 AllDebrid: searching for torrents...');
+    final Map<String, Torrent> dedup = {};
+    final engineStates = await _tvEngineSearchStates();
+    final maxResultsOverrides = _quickPlayMaxResultsOverrides();
+
+    try {
+      final futures = keywords
+          .map(
+            (kw) => TorrentService.searchAllEngines(
+              kw,
+              engineStates: engineStates,
+              maxResultsOverrides: maxResultsOverrides,
+            ),
+          )
+          .toList();
+
+      await for (final result in Stream.fromFutures(futures)) {
+        if (_watchCancelled) return;
+        final torrents =
+            (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
+
+        List<Torrent> torrentsToProcess = torrents;
+        if (_quickAvoidNsfw) {
+          torrentsToProcess = torrents.where((t) {
+            return !NsfwFilter.shouldFilter(t.category, t.name);
+          }).toList();
+        }
+
+        for (final torrent in torrentsToProcess) {
+          final normalizedHash = _normalizeInfohash(torrent.infohash);
+          if (normalizedHash.isEmpty) continue;
+          dedup.putIfAbsent(normalizedHash, () => torrent);
+        }
+
+        if (dedup.isNotEmpty && mounted) {
+          setState(() => _status = 'Finding a playable stream...');
+        }
+      }
+
+      final combinedList = dedup.values.toList();
+      if (combinedList.isEmpty) {
+        _closeProgressDialog();
+        if (mounted) {
+          setState(() => _status = 'No results found. Try different keywords.');
+          _showSnack('No results found. Try different keywords.',
+              color: Colors.red);
+        }
+        return;
+      }
+
+      combinedList.shuffle(Random());
+
+      // Seed the queue with raw torrents — sequential add-and-probe, no cache
+      // check (mirrors Real-Debrid). The prefetcher prepares the rest.
+      _queue
+        ..clear()
+        ..addAll(combinedList);
+      _lastQueueSize = _queue.length;
+      _lastSearchAt = DateTime.now();
+      _seenRestrictedLinks.clear();
+      _seenLinkWithTorrentId.clear();
+
+      String _inferTitleFromUrl(String url) {
+        final uri = Uri.tryParse(url);
+        final last = (uri != null && uri.pathSegments.isNotEmpty)
+            ? uri.pathSegments.last
+            : url;
+        return Uri.decodeComponent(last);
+      }
+
+      String firstTitle = 'Debrify TV';
+
+      Future<Map<String, String>?> requestMagicNext() async {
+        if (_watchCancelled) return null;
+        debugPrint(
+          'MagicTV/AD: requestMagicNext() queueSize=${_queue.length}',
+        );
+        while (_queue.isNotEmpty && !_watchCancelled) {
+          final item = _queue.removeAt(0);
+          if (item is Map && item['type'] == 'ad_locked') {
+            final String link = item['allDebridLink'] as String? ?? '';
+            if (link.isEmpty) continue;
+            try {
+              final videoUrl = await AllDebridService.unlockLink(apiKey, link);
+              if (_watchCancelled) return null;
+              if (videoUrl.isNotEmpty) {
+                final inferred = _inferTitleFromUrl(videoUrl).trim();
+                final display = (item['displayName'] as String?)?.trim();
+                final chosenTitle = inferred.isNotEmpty
+                    ? inferred
+                    : (display ?? 'Debrify TV');
+                firstTitle = chosenTitle;
+                return {'url': videoUrl, 'title': chosenTitle};
+              }
+            } catch (e) {
+              debugPrint('MagicTV/AD: unlock failed: $e');
+              continue;
+            }
+          }
+
+          if (item is Torrent) {
+            final prepared = await _resolveAllDebridLinks(item, apiKey);
+            if (_watchCancelled) return null;
+            if (prepared == null || prepared.lockedLinks.isEmpty) {
+              continue;
+            }
+            final links = List<String>.from(prepared.lockedLinks);
+            final String headLink = links.removeAt(0);
+            for (final link in links) {
+              _queue.add({
+                'type': 'ad_locked',
+                'allDebridLink': link,
+                'magnetId': prepared.magnetId,
+                'displayName': item.name,
+              });
+            }
+            try {
+              final videoUrl =
+                  await AllDebridService.unlockLink(apiKey, headLink);
+              if (_watchCancelled) return null;
+              if (videoUrl.isNotEmpty) {
+                final inferred = _inferTitleFromUrl(videoUrl).trim();
+                final chosenTitle = inferred.isNotEmpty
+                    ? inferred
+                    : (item.name.trim().isNotEmpty ? item.name : 'Debrify TV');
+                firstTitle = chosenTitle;
+                return {'url': videoUrl, 'title': chosenTitle};
+              }
+            } catch (e) {
+              debugPrint('MagicTV/AD: add/unlock failed: $e');
+              continue;
+            }
+          }
+        }
+        debugPrint('MagicTV/AD: requestMagicNext() queue exhausted.');
+        return null;
+      }
+
+      final first = await requestMagicNext();
+      if (_watchCancelled) return;
+      if (first == null) {
+        _closeProgressDialog();
+        if (mounted && !_watchCancelled) {
+          setState(() {
+            _status =
+                'No playable AllDebrid streams found. Try different keywords.';
+          });
+          _showSnack(
+            'No playable AllDebrid streams found. Try different keywords.',
+            color: Colors.red,
+          );
+        }
+        return;
+      }
+
+      firstTitle = (first['title'] ?? firstTitle).trim().isNotEmpty
+          ? (first['title'] ?? firstTitle)
+          : firstTitle;
+
+      _closeProgressDialog();
+      if (!mounted) return;
+
+      _activeApiKey = apiKey;
+      _activeProvider = _providerAllDebrid;
+      _startPrefetch();
+
+      final launchedOnTv = await _launchRealDebridOnAndroidTv(
+        firstStream: first,
+        requestNext: requestMagicNext,
+        showChannelNameOverride: _quickShowChannelName,
+        channelId: null,
+        channelNumber: null,
+        channelDirectory: null,
+      );
+      if (_watchCancelled) return;
+      if (launchedOnTv) return;
+
+      if (!_watchCancelled) {
+        MainPageBridge.notifyPlayerLaunching();
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: first['url'] ?? '',
+              title: firstTitle,
+              startFromRandom: _quickStartRandom,
+              randomStartMaxPercent: _quickRandomStartPercent,
+              hideSeekbar: _quickHideSeekbar,
+              showChannelName: _quickShowChannelName,
+              channelName: null,
+              channelNumber: null,
+              showVideoTitle: _quickShowVideoTitle,
+              hideOptions: _quickHideOptions,
+              requestMagicNext: requestMagicNext,
+              requestNextChannel:
+                  _channels.length > 1 &&
+                      (_quickProvider == _providerRealDebrid ||
+                          _quickProvider == _providerTorbox ||
+                          _quickProvider == _providerPikPak ||
+                          _quickProvider == _providerPremiumize ||
+                          _quickProvider == _providerAllDebrid)
+                  ? _requestNextChannel
+                  : null,
+            ),
+          ),
+        );
+        await _stopPrefetch();
+      }
+
+      if (mounted && !_watchCancelled) {
+        setState(() {
+          _status =
+              _queue.isEmpty ? '' : 'Queue has ${_queue.length} remaining';
+        });
+      }
+    } finally {
+      _closeProgressDialog();
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
   List<TorboxPlayableEntry> _buildTorboxPlayableEntries(
     TorboxTorrent torrent,
     String fallbackTitle,
@@ -9890,7 +10560,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     int count = 0;
     for (int i = 0; i < end; i++) {
       final item = _queue[i];
-      if (item is Map && item['type'] == 'rd_restricted') {
+      if (item is Map &&
+          (item['type'] == 'rd_restricted' || item['type'] == 'ad_locked')) {
         count++;
       }
     }
@@ -9915,6 +10586,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (idx < 0 || idx >= _queue.length) return;
     final item = _queue[idx];
     if (item is! Torrent) return;
+    if (_activeProvider == _providerAllDebrid) {
+      await _prefetchOneAllDebrid(idx, item);
+      return;
+    }
     final infohash = item.infohash;
     _inflightInfohashes.add(infohash);
     debugPrint('MagicTV: Prefetching torrent at idx=$idx name="${item.name}"');
@@ -9983,4 +10658,108 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _inflightInfohashes.remove(infohash);
     }
   }
+
+  /// Adds [candidate] to AllDebrid (trusting the upload `ready` flag — no
+  /// polling) and returns its fresh (unseen) locked video-file links, marking
+  /// them seen. Returns null when the torrent is not cached/ready (the magnet
+  /// is deleted in that case) or has no usable video files. Each returned link
+  /// is still locked and must be unlocked via [AllDebridService.unlockLink]
+  /// before playback — the lazy model mirrors Real-Debrid's restricted links.
+  Future<_AllDebridPrepared?> _resolveAllDebridLinks(
+    Torrent candidate,
+    String apiKey,
+  ) async {
+    final magnetLink = 'magnet:?xt=urn:btih:${candidate.infohash}';
+    AllDebridAddResult result;
+    try {
+      result =
+          await AllDebridService.addMagnetAndResolveFiles(apiKey, magnetLink);
+    } on AllDebridTorrentNotReadyException catch (e) {
+      // Not cached/ready — don't leave it downloading on the account.
+      await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+      return null;
+    }
+    final freshLinks = result.files
+        .where((f) => FileUtils.isVideoFile(f.fileName))
+        .map((f) => f.link)
+        .where((link) => link.isNotEmpty && !_seenRestrictedLinks.contains(link))
+        .toList();
+    if (freshLinks.isEmpty) return null;
+    for (final link in freshLinks) {
+      _seenRestrictedLinks.add(link);
+    }
+    return _AllDebridPrepared(
+      magnetId: result.magnetId,
+      name: result.name,
+      lockedLinks: freshLinks,
+    );
+  }
+
+  /// AllDebrid analog of the Real-Debrid prefetch path. Converts the [item]
+  /// queue slot into a prepared `ad_locked` entry (a still-locked link), and
+  /// since AllDebrid returns every file at once, enqueues the remaining video
+  /// files immediately rather than re-adding the torrent.
+  Future<void> _prefetchOneAllDebrid(int idx, Torrent item) async {
+    final infohash = item.infohash;
+    _inflightInfohashes.add(infohash);
+    debugPrint(
+      'MagicTV: Prefetching AllDebrid torrent at idx=$idx name="${item.name}"',
+    );
+    try {
+      final prepared = await _resolveAllDebridLinks(item, _activeApiKey!);
+      if (prepared == null || prepared.lockedLinks.isEmpty) {
+        // Not ready / no usable video; move to tail to retry later.
+        if (idx < _queue.length && identical(_queue[idx], item)) {
+          _queue.removeAt(idx);
+          _queue.add(item);
+        }
+        debugPrint(
+          'MagicTV: AllDebrid prefetch: not ready/no links; moved to tail idx=$idx',
+        );
+        return;
+      }
+
+      final links = List<String>.from(prepared.lockedLinks);
+      final headLink = links.removeAt(0);
+      Map<String, dynamic> lockedEntry(String link) => {
+            'type': 'ad_locked',
+            'allDebridLink': link,
+            'magnetId': prepared.magnetId,
+            'displayName': item.name,
+          };
+
+      if (idx < _queue.length && identical(_queue[idx], item)) {
+        _queue[idx] = lockedEntry(headLink);
+      } else {
+        // Slot shifted out from under us; don't lose the resolved head link.
+        _queue.add(lockedEntry(headLink));
+      }
+      for (final link in links) {
+        _queue.add(lockedEntry(link));
+      }
+    } catch (e) {
+      if (idx < _queue.length && identical(_queue[idx], item)) {
+        _queue.removeAt(idx);
+        _queue.add(item);
+      }
+      debugPrint(
+        'MagicTV: AllDebrid prefetch failed for $infohash: $e (moved to tail)',
+      );
+    } finally {
+      _inflightInfohashes.remove(infohash);
+    }
+  }
+}
+
+/// Result of adding an AllDebrid magnet for Debrify TV: the resolved (still
+/// locked) video-file links plus identifiers for the created magnet.
+class _AllDebridPrepared {
+  final String magnetId;
+  final String name;
+  final List<String> lockedLinks;
+  _AllDebridPrepared({
+    required this.magnetId,
+    required this.name,
+    required this.lockedLinks,
+  });
 }
