@@ -74,15 +74,25 @@ class TorboxUser {
     );
   }
 
+  /// Whether the account currently has active premium access.
+  ///
+  /// This is based on the paid [plan] and [premiumExpiresAt], NOT on
+  /// [isSubscribed]. Torbox's `is_subscribed` flag only indicates an
+  /// auto-renewing (recurring) subscription, so users who paid one-time /
+  /// prepaid / gift / vendor plans have `is_subscribed == false` while still
+  /// holding a valid, active plan. Keying off [plan] avoids wrongly showing
+  /// those (Essential/Pro/Standard) accounts as "Inactive".
   bool get hasActiveSubscription {
-    if (!isSubscribed) return false;
-    if (premiumExpiresAt == null) return true;
+    if (plan <= 0) return false; // 0 = free, no premium
+    if (premiumExpiresAt == null) return true; // e.g. lifetime / vendor
     return premiumExpiresAt!.isAfter(DateTime.now());
   }
 
-  String get subscriptionStatus => hasActiveSubscription
-      ? 'Active'
-      : (isSubscribed ? 'Expired' : 'Inactive');
+  String get subscriptionStatus {
+    if (hasActiveSubscription) return 'Active';
+    if (plan > 0) return 'Expired'; // had a paid plan that has lapsed
+    return 'Inactive'; // free / no plan
+  }
 
   String get formattedPremiumExpiry => _formatDate(premiumExpiresAt);
 
