@@ -4528,26 +4528,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
     }
 
-    // Check if we're on Android and if the tap is in the far right area for next episode
-    final isAndroid = Theme.of(context).platform == TargetPlatform.android;
-    final farRightThreshold = size.width * 0.8; // Far right 20% of screen
-
-    if (isAndroid && localPos.dx > farRightThreshold) {
-      // Double tap on far right for next episode on Android
-      if (_hasAnyNext) {
-        _ripple = DoubleTapRipple(
-          center: localPos,
-          icon: Icons.skip_next_rounded,
-        );
-        setState(() {});
-        Future.delayed(const Duration(milliseconds: 450), () {
-          if (mounted) setState(() => _ripple = null);
-        });
-        await _goToNextEpisode();
-        return;
-      }
-    }
-
     // Default seek behavior for left/right taps
     final isLeft = localPos.dx < size.width / 2;
     final delta = VideoPlayerTimingConstants.seekDelta;
