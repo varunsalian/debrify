@@ -600,6 +600,59 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
   }
 
+  // ── Add to playlist ─────────────────────────────────────────────────────
+
+  /// Saves a magnet to the playlist (RD-manner: keyed by infohash). Single
+  /// video → 'single' with its locked link; multiple → 'collection' re-resolved
+  /// by hash at play time.
+  Future<void> _addMagnetToPlaylist(AllDebridMagnet magnet) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+    if (magnet.hash.isEmpty) {
+      _snack('This magnet has no infohash to save.', isError: true);
+      return;
+    }
+    List<AllDebridFile> files = _currentFiles;
+    if (_currentMagnet?.id != magnet.id || files.isEmpty) {
+      _showLoading('Scanning magnet…');
+      try {
+        files = await AllDebridService.getMagnetFiles(apiKey, magnet.id);
+      } catch (e) {
+        _dismissLoading();
+        _snack('Failed to scan magnet: $e', isError: true);
+        return;
+      }
+      _dismissLoading();
+    }
+    final videos = files.where(_looksLikeVideo).toList();
+    if (videos.isEmpty) {
+      _snack('No video files to add.', isError: true);
+      return;
+    }
+    bool added;
+    if (videos.length == 1) {
+      added = await StorageService.addPlaylistItemRaw({
+        'provider': 'alldebrid',
+        'title': FileUtils.cleanPlaylistTitle(magnet.name),
+        'kind': 'single',
+        'torrent_hash': magnet.hash,
+        'allDebridLink': videos.first.link,
+        'sizeBytes': videos.first.size,
+      });
+    } else {
+      added = await StorageService.addPlaylistItemRaw({
+        'provider': 'alldebrid',
+        'title': FileUtils.cleanPlaylistTitle(magnet.name),
+        'kind': 'collection',
+        'torrent_hash': magnet.hash,
+        'count': videos.length,
+      });
+    }
+    if (!mounted) return;
+    _snack(added ? 'Added to playlist' : 'Already in playlist',
+        isError: !added);
+  }
+
   // ── Delete ─────────────────────────────────────────────────────────────
 
   Future<void> _deleteMagnets(List<AllDebridMagnet> magnets,
@@ -1338,6 +1391,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                             case 'download':
                               _downloadMagnet(m);
                               break;
+                            case 'add_to_playlist':
+                              _addMagnetToPlaylist(m);
+                              break;
                             case 'delete':
                               _deleteMagnets([m]);
                               break;
@@ -1362,6 +1418,16 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                                     size: 18, color: Colors.green),
                                 SizedBox(width: 12),
                                 Text('Download to device'),
+                              ]),
+                            ),
+                          if (m.isReady)
+                            const PopupMenuItem(
+                              value: 'add_to_playlist',
+                              child: Row(children: [
+                                Icon(Icons.playlist_add,
+                                    size: 18, color: Colors.blue),
+                                SizedBox(width: 12),
+                                Text('Add to Playlist'),
                               ]),
                             ),
                           const PopupMenuItem(

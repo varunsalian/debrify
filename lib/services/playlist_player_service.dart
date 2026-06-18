@@ -10,6 +10,8 @@ import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'webdav_service.dart';
+import 'alldebrid_service.dart';
+import '../models/alldebrid_file.dart';
 import '../models/premiumize_file.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
@@ -82,6 +84,15 @@ class PlaylistPlayerService {
         context,
         freshItem,
         fallbackTitle: title,
+        playRandom: playRandom,
+      );
+      return;
+    }
+    if (provider == 'alldebrid') {
+      await _playAllDebridItem(
+        context,
+        freshItem,
+        title: title,
         playRandom: playRandom,
       );
       return;
@@ -412,6 +423,228 @@ class PlaylistPlayerService {
         title: title,
         rdTorrentId: rdTorrentId,
         viewMode: viewMode,
+        contentImdbId: item['imdbId'] as String?,
+        contentType: item['contentType'] as String?,
+        suppressTraktAutoSync: true,
+      ),
+    );
+  }
+
+  // ── AllDebrid ──────────────────────────────────────────────────────────────
+
+  /// Plays a saved AllDebrid playlist item. Follows the Real-Debrid model:
+  /// a single item just unlocks its stored locked link; a collection re-adds
+  /// the magnet by infohash (trusting the `ready` flag — no polling), then
+  /// unlocks the start file and lazily unlocks the rest via [PlaylistEntry.allDebridLink].
+  static Future<void> _playAllDebridItem(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    required String title,
+    bool playRandom = false,
+  }) async {
+    final String kind = (item['kind'] as String?) ?? 'single';
+    final String? apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add your AllDebrid API key in Settings first'),
+        ),
+      );
+      return;
+    }
+    final String? torrentHash = item['torrent_hash'] as String?;
+
+    // Single: unlock the stored locked link directly (fast path).
+    if (kind == 'single') {
+      final String? lockedLink = item['allDebridLink'] as String?;
+      if (lockedLink != null && lockedLink.isNotEmpty) {
+        try {
+          final url = await AllDebridService.unlockLink(apiKey, lockedLink);
+          if (url.isNotEmpty) {
+            if (!context.mounted) return;
+            MainPageBridge.notifyPlayerLaunching();
+            final savedViewModeString =
+                await StorageService.getPlaylistItemViewMode(item);
+            final viewMode = PlaylistViewModeStorage.fromStorageString(
+              savedViewModeString,
+            );
+            await VideoPlayerLauncher.push(
+              context,
+              VideoPlayerLaunchArgs(
+                videoUrl: url,
+                title: title,
+                viewMode: viewMode,
+                contentImdbId: item['imdbId'] as String?,
+                contentType: item['contentType'] as String?,
+                suppressTraktAutoSync: true,
+                playlist: [
+                  PlaylistEntry(
+                    url: url,
+                    title: title,
+                    provider: 'alldebrid',
+                    allDebridLink: lockedLink,
+                    torrentHash: torrentHash,
+                  ),
+                ],
+                startIndex: 0,
+              ),
+            );
+            return;
+          }
+        } catch (e) {
+          // Locked link is stale (magnet may have been deleted) — fall through
+          // to re-add by hash if we have one.
+        }
+      }
+    }
+
+    // Collection (or single recovery): re-add by infohash and resolve files.
+    if (torrentHash == null || torrentHash.isEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to resolve AllDebrid link')),
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF1E293B),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    AllDebridAddResult result;
+    try {
+      result = await AllDebridService.addMagnetAndResolveFiles(
+        apiKey,
+        'magnet:?xt=urn:btih:$torrentHash',
+      );
+    } on AllDebridTorrentNotReadyException catch (e) {
+      await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
+      if (context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This torrent is no longer cached on AllDebrid.'),
+          ),
+        );
+      }
+      return;
+    } catch (e) {
+      if (context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      }
+      return;
+    }
+
+    final videoFiles =
+        result.files.where((f) => FileUtils.isVideoFile(f.fileName)).toList();
+    if (videoFiles.isEmpty) {
+      if (context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No playable video files found in this torrent.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Series-aware ordering + start index (mirrors the Real-Debrid path).
+    final filenames = videoFiles.map((f) => f.fileName).toList();
+    final bool isSeries = SeriesParser.isSeriesPlaylist(filenames);
+    int firstIndex = 0;
+    if (isSeries) {
+      final infos = SeriesParser.parsePlaylist(filenames);
+      int lowestSeason = 999, lowestEpisode = 999;
+      for (int i = 0; i < infos.length; i++) {
+        final info = infos[i];
+        if (info.isSeries && info.season != null && info.episode != null) {
+          if (info.season! < lowestSeason ||
+              (info.season! == lowestSeason && info.episode! < lowestEpisode)) {
+            lowestSeason = info.season!;
+            lowestEpisode = info.episode!;
+            firstIndex = i;
+          }
+        }
+      }
+    }
+    if (playRandom && videoFiles.length > 1) {
+      firstIndex = Random().nextInt(videoFiles.length);
+    }
+
+    String startUrl = '';
+    try {
+      startUrl = await AllDebridService.unlockLink(
+        apiKey,
+        videoFiles[firstIndex].link,
+      );
+    } catch (_) {}
+
+    final List<PlaylistEntry> entries = [];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final f = videoFiles[i];
+      String relativePath = f.path;
+      final firstSlash = relativePath.indexOf('/');
+      if (firstSlash > 0) {
+        relativePath = relativePath.substring(firstSlash + 1);
+      }
+      entries.add(
+        PlaylistEntry(
+          url: i == firstIndex ? startUrl : '',
+          title: f.fileName,
+          relativePath: relativePath,
+          provider: 'alldebrid',
+          allDebridLink: f.link,
+          torrentHash: torrentHash,
+          sizeBytes: f.size > 0 ? f.size : null,
+        ),
+      );
+    }
+
+    if (context.mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    if (!context.mounted) return;
+    MainPageBridge.notifyPlayerLaunching();
+    final savedViewModeString =
+        await StorageService.getPlaylistItemViewMode(item);
+    final viewMode = PlaylistViewModeStorage.fromStorageString(
+      savedViewModeString,
+    );
+    final int startIndex =
+        (firstIndex >= 0 && firstIndex < entries.length) ? firstIndex : 0;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: entries[startIndex].url,
+        title: title,
+        subtitle: '${entries.length} files',
+        playlist: entries,
+        startIndex: startIndex,
+        viewMode: viewMode,
+        disableAutoResume: playRandom,
         contentImdbId: item['imdbId'] as String?,
         contentType: item['contentType'] as String?,
         suppressTraktAutoSync: true,

@@ -302,6 +302,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           final premiumizeItemId = isPremiumize
               ? (widget.playlistItem?['premiumizeItemId']?.toString())
               : null;
+          final isAllDebrid =
+              (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+              'alldebrid';
+          final allDebridHash = isAllDebrid
+              ? (widget.playlistItem?['torrent_hash'] as String?)
+              : null;
           await StorageService.updatePlaylistItemImdbId(
             imdbId,
             rdTorrentId: rdId,
@@ -309,6 +315,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             pikpakCollectionId: pikpakId,
             premiumizeHash: premiumizeHash,
             premiumizeItemId: premiumizeItemId,
+            allDebridHash: allDebridHash,
             force: true,
           );
         }
@@ -416,6 +423,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
             premiumizeItemId: premiumizeItemId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'alldebrid') {
+        final allDebridHash = widget.playlistItem!['torrent_hash'] as String?;
+        if (allDebridHash != null && allDebridHash.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            allDebridHash: allDebridHash,
           );
         }
       }

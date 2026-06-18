@@ -2131,6 +2131,7 @@ class StorageService {
     String? pikpakCollectionId,
     String? premiumizeHash,
     String? premiumizeItemId,
+    String? allDebridHash,
     String? webDavServerId,
     String? webDavBaseUrl,
     String? webDavPath,
@@ -2235,6 +2236,21 @@ class StorageService {
       }
     }
 
+    // Search by AllDebrid infohash if provided and not found yet.
+    if (itemIndex == -1 &&
+        allDebridHash != null &&
+        allDebridHash.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'alldebrid') &&
+            (item['torrent_hash'] as String?)?.toLowerCase() ==
+                allDebridHash.toLowerCase(),
+      );
+      if (itemIndex != -1) {
+        print('  ✅ Found item by allDebridHash at index $itemIndex');
+      }
+    }
+
     if (itemIndex == -1 &&
         webDavPath != null &&
         webDavPath.isNotEmpty &&
@@ -2275,6 +2291,7 @@ class StorageService {
     String? pikpakCollectionId,
     String? premiumizeHash,
     String? premiumizeItemId,
+    String? allDebridHash,
     bool force = false,
   }) async {
     final items = await getPlaylistItemsRaw();
@@ -2332,6 +2349,17 @@ class StorageService {
         }
         return false;
       });
+    }
+
+    if (itemIndex == -1 &&
+        allDebridHash != null &&
+        allDebridHash.isNotEmpty) {
+      itemIndex = items.indexWhere(
+        (item) =>
+            ((item['provider'] as String?)?.toLowerCase() == 'alldebrid') &&
+            (item['torrent_hash'] as String?)?.toLowerCase() ==
+                allDebridHash.toLowerCase(),
+      );
     }
 
     if (itemIndex == -1) return false;

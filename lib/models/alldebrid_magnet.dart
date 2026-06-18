@@ -6,6 +6,11 @@ class AllDebridMagnet {
   final String name;
   final int size;
 
+  /// The torrent infohash. AllDebrid magnets carry a hash (unlike Premiumize
+  /// cloud folders), so playlist items can be keyed/re-resolved by it — the
+  /// Real-Debrid model.
+  final String hash;
+
   /// AllDebrid status code: 0–3 = processing/downloading, 4 = ready,
   /// >= 5 = error.
   final int statusCode;
@@ -18,6 +23,7 @@ class AllDebridMagnet {
     required this.id,
     required this.name,
     required this.size,
+    required this.hash,
     required this.statusCode,
     required this.statusText,
     required this.progress,
@@ -45,6 +51,7 @@ class AllDebridMagnet {
       id: json['id']?.toString() ?? '',
       name: (json['filename'] ?? json['name'] ?? '').toString(),
       size: size,
+      hash: (json['hash'] ?? '').toString(),
       statusCode: code,
       statusText: (json['status'] ?? '').toString(),
       progress: progress,

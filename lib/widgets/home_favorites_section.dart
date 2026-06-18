@@ -322,6 +322,8 @@ class HomeFavoritesSectionState extends State<HomeFavoritesSection>
         return ('PP', const Color(0xFFF59E0B), 'PikPak');
       case 'premiumize':
         return ('PM', const Color(0xFFFB923C), 'Premiumize');
+      case 'alldebrid':
+        return ('AD', const Color(0xFF26A69A), 'AllDebrid');
       case 'webdav':
         return ('DV', const Color(0xFF8B5CF6), 'WebDAV');
       default:

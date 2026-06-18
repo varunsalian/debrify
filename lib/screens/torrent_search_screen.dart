@@ -14830,6 +14830,66 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     }
   }
 
+  /// Saves AllDebrid video files to the playlist. Follows the Real-Debrid
+  /// model: keyed by infohash, with the locked link stored for single items
+  /// (lazy unlock) and the magnet re-resolved by hash for collections.
+  Future<void> _addAllDebridToPlaylist(
+    List<AllDebridFile> videoFiles,
+    String torrentName, {
+    required String infohash,
+  }) async {
+    if (videoFiles.isEmpty) {
+      _showAllDebridSnack('No video files to add', isError: true);
+      return;
+    }
+    if (infohash.isEmpty) {
+      _showAllDebridSnack('Missing torrent info', isError: true);
+      return;
+    }
+
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'alldebrid',
+        'title': FileUtils.cleanPlaylistTitle(torrentName),
+        'kind': 'single',
+        'torrent_hash': infohash,
+        'allDebridLink': file.link,
+        'sizeBytes': file.size,
+        if (_activeAdvancedSelection?.imdbId != null)
+          'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null)
+          'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null)
+          'posterUrl': _activeAdvancedSelection!.posterUrl,
+      });
+      _showAllDebridSnack(
+        added ? 'Added to playlist' : 'Already in playlist',
+        isError: !added,
+      );
+    } else {
+      final added = await StorageService.addPlaylistItemRaw({
+        'provider': 'alldebrid',
+        'title': FileUtils.cleanPlaylistTitle(torrentName),
+        'kind': 'collection',
+        'torrent_hash': infohash,
+        'count': videoFiles.length,
+        if (_activeAdvancedSelection?.imdbId != null)
+          'imdbId': _activeAdvancedSelection!.imdbId,
+        if (_activeAdvancedSelection?.contentType != null)
+          'contentType': _activeAdvancedSelection!.contentType,
+        if (_activeAdvancedSelection?.posterUrl != null)
+          'posterUrl': _activeAdvancedSelection!.posterUrl,
+      });
+      _showAllDebridSnack(
+        added
+            ? 'Added ${videoFiles.length} videos to playlist'
+            : 'Already in playlist',
+        isError: !added,
+      );
+    }
+  }
+
   Future<void> _showAllDebridPostAddOptions(
     List<AllDebridFile> files,
     Torrent torrent,
@@ -15010,6 +15070,23 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                               _showAllDebridDownloadOptions(files, torrentName);
                             },
                           ),
+                          if (hasVideo)
+                            _DebridActionTile(
+                              icon: Icons.playlist_add_rounded,
+                              color: const Color(0xFFA78BFA),
+                              title: 'Add to Playlist',
+                              subtitle: 'Save to your playlist for later.',
+                              enabled: true,
+                              onTap: () {
+                                Navigator.of(ctx).pop();
+                                _restoreFocusToCard(-1, torrent);
+                                _addAllDebridToPlaylist(
+                                  videoFiles,
+                                  torrentName,
+                                  infohash: infohash ?? torrent.infohash,
+                                );
+                              },
+                            ),
                           _DebridActionTile(
                             icon: Icons.connected_tv,
                             color: const Color(0xFF10B981),

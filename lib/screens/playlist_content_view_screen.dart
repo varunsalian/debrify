@@ -8,6 +8,8 @@ import '../models/rd_file_node.dart';
 import '../models/series_playlist.dart';
 import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
+import '../services/alldebrid_service.dart';
+import '../models/alldebrid_file.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/video_player_launcher.dart';
@@ -55,6 +57,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   RDFileNode? _rootContent; // Root content tree
   List<RDFileNode>?
   _currentViewNodes; // Current folder's visible nodes (after view mode transformation)
+
+  // AllDebrid: files in the order used to build the tree, so a node's linkIndex
+  // maps to its locked link (parallels Real-Debrid's links[] array).
+  List<AllDebridFile> _allDebridFiles = [];
 
   // View mode state
   FolderViewMode _currentViewMode = FolderViewMode.raw;
@@ -306,6 +312,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _loadWebDavContent();
       } else if (normalizedProvider == 'premiumize') {
         await _loadPremiumizeContent();
+      } else if (normalizedProvider == 'alldebrid') {
+        await _loadAllDebridContent();
       } else {
         await _loadRealDebridContent();
       }
@@ -349,6 +357,43 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _rootContent = RDFolderTreeBuilder.buildTree(
       allFiles.cast<Map<String, dynamic>>(),
     );
+  }
+
+  /// Load AllDebrid content. Re-adds the magnet by infohash (trusting the
+  /// `ready` flag), then builds the tree from its files. The files are kept in
+  /// order so each node's [RDFileNode.linkIndex] maps to its locked link.
+  Future<void> _loadAllDebridContent() async {
+    final torrentHash = widget.playlistItem['torrent_hash'] as String?;
+    if (torrentHash == null || torrentHash.isEmpty) {
+      throw Exception('No AllDebrid magnet info found');
+    }
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('No AllDebrid API key configured');
+    }
+
+    final result = await AllDebridService.addMagnetAndResolveFiles(
+      apiKey,
+      'magnet:?xt=urn:btih:$torrentHash',
+    );
+    if (result.files.isEmpty) {
+      throw Exception('No files found in magnet');
+    }
+
+    _allDebridFiles = result.files;
+    // Map AllDebrid files to RD-style file maps; linkIndex is assigned in this
+    // same order by the tree builder, so it indexes back into _allDebridFiles.
+    final fileMaps = <Map<String, dynamic>>[];
+    for (int i = 0; i < _allDebridFiles.length; i++) {
+      final f = _allDebridFiles[i];
+      fileMaps.add({
+        'id': i,
+        'path': f.path.startsWith('/') ? f.path : '/${f.path}',
+        'bytes': f.size,
+        'selected': 1,
+      });
+    }
+    _rootContent = RDFolderTreeBuilder.buildTree(fileMaps);
   }
 
   /// Load Torbox content
@@ -1120,6 +1165,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playWebDavPlaylist(videoFiles, startIndex);
       } else if (provider == 'premiumize') {
         await _playPremiumizePlaylist(videoFiles, startIndex);
+      } else if (provider == 'alldebrid') {
+        await _playAllDebridPlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -2055,6 +2102,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final String? premiumizeItemId = isPremiumize
         ? (widget.playlistItem?['premiumizeItemId']?.toString())
         : null;
+    final bool isAllDebrid =
+        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+            'alldebrid';
+    final String? allDebridHash = isAllDebrid
+        ? (widget.playlistItem?['torrent_hash'] as String?)
+        : null;
 
     await StorageService.updatePlaylistItemImdbId(
       imdbId,
@@ -2063,6 +2116,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       pikpakCollectionId: pikpakCollectionId,
       premiumizeHash: premiumizeHash,
       premiumizeItemId: premiumizeItemId,
+      allDebridHash: allDebridHash,
       force: force,
     );
   }
@@ -2373,6 +2427,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
             premiumizeItemId: premiumizeItemId,
+          );
+        }
+      } else if (provider.toLowerCase() == 'alldebrid') {
+        final allDebridHash = widget.playlistItem['torrent_hash'] as String?;
+        if (allDebridHash != null && allDebridHash.isNotEmpty) {
+          updated = await StorageService.updatePlaylistItemPoster(
+            posterUrl,
+            allDebridHash: allDebridHash,
           );
         }
       }
@@ -3348,6 +3410,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         await _playWebDavPlaylist(videoFiles, startIndex);
       } else if (provider == 'premiumize') {
         await _playPremiumizePlaylist(videoFiles, startIndex);
+      } else if (provider == 'alldebrid') {
+        await _playAllDebridPlaylist(videoFiles, startIndex);
       }
 
       if (mounted && Navigator.of(context).canPop()) {
@@ -3481,6 +3545,75 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         disableAutoResume: true,
         viewMode: _convertToPlaylistViewMode(_currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
+        contentImdbId: widget.playlistItem['imdbId'] as String?,
+        contentType: widget.playlistItem['contentType'] as String?,
+        suppressTraktAutoSync: true,
+      ),
+    );
+  }
+
+  /// Play AllDebrid playlist. Each node's linkIndex maps to its locked link in
+  /// [_allDebridFiles] (populated by [_loadAllDebridContent]); the start file is
+  /// unlocked, the rest carry their locked link for lazy unlock by the player.
+  Future<void> _playAllDebridPlaylist(
+    List<RDFileNode> videoFiles,
+    int startIndex,
+  ) async {
+    final apiKey = await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      throw Exception('Please set your AllDebrid API key in Settings');
+    }
+    final torrentHash = widget.playlistItem['torrent_hash'] as String?;
+
+    final List<PlaylistEntry> entries = [];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final linkIndex = file.linkIndex;
+      if (linkIndex < 0 || linkIndex >= _allDebridFiles.length) continue;
+      final lockedLink = _allDebridFiles[linkIndex].link;
+
+      String url = '';
+      if (i == startIndex) {
+        try {
+          url = await AllDebridService.unlockLink(apiKey, lockedLink);
+        } catch (_) {}
+      }
+      entries.add(
+        PlaylistEntry(
+          url: url,
+          title: file.name,
+          relativePath: file.relativePath ?? file.path,
+          provider: 'alldebrid',
+          allDebridLink: lockedLink,
+          torrentHash: torrentHash,
+          sizeBytes: file.bytes,
+        ),
+      );
+    }
+
+    if (entries.isEmpty) {
+      throw Exception('No playable files found');
+    }
+
+    final String initialVideoUrl = entries[startIndex].url;
+    final String seriesTitle = _seriesPlaylist?.seriesTitle ??
+        widget.playlistItem['title'] as String? ??
+        'Series';
+
+    if (!mounted) return;
+    widget.onPlaybackStarted?.call();
+    MainPageBridge.notifyPlayerLaunching();
+
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialVideoUrl,
+        title: seriesTitle,
+        subtitle: '${entries.length} episodes',
+        playlist: entries,
+        startIndex: startIndex,
+        disableAutoResume: true,
+        viewMode: _convertToPlaylistViewMode(_currentViewMode),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
