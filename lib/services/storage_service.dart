@@ -116,6 +116,8 @@ class StorageService {
   static const String _lemmyAllowNsfwKey = 'lemmy_allow_nsfw';
   static const String _lemmyFavoriteCommunitiesKey = 'lemmy_favorite_communities';
   static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
+  // YouTube settings
+  static const String _youtubeMaxHeightKey = 'youtube_max_height';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
@@ -3318,6 +3320,19 @@ class StorageService {
     } else {
       await prefs.setString(_lemmyDefaultCommunityKey, community);
     }
+  }
+
+  // YouTube Settings
+  /// Preferred max playback height for YouTube (1080/720/480/360). Default 1080.
+  static Future<int> getYoutubeMaxHeight() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt(_youtubeMaxHeightKey);
+    return (v != null && v > 0) ? v : 1080;
+  }
+
+  static Future<void> setYoutubeMaxHeight(int height) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_youtubeMaxHeightKey, height);
   }
 
   // PikPak API Settings

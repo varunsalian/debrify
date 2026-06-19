@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/youtube_service.dart';
+import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import 'youtube_filters.dart';
 import 'youtube_video_card.dart';
 import 'youtube_empty_state.dart';
 
@@ -35,6 +37,9 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
   String? _errorMessage;
 
   final List<FocusNode> _cardFocusNodes = [];
+  final FocusNode _qualityFocusNode = FocusNode(debugLabel: 'youtube-quality-filter');
+
+  int _maxHeight = 1080;
 
   String _lastSearchQuery = '';
   int _searchGeneration = 0;
@@ -44,7 +49,19 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
     super.initState();
     _scrollController.addListener(_onScroll);
     _lastSearchQuery = widget.searchQuery;
+    _loadQuality();
     if (widget.searchQuery.isNotEmpty) _performSearch();
+  }
+
+  Future<void> _loadQuality() async {
+    final h = await StorageService.getYoutubeMaxHeight();
+    if (mounted) setState(() => _maxHeight = h);
+  }
+
+  void _onQualityChanged(int height) {
+    setState(() => _maxHeight = height);
+    StorageService.setYoutubeMaxHeight(height);
+    // Applies to the next video resolved; current playback is unaffected.
   }
 
   @override
@@ -59,6 +76,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _qualityFocusNode.dispose();
     for (final node in _cardFocusNodes) {
       node.dispose();
     }
@@ -243,28 +261,22 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
     }
   }
 
-  /// DPAD entry point from the search input: focus the first result card.
+  /// DPAD entry point from the search input: focus the quality selector.
   void focusFirstFilter() {
-    if (_cardFocusNodes.isNotEmpty) _cardFocusNodes.first.requestFocus();
+    _qualityFocusNode.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (_videos.isNotEmpty && !widget.isTelevision)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${_videos.length} video${_videos.length != 1 ? 's' : ''} • long press to download',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
+        YoutubeFiltersBar(
+          selectedHeight: _maxHeight,
+          resultCount: _videos.length,
+          isTelevision: widget.isTelevision,
+          onQualityChanged: _onQualityChanged,
+          qualityFocusNode: _qualityFocusNode,
+        ),
         Expanded(child: _buildContent()),
       ],
     );

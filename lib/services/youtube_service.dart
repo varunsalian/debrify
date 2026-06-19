@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
+import 'storage_service.dart';
 
 /// A YouTube video surfaced from a search.
 class YoutubeVideo {
@@ -250,17 +251,14 @@ class YoutubeService {
 
   // ============== Stream resolution (youtube_explode) ==============
 
-  /// Highest video-only resolution to play. Capped at 1080p to balance
-  /// bandwidth/decode cost across phones and TVs.
-  static const int _maxPlaybackHeight = 1080;
-
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///
-  /// For playback this prefers a high-res *video-only* stream (up to 1080p)
-  /// paired with a separate audio stream (the player muxes them) — muxed
-  /// single-file streams cap at 360p. For downloads it returns the best muxed
-  /// single-file stream (has audio, but ~360p).
+  /// For playback this prefers a high-res *video-only* H.264 stream at or below
+  /// the user's preferred resolution (see [StorageService.getYoutubeMaxHeight])
+  /// paired with a separate AAC audio stream (the player muxes them). For
+  /// downloads it returns the best muxed single-file stream (has audio, ~360p).
   static Future<YoutubeResolvedStreams?> resolveStreams(String videoId) async {
+    final maxHeight = await StorageService.getYoutubeMaxHeight();
     try {
       // Use the ANDROID_VR client: its googlevideo stream URLs open directly in
       // ffmpeg/mpv, whereas the default (ANDROID) client's URLs return HTTP 403
@@ -303,9 +301,12 @@ class YoutubeService {
       if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
         videoOnly.sort(
             (a, b) => b.videoResolution.height.compareTo(a.videoResolution.height));
-        final capped =
-            videoOnly.where((s) => s.videoResolution.height <= _maxPlaybackHeight).toList();
-        final chosenVideo = capped.isNotEmpty ? capped.first : videoOnly.last;
+        // Highest H.264 stream at or below the preferred height; if none exist
+        // that low, fall back to the lowest available (videoOnly is sorted
+        // descending, so .last is the smallest).
+        final atOrBelow =
+            videoOnly.where((s) => s.videoResolution.height <= maxHeight).toList();
+        final chosenVideo = atOrBelow.isNotEmpty ? atOrBelow.first : videoOnly.last;
         playUrl = chosenVideo.url.toString();
 
         audioStreams.sort(
