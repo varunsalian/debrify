@@ -248,8 +248,14 @@ class AllDebridService {
     }
   }
 
-  /// Unlocks a locked link returned by [getMagnetFiles] into a ready-to-use
-  /// direct download/stream URL. Throws on error.
+  /// Unlocks a locked link returned by [getMagnetFiles] / saved links into a
+  /// ready-to-use direct download/stream URL. Throws on error.
+  ///
+  /// Most links unlock instantly. Some hosts return a *delayed* unlock: the
+  /// response carries a `delayed` id instead of a `link`, and the direct URL
+  /// only becomes available once AllDebrid finishes processing it. In that case
+  /// we poll `/link/delayed` until it's ready, mirroring the official client's
+  /// wait-for-delayed flow.
   static Future<String> unlockLink(String apiKey, String link) async {
     final response = await http
         .post(
@@ -260,10 +266,47 @@ class AllDebridService {
         .timeout(const Duration(seconds: 30));
     final data = _decode(response);
     final url = data['link']?.toString() ?? '';
-    if (url.isEmpty) {
-      throw Exception('AllDebrid did not return a download link');
+    if (url.isNotEmpty) return url;
+
+    final delayedId = data['delayed']?.toString() ?? '';
+    if (delayedId.isNotEmpty && delayedId != '0') {
+      return _resolveDelayedLink(apiKey, delayedId);
     }
-    return url;
+
+    throw Exception('AllDebrid did not return a download link');
+  }
+
+  /// Polls `/link/delayed` for a delayed unlock [delayedId] until the direct
+  /// link is ready, an error occurs, or we time out. AllDebrid status codes:
+  /// 1 = still processing, 2 = ready (link available), 3 = error.
+  static Future<String> _resolveDelayedLink(
+    String apiKey,
+    String delayedId,
+  ) async {
+    const maxAttempts = 12;
+    const pollInterval = Duration(seconds: 5);
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      await Future.delayed(pollInterval);
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/link/delayed'),
+            headers: _authHeaders(apiKey),
+            body: {'id': delayedId},
+          )
+          .timeout(const Duration(seconds: 20));
+      final data = _decode(response);
+      final status = _asInt(data['status']);
+      if (status == 2) {
+        final url = data['link']?.toString() ?? '';
+        if (url.isNotEmpty) return url;
+        throw Exception('AllDebrid returned an empty delayed link');
+      }
+      if (status == 3) {
+        throw Exception('AllDebrid failed to process this link');
+      }
+      // status == 1 → still processing; keep polling.
+    }
+    throw Exception('AllDebrid link is taking too long to unlock');
   }
 
   /// Lists the user's saved direct-download links (`/v4/user/links`). These are
