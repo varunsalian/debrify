@@ -111,6 +111,11 @@ class StorageService {
   static const String _redditFavoriteSubredditsKey =
       'reddit_favorite_subreddits';
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
+  // Lemmy settings
+  static const String _lemmyInstanceKey = 'lemmy_instance';
+  static const String _lemmyAllowNsfwKey = 'lemmy_allow_nsfw';
+  static const String _lemmyFavoriteCommunitiesKey = 'lemmy_favorite_communities';
+  static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
@@ -3262,6 +3267,56 @@ class StorageService {
       await prefs.remove(_redditDefaultSubredditKey);
     } else {
       await prefs.setString(_redditDefaultSubredditKey, subreddit);
+    }
+  }
+
+  // Lemmy Settings
+  static Future<String> getLemmyInstance() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_lemmyInstanceKey);
+    return (value != null && value.isNotEmpty)
+        ? value
+        : 'https://lemmy.world';
+  }
+
+  static Future<void> setLemmyInstance(String instance) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lemmyInstanceKey, instance);
+  }
+
+  static Future<bool> getLemmyAllowNsfw() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_lemmyAllowNsfwKey) ?? false;
+  }
+
+  static Future<void> setLemmyAllowNsfw(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_lemmyAllowNsfwKey, value);
+  }
+
+  static Future<List<String>> getLemmyFavoriteCommunities() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_lemmyFavoriteCommunitiesKey) ?? [];
+  }
+
+  static Future<void> setLemmyFavoriteCommunities(
+    List<String> communities,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_lemmyFavoriteCommunitiesKey, communities);
+  }
+
+  static Future<String?> getLemmyDefaultCommunity() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lemmyDefaultCommunityKey);
+  }
+
+  static Future<void> setLemmyDefaultCommunity(String? community) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (community == null || community.isEmpty) {
+      await prefs.remove(_lemmyDefaultCommunityKey);
+    } else {
+      await prefs.setString(_lemmyDefaultCommunityKey, community);
     }
   }
 

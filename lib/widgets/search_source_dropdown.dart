@@ -12,6 +12,8 @@ enum SearchSourceType {
   addon,    // Specific addon catalog
   trakt,    // Trakt lists (watchlist, collection, etc.)
   reddit,   // Reddit video search
+  lemmy,    // Lemmy video search (federated)
+  youtube,  // YouTube video search (on-device via youtube_explode)
   iptv,     // IPTV M3U playlists
 }
 
@@ -55,6 +57,20 @@ class SearchSourceOption {
     type: SearchSourceType.reddit,
     label: 'Reddit',
     icon: Icons.play_circle_outline,
+  );
+
+  /// Create "Lemmy" option
+  factory SearchSourceOption.lemmy() => const SearchSourceOption(
+    type: SearchSourceType.lemmy,
+    label: 'Lemmy',
+    icon: Icons.hub_outlined,
+  );
+
+  /// Create "YouTube" option
+  factory SearchSourceOption.youtube() => const SearchSourceOption(
+    type: SearchSourceType.youtube,
+    label: 'YouTube',
+    icon: Icons.smart_display_outlined,
   );
 
   /// Create "IPTV" option
@@ -697,11 +713,15 @@ class SearchSourceOptionsLoader {
       debugPrint('SearchSourceOptionsLoader: Error checking Trakt auth: $e');
     }
 
-    // IPTV before Reddit
+    // IPTV
     options.add(SearchSourceOption.iptv());
 
-    // Reddit always goes last
-    options.add(SearchSourceOption.reddit());
+    // YouTube.
+    // NOTE: Reddit and Lemmy are intentionally hidden from navigation for now
+    // (Lemmy still needs more work). Their enum values, search-screen dispatch,
+    // and result views remain in place so they can be re-enabled by simply
+    // adding `SearchSourceOption.lemmy()` / `.reddit()` back here.
+    options.add(SearchSourceOption.youtube());
 
     return options;
   }

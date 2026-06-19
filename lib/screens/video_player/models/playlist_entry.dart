@@ -1,6 +1,11 @@
 class PlaylistEntry {
   final String url;
   final String title;
+  // High-res YouTube: a video-only track ([hdVideoUrl]) plus a separate
+  // [audioUrl], merged at playback. When set, [url] should be a muxed stream
+  // (already has audio) used as the never-silent fallback.
+  final String? hdVideoUrl;
+  final String? audioUrl;
   final String? relativePath; // Full relative path from torrent root (e.g. "/Season 1/Episode 1.mkv")
   final String? restrictedLink; // The original restricted link from debrid
   final String? torrentHash; // SHA1 Hash of the torrent
@@ -20,6 +25,8 @@ class PlaylistEntry {
   const PlaylistEntry({
     required this.url,
     required this.title,
+    this.hdVideoUrl,
+    this.audioUrl,
     this.relativePath,
     this.restrictedLink,
     this.torrentHash,

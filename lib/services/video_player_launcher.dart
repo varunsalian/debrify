@@ -170,6 +170,14 @@ void _clearResolvedStreams(Iterable<String?> resumeIds) {
 
 class VideoPlayerLaunchArgs {
   final String videoUrl;
+
+  /// Optional separate audio track to play alongside [videoUrl] (used for
+  /// high-res YouTube, where video and audio are served as separate streams).
+  final String? audioUrl;
+
+  /// Optional muxed stream (already has audio) used as a never-silent fallback
+  /// on Android TV, where [videoUrl] may be a video-only HD track.
+  final String? fallbackUrl;
   final String title;
   final String? subtitle;
   final List<PlaylistEntry>? playlist;
@@ -236,6 +244,8 @@ class VideoPlayerLaunchArgs {
 
   const VideoPlayerLaunchArgs({
     required this.videoUrl,
+    this.audioUrl,
+    this.fallbackUrl,
     required this.title,
     this.subtitle,
     this.playlist,
@@ -293,6 +303,7 @@ class VideoPlayerLaunchArgs {
   VideoPlayerScreen toWidget() {
     return VideoPlayerScreen(
       videoUrl: videoUrl,
+      audioUrl: audioUrl,
       title: title,
       subtitle: subtitle,
       playlist: playlist,
@@ -390,6 +401,8 @@ class VideoPlayerLauncher {
       if (syncCatalog && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
+          audioUrl: args.audioUrl,
+          fallbackUrl: args.fallbackUrl,
           title: args.title,
           subtitle: args.subtitle,
           playlist: args.playlist,
@@ -1240,6 +1253,8 @@ class VideoPlayerLauncher {
               'id': '${entry.title}_$i',
               'title': episode?.displayTitle ?? entry.title,
               'url': entry.url,
+              if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
+              if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
               'index': i,
               if (episode?.seriesInfo.season != null)
                 'season': episode!.seriesInfo.season,
@@ -2284,6 +2299,8 @@ class _AndroidTvPlaybackItem {
   final String id;
   final String title;
   final String url;
+  final String? hdVideoUrl;
+  final String? audioUrl;
   final int index;
   final int? season;
   final int? episode;
@@ -2300,6 +2317,8 @@ class _AndroidTvPlaybackItem {
     required this.id,
     required this.title,
     required this.url,
+    this.hdVideoUrl,
+    this.audioUrl,
     required this.index,
     required this.season,
     required this.episode,
@@ -2318,6 +2337,8 @@ class _AndroidTvPlaybackItem {
       'id': id,
       'title': title,
       'url': url,
+      if (hdVideoUrl != null) 'hdVideoUrl': hdVideoUrl,
+      if (audioUrl != null) 'audioUrl': audioUrl,
       'index': index,
       'season': season,
       'episode': episode,
@@ -2576,6 +2597,8 @@ class _AndroidTvPlaybackPayloadBuilder {
           id: entry.url.isNotEmpty ? entry.url : '${entry.title}_$i',
           title: displayTitle,
           url: entry.url,
+          hdVideoUrl: entry.hdVideoUrl,
+          audioUrl: entry.audioUrl,
           index: i,
           season: episodeInfo.seriesInfo.season,
           episode: episodeInfo.seriesInfo.episode,
@@ -2796,6 +2819,21 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (playlist != null && playlist.isNotEmpty) {
       return playlist;
     }
+    // For high-res YouTube, [videoUrl] is a video-only HD track and [audioUrl]
+    // its audio. Use the muxed [fallbackUrl] as the base (never-silent) url and
+    // carry the HD video/audio pair for ExoPlayer to merge.
+    if (args.audioUrl != null && args.audioUrl!.isNotEmpty) {
+      return [
+        PlaylistEntry(
+          url: (args.fallbackUrl != null && args.fallbackUrl!.isNotEmpty)
+              ? args.fallbackUrl!
+              : args.videoUrl,
+          hdVideoUrl: args.videoUrl,
+          audioUrl: args.audioUrl,
+          title: args.title,
+        ),
+      ];
+    }
     return [PlaylistEntry(url: args.videoUrl, title: args.title)];
   }
 
@@ -2822,6 +2860,8 @@ class _AndroidTvPlaybackPayloadBuilder {
             PlaylistEntry(
               url: resolved,
               title: entry.title,
+              hdVideoUrl: entry.hdVideoUrl,
+              audioUrl: entry.audioUrl,
               relativePath: entry.relativePath,
               restrictedLink: entry.restrictedLink,
               torrentHash: entry.torrentHash,

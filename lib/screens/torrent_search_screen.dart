@@ -74,6 +74,8 @@ import '../models/trakt/trakt_calendar_entry.dart';
 import 'settings/trakt_settings_page.dart';
 import 'trakt_calendar_screen.dart';
 import '../widgets/reddit/reddit_results_view.dart';
+import '../widgets/lemmy/lemmy_results_view.dart';
+import '../widgets/youtube/youtube_results_view.dart';
 import '../widgets/iptv/iptv_results_view.dart';
 import '../widgets/trakt/trakt_results_view.dart';
 import '../services/series_source_service.dart';
@@ -218,6 +220,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   // RedditResultsView GlobalKey (for DPAD navigation)
   final GlobalKey<RedditResultsViewState> _redditResultsKey =
       GlobalKey<RedditResultsViewState>();
+
+  // LemmyResultsView GlobalKey (for DPAD navigation)
+  final GlobalKey<LemmyResultsViewState> _lemmyResultsKey =
+      GlobalKey<LemmyResultsViewState>();
+
+  // YoutubeResultsView GlobalKey (for DPAD navigation)
+  final GlobalKey<YoutubeResultsViewState> _youtubeResultsKey =
+      GlobalKey<YoutubeResultsViewState>();
 
   // IptvResultsView GlobalKey (for DPAD navigation)
   final GlobalKey<IptvResultsViewState> _iptvResultsKey =
@@ -1108,6 +1118,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (_selectedSource.type == SearchSourceType.reddit &&
         _redditResultsKey.currentState != null) {
       _redditResultsKey.currentState!.focusFirstFilter();
+      return;
+    }
+
+    if (_selectedSource.type == SearchSourceType.lemmy &&
+        _lemmyResultsKey.currentState != null) {
+      _lemmyResultsKey.currentState!.focusFirstFilter();
+      return;
+    }
+
+    if (_selectedSource.type == SearchSourceType.youtube &&
+        _youtubeResultsKey.currentState != null) {
+      _youtubeResultsKey.currentState!.focusFirstFilter();
       return;
     }
 
@@ -2400,6 +2422,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
         return SearchSourceType.trakt;
       case 'reddit':
         return SearchSourceType.reddit;
+      case 'lemmy':
+        return SearchSourceType.lemmy;
+      case 'youtube':
+        return SearchSourceType.youtube;
       default:
         return null;
     }
@@ -2438,6 +2464,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
           break;
         case SearchSourceType.reddit:
           // Reddit mode - handles its own search, keep keyword mode for fallback
+          _searchMode = SearchMode.keyword;
+          break;
+        case SearchSourceType.lemmy:
+          // Lemmy mode - handles its own search, keep keyword mode for fallback
+          _searchMode = SearchMode.keyword;
+          break;
+        case SearchSourceType.youtube:
+          // YouTube mode - handles its own search, keep keyword fallback
           _searchMode = SearchMode.keyword;
           break;
         case SearchSourceType.iptv:
@@ -3517,6 +3551,18 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
     // Trakt mode: Trigger rebuild so TraktResultsView gets updated searchQuery
     if (_selectedSource.type == SearchSourceType.trakt) {
+      setState(() {});
+      return;
+    }
+
+    // Lemmy mode: Trigger rebuild so LemmyResultsView gets updated searchQuery
+    if (_selectedSource.type == SearchSourceType.lemmy) {
+      setState(() {});
+      return;
+    }
+
+    // YouTube mode: Trigger rebuild so YoutubeResultsView gets updated searchQuery
+    if (_selectedSource.type == SearchSourceType.youtube) {
       setState(() {});
       return;
     }
@@ -20760,6 +20806,16 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                             return;
                                           }
                                           if (_selectedSource.type ==
+                                              SearchSourceType.lemmy) {
+                                            setState(() {});
+                                            return;
+                                          }
+                                          if (_selectedSource.type ==
+                                              SearchSourceType.youtube) {
+                                            setState(() {});
+                                            return;
+                                          }
+                                          if (_selectedSource.type ==
                                               SearchSourceType.keyword) {
                                             _searchTorrents(query);
                                           } else if (_searchMode ==
@@ -21131,6 +21187,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                             isTelevision: _isTelevision,
                           ),
 
+                        // Lemmy mode - Lemmy video results
+                        if (_selectedSource.type == SearchSourceType.lemmy)
+                          LemmyResultsView(
+                            key: _lemmyResultsKey,
+                            searchQuery: _searchController.text,
+                            isTelevision: _isTelevision,
+                          ),
+
+                        // YouTube mode - video results
+                        if (_selectedSource.type == SearchSourceType.youtube)
+                          YoutubeResultsView(
+                            key: _youtubeResultsKey,
+                            searchQuery: _searchController.text,
+                            isTelevision: _isTelevision,
+                          ),
+
                         // IPTV mode - IPTV M3U channels
                         if (_selectedSource.type == SearchSourceType.iptv)
                           IptvResultsView(
@@ -21141,8 +21213,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
                                 _sourceDropdownFocusNode.requestFocus(),
                           ),
 
-                        // Results and other views (not shown in Reddit/IPTV mode - they handle their own content)
+                        // Results and other views (not shown in Reddit/Lemmy/YouTube/IPTV mode - they handle their own content)
                         if (_selectedSource.type != SearchSourceType.reddit &&
+                            _selectedSource.type != SearchSourceType.lemmy &&
+                            _selectedSource.type != SearchSourceType.youtube &&
                             _selectedSource.type != SearchSourceType.iptv)
                           Builder(
                             builder: (context) {
@@ -24737,6 +24811,10 @@ class _SearchTextFieldState extends State<_SearchTextField> {
                 ? (widget.disabledTooltip ?? 'Search not available')
                 : widget.selectedSource.type == SearchSourceType.reddit
                 ? 'Search Reddit...'
+                : widget.selectedSource.type == SearchSourceType.lemmy
+                ? 'Search Lemmy...'
+                : widget.selectedSource.type == SearchSourceType.youtube
+                ? 'Search YouTube...'
                 : widget.searchMode == SearchMode.catalog
                 ? 'Search catalog...'
                 : 'Search...',

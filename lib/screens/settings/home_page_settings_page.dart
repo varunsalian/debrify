@@ -44,7 +44,11 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       if (!mounted) return;
       setState(() {
         _addons = addons;
-        _selectedSourceType = sourceType ?? 'all';
+        // Coerce any stale/unsupported saved value (e.g. a previously-selected
+        // 'reddit', now hidden) to a valid option so the dropdown can't crash.
+        const validSourceTypes = {'all', 'keyword', 'addon', 'trakt', 'iptv', 'youtube'};
+        _selectedSourceType =
+            validSourceTypes.contains(sourceType) ? sourceType! : 'all';
         _selectedAddonUrl = addonUrl;
         _selectedCatalogId = catalogId;
         _selectedTraktListType = traktListType ?? 'progress';
@@ -252,7 +256,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         DropdownMenuItem(value: 'addon', child: Text('Addon')),
                         DropdownMenuItem(value: 'trakt', child: Text('Trakt')),
                         DropdownMenuItem(value: 'iptv', child: Text('IPTV')),
-                        DropdownMenuItem(value: 'reddit', child: Text('Reddit')),
+                        DropdownMenuItem(value: 'youtube', child: Text('YouTube')),
                       ],
                       onChanged: (value) {
                         if (value != null) _selectSourceType(value);
@@ -504,8 +508,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return Icons.extension;
       case 'iptv':
         return Icons.live_tv;
-      case 'reddit':
-        return Icons.play_circle_outline;
+      case 'youtube':
+        return Icons.smart_display_outlined;
       case 'trakt':
         return Icons.movie_filter_rounded;
       default:
@@ -523,8 +527,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return 'The home screen will open directly to the selected addon\'s catalog, showing its content immediately.';
       case 'iptv':
         return 'The home screen will open in IPTV mode, showing your M3U playlist channels.';
-      case 'reddit':
-        return 'The home screen will open in Reddit mode, showing video content from subreddits.';
+      case 'youtube':
+        return 'The home screen will open in YouTube mode, ready to search and play videos.';
       case 'trakt':
         return 'The home screen will open in Trakt mode, showing your watchlist, continue watching, and more.';
       default:

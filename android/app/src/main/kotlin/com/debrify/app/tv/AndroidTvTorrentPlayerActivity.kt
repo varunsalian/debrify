@@ -34,9 +34,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -841,11 +844,34 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dataSourceFactory)
 
-        player = ExoPlayer.Builder(this, renderersFactory)
+        val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
             .setMediaSourceFactory(mediaSourceFactory)
             .setHandleAudioBecomingNoisy(true)
-            .build()
+
+        // For YouTube (merged video-only + audio) ONLY, start after buffering
+        // ~1s instead of ExoPlayer's conservative 2.5s default — otherwise the
+        // two separate googlevideo streams take 20-30s to fill the buffer before
+        // the first frame. All other content keeps ExoPlayer's defaults so this
+        // can't regress torrent/IPTV/debrid playback.
+        val isYouTubeMerge = payload?.items?.any {
+            !it.hdVideoUrl.isNullOrEmpty() && !it.audioUrl.isNullOrEmpty()
+        } == true
+        if (isYouTubeMerge) {
+            playerBuilder.setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        15_000, // minBufferMs (default 50000)
+                        50_000, // maxBufferMs (default 50000)
+                        1_000,  // bufferForPlaybackMs (default 2500)
+                        2_000,  // bufferForPlaybackAfterRebufferMs (default 5000)
+                    )
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            )
+        }
+
+        player = playerBuilder.build()
 
         player?.addListener(playbackListener)
         playerView.player = player
@@ -1691,11 +1717,51 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setMediaMetadata(metadata)
             .build()
 
+        // High-res YouTube: video and audio are separate streams. Merge a
+        // video-only track with its audio track. If anything goes wrong we fall
+        // back to [item.url], a muxed stream that already contains audio, so we
+        // never end up with silent video.
+        val mergedSource = buildMergedSourceOrNull(item, mediaItem)
+
         player?.apply {
-            setMediaItem(mediaItem)
+            if (mergedSource != null) {
+                setMediaSource(mergedSource)
+            } else {
+                setMediaItem(mediaItem)
+            }
             prepare()
             playWhenReady = true
             play()
+        }
+    }
+
+    // Build a MergingMediaSource (video-only + audio) for high-res YouTube,
+    // or null when the item has no separate audio track / on any error.
+    private fun buildMergedSourceOrNull(
+        item: PlaybackItem,
+        baseMediaItem: MediaItem,
+    ): MergingMediaSource? {
+        val hdVideoUrl = item.hdVideoUrl
+        val audioUrl = item.audioUrl
+        if (hdVideoUrl.isNullOrEmpty() || audioUrl.isNullOrEmpty()) return null
+        return try {
+            // Use an HTTP data source that follows cross-protocol redirects
+            // (googlevideo may redirect) — matching the app's main playback path.
+            val httpFactory = DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+            val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+            val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(
+                    baseMediaItem.buildUpon().setUri(hdVideoUrl).build()
+                )
+            val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(MediaItem.fromUri(audioUrl))
+            // adjustPeriodTimeOffsets + clipDurations tolerate the tiny
+            // duration mismatch between YouTube's video/audio tracks.
+            MergingMediaSource(true, true, videoSource, audioSource)
+        } catch (e: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "merge build failed, using muxed fallback", e)
+            null
         }
 
         // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
@@ -2347,6 +2413,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 id = "iptv:${entry.index}",
                 title = entry.name,
                 url = entry.url,
+                hdVideoUrl = null,
+                audioUrl = null,
                 index = 0,
                 season = null,
                 episode = null,
@@ -2374,6 +2442,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             id = "current:${fallbackTitle.hashCode()}",
             title = fallbackTitle,
             url = mediaUrl,
+            hdVideoUrl = null,
+            audioUrl = null,
             index = currentIndex,
             season = null,
             episode = null,
@@ -6973,6 +7043,11 @@ private data class PlaybackItem(
     val id: String,
     val title: String,
     val url: String,
+    // Optional adaptive pair for high-res YouTube: video-only track + separate
+    // audio track, merged at playback. When absent, [url] (a muxed stream that
+    // already has audio) is played as-is.
+    val hdVideoUrl: String? = null,
+    val audioUrl: String? = null,
     val index: Int,
     val season: Int?,
     val episode: Int?,
@@ -7002,6 +7077,8 @@ private data class PlaybackItem(
                 id = obj.optString("id"),
                 title = obj.optString("title"),
                 url = obj.optString("url"),
+                hdVideoUrl = if (obj.has("hdVideoUrl")) obj.optString("hdVideoUrl").takeIf { it.isNotEmpty() } else null,
+                audioUrl = if (obj.has("audioUrl")) obj.optString("audioUrl").takeIf { it.isNotEmpty() } else null,
                 index = obj.optInt("index", 0),
                 season = obj.optInt("season").takeIf { obj.has("season") },
                 episode = obj.optInt("episode").takeIf { obj.has("episode") },

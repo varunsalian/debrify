@@ -97,6 +97,10 @@ class _SeasonEpisodeSelection {
 /// - Series-aware episode ordering and tracking
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl;
+
+  /// Optional separate audio track played alongside [videoUrl] via mpv's
+  /// external-audio support (high-res YouTube serves video/audio separately).
+  final String? audioUrl;
   final String title;
   final String? subtitle;
   final List<PlaylistEntry>? playlist;
@@ -167,6 +171,7 @@ class VideoPlayerScreen extends StatefulWidget {
   const VideoPlayerScreen({
     Key? key,
     required this.videoUrl,
+    this.audioUrl,
     required this.title,
     this.subtitle,
     this.playlist,
@@ -776,6 +781,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// Load an external audio track to play alongside a video-only stream
+  /// (high-res YouTube serves video and audio separately). Uses media_kit's
+  /// AudioTrack.uri (mpv `audio-add`), which is URL-safe — unlike the
+  /// `audio-files` path-list option, which mangles URLs on the `:`/`,`
+  /// separators. Must be called AFTER the main media has loaded.
+  Future<void> _setExternalAudioTrack(String audioUrl) async {
+    try {
+      await _player.setAudioTrack(mk.AudioTrack.uri(audioUrl));
+    } catch (e) {
+      debugPrint('VideoPlayer: failed to set external audio track: $e');
+    }
+  }
+
   Future<void> _initializePlayer() async {
     // Load default player settings
     await _loadPlayerDefaults();
@@ -971,11 +989,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _restoreTrackPreferences();
         });
       } else {
+        // High-res YouTube serves video and audio as separate streams. Open
+        // PAUSED, attach the external audio track, then start — so both tracks
+        // are loaded before the first frame and play in sync from the start.
+        // (Attaching audio mid-playback makes mpv resync, causing a few seconds
+        // of A/V drift.)
+        final hasExternalAudio =
+            widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
         _player
-            .open(mk.Media(initialUrl, httpHeaders: widget.httpHeaders))
+            .open(
+              mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
+              play: !hasExternalAudio,
+            )
             .then((_) async {
               // Wait for the video to load and duration to be available
               await _waitForVideoReady();
+              if (hasExternalAudio) {
+                await _setExternalAudioTrack(widget.audioUrl!);
+              }
               // Random start takes precedence over resume, then startAtPercent
               if (widget.startFromRandom) {
                 final offset = _randomStartOffset(_duration);
@@ -995,6 +1026,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               _scheduleAutoHide();
               // Restore audio and subtitle track preferences
               await _restoreTrackPreferences();
+              // Start playback now that video + external audio are both loaded.
+              if (hasExternalAudio) {
+                await _player.play();
+              }
+            })
+            .catchError((e) {
+              debugPrint('VideoPlayer: YouTube open failed: $e');
             });
       }
     } else {
