@@ -28,6 +28,30 @@ class MainPageBridge {
   handlePikPakResult;
   static VoidCallback? hideAutoLaunchOverlay;
 
+  /// Asks the AllDebrid screen to switch to its "Web Downloads" view and
+  /// refresh, used after a shared web link is saved. Set by the AllDebrid
+  /// screen when it's mounted; if it isn't (the common case — the tab is built
+  /// fresh on switch), [notifyAllDebridFocusWebDownloads] stores a pending flag
+  /// that the screen consumes in initState.
+  static Future<void> Function()? focusAllDebridWebDownloads;
+  static bool _allDebridFocusWebDownloadsPending = false;
+
+  static void notifyAllDebridFocusWebDownloads() {
+    final handler = focusAllDebridWebDownloads;
+    if (handler != null) {
+      _allDebridFocusWebDownloadsPending = false;
+      unawaited(handler());
+      return;
+    }
+    _allDebridFocusWebDownloadsPending = true;
+  }
+
+  static bool getAndClearAllDebridFocusWebDownloads() {
+    final pending = _allDebridFocusWebDownloadsPending;
+    _allDebridFocusWebDownloadsPending = false;
+    return pending;
+  }
+
   /// Fired only when playback was handed off to a *separate external
   /// activity* (Android TV native player, DeoVR, or an external player app)
   /// — i.e. control returns to Flutter immediately while that activity is

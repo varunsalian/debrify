@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/alldebrid_user.dart';
 import '../models/alldebrid_file.dart';
 import '../models/alldebrid_magnet.dart';
+import '../models/alldebrid_link.dart';
 
 /// Thrown when a magnet is added to AllDebrid but is not ready (not cached) yet.
 /// AllDebrid has no cache-check endpoint, so the only way to know is to upload
@@ -263,6 +264,63 @@ class AllDebridService {
       throw Exception('AllDebrid did not return a download link');
     }
     return url;
+  }
+
+  /// Lists the user's saved direct-download links (`/v4/user/links`). These are
+  /// individual host links the user has saved (the "web downloads" library),
+  /// distinct from magnets. Each [AllDebridLink.link] is locked and must be
+  /// unlocked via [unlockLink] before use.
+  static Future<List<AllDebridLink>> listSavedLinks(String apiKey) async {
+    final response = await http
+        .get(Uri.parse('$_baseUrl/user/links'), headers: _authHeaders(apiKey))
+        .timeout(const Duration(seconds: 30));
+    final data = _decode(response);
+    final links = data['links'];
+    final out = <AllDebridLink>[];
+    if (links is List) {
+      for (final l in links) {
+        if (l is Map<String, dynamic>) out.add(AllDebridLink.fromJson(l));
+      }
+    } else if (links is Map<String, dynamic>) {
+      // Defensive: AllDebrid documents an array, but a map can arrive either as
+      // a single link object ({link, filename, …}) or a keyed collection
+      // ({"0": {…}, "1": {…}}). Disambiguate on the presence of a 'link' key.
+      if (links.containsKey('link')) {
+        out.add(AllDebridLink.fromJson(links));
+      } else {
+        for (final v in links.values) {
+          if (v is Map<String, dynamic>) out.add(AllDebridLink.fromJson(v));
+        }
+      }
+    }
+    debugPrint('AllDebridService: listSavedLinks returned ${out.length} links');
+    return out;
+  }
+
+  /// Saves [link] to the user's saved-links library (`/v4/user/links/save`).
+  /// Throws on error.
+  static Future<void> saveLink(String apiKey, String link) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/user/links/save'),
+          headers: _authHeaders(apiKey),
+          body: {'links[]': link},
+        )
+        .timeout(const Duration(seconds: 30));
+    _decode(response);
+  }
+
+  /// Removes [link] from the user's saved-links library
+  /// (`/v4/user/links/delete`). Throws on error.
+  static Future<void> deleteSavedLink(String apiKey, String link) async {
+    final response = await http
+        .post(
+          Uri.parse('$_baseUrl/user/links/delete'),
+          headers: _authHeaders(apiKey),
+          body: {'links[]': link},
+        )
+        .timeout(const Duration(seconds: 20));
+    _decode(response);
   }
 
   /// Deletes a magnet from the user's AllDebrid account. Best-effort.

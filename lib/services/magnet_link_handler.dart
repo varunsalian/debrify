@@ -23,6 +23,7 @@ class MagnetLinkHandler {
   // URL handling callbacks
   final Function(Map<String, dynamic> result)? onRealDebridUrlResult;
   final Function(int webDownloadId, String fileName)? onTorboxUrlResult;
+  final Function()? onAllDebridUrlResult;
 
   MagnetLinkHandler({
     required this.context,
@@ -36,6 +37,7 @@ class MagnetLinkHandler {
     this.onPikPakResult,
     this.onRealDebridUrlResult,
     this.onTorboxUrlResult,
+    this.onAllDebridUrlResult,
   });
 
   /// Process a magnet link
@@ -754,17 +756,29 @@ class MagnetLinkHandler {
     _showLoadingDialog(displayName, 'AllDebrid');
 
     try {
+      // Unlock first to validate the host is supported, then persist it to the
+      // saved-links library so it shows up in the Web Downloads view (matching
+      // the in-app Add Link flow, and RD/Torbox shared-URL behavior).
       final downloadUrl = await AllDebridService.unlockLink(apiKey, url);
+      if (downloadUrl.isEmpty) {
+        if (!context.mounted) return;
+        Navigator.of(context).pop();
+        _showError('AllDebrid could not unlock this link');
+        return;
+      }
+      await AllDebridService.saveLink(apiKey, url);
 
       if (!context.mounted) return;
       Navigator.of(context).pop();
 
-      if (downloadUrl.isEmpty) {
-        _showError('AllDebrid could not unlock this link');
-        return;
+      _showSuccess('Link added to AllDebrid: $displayName');
+      // Web links go to the Web Downloads view (not the magnet/Torrents view
+      // that onAllDebridAdded targets), so use the dedicated URL callback.
+      if (onAllDebridUrlResult != null) {
+        onAllDebridUrlResult!();
+      } else {
+        onAllDebridAdded?.call();
       }
-      _showSuccess('Link unlocked on AllDebrid: $displayName');
-      onAllDebridAdded?.call();
     } catch (e) {
       if (!context.mounted) return;
       Navigator.of(context).pop();

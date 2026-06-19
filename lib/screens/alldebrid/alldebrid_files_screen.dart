@@ -9,6 +9,7 @@ import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
 import '../../models/alldebrid_magnet.dart';
 import '../../models/alldebrid_file.dart';
+import '../../models/alldebrid_link.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
@@ -17,10 +18,16 @@ import '../../widgets/file_selection_dialog.dart';
 import '../../utils/tv_keys.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 
+/// The two root views, switched via the toolbar dropdown (mirrors the
+/// Real-Debrid downloads page): the magnet "cloud" library, and the saved
+/// direct-download links library ("Web Downloads").
+enum _AdView { torrents, webDownloads }
+
 /// Cloud-library browser for AllDebrid. AllDebrid's cloud is a flat list of
 /// magnets (each with files), so this is a two-level browser (magnet list →
 /// the selected magnet's files), built to match the Torbox/Real-Debrid
-/// downloads pages (same toolbar, cards and action buttons).
+/// downloads pages (same toolbar, cards and action buttons). A toolbar dropdown
+/// also switches to the saved-links ("Web Downloads") view.
 class AllDebridFilesScreen extends StatefulWidget {
   final bool isPushedRoute;
 
@@ -38,6 +45,15 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   String? _error;
 
   List<AllDebridMagnet> _magnets = [];
+
+  // Root view: torrents (magnets) vs saved links (web downloads).
+  _AdView _selectedView = _AdView.torrents;
+
+  // Saved-links ("Web Downloads") library. Loaded lazily on first switch.
+  List<AllDebridLink> _links = [];
+  bool _loadingLinks = false;
+  bool _linksLoadedOnce = false;
+  String? _linksError;
 
   // When non-null, we are viewing this magnet's files.
   AllDebridMagnet? _currentMagnet;
@@ -67,6 +83,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   final FocusNode _backButtonFocusNode = FocusNode();
   final FocusNode _deleteButtonFocusNode = FocusNode();
   final FocusNode _toolbarSearchFocusNode = FocusNode();
+  final FocusNode _viewSelectorFocusNode = FocusNode(debugLabel: 'ad-view');
   VoidCallback? _tvContentFocusHandler;
 
   // TV: focus the first magnet card when the user moves focus into content.
@@ -86,8 +103,35 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         _tabIndex,
         _tvContentFocusHandler!,
       );
+      MainPageBridge.focusAllDebridWebDownloads = _focusWebDownloads;
+      // A shared web link may have been saved while this tab was unmounted;
+      // open directly on the Web Downloads view so the new link is visible.
+      if (MainPageBridge.getAndClearAllDebridFocusWebDownloads()) {
+        _selectedView = _AdView.webDownloads;
+      }
     }
     _load();
+    if (_selectedView == _AdView.webDownloads) {
+      _loadLinks();
+    }
+  }
+
+  /// Switches to the Web Downloads view and refreshes it. Invoked via
+  /// [MainPageBridge.focusAllDebridWebDownloads] when a shared web link is saved
+  /// while this screen is already mounted.
+  Future<void> _focusWebDownloads() async {
+    if (!mounted) return;
+    setState(() {
+      _selectedView = _AdView.webDownloads;
+      _currentMagnet = null;
+      _currentFiles = [];
+      _selectionMode = false;
+      _selectedIds.clear();
+      _searchActive = false;
+      _searchQuery = '';
+      _searchController.clear();
+    });
+    await _loadLinks();
   }
 
   @override
@@ -100,6 +144,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           _tvContentFocusHandler!,
         );
       }
+      if (MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads) {
+        MainPageBridge.focusAllDebridWebDownloads = null;
+      }
     }
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -110,6 +157,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     _backButtonFocusNode.dispose();
     _deleteButtonFocusNode.dispose();
     _toolbarSearchFocusNode.dispose();
+    _viewSelectorFocusNode.dispose();
     _firstItemFocusNode.dispose();
     super.dispose();
   }
@@ -118,7 +166,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     if (!_shouldFocusOnLoad) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_shouldFocusOnLoad) return;
-      if (_isAtRoot && _visibleMagnets.isNotEmpty) {
+      final hasItems = _selectedView == _AdView.webDownloads
+          ? _visibleLinks.isNotEmpty
+          : _visibleMagnets.isNotEmpty;
+      if (_isAtRoot && hasItems) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
       }
@@ -144,9 +195,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       final magnets = await AllDebridService.listMagnets(apiKey);
       if (!mounted) return;
       setState(() {
-        _magnets = magnets;
+        _magnets = magnets.where((m) => m.isReady).toList();
         _loading = false;
-        _selectedIds.removeWhere((id) => !magnets.any((m) => m.id == id));
+        _selectedIds.removeWhere((id) => !_magnets.any((m) => m.id == id));
       });
       _focusFirstItem();
     } catch (e) {
@@ -158,8 +209,45 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
   }
 
+  Future<void> _loadLinks() async {
+    setState(() {
+      _loadingLinks = true;
+      _linksError = null;
+    });
+    final apiKey = _apiKey ?? await StorageService.getAllDebridApiKey();
+    if (apiKey == null || apiKey.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loadingLinks = false;
+        _linksLoadedOnce = true;
+        _linksError = 'Add your AllDebrid API key in Settings first.';
+      });
+      return;
+    }
+    _apiKey = apiKey;
+    try {
+      final links = await AllDebridService.listSavedLinks(apiKey);
+      if (!mounted) return;
+      setState(() {
+        _links = links;
+        _loadingLinks = false;
+        _linksLoadedOnce = true;
+      });
+      _focusFirstItem();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingLinks = false;
+        _linksLoadedOnce = true;
+        _linksError = 'Failed to load your saved links: $e';
+      });
+    }
+  }
+
   Future<void> _refresh() async {
-    if (_currentMagnet != null) {
+    if (_selectedView == _AdView.webDownloads) {
+      await _loadLinks();
+    } else if (_currentMagnet != null) {
       await _openMagnet(_currentMagnet!, force: true);
     } else {
       await _load();
@@ -601,6 +689,205 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
   }
 
+  // ── Web Downloads (saved links) ──────────────────────────────────────────
+
+  Future<void> _playLink(AllDebridLink l) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+    _showLoading('Unlocking…');
+    final url = await _unlockStart(apiKey, l.link);
+    _dismissLoading();
+    if (!mounted) return;
+    if (url.isEmpty) {
+      _snack('Failed to unlock this link.', isError: true);
+      return;
+    }
+    MainPageBridge.notifyPlayerLaunching();
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: url,
+        title: l.fileName,
+        subtitle: l.size > 0 ? Formatters.formatFileSize(l.size) : null,
+        playlist: [
+          PlaylistEntry(
+            url: url,
+            title: l.fileName,
+            relativePath: l.fileName,
+            provider: 'alldebrid',
+            allDebridLink: l.link,
+            sizeBytes: l.size > 0 ? l.size : null,
+          ),
+        ],
+        startIndex: 0,
+        viewMode: PlaylistViewMode.sorted,
+      ),
+    );
+  }
+
+  Future<void> _downloadLink(AllDebridLink l) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+    _showLoading('Preparing download…');
+    final url = await _unlockStart(apiKey, l.link);
+    _dismissLoading();
+    if (!mounted) return;
+    if (url.isEmpty) {
+      _snack('Failed to unlock this link.', isError: true);
+      return;
+    }
+    try {
+      await DownloadService.instance.enqueueDownload(
+        url: url,
+        fileName: l.fileName,
+        context: mounted ? context : null,
+      );
+      _snack('Download queued: ${l.fileName}', isError: false);
+    } catch (e) {
+      _snack('Failed to download: $e', isError: true);
+    }
+  }
+
+  Future<void> _copyLink(AllDebridLink l) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+    _showLoading('Unlocking…');
+    final url = await _unlockStart(apiKey, l.link);
+    _dismissLoading();
+    if (!mounted) return;
+    if (url.isEmpty) {
+      _snack('Failed to unlock this link.', isError: true);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    _snack('Link copied', isError: false);
+  }
+
+  Future<void> _showAddLinkDialog() async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty) return;
+    final controller = TextEditingController();
+    // Auto-paste a URL from the clipboard, matching the Real-Debrid page.
+    final clip = await Clipboard.getData(Clipboard.kTextPlain);
+    final clipText = clip?.text?.trim() ?? '';
+    if (clipText.startsWith('http://') || clipText.startsWith('https://')) {
+      controller.text = clipText;
+    }
+    if (!mounted) return;
+    final link = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add link'),
+        content: Focus(
+          // D-pad: let arrow-down leave the field for the Cancel/Add buttons.
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.arrowDown) {
+              node.nextFocus();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 3,
+            minLines: 1,
+            decoration: const InputDecoration(
+              hintText: 'Paste a download link',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (link == null || link.isEmpty) return;
+    if (!link.startsWith('http://') && !link.startsWith('https://')) {
+      _snack('Enter a valid URL (must start with http:// or https://)',
+          isError: true);
+      return;
+    }
+    _showLoading('Adding…');
+    try {
+      // Unlock first to validate the host is supported, then persist it to the
+      // saved-links library so it shows up in this view.
+      await AllDebridService.unlockLink(apiKey, link);
+      await AllDebridService.saveLink(apiKey, link);
+      _dismissLoading();
+      _snack('Link added', isError: false);
+      await _loadLinks();
+    } catch (e) {
+      _dismissLoading();
+      _snack('Failed to add link: $e', isError: true);
+    }
+  }
+
+  Future<void> _deleteLinks(List<AllDebridLink> links, {String? title}) async {
+    final apiKey = _apiKey;
+    if (apiKey == null || apiKey.isEmpty || links.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title ??
+            (links.length == 1 ? 'Delete link?' : 'Delete ${links.length} links?')),
+        content: Text(
+          links.length == 1
+              ? 'Remove "${links.first.fileName}" from your AllDebrid saved links?'
+              : 'Remove these ${links.length} links from your AllDebrid saved links?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    _showLoading('Deleting…');
+    int fail = 0;
+    for (final l in links) {
+      try {
+        await AllDebridService.deleteSavedLink(apiKey, l.link);
+      } catch (_) {
+        fail++;
+      }
+    }
+    _dismissLoading();
+    await _loadLinks();
+    if (!mounted) return;
+    if (fail == 0) {
+      _snack(
+        links.length == 1 ? 'Link deleted' : '${links.length} links deleted',
+        isError: false,
+      );
+    } else {
+      _snack('Failed to delete $fail link${fail == 1 ? '' : 's'}',
+          isError: true);
+    }
+  }
+
+  void _confirmDeleteAllLinks() {
+    if (_links.isEmpty) return;
+    _deleteLinks(List.of(_links), title: 'Delete all links?');
+  }
+
   // ── Add to playlist ─────────────────────────────────────────────────────
 
   /// Saves a magnet to the playlist (RD-manner: keyed by infohash). Single
@@ -789,6 +1076,16 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         .toList();
   }
 
+  List<AllDebridLink> get _visibleLinks {
+    if (_searchQuery.trim().isEmpty) return _links;
+    final q = _searchQuery.trim().toLowerCase();
+    return _links
+        .where((l) =>
+            l.fileName.toLowerCase().contains(q) ||
+            l.host.toLowerCase().contains(q))
+        .toList();
+  }
+
   // ── Dialog / snack helpers ───────────────────────────────────────────────
 
   bool _loadingDialogOpen = false;
@@ -889,7 +1186,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildToolbar() {
     final theme = Theme.of(context);
-    final hasItems = _magnets.isNotEmpty;
+    final isWeb = _selectedView == _AdView.webDownloads;
+    final hasItems = isWeb ? _links.isNotEmpty : _magnets.isNotEmpty;
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
@@ -911,19 +1209,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           ),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  hasItems
-                      ? '${_magnets.length} magnet${_magnets.length == 1 ? '' : 's'}'
-                      : 'AllDebrid',
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+              Expanded(child: _buildViewSelector(isCompact)),
               SizedBox(width: isCompact ? 6 : 12),
-              if (hasItems) ...[
+              // Selection mode is torrents-only (it bulk-deletes magnets).
+              if (!isWeb && hasItems)
                 Tooltip(
                   message: _selectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
@@ -939,10 +1228,12 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
+              if (hasItems) ...[
                 Tooltip(
-                  message: 'Delete all magnets',
+                  message: isWeb ? 'Delete all links' : 'Delete all magnets',
                   child: IconButton(
-                    onPressed: _confirmDeleteAll,
+                    onPressed:
+                        isWeb ? _confirmDeleteAllLinks : _confirmDeleteAll,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -952,7 +1243,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   ),
                 ),
                 Tooltip(
-                  message: _searchActive ? 'Close search' : 'Search magnets',
+                  message: _searchActive
+                      ? 'Close search'
+                      : (isWeb ? 'Search links' : 'Search magnets'),
                   child: IconButton(
                     focusNode: _toolbarSearchFocusNode,
                     onPressed: _toggleSearch,
@@ -970,9 +1263,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 ),
               ],
               Tooltip(
-                message: 'Add magnet link',
+                message: isWeb ? 'Add link' : 'Add magnet link',
                 child: IconButton(
-                  onPressed: _showAddMagnetDialog,
+                  onPressed: isWeb ? _showAddLinkDialog : _showAddMagnetDialog,
                   iconSize: iconSize,
                   padding: iconPadding,
                   constraints: iconConstraints,
@@ -997,6 +1290,50 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildViewSelector(bool isCompact) {
+    final theme = Theme.of(context);
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<_AdView>(
+        focusNode: _viewSelectorFocusNode,
+        value: _selectedView,
+        isDense: isCompact,
+        isExpanded: true,
+        dropdownColor: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        iconEnabledColor: theme.colorScheme.onSurface,
+        iconSize: isCompact ? 20 : 24,
+        style: TextStyle(
+          color: theme.colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+          fontSize: isCompact ? 13 : 14,
+        ),
+        items: [
+          DropdownMenuItem(
+            value: _AdView.torrents,
+            child: Text(isCompact ? 'Torrents' : 'Torrent Downloads'),
+          ),
+          DropdownMenuItem(
+            value: _AdView.webDownloads,
+            child: Text(isCompact ? 'Web' : 'Web Downloads'),
+          ),
+        ],
+        onChanged: (value) {
+          if (value == null || value == _selectedView) return;
+          _exitSelectionMode();
+          setState(() {
+            _selectedView = value;
+            _searchActive = false;
+            _searchQuery = '';
+            _searchController.clear();
+          });
+          if (value == _AdView.webDownloads && !_linksLoadedOnce) {
+            _loadLinks();
+          }
+        },
+      ),
     );
   }
 
@@ -1142,7 +1479,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 onChanged: (v) => setState(() => _searchQuery = v),
                 onSubmitted: (_) => _searchFocusNode.unfocus(),
-                decoration: _searchDecoration('Search your magnets...'),
+                decoration: _searchDecoration(
+                    _selectedView == _AdView.webDownloads
+                        ? 'Search your links...'
+                        : 'Search your magnets...'),
               ),
             ),
           ),
@@ -1223,6 +1563,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildBody() {
+    if (_selectedView == _AdView.webDownloads) {
+      return _buildLinksView();
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1446,6 +1789,192 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinksView() {
+    if (_loadingLinks) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_linksError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off, size: 48, color: Colors.white38),
+              const SizedBox(height: 16),
+              Text(_linksError!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                  onPressed: _loadLinks, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
+    final links = _visibleLinks;
+    if (links.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadLinks,
+        child: ListView(
+          children: [
+            const SizedBox(height: 120),
+            Center(
+              child: Text(
+                _searchQuery.isNotEmpty
+                    ? 'No links match your search.'
+                    : 'No saved links yet.',
+                style: const TextStyle(color: Colors.white54),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadLinks,
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(16),
+        itemCount: links.length,
+        itemBuilder: (context, index) {
+          return KeyedSubtree(
+            key: ValueKey(links[index].link),
+            child: _buildLinkCard(links[index], index),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLinkCard(AllDebridLink l, int index) {
+    final isVideo = FileUtils.isVideoFile(l.fileName);
+    final subtitle = [
+      if (l.size > 0) Formatters.formatFileSize(l.size),
+      if (l.host.isNotEmpty) l.host,
+    ].join(' • ');
+    return TvFocusScrollWrapper(
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isVideo
+                        ? Icons.play_circle_outline
+                        : Icons.insert_drive_file,
+                    color: isVideo ? Colors.blue : Colors.grey,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l.fileName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (isVideo)
+                    Expanded(
+                      child: _buildActionButton(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Play',
+                        color: const Color(0xFF22C55E),
+                        onTap: () => _playLink(l),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: _buildActionButton(
+                        focusNode: index == 0 ? _firstItemFocusNode : null,
+                        icon: Icons.download_rounded,
+                        label: 'Download',
+                        color: const Color(0xFF3B82F6),
+                        onTap: () => _downloadLink(l),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'More options',
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'download':
+                          _downloadLink(l);
+                          break;
+                        case 'copy':
+                          _copyLink(l);
+                          break;
+                        case 'delete':
+                          _deleteLinks([l]);
+                          break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      if (isVideo)
+                        const PopupMenuItem(
+                          value: 'download',
+                          child: Row(children: [
+                            Icon(Icons.download, size: 18, color: Colors.green),
+                            SizedBox(width: 12),
+                            Text('Download to device'),
+                          ]),
+                        ),
+                      const PopupMenuItem(
+                        value: 'copy',
+                        child: Row(children: [
+                          Icon(Icons.link, size: 18, color: Colors.orange),
+                          SizedBox(width: 12),
+                          Text('Copy link'),
+                        ]),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Delete'),
+                        ]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

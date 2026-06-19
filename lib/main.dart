@@ -965,6 +965,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         onAllDebridAdded: () {
           MainPageBridge.switchTab?.call(12); // AllDebrid tab index
         },
+        onAllDebridUrlResult: () {
+          // Shared web link was saved → open AllDebrid on its Web Downloads
+          // view and refresh so the new link is visible. notify() before
+          // switchTab so the freshly-built screen picks up the pending flag.
+          MainPageBridge.notifyAllDebridFocusWebDownloads();
+          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
+        },
       );
 
       // Handle the shared URL
