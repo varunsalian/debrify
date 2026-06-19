@@ -48,6 +48,7 @@
   <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
   <img src="https://img.shields.io/badge/Premiumize-Supported-fb923c?style=for-the-badge" alt="Premiumize">
   <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
+  <img src="https://img.shields.io/badge/AllDebrid-Supported-ec4899?style=for-the-badge" alt="AllDebrid">
   <img src="https://img.shields.io/badge/WebDAV-Supported-14b8a6?style=for-the-badge" alt="WebDAV">
   <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
   <img src="https://img.shields.io/badge/Jackett_%26_Prowlarr-Supported-f43f5e?style=for-the-badge" alt="Jackett and Prowlarr">
@@ -87,7 +88,7 @@ If Debrify has been useful to you, you can support development here:
 <td width="50%">
 
 ### Debrid Management
-- **Multi-provider support** — Real-Debrid, Torbox, Premiumize, and PikPak
+- **Multi-provider support** — Real-Debrid, Torbox, Premiumize, PikPak, and AllDebrid
 - **Full feature parity** — Stream, download, and manage files across all providers
 - **Account dashboard** — View status, expiration, and usage at a glance
 - **File browser** — Browse and manage your debrid cloud storage
@@ -158,7 +159,7 @@ If Debrify has been useful to you, you can support development here:
 <td width="50%">
 
 ### Debrify TV
-- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, Premiumize, and PikPak engines to auto-build always-on channels
+- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, Premiumize, PikPak, and AllDebrid engines to auto-build always-on channels
 - **Quick Play & auto-launch** — Instant channel playback with random starts, resume buttons, and optional auto-launch overlay
 - **Smart filtering** — Automatically skips RD-blocked torrents so playback never stalls
 - **Smart caching & rotation** — Caches torrents per channel and rotates movies/series so the lineup stays fresh all day
@@ -195,11 +196,12 @@ If Debrify has been useful to you, you can support development here:
 <tr>
 <td width="50%">
 
-### Reddit Videos
-- **Audio merged** — Plays videos with audio properly combined
-- **Random play** — Shuffle through subreddit videos with multi-page aggregation
-- **Subreddit filters** — Scrollable filter bar to browse by subreddit
-- **Download support** — Save Reddit videos locally
+### YouTube
+- **On-device search** — Searches YouTube directly from the app, no proxy or account required
+- **Resolution selector** — Pick your preferred max playback quality (TV-friendly picker)
+- **Endless results** — Paginated search keeps loading more as you scroll
+- **Built-in playback** — Streams straight into Debrify's player, with audio properly muxed
+- **Download support** — Save YouTube videos locally
 
 </td>
 <td width="50%">
@@ -321,14 +323,14 @@ Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See
 
 ## 🔌 Provider Support
 
-| Feature | Real-Debrid | Torbox | Premiumize | PikPak |
-|:--------|:-----------:|:------:|:----------:|:------:|
-| Stream files | ✅ | ✅ | ✅ | ✅ |
-| Download files | ✅ | ✅ | ✅ | ✅ |
-| Browse cloud storage | ✅ | ✅ | ✅ | ✅ |
-| Add magnets/links | ✅ | ✅ | ✅ | ✅ |
-| Playlists | ✅ | ✅ | ✅ | ✅ |
-| Episode tracking | ✅ | ✅ | ✅ | ✅ |
+| Feature | Real-Debrid | Torbox | Premiumize | PikPak | AllDebrid |
+|:--------|:-----------:|:------:|:----------:|:------:|:---------:|
+| Stream files | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Download files | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Browse cloud storage | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Add magnets/links | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Playlists | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Episode tracking | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
