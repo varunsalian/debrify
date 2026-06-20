@@ -153,7 +153,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var videoDuration: Long = 0
     private var resizeModeIndex = 1  // Fill by default
     private var playbackSpeedIndex = 2  // 1.0x
-    private var nightModeIndex = 2  // Medium by default
+    private var nightModeIndex = 0  // Off by default
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var playlistMode: PlaylistMode = PlaylistMode.NONE
     private var playlistAdapter: PlaylistOverlayAdapter? = null
@@ -5011,8 +5011,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             resizeModeIndex = prefs.getLong("flutter.player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
 
-            // Load night mode index (default: 2 = Medium)
-            nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 2L).toInt()
+            // Load night mode index (default: 0 = Off)
+            nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
             android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex")

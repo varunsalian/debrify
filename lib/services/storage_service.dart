@@ -4490,10 +4490,10 @@ class StorageService {
 
   /// Get night mode index (Android TV only)
   /// 0=Off, 1=Low, 2=Medium, 3=High, 4=Higher, 5=Extreme, 6=Max, 7=Sleeping Baby
-  /// Default: 2 (Medium)
+  /// Default: 0 (Off)
   static Future<int> getPlayerNightModeIndex() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_playerNightModeIndexKey) ?? 2;
+    return prefs.getInt(_playerNightModeIndexKey) ?? 0;
   }
 
   /// Set night mode index (Android TV only)

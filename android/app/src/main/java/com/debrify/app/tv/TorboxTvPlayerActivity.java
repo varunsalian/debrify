@@ -144,7 +144,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View aspectButton;
     private View nightModeButton;
     private View speedButton;
-    private int nightModeIndex = 2;  // Medium by default
+    private int nightModeIndex = 0;  // Off by default
     private LoudnessEnhancer loudnessEnhancer = null;
     private View guideButton;
     private View channelNextButton;
@@ -1152,8 +1152,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             resizeModeIndex = (int) prefs.getLong("flutter.player_default_aspect_index_tv", 0);
             resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
 
-            // Load night mode index (default: 2 = Medium)
-            nightModeIndex = (int) prefs.getLong("flutter.player_night_mode_index", 2);
+            // Load night mode index (default: 0 = Off)
+            nightModeIndex = (int) prefs.getLong("flutter.player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
 
             android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex);

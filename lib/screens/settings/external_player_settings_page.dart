@@ -72,7 +72,7 @@ class _ExternalPlayerSettingsPageState
   // Debrify Player default settings
   bool _isAndroidTv = false;
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
-  int _nightModeIndex = 2; // Medium
+  int _nightModeIndex = 0; // Off
   String? _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String? _defaultAudioLanguage; // null = no preference, 'en'/'es'/etc = language
   int _subtitleSizeIndex = 2; // Medium
@@ -2122,7 +2122,7 @@ class _ExternalPlayerSettingsPageState
                                               fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.normal,
                                             ),
                                           ),
-                                          if (index == 2) ...[
+                                          if (index == 0) ...[
                                             const SizedBox(width: 8),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
