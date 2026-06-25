@@ -24,6 +24,8 @@ import 'screens/magic_tv_screen.dart';
 import 'screens/stremio_tv/stremio_tv_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
+import 'screens/live_sports_screen.dart';
+import 'features/iptv/portal_search/screens/iptv_pt_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/storage_service.dart';
 import 'services/debrify_tv_repository.dart';
@@ -570,6 +572,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const WebDavFilesScreen(), // 10: WebDAV
     const PremiumizeFilesScreen(), // 11: Premiumize
     const AllDebridFilesScreen(), // 12: AllDebrid
+    const LiveSportsScreen(), // 13: Live Sports
+    const IptvPtScreen(), // 14: Portal Search
   ];
 
   final List<String> _titles = [
@@ -586,6 +590,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'WebDAV',
     'Premiumize',
     'AllDebrid',
+    'Live Sports',
+    'Portal Search',
   ];
 
   final List<IconData> _icons = [
@@ -602,6 +608,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_sync_rounded,
     Icons.workspace_premium_rounded,
     Icons.all_inclusive_rounded,
+    Icons.sports_soccer_rounded,
+    Icons.live_tv_rounded,
   ];
 
   @override
@@ -2113,7 +2121,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         2,
         3,
         9,
-      ]; // Torrent, Downloads, Debrify TV, Stremio TV
+        13,
+        14,
+      ]; // Torrent, Downloads, Debrify TV, Stremio TV, Live Sports, Portal Search
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
@@ -2150,10 +2160,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final allDebrid = allDebridEnabled ?? _allDebridEnabled;
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
-      return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
+      return [0, 9, 13, 14, 7, 8]; // Home, Stremio TV, Live Sports, Portal Search, Addons, Settings
     }
 
-    final indices = <int>[0, 2, 3, 9];
+    final indices = <int>[0, 2, 3, 9, 13, 14];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
@@ -2174,6 +2184,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return 'Main';
       case 3: // Debrify TV
       case 9: // Stremio TV
+      case 13: // Live Sports
+      case 14: // Portal Search
         return 'TV';
       case 4: // Real Debrid
       case 5: // Torbox

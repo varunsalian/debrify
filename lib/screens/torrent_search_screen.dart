@@ -38,6 +38,7 @@ import '../services/main_page_bridge.dart';
 import '../services/torbox_service.dart';
 import '../services/premiumize_service.dart';
 import '../models/premiumize_file.dart';
+import 'streaming_details_screen.dart';
 import '../services/alldebrid_service.dart';
 import '../models/alldebrid_file.dart';
 import '../services/torrent_file_service.dart';
@@ -1522,6 +1523,29 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     if (torrent.isDirectStream || torrent.isExternalStream) {
       // Show action dialog for direct/external streams
       _showDirectStreamActionDialog(torrent, index);
+      return;
+    }
+
+    // Check if Direct Streaming Mode is enabled
+    final streamingMode = await StorageService.getStreamingModeEnabled();
+    if (streamingMode && _activeAdvancedSelection != null) {
+      final sel = _activeAdvancedSelection!;
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => StreamingDetailsScreen(
+              title: sel.title,
+              imdbId: sel.imdbId,
+              year: sel.year,
+              posterUrl: sel.posterUrl,
+              contentType: sel.isSeries ? 'series' : 'movie',
+              season: sel.season,
+              episode: sel.episode,
+            ),
+          ),
+        );
+      }
       return;
     }
 

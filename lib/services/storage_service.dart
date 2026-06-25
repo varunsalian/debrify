@@ -278,6 +278,60 @@ class StorageService {
   static const String _remoteTvDeviceNameKey = 'remote_tv_device_name';
   static const String _remoteLastDeviceKey = 'remote_last_device';
 
+  // Direct Streaming Mode settings
+  static const String _streamingModeKey = 'streaming_mode';
+  static const String _streamProviderOrderKey = 'stream_provider_order';
+  static const List<String> defaultStreamProviderOrder = [
+    'videasy',
+    'vidlink',
+    'vidsrc',
+    'vixsrc',
+    'vidnest',
+    'service111477',
+    'webstreamr',
+  ];
+
+  static Future<bool> getStreamingModeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_streamingModeKey) ?? false;
+  }
+
+  static Future<void> setStreamingMode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_streamingModeKey, enabled);
+  }
+
+  static Future<List<String>> getStreamProviderOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_streamProviderOrderKey);
+    if (saved == null || saved.isEmpty) {
+      return List<String>.from(defaultStreamProviderOrder);
+    }
+    final out = <String>[...saved];
+    for (final k in defaultStreamProviderOrder) {
+      if (!out.contains(k)) out.add(k);
+    }
+    return out;
+  }
+
+  static Future<void> setStreamProviderOrder(List<String> order) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_streamProviderOrderKey, order);
+  }
+
+  static List<String> mergeStreamProviderOrder(
+      List<String> saved, Iterable<String> available) {
+    final availSet = available.toSet();
+    final out = <String>[];
+    for (final k in saved) {
+      if (availSet.contains(k) && !out.contains(k)) out.add(k);
+    }
+    for (final k in available) {
+      if (!out.contains(k)) out.add(k);
+    }
+    return out;
+  }
+
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
