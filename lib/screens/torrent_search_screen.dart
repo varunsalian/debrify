@@ -6263,11 +6263,20 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
             _allDebridApiKey != null &&
             _allDebridApiKey!.isNotEmpty);
 
+    // Check Direct Streaming Mode toggle — when ON, prefer direct streams
+    // even when debrid torrents are available.
+    final streamingMode = await StorageService.getStreamingModeEnabled();
+
     // Decide which source type to use:
-    // - If debrid configured and torrents available → use torrents
-    // - If no debrid OR no torrents → use direct streams if available
-    final useTorrents = hasDebridProvider && torrentsOnly.isNotEmpty;
-    final useDirectStreams = !useTorrents && directStreams.isNotEmpty;
+    // - Streaming Mode ON  → prefer direct streams, fall back to torrents
+    // - Streaming Mode OFF → prefer torrents (if debrid available), fall back to direct
+    final useDirectStreams = streamingMode
+        ? directStreams.isNotEmpty
+        : !(hasDebridProvider && torrentsOnly.isNotEmpty) &&
+            directStreams.isNotEmpty;
+    final useTorrents = streamingMode
+        ? !useDirectStreams && hasDebridProvider && torrentsOnly.isNotEmpty
+        : hasDebridProvider && torrentsOnly.isNotEmpty;
 
     if (!useTorrents && !useDirectStreams) {
       // No playable sources
@@ -22753,11 +22762,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   }
 
   void _setHomeSectionInitialLoading(HomeSection section, bool isLoading) {
-    final changed = isLoading
-        ? _homeInitialLoadingSections.add(section)
-        : _homeInitialLoadingSections.remove(section);
-    if (!changed || !mounted) return;
-    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final changed = isLoading
+          ? _homeInitialLoadingSections.add(section)
+          : _homeInitialLoadingSections.remove(section);
+      if (!changed) return;
+      if (mounted) setState(() {});
+    });
   }
 
   Widget _buildHomeSection() {

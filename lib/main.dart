@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -64,6 +64,69 @@ import 'services/update_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Log all Flutter errors to a file for crash diagnosis
+  if (!kIsWeb) {
+    try {
+      final dir = Directory('/sdcard/Android/data/com.debrify.app/cache');
+      if (await dir.exists()) {
+        final errorLog = File('${dir.path}/flutter_error.log');
+        FlutterError.onError = (FlutterErrorDetails details) {
+          try {
+            errorLog.writeAsStringSync(
+              '${DateTime.now()}\n${details.exception}\n${details.stack}\n---\n',
+              mode: FileMode.append,
+            );
+          } catch (_) {}
+          FlutterError.dumpErrorToConsole(details);
+        };
+        PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+          try {
+            errorLog.writeAsStringSync(
+              '${DateTime.now()}\n[PLATFORM DISPATCHER]\n$error\n$stack\n---\n',
+              mode: FileMode.append,
+            );
+          } catch (_) {}
+          return true; // handled -- don't crash
+        };
+      }
+    } catch (_) {}
+  }
+  // Show error details on screen
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.black,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${details.exception.runtimeType}',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${details.exception}',
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${details.stack}',
+                style: const TextStyle(color: Colors.orange, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+
   await AptabaseService.init();
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
