@@ -94,6 +94,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var nextOverlay: View
     private lateinit var nextText: TextView
     private lateinit var nextSubtext: TextView
+
+    // Loading/tuning overlay backdrop art
+    private lateinit var nextBackdrop: android.widget.ImageView
+
+    // Up Next card (slide-in near end of episode)
+    private lateinit var upNextCard: View
+    private lateinit var upNextPoster: android.widget.ImageView
+    private lateinit var upNextTitle: TextView
+    private lateinit var upNextCountdown: TextView
+    private var upNextVisible = false
+    private var upNextTargetIndex: Int? = null
+    private var upNextDismissedForIndex = -1
+    private val upNextHandler = Handler(Looper.getMainLooper())
     private val seasonTabs = mutableListOf<android.widget.TextView>()
     private val movieTabs = mutableListOf<MovieTab>()
 
@@ -121,6 +134,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var debrifyTimeCurrent: TextView? = null  // Current time (left)
     private var debrifyTimeTotal: TextView? = null    // Total time (right)
     private var debrifyProgressLine: View? = null
+    private var cinemaProgressBuffered: View? = null
 
     // Cinema Mode Interactive Progress Bar
     private var cinemaProgressContainer: View? = null
@@ -293,6 +307,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val progressRunnable = object : Runnable {
         override fun run() {
             sendProgress(completed = false)
+            maybeShowUpNext()
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
         }
     }
@@ -682,6 +697,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nextOverlay = findViewById(R.id.android_tv_next_overlay)
         nextText = findViewById(R.id.android_tv_next_text)
         nextSubtext = findViewById(R.id.android_tv_next_subtext)
+        nextBackdrop = findViewById(R.id.android_tv_next_backdrop)
+        upNextCard = findViewById(R.id.android_tv_upnext_card)
+        upNextPoster = findViewById(R.id.android_tv_upnext_poster)
+        upNextTitle = findViewById(R.id.android_tv_upnext_title)
+        upNextCountdown = findViewById(R.id.android_tv_upnext_countdown)
         seekbarOverlay = findViewById(R.id.seekbar_overlay)
         seekbarProgress = findViewById(R.id.seekbar_progress)
         seekbarHandle = findViewById(R.id.seekbar_handle)
@@ -1498,6 +1518,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current)  // Current time
         debrifyTimeTotal = playerView.findViewById(R.id.debrify_time_total)      // Total time
         debrifyProgressLine = playerView.findViewById(R.id.debrify_progress_line)
+        cinemaProgressBuffered = playerView.findViewById(R.id.cinema_progress_buffered)
 
         // Cinema Mode Interactive Progress Bar
         cinemaProgressContainer = playerView.findViewById(R.id.cinema_progress_container)
@@ -1630,6 +1651,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Reset buffering state for new content
         hasEverBeenReady = false
         hideBufferingIndicator()
+        hideUpNextCard()
 
         // Cancel any ongoing PikPak retry before starting new item
         cancelPikPakRetry()
@@ -2083,18 +2105,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateTitle(item: PlaybackItem) {
-        // Always set the simple title (used when controls not visible)
-        titleView.text = item.title
+        // Prefer the episode label / show title when the item title is blank, so
+        // a series episode never renders as just the red badge with no text (the
+        // "red line" bug). If everything is blank (rare non-series case) the
+        // showControlsMenu guard keeps the header hidden rather than showing empty.
+        val model = payload
+        val fallbackTitle = item.seasonEpisodeLabel().ifEmpty { model?.title.orEmpty() }
+        titleView.text = item.title.ifBlank { fallbackTitle }
 
         // Pre-populate OTT fields for when controls menu is shown
-        val model = payload
         if (model?.contentType?.lowercase(java.util.Locale.US) == "series") {
             if (item.season != null && item.episode != null) {
                 val seasonStr = item.season.toString().padStart(2, '0')
                 val episodeStr = item.episode.toString().padStart(2, '0')
                 ottEpisodeBadge.text = "S$seasonStr E$episodeStr"
+                ottEpisodeBadge.visibility = View.VISIBLE
+            } else {
+                ottEpisodeBadge.visibility = View.GONE
             }
-            ottEpisodeTitle.text = item.title
+            // Fall back to "Episode N" so the badge never sits next to a blank line.
+            ottEpisodeTitle.text = item.title.ifBlank {
+                item.episode?.let { "Episode $it" } ?: fallbackTitle
+            }
 
             val rating = item.rating
             if (rating != null && rating > 0) {
@@ -2118,11 +2150,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setResolvingState(resolving: Boolean) {
         if (resolving) {
+            setNextOverlayBackdrop(payload?.items?.getOrNull(currentIndex)?.artwork)
             nextText.text = "📺 TUNING STREAM..."
             nextSubtext.visibility = View.GONE
             nextOverlay.visibility = View.VISIBLE
         } else {
             nextOverlay.visibility = View.GONE
+            setNextOverlayBackdrop(null)
+        }
+    }
+
+    // Loads dimmed backdrop art behind the loading/tuning overlay, or clears it.
+    private fun setNextOverlayBackdrop(artworkUrl: String?) {
+        if (!::nextBackdrop.isInitialized) return
+        // Glide.with(activity) throws once the activity is destroyed; the
+        // loading overlay is torn down from async MethodChannel callbacks that
+        // can resolve after onDestroy, so bail out defensively.
+        if (isFinishing || isDestroyed) return
+        if (!artworkUrl.isNullOrEmpty()) {
+            nextBackdrop.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this).load(artworkUrl).into(nextBackdrop)
+        } else {
+            com.bumptech.glide.Glide.with(this).clear(nextBackdrop)
+            nextBackdrop.setImageDrawable(null)
+            nextBackdrop.visibility = View.GONE
         }
     }
 
@@ -3294,6 +3345,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
+        // Handle Up Next card: OK plays next now, BACK dismisses it for this
+        // episode, any other key soft-hides it (it may reappear near the end)
+        // and proceeds with normal playback handling.
+        if (upNextVisible) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) triggerUpNext()
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) dismissUpNext()
+                    return true
+                }
+                else -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) hideUpNextCard()
+                }
+            }
+        }
+
         if (controlsMenuVisible && keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
             hideControlsMenu()
             return true
@@ -3641,6 +3711,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     val layoutParams = progressLine.layoutParams
                     layoutParams.width = progressWidth
                     progressLine.layoutParams = layoutParams
+                }
+            }
+
+            // Update buffered-ahead width (translucent bar behind the played line).
+            // bufferedPosition fills in chunks, so skip the relayout when the
+            // computed width hasn't actually changed (avoids a layout pass each tick).
+            cinemaProgressBuffered?.let { buffered ->
+                val bufferedPercentage = (player.bufferedPosition.toFloat() / duration.toFloat())
+                    .coerceIn(0f, 1f)
+                val parentWidth = (buffered.parent as? View)?.width ?: 0
+                if (parentWidth > 0) {
+                    val bufferedWidth = (parentWidth * bufferedPercentage).toInt()
+                    val layoutParams = buffered.layoutParams
+                    if (layoutParams.width != bufferedWidth) {
+                        layoutParams.width = bufferedWidth
+                        buffered.layoutParams = layoutParams
+                    }
                 }
             }
         }
@@ -4247,6 +4334,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Next overlay
     private fun showNextOverlay(nextItem: PlaybackItem) {
+        setNextOverlayBackdrop(nextItem.artwork)
         nextText.text = "📺 LOADING NEXT..."
         nextSubtext.text = nextItem.title
         nextSubtext.visibility = View.VISIBLE
@@ -4255,6 +4343,129 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hideNextOverlay() {
         nextOverlay.visibility = View.GONE
+        setNextOverlayBackdrop(null)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UP NEXT CARD
+    // ═══════════════════════════════════════════════════════════════
+
+    // True only during plain playback (no overlay/panel/controls on screen).
+    private fun isCleanPlaybackState(): Boolean {
+        if (controlsMenuVisible || seekbarVisible || playlistVisible) return false
+        if (stremioSourcesVisible || iptvGuideVisible || stremioTvGuideVisible) return false
+        if (subtitlePanel?.isVisible == true) return false
+        if (linePickerOverlay?.isVisible == true || syncOverlay?.isVisible == true) return false
+        if (nextOverlay.visibility == View.VISIBLE) return false
+        if (pikPakReactivationIndicator.visibility == View.VISIBLE) return false
+        return true
+    }
+
+    // Called periodically from the progress loop. Shows the Up Next card when
+    // the current episode is near its end and a playable next item exists.
+    private fun maybeShowUpNext() {
+        if (upNextVisible) return
+        if (isIptvMode || isStremioTvMode) return
+        if (upNextDismissedForIndex == currentIndex) return
+        if (!isCleanPlaybackState()) return
+        val p = player ?: return
+        if (p.playbackState != Player.STATE_READY || !p.isPlaying) return
+        val duration = p.duration
+        if (duration <= UP_NEXT_MIN_DURATION_MS) return
+        val remaining = duration - p.currentPosition
+        if (remaining <= 0 || remaining > UP_NEXT_THRESHOLD_MS) return
+        // Mirror the STATE_ENDED auto-advance: shuffle picks a random eligible
+        // episode, otherwise advance to the linear next.
+        val nextIndex = if (continuousShuffleEnabled) {
+            pickShuffleIndex()
+        } else {
+            getNextPlayableIndex(currentIndex)
+        } ?: return
+        showUpNextCard(nextIndex)
+    }
+
+    private val upNextTicker = object : Runnable {
+        override fun run() {
+            val p = player
+            val target = upNextTargetIndex
+            val duration = p?.duration ?: 0L
+            if (p == null || target == null || duration <= 0) {
+                hideUpNextCard()
+                return
+            }
+            // A panel/controls opened — pull the card; the progress loop can
+            // re-show it later if still near the end.
+            if (!isCleanPlaybackState()) {
+                hideUpNextCard()
+                return
+            }
+            val remaining = duration - p.currentPosition
+            // User seeked back well before the end — drop the card.
+            if (remaining > UP_NEXT_THRESHOLD_MS + 5_000L) {
+                hideUpNextCard()
+                return
+            }
+            if (remaining <= UP_NEXT_TICK_MS + 250L) {
+                triggerUpNext()
+                return
+            }
+            val secs = ((remaining + 999L) / 1000L).toInt()
+            upNextCountdown.text = "Starting in ${secs}s"
+            upNextHandler.postDelayed(this, UP_NEXT_TICK_MS)
+        }
+    }
+
+    private fun showUpNextCard(nextIndex: Int) {
+        val model = payload ?: return
+        if (nextIndex < 0 || nextIndex >= model.items.size) return
+        val item = model.items[nextIndex]
+        upNextTargetIndex = nextIndex
+
+        val badge = item.seasonEpisodeLabel()
+        upNextTitle.text = if (badge.isNotEmpty()) "$badge · ${item.title}" else item.title
+
+        val art = item.artwork
+        if (!art.isNullOrEmpty()) {
+            upNextPoster.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this).load(art).into(upNextPoster)
+        } else {
+            upNextPoster.visibility = View.GONE
+        }
+
+        upNextVisible = true
+        upNextCard.visibility = View.VISIBLE
+        upNextCard.alpha = 0f
+        upNextCard.translationX = 40f
+        upNextCard.animate().alpha(1f).translationX(0f).setDuration(220).start()
+
+        upNextHandler.removeCallbacks(upNextTicker)
+        upNextHandler.post(upNextTicker)
+    }
+
+    private fun triggerUpNext() {
+        // playItem() hides the card (and cancels the ticker) as part of its
+        // per-item reset, so no explicit hide is needed here.
+        val target = upNextTargetIndex ?: return
+        playItem(target)
+    }
+
+    private fun dismissUpNext() {
+        upNextDismissedForIndex = currentIndex
+        hideUpNextCard()
+    }
+
+    private fun hideUpNextCard() {
+        upNextHandler.removeCallbacks(upNextTicker)
+        upNextTargetIndex = null
+        if (!upNextVisible) {
+            upNextCard.visibility = View.GONE
+            return
+        }
+        upNextVisible = false
+        upNextCard.animate().alpha(0f).translationX(40f).setDuration(160).withEndAction {
+            upNextCard.visibility = View.GONE
+            upNextCard.translationX = 0f
+        }.start()
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -6034,6 +6245,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         bufferingIndicator.animate().cancel()
         bufferingHandler.removeCallbacksAndMessages(null)
 
+        // Clean up Up Next card
+        upNextHandler.removeCallbacksAndMessages(null)
+
         // Unregister broadcast receiver
         metadataUpdateReceiver?.let {
             try {
@@ -6771,6 +6985,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     companion object {
         const val PAYLOAD_KEY = "payload"
         private const val PROGRESS_INTERVAL_MS = 5_000L
+        private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
+        private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips
+        private const val UP_NEXT_TICK_MS = 500L
         private const val TITLE_FADE_DELAY_MS = 4000L
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 4000L
         private const val SEEK_STEP_MS = 10_000L

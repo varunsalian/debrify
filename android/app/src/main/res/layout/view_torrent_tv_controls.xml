@@ -63,6 +63,13 @@
                     android:layout_height="match_parent"
                     android:background="@drawable/cinema_progress_bg" />
 
+                <!-- Buffered progress (translucent white, behind played line) -->
+                <View
+                    android:id="@+id/cinema_progress_buffered"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/cinema_progress_buffered" />
+
                 <!-- Played progress (red) -->
                 <View
                     android:id="@+id/debrify_progress_line"
