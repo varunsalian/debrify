@@ -1733,6 +1733,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playWhenReady = true
             play()
         }
+
+        // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
+        player?.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                player?.removeListener(this)
+                if (isFinishing || isDestroyed) return
+                val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
+                if (defaultSubtitleLang == "off") return
+                val hasTextSelected = tracks.groups.any { group ->
+                    group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
+                }
+                if (hasTextSelected) {
+                    embeddedSubtitleSelected = true
+                }
+            }
+        })
+
+        updateTitle(item)
+        playlistAdapter?.setActiveIndex(currentIndex)
+        restartProgressUpdates()
+
+        // Fetch Stremio subtitles for this item
+        fetchStremioSubtitles(item)
     }
 
     // Build a MergingMediaSource (video-only + audio) for high-res YouTube,
@@ -1763,29 +1786,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.w("AndroidTvPlayer", "merge build failed, using muxed fallback", e)
             null
         }
-
-        // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
-        player?.addListener(object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) {
-                player?.removeListener(this)
-                if (isFinishing || isDestroyed) return
-                val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
-                if (defaultSubtitleLang == "off") return
-                val hasTextSelected = tracks.groups.any { group ->
-                    group.type == C.TRACK_TYPE_TEXT && (0 until group.length).any { group.isTrackSelected(it) }
-                }
-                if (hasTextSelected) {
-                    embeddedSubtitleSelected = true
-                }
-            }
-        })
-
-        updateTitle(item)
-        playlistAdapter?.setActiveIndex(currentIndex)
-        restartProgressUpdates()
-
-        // Fetch Stremio subtitles for this item
-        fetchStremioSubtitles(item)
     }
 
     /**
