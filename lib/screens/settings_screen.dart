@@ -16,6 +16,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/webdav_item.dart';
 import '../services/main_page_bridge.dart';
 
+import '../models/stream_providers.dart';
+
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/download_service.dart';
@@ -1758,6 +1760,9 @@ class _SettingsLayout extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+          // Streaming Mode section
+          _StreamingModeSection(),
+          const SizedBox(height: 24),
           // Maintenance section
           _SettingsSection(
             title: 'Maintenance',
@@ -2788,6 +2793,253 @@ class _SkeletonSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StreamingModeSection extends StatefulWidget {
+  @override
+  State<_StreamingModeSection> createState() => _StreamingModeSectionState();
+}
+
+class _StreamingModeSectionState extends State<_StreamingModeSection> {
+  bool _streamingMode = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final enabled = await StorageService.getStreamingModeEnabled();
+    if (mounted) {
+      setState(() {
+        _streamingMode = enabled;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const SizedBox.shrink();
+    return _SettingsSection(
+      title: 'Streaming',
+      children: [
+        _SettingsTile(
+          icon: Icons.wifi_tethering_rounded,
+          title: 'Direct Streaming Mode',
+          subtitle: 'Use direct stream links instead of torrents by default.',
+          trailing: Switch(
+            value: _streamingMode,
+            activeColor: const Color(0xFF1565C0),
+            onChanged: (val) {
+              setState(() => _streamingMode = val);
+              StorageService.setStreamingMode(val);
+            },
+          ),
+          iconColor: const Color(0xFF10B981),
+          onTap: () async {
+            setState(() => _streamingMode = !_streamingMode);
+            await StorageService.setStreamingMode(!_streamingMode);
+          },
+        ),
+        if (_streamingMode)
+          _SettingsTile(
+            icon: Icons.reorder_rounded,
+            title: 'Provider Order',
+            subtitle: 'Order in which streaming mode tries each provider.',
+            onTap: () => _showProviderOrderDialog(context),
+            iconColor: const Color(0xFF6366F1),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showProviderOrderDialog(BuildContext context) async {
+    final order = List<String>.from(await StorageService.getStreamProviderOrder());
+    final available = StreamProviders.providers.keys.toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _ProviderOrderDialog(
+        initialOrder: order,
+        available: available,
+      ),
+    );
+  }
+}
+
+class _ProviderOrderDialog extends StatefulWidget {
+  final List<String> initialOrder;
+  final List<String> available;
+
+  const _ProviderOrderDialog({
+    required this.initialOrder,
+    required this.available,
+  });
+
+  @override
+  State<_ProviderOrderDialog> createState() => _ProviderOrderDialogState();
+}
+
+class _ProviderOrderDialogState extends State<_ProviderOrderDialog> {
+  late List<String> _order;
+
+  @override
+  void initState() {
+    super.initState();
+    _order = StorageService.mergeStreamProviderOrder(
+      widget.initialOrder,
+      widget.available,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Stream Provider Order',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Drag to reorder. First provider that works wins.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ReorderableListView(
+                shrinkWrap: true,
+                buildDefaultDragHandles: false,
+                children: [
+                  for (int i = 0; i < _order.length; i++)
+                    _ProviderOrderItem(
+                      key: ValueKey(_order[i]),
+                      name: _providerDisplayName(_order[i]),
+                      index: i,
+                      onTap: _order.length > 1
+                          ? () => _toggleProvider(i)
+                          : null,
+                    ),
+                ],
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) newIndex--;
+                    final item = _order.removeAt(oldIndex);
+                    _order.insert(newIndex, item);
+                  });
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    _order = List<String>.from(
+                      StorageService.defaultStreamProviderOrder,
+                    );
+                    setState(() {});
+                  },
+                  child: const Text(
+                    'Reset',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                  ),
+                  onPressed: () {
+                    StorageService.setStreamProviderOrder(_order);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _providerDisplayName(String key) {
+    final p = StreamProviders.providers[key];
+    if (p != null) return p['name'] as String? ?? key;
+    return key;
+  }
+
+  void _toggleProvider(int index) {
+    // Swap with previous to move up
+    if (index > 0) {
+      setState(() {
+        final temp = _order[index];
+        _order[index] = _order[index - 1];
+        _order[index - 1] = temp;
+      });
+    }
+  }
+}
+
+class _ProviderOrderItem extends StatelessWidget {
+  final String name;
+  final int index;
+  final VoidCallback? onTap;
+
+  const _ProviderOrderItem({
+    super.key,
+    required this.name,
+    required this.index,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A3E),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ListTile(
+          leading: ReorderableDragStartListener(
+            index: index,
+            child: const Icon(Icons.drag_handle, color: Colors.white38),
+          ),
+          title: Text(name, style: const TextStyle(color: Colors.white)),
+          trailing: Text(
+            '#${index + 1}',
+            style: const TextStyle(color: Colors.white38),
+          ),
+        ),
+      ),
     );
   }
 }
