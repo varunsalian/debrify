@@ -339,6 +339,28 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onMediaItemTransition(@Nullable MediaItem mediaItem, int reason) {
+            // When the player is reused across a content swap (next episode,
+            // channel switch), the audio session id stays the same and
+            // onAudioSessionIdChanged never fires — but the new media item
+            // rebuilds the AudioTrack, detaching the night-mode LoudnessEnhancer.
+            // (When maybeRecreatePlayerForBandwidth() rebuilds the player instead,
+            // createPlayer() reattaches the effect itself; this covers the reused
+            // case it doesn't.) Drop the stale instance so the STATE_READY handler
+            // recreates it against the live audio track.
+            //
+            // Defensive: repeat mode isn't enabled today (next is manual via
+            // STATE_ENDED), so this can't currently fire. But if it ever is, a
+            // seamless repeat reuses the same AudioTrack (effect still attached)
+            // and won't re-fire STATE_READY — releasing there would kill night
+            // mode with nothing to rebuild it.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
+                return;
+            }
+            releaseLoudnessEnhancer();
+        }
+
+        @Override
         public void onAudioSessionIdChanged(int audioSessionId) {
             // Reinitialize night mode effect when audio session changes
             if (nightModeIndex > 0 && audioSessionId != 0) {
