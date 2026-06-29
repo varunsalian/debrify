@@ -283,11 +283,11 @@
         android:id="@+id/android_tv_next_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#000000"
+        android:background="#F00B0B0F"
         android:visibility="gone"
         android:elevation="40dp">
 
-        <!-- Backdrop art (current/next item poster), dimmed by the scrim below -->
+        <!-- Backdrop art (kept for compatibility; no longer shown) -->
         <ImageView
             android:id="@+id/android_tv_next_backdrop"
             android:layout_width="match_parent"
@@ -295,7 +295,7 @@
             android:scaleType="centerCrop"
             android:visibility="gone" />
 
-        <!-- Dark scrim so foreground text/spinner stay readable over the art -->
+        <!-- Subtle depth vignette -->
         <View
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -309,45 +309,42 @@
             android:gravity="center"
             android:padding="48dp">
 
+            <!-- Gradient-arc spinner -->
             <ProgressBar
                 android:id="@+id/android_tv_next_spinner"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginBottom="28dp"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:layout_marginBottom="18dp"
                 android:indeterminate="true"
-                android:indeterminateTint="#00FF99" />
+                android:indeterminateDuration="1100"
+                android:indeterminateDrawable="@drawable/premium_next_spinner" />
 
+            <!-- Title (shown once known) -->
             <TextView
                 android:id="@+id/android_tv_next_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="📺 LOADING..."
-                android:textColor="#00FF99"
-                android:textSize="36sp"
-                android:fontFamily="monospace"
-                android:textStyle="bold"
-                android:shadowColor="#003300"
-                android:shadowDx="2"
-                android:shadowDy="2"
-                android:shadowRadius="4"
-                android:letterSpacing="0.1" />
-
-            <TextView
-                android:id="@+id/android_tv_next_subtext"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:textColor="#00FF99"
-                android:textSize="16sp"
-                android:fontFamily="monospace"
+                android:textColor="#F2FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="normal"
                 android:gravity="center"
                 android:maxWidth="700dp"
                 android:maxLines="2"
                 android:ellipsize="end"
-                android:shadowColor="#003300"
-                android:shadowDx="1"
-                android:shadowDy="1"
-                android:shadowRadius="2"
+                android:letterSpacing="0.02" />
+
+            <!-- Legacy secondary line (kept for code compatibility, unused) -->
+            <TextView
+                android:id="@+id/android_tv_next_subtext"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#99FFFFFF"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:maxWidth="700dp"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>

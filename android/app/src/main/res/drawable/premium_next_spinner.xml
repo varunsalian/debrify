@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Premium loading spinner: a thin indigo sweep-gradient arc (transparent tail
+     -> solid head). Used as a ProgressBar indeterminateDrawable; ProgressBar
+     drives the continuous rotation via its indeterminate animation. -->
+<rotate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromDegrees="0"
+    android:toDegrees="360"
+    android:pivotX="50%"
+    android:pivotY="50%">
+    <shape
+        android:shape="ring"
+        android:thickness="2.5dp"
+        android:innerRadiusRatio="2.3"
+        android:useLevel="false">
+        <gradient
+            android:type="sweep"
+            android:startColor="#00818CF8"
+            android:centerColor="#73818CF8"
+            android:endColor="#FF818CF8" />
+    </shape>
+</rotate>

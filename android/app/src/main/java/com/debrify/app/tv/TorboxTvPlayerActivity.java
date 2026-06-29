@@ -96,11 +96,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final String PROVIDER_REAL_DEBRID = "real_debrid";
     private static final String PROVIDER_PIKPAK = "pikpak";
 
-    private enum LoadingType {
-        STREAM,   // Loading next stream (green)
-        CHANNEL   // Switching channel (cyan)
-    }
-    
     private static final long SEEK_STEP_MS = 10_000L;
     private static final long DEFAULT_TARGET_BUFFER_MS = 12_000L;
     private static final long HIGH_TARGET_BUFFER_MS = 20_000L;
@@ -153,8 +148,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View nextOverlay;
     private TextView nextText;
     private TextView nextSubtext;
-    private View tvStaticView;
-    private View tvScanlines;
     private View channelOverlay;
     private TextView channelNumberText;
     private TextView channelNameText;
@@ -231,7 +224,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final ArrayList<ChannelEntry> channelDirectoryEntries = new ArrayList<>();
     private final ArrayList<ChannelEntry> filteredChannelEntries = new ArrayList<>();
     private android.animation.ValueAnimator staticAnimator;
-    private Handler staticHandler = new Handler(Looper.getMainLooper());
 
     // Seek feedback manager
     private SeekFeedbackManager seekFeedbackManager;
@@ -374,8 +366,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         nextOverlay = findViewById(R.id.player_next_overlay);
         nextText = findViewById(R.id.player_next_text);
         nextSubtext = findViewById(R.id.player_next_subtext);
-        tvStaticView = findViewById(R.id.tv_static_view);
-        tvScanlines = findViewById(R.id.tv_scanlines);
         channelOverlay = findViewById(R.id.player_channel_overlay);
         channelNumberText = findViewById(R.id.channel_number_text);
         channelNameText = findViewById(R.id.channel_name_text);
@@ -1654,11 +1644,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .start();
     }
 
-    private void showLoadingBar(LoadingType type) {
-        showLoadingBar(type, null, null);
+    private void showLoadingBar() {
+        showLoadingBar(null, null);
     }
 
-    private void showLoadingBar(LoadingType type, @Nullable Integer channelNum, @Nullable String channelName) {
+    private void showLoadingBar(@Nullable Integer channelNum, @Nullable String channelName) {
         if (loadingBarContainer == null || loadingBar == null) {
             return;
         }
@@ -1669,24 +1659,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 loadingBarAnimator.cancel();
             }
 
-            // Set color based on type
-            int barColor;
-            int shadowColor;
-            if (type == LoadingType.CHANNEL) {
-                barColor = Color.parseColor("#CC00FFFF"); // Cyan for channel
-                shadowColor = Color.parseColor("#AA00FFFF");
-            } else {
-                barColor = Color.parseColor("#CC00FF00"); // Green for stream
-                shadowColor = Color.parseColor("#AA00FF00");
-            }
-            loadingBar.setBackgroundColor(barColor);
+            loadingBar.setBackgroundColor(Color.parseColor("#CC00FFFF")); // Cyan for channel
 
             // Show the container
             loadingBarContainer.setVisibility(View.VISIBLE);
             loadingBarContainer.setAlpha(1f);
 
             // Show bottom indicator
-            showBottomLoadingIndicator(type, channelNum, channelName);
+            showBottomLoadingIndicator(channelNum, channelName);
             
             // Get the width of the container
             loadingBarContainer.post(() -> {
@@ -1735,7 +1715,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         });
     }
     
-    private void showBottomLoadingIndicator(LoadingType type, @Nullable Integer channelNum, @Nullable String channelName) {
+    private void showBottomLoadingIndicator(@Nullable Integer channelNum, @Nullable String channelName) {
         if (loadingIndicator == null || loadingText == null) {
             return;
         }
@@ -1746,25 +1726,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 dotsAnimator.cancel();
             }
 
-            // Set text and color based on type
-            int textColor;
-            int dotColor;
+            // Cyan channel-switch styling
+            int textColor = Color.parseColor("#00FFFF");
+            int dotColor = Color.parseColor("#00FFFF");
             String text;
-
-            if (type == LoadingType.CHANNEL) {
-                textColor = Color.parseColor("#00FFFF"); // Cyan
-                dotColor = Color.parseColor("#00FFFF");
-                if (channelNum != null && channelName != null) {
-                    text = String.format(Locale.US, "Loading channel %02d : %s", channelNum, channelName.toUpperCase());
-                } else if (channelNum != null) {
-                    text = String.format(Locale.US, "Loading channel %02d", channelNum);
-                } else {
-                    text = "Loading channel";
-                }
+            if (channelNum != null && channelName != null) {
+                text = String.format(Locale.US, "Loading channel %02d : %s", channelNum, channelName.toUpperCase());
+            } else if (channelNum != null) {
+                text = String.format(Locale.US, "Loading channel %02d", channelNum);
             } else {
-                textColor = Color.parseColor("#00FF00"); // Green
-                dotColor = Color.parseColor("#00FF00");
-                text = "Loading Stream";
+                text = "Loading channel";
             }
 
             loadingText.setText(text);
@@ -1860,103 +1831,48 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         });
     }
     
-    private void showNextOverlay(@Nullable String headline, @Nullable String subline) {
-        // Now just show loading bar instead of full overlay - STREAM type (green)
-        showLoadingBar(LoadingType.STREAM);
-    }
-    
-    private String getRandomTvStaticMessage() {
-        String[] messages = {
-            "📺 BUFFERING... JUST KIDDING",
-            "📺 RETICULATING SPLINES...",
-            "📺 SUMMONING VIDEO GODS...",
-            "📺 ENGAGING HYPERDRIVE...",
-            "📺 CALIBRATING FLUX CAPACITOR",
-            "📺 CONSULTING THE ALGORITHMS",
-            "📺 WARMING UP THE PIXELS",
-            "📺 BRIBING THE SERVERS..."
-        };
-        return messages[random.nextInt(messages.length)];
-    }
-    
-    private void startTvStaticEffect() {
-        if (tvStaticView == null) {
-            return;
-        }
-        
-        // Stop any existing animation
-        stopTvStaticEffect();
-        
-        // Create random gray noise effect by rapidly changing background colors
-        final Runnable staticRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (tvStaticView != null && nextOverlay.getVisibility() == View.VISIBLE) {
-                    // Generate random gray value for TV static
-                    int grayValue = 20 + random.nextInt(80); // Random between 20-100
-                    int color = Color.rgb(grayValue, grayValue, grayValue);
-                    tvStaticView.setBackgroundColor(color);
-                    
-                    // Randomly flicker the text
-                    if (nextText != null && random.nextInt(10) > 7) {
-                        nextText.setAlpha(0.7f + random.nextFloat() * 0.3f);
-                    }
-                    
-                    // Continue animation
-                    staticHandler.postDelayed(this, 50); // Update every 50ms for smooth static
-                }
+    private void showNextOverlay() {
+        // Premium frosted "loading next stream" overlay (spinner + title).
+        runOnUiThread(() -> {
+            if (nextOverlay == null) {
+                return;
             }
-        };
-        staticHandler.post(staticRunnable);
-        
-        // Animate scan lines slowly moving
-        if (tvScanlines != null) {
-            tvScanlines.animate()
-                .translationY(20f)
-                .setDuration(1000)
-                .setInterpolator(new android.view.animation.LinearInterpolator())
-                .withEndAction(() -> {
-                    if (tvScanlines != null) {
-                        tvScanlines.setTranslationY(-20f);
-                        if (nextOverlay.getVisibility() == View.VISIBLE) {
-                            startTvStaticEffect(); // Restart scan line animation
-                        }
-                    }
-                })
-                .start();
-        }
-    }
-    
-    private void stopTvStaticEffect() {
-        staticHandler.removeCallbacksAndMessages(null);
-        
-        if (tvStaticView != null) {
-            tvStaticView.setBackgroundColor(Color.BLACK);
-        }
-        
-        if (tvScanlines != null) {
-            tvScanlines.animate().cancel();
-            tvScanlines.setTranslationY(0f);
-        }
-        
-        if (nextText != null) {
-            nextText.setAlpha(1f);
-        }
+            if (nextText != null) {
+                nextText.setText(""); // Title is filled in once the stream resolves
+            }
+            if (nextSubtext != null) {
+                nextSubtext.setVisibility(View.GONE);
+            }
+            nextOverlay.animate().cancel();
+            nextOverlay.setAlpha(0f);
+            nextOverlay.setVisibility(View.VISIBLE);
+            nextOverlay.animate().alpha(1f).setDuration(220).start();
+        });
     }
 
     private void hideNextOverlay() {
-        // Now just hide loading bar
-        hideLoadingBar();
+        runOnUiThread(() -> {
+            // Channel-switch flows funnel through here too; always clear the bar.
+            hideLoadingBar();
+            if (nextOverlay == null || nextOverlay.getVisibility() != View.VISIBLE) {
+                return;
+            }
+            nextOverlay.animate().cancel();
+            nextOverlay.animate().alpha(0f).setDuration(160).withEndAction(() -> {
+                if (nextOverlay != null) {
+                    nextOverlay.setVisibility(View.GONE);
+                    nextOverlay.setAlpha(1f);
+                }
+            }).start();
+        });
     }
 
     private void scheduleHideNextOverlay(long delayMs) {
-        // Schedule hiding the loading bar
-        new Handler(Looper.getMainLooper()).postDelayed(this::hideLoadingBar, delayMs);
+        new Handler(Looper.getMainLooper()).postDelayed(this::hideNextOverlay, delayMs);
     }
 
     private void performHideNextOverlay() {
-        // Now just hide loading bar
-        hideLoadingBar();
+        hideNextOverlay();
     }
 
     private void playMedia(String url, @Nullable String title) {
@@ -2681,8 +2597,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         
-        showNextOverlay(getString(R.string.debrify_tv_next_loading),
-                getString(R.string.debrify_tv_next_hint));
+        showNextOverlay();
         requestingNext = true;
         
         // Determine which method to call based on provider
@@ -2717,15 +2632,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
                 android.util.Log.d("TorboxTvPlayer", "requestNextStream: received provider=" + nextProvider);
 
-                // Update TV static message to show video is ready
+                // Show the resolved title under the spinner.
                 if (nextTitle != null && !nextTitle.isEmpty()) {
                     runOnUiThread(() -> {
                         if (nextText != null) {
-                            nextText.setText("📺 SIGNAL ACQUIRED");
-                        }
-                        if (nextSubtext != null) {
-                            nextSubtext.setVisibility(View.VISIBLE);
-                            nextSubtext.setText("▶ " + nextTitle.toUpperCase());
+                            nextText.setText(nextTitle);
                         }
                     });
                 }
@@ -2797,7 +2708,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         
         // Show loading bar IMMEDIATELY before fetching - CHANNEL type (cyan)
-        showLoadingBar(LoadingType.CHANNEL);
+        showLoadingBar();
         
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -3615,7 +3526,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         hideUnifiedGuide();
         hasEverBeenReady = false;
         hideBufferingIndicator();
-        showLoadingBar(LoadingType.CHANNEL, entry.number > 0 ? entry.number : null, entry.name);
+        showLoadingBar(entry.number > 0 ? entry.number : null, entry.name);
 
         lastChannelSwitchTime = now;
         requestingNext = true;
@@ -4133,12 +4044,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         subtitleExecutor.shutdown();
         stremioSubtitles.clear();
         stremioSubtitleService = null;
-
-        // Clean up TV static effect
-        stopTvStaticEffect();
-        if (staticHandler != null) {
-            staticHandler.removeCallbacksAndMessages(null);
-        }
 
         // Clean up PikPak retry handler
         if (pikPakRetryHandler != null) {

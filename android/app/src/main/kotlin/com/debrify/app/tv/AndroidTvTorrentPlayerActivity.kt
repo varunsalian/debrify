@@ -2150,12 +2150,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setResolvingState(resolving: Boolean) {
         if (resolving) {
-            setNextOverlayBackdrop(payload?.items?.getOrNull(currentIndex)?.artwork)
-            nextText.text = "📺 TUNING STREAM..."
+            nextText.text = "" // Title is filled in once the stream resolves
             nextSubtext.visibility = View.GONE
-            nextOverlay.visibility = View.VISIBLE
+            fadeInNextOverlay()
         } else {
-            nextOverlay.visibility = View.GONE
+            hideNextOverlay()
             setNextOverlayBackdrop(null)
         }
     }
@@ -4334,16 +4333,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Next overlay
     private fun showNextOverlay(nextItem: PlaybackItem) {
-        setNextOverlayBackdrop(nextItem.artwork)
-        nextText.text = "📺 LOADING NEXT..."
-        nextSubtext.text = nextItem.title
-        nextSubtext.visibility = View.VISIBLE
+        nextText.text = nextItem.title
+        nextSubtext.visibility = View.GONE
+        fadeInNextOverlay()
+    }
+
+    private fun fadeInNextOverlay() {
+        nextOverlay.animate().cancel()
+        nextOverlay.alpha = 0f
         nextOverlay.visibility = View.VISIBLE
+        nextOverlay.animate().alpha(1f).setDuration(220).start()
     }
 
     private fun hideNextOverlay() {
-        nextOverlay.visibility = View.GONE
-        setNextOverlayBackdrop(null)
+        if (nextOverlay.visibility != View.VISIBLE) return
+        nextOverlay.animate().cancel()
+        nextOverlay.animate().alpha(0f).setDuration(160).withEndAction {
+            nextOverlay.visibility = View.GONE
+            nextOverlay.alpha = 1f
+        }.start()
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -4680,10 +4688,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIptvIndex = entry.index
 
         // Show transition overlay
-        nextText.text = "📺 TUNING..."
-        nextSubtext.text = entry.name
-        nextSubtext.visibility = View.VISIBLE
-        nextOverlay.visibility = View.VISIBLE
+        nextText.text = entry.name
+        nextSubtext.visibility = View.GONE
+        fadeInNextOverlay()
 
         // Clear subtitle identity/results when changing channels from the guide.
         resetSubtitleState()
@@ -6819,10 +6826,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioTvSwitchToken++
         val token = stremioTvSwitchToken
 
-        nextText.text = "📺 LOADING NEXT..."
-        nextSubtext.text = channel.nextUpTitle ?: channel.name
-        nextSubtext.visibility = View.VISIBLE
-        nextOverlay.visibility = View.VISIBLE
+        nextText.text = channel.nextUpTitle ?: channel.name
+        nextSubtext.visibility = View.GONE
+        fadeInNextOverlay()
 
         try {
             val args = hashMapOf<String, Any?>("channelId" to channel.id)
@@ -6844,9 +6850,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             }
 
                             val title = map["title"] as? String ?: channel.name
-                            nextText.text = "📺 SIGNAL ACQUIRED"
-                            nextSubtext.text = "▶ ${title.uppercase(Locale.US)}"
-                            nextSubtext.visibility = View.VISIBLE
+                            nextText.text = title
+                            nextSubtext.visibility = View.GONE
 
                             playStremioTvPlaybackMap(
                                 channel = channel,
