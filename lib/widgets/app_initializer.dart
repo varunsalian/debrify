@@ -1,5 +1,7 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/app_migration_service.dart';
@@ -22,24 +24,28 @@ class _AppInitializerState extends State<AppInitializer>
   bool _onboardingComplete = false;
   bool _isAndroidTv = false;
 
-  late AnimationController _particleController;
+  late AnimationController _revealController;
   late AnimationController _exitController;
   late Animation<double> _exitAnimation;
 
-  List<_Particle> _particles = [];
+  ui.Image? _logoImage;
+  // Tight content box of the logo art, normalised 0..1. Replaced with the real
+  // alpha bounds once the image loads; this is only a fallback.
+  Rect _crop = const Rect.fromLTRB(0.06, 0.29, 0.94, 0.71);
+  List<_Blob> _blobs = [];
   final Random _rng = Random(42);
 
   @override
   void initState() {
     super.initState();
 
-    _particleController = AnimationController(
-      duration: const Duration(milliseconds: 3200),
+    _revealController = AnimationController(
+      duration: const Duration(milliseconds: 2200),
       vsync: this,
     );
 
     _exitController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 450),
       vsync: this,
     );
 
@@ -48,102 +54,115 @@ class _AppInitializerState extends State<AppInitializer>
       end: 0.0,
     ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initParticles();
-      _particleController.forward();
-    });
+    _buildBlobs();
+    _loadLogo();
 
     _checkInitializationStatus();
   }
 
-  void _initParticles() {
-    final screen = MediaQuery.of(context).size;
-    final area = screen.width * screen.height;
-    final count = (area / 1600).clamp(200, 650).toInt();
+  // The liquid is a small number of metaball "droplets" that bloom out from the
+  // centre. One large core droplet guarantees the wordmark fully resolves; the
+  // satellites give the spreading edge its organic, undulating shape. Positions
+  // are normalised to the logo box so they scale to any screen.
+  void _buildBlobs() {
+    final blobs = <_Blob>[
+      // Core droplet — grows to cover the entire wordmark.
+      _Blob(
+        nx: 0,
+        ny: 0,
+        radiusFrac: 0.66,
+        phase: 0,
+        freq: 0,
+        wobble: 0,
+      ),
+    ];
 
-    final cx = screen.width / 2;
-    final cy = screen.height / 2;
-
-    final scale = (screen.shortestSide / 420).clamp(0.85, 1.6);
-
-    _particles = [];
-
-    // --- Core particles — converge to a compact cluster at center ---
-    final coreCount = (count * 0.55).toInt();
-    for (int i = 0; i < coreCount; i++) {
-      final angle = _rng.nextDouble() * 2 * pi;
-      final dist = _rng.nextDouble() * 30 * scale;
-      final targetX = cx + cos(angle) * dist;
-      final targetY = cy + sin(angle) * dist;
-
-      final blend = _rng.nextDouble() * 0.15;
-      final r = (0.25 + blend).clamp(0.0, 1.0);
-      final g = (0.22 + blend).clamp(0.0, 1.0);
-      final b = (0.85 + _rng.nextDouble() * 0.10).clamp(0.0, 1.0);
-
-      _particles.add(_Particle(
-        startX: _rng.nextDouble() * screen.width,
-        startY: _rng.nextDouble() * screen.height,
-        targetX: targetX,
-        targetY: targetY,
-        size: 1.0 + _rng.nextDouble() * 1.5,
-        r: r,
-        g: g,
-        b: b,
-        type: 0,
-        delay: 0.02 + _rng.nextDouble() * 0.16,
-        driftAngle: _rng.nextDouble() * 2 * pi,
-        driftSpeed: 0.3 + _rng.nextDouble() * 0.7,
+    const satellites = 11;
+    for (int i = 0; i < satellites; i++) {
+      final angle = i / satellites * 2 * pi + _rng.nextDouble() * 0.6;
+      final spread = sqrt(_rng.nextDouble());
+      blobs.add(_Blob(
+        nx: cos(angle) * spread,
+        ny: sin(angle) * spread * 0.6,
+        radiusFrac: 0.18 + _rng.nextDouble() * 0.18,
+        phase: _rng.nextDouble() * 2 * pi,
+        freq: 2.0 + _rng.nextDouble() * 2.5,
+        wobble: 0.02 + _rng.nextDouble() * 0.035,
       ));
     }
 
-    // --- Glow particles (tight halo around center) ---
-    final glowCount = (count * 0.18).toInt();
-    for (int i = 0; i < glowCount; i++) {
-      final angle = _rng.nextDouble() * 2 * pi;
-      final dist = 20 * scale + _rng.nextDouble() * 25 * scale;
-      _particles.add(_Particle(
-        startX: _rng.nextDouble() * screen.width,
-        startY: _rng.nextDouble() * screen.height,
-        targetX: cx + cos(angle) * dist,
-        targetY: cy + sin(angle) * dist,
-        size: 1.0 + _rng.nextDouble() * 1.5,
-        r: 0.388,
-        g: 0.400,
-        b: 0.945,
-        type: 1,
-        delay: _rng.nextDouble() * 0.2,
-        driftAngle: _rng.nextDouble() * 2 * pi,
-        driftSpeed: 0.2 + _rng.nextDouble() * 0.5,
-      ));
-    }
+    _blobs = blobs;
+  }
 
-    // --- Ambient particles (star field, fade out) ---
-    final ambientCount = count - _particles.length;
-    for (int i = 0; i < ambientCount; i++) {
-      _particles.add(_Particle(
-        startX: _rng.nextDouble() * screen.width,
-        startY: _rng.nextDouble() * screen.height,
-        targetX: 0,
-        targetY: 0,
-        size: 0.5 + _rng.nextDouble() * 1.2,
-        r: 1.0,
-        g: 1.0,
-        b: 1.0,
-        type: 2,
-        delay: 0,
-        driftAngle: _rng.nextDouble() * 2 * pi,
-        driftSpeed: 0.1 + _rng.nextDouble() * 0.4,
-      ));
+  Future<void> _loadLogo() async {
+    try {
+      final data = await rootBundle.load('assets/splash_logo.png');
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      if (!mounted) return;
+      final crop = await _computeContentBounds(frame.image);
+      if (!mounted) return;
+      setState(() {
+        _logoImage = frame.image;
+        _crop = crop;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _revealController.forward();
+      });
+    } catch (e) {
+      debugPrint('AppInitializer: failed to load splash logo: $e');
+      // Still run the controller so timing/handoff stays consistent.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _revealController.forward();
+      });
     }
+  }
 
-    setState(() {});
+  // Scan the alpha channel for the tight bounding box of visible pixels, so the
+  // art is drawn edge-to-edge with no clipping and no dead margin — whatever the
+  // asset's framing. Returns a normalised (0..1) rect with a hair of padding.
+  Future<Rect> _computeContentBounds(ui.Image img) async {
+    try {
+      final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) return _crop;
+      final w = img.width;
+      final h = img.height;
+      final bytes = data.buffer.asUint8List();
+      int minX = w, minY = h, maxX = -1, maxY = -1;
+      const step = 2; // sampling stride — plenty for a bounding box
+      const alphaThreshold = 12;
+      for (int y = 0; y < h; y += step) {
+        final rowOffset = y * w * 4;
+        for (int x = 0; x < w; x += step) {
+          final a = bytes[rowOffset + x * 4 + 3];
+          if (a > alphaThreshold) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < minX || maxY < minY) return _crop;
+      final padX = w * 0.015;
+      final padY = h * 0.015;
+      return Rect.fromLTRB(
+        ((minX - padX) / w).clamp(0.0, 1.0),
+        ((minY - padY) / h).clamp(0.0, 1.0),
+        ((maxX + padX) / w).clamp(0.0, 1.0),
+        ((maxY + padY) / h).clamp(0.0, 1.0),
+      );
+    } catch (e) {
+      debugPrint('AppInitializer: content-bounds scan failed: $e');
+      return _crop;
+    }
   }
 
   @override
   void dispose() {
-    _particleController.dispose();
+    _revealController.dispose();
     _exitController.dispose();
+    _logoImage?.dispose();
     super.dispose();
   }
 
@@ -171,13 +190,13 @@ class _AppInitializerState extends State<AppInitializer>
     if (!mounted) return;
 
     if (!hasCompleted) {
-      await Future.delayed(const Duration(milliseconds: 1800));
+      await Future.delayed(const Duration(milliseconds: 1700));
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted) return;
       await _showOnboarding();
     } else {
-      await Future.delayed(const Duration(milliseconds: 3400));
+      await Future.delayed(const Duration(milliseconds: 2300));
       if (!mounted) return;
       await _exitController.forward();
       if (!mounted) return;
@@ -260,73 +279,30 @@ class _AppInitializerState extends State<AppInitializer>
       backgroundColor: const Color(0xFF020617),
       body: FadeTransition(
         opacity: _exitAnimation,
-        child: Stack(
-          children: [
-            Container(color: const Color(0xFF020617)),
-
-            // Particle field
-            if (_particles.isNotEmpty)
-              AnimatedBuilder(
-                animation: _particleController,
-                builder: (context, child) {
-                  return CustomPaint(
-                    painter: _ParticleFieldPainter(
-                      particles: _particles,
-                      progress: _particleController.value,
-                    ),
-                    size: Size.infinite,
-                  );
-                },
-              ),
-
-            // Logo image + text — appears AFTER particles are fully gone
-            Center(
-              child: AnimatedBuilder(
-                animation: _particleController,
-                builder: (context, child) {
-                  final p = _particleController.value;
-
-                  // Logo appears: 0.76 → 0.90 (particles gone by 0.74)
-                  final logoRaw = ((p - 0.76) / 0.14).clamp(0.0, 1.0);
-                  final logoOpacity = Curves.easeOut.transform(logoRaw);
-                  final logoScale =
-                      0.90 + 0.10 * Curves.easeOutBack.transform(logoRaw);
-                  final glowIntensity = Curves.easeOut.transform(logoRaw);
-
-                  return Opacity(
-                    opacity: logoOpacity,
-                    child: Transform.scale(
-                      scale: logoScale,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF4F46E5).withValues(
-                                alpha: 0.35 * glowIntensity,
-                              ),
-                              blurRadius: 60 * glowIntensity,
-                              spreadRadius: 15 * glowIntensity,
-                            ),
-                            BoxShadow(
-                              color: const Color(0xFF818CF8).withValues(
-                                alpha: 0.18 * glowIntensity,
-                              ),
-                              blurRadius: 120 * glowIntensity,
-                              spreadRadius: 40 * glowIntensity,
-                            ),
-                          ],
-                        ),
-                        child: Image.asset(
-                          'assets/splash_logo.png',
-                          width: 320,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+        child: DecoratedBox(
+          // Subtle radial lift in the backdrop reads richer than flat black.
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
+              radius: 1.1,
+              colors: [Color(0xFF0B1026), Color(0xFF020617)],
+              stops: [0.0, 0.9],
             ),
-          ],
+          ),
+          child: AnimatedBuilder(
+            animation: _revealController,
+            builder: (context, child) {
+              return CustomPaint(
+                size: Size.infinite,
+                painter: _LiquidRevealPainter(
+                  progress: _revealController.value,
+                  blobs: _blobs,
+                  logo: _logoImage,
+                  crop: _crop,
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -334,172 +310,215 @@ class _AppInitializerState extends State<AppInitializer>
 }
 
 // ---------------------------------------------------------------------------
-// Particle data
+// Liquid droplet data
 // ---------------------------------------------------------------------------
 
-class _Particle {
-  final double startX, startY;
-  final double targetX, targetY;
-  final double size;
-  final double r, g, b;
-  final int type; // 0 = logo, 1 = glow, 2 = ambient
-  final double delay;
-  final double driftAngle;
-  final double driftSpeed;
+class _Blob {
+  final double nx, ny; // normalised position within the logo box
+  final double radiusFrac; // radius at full coverage, as fraction of logo width
+  final double phase, freq, wobble; // organic surface undulation
 
-  const _Particle({
-    required this.startX,
-    required this.startY,
-    required this.targetX,
-    required this.targetY,
-    required this.size,
-    required this.r,
-    required this.g,
-    required this.b,
-    required this.type,
-    required this.delay,
-    required this.driftAngle,
-    required this.driftSpeed,
+  const _Blob({
+    required this.nx,
+    required this.ny,
+    required this.radiusFrac,
+    required this.phase,
+    required this.freq,
+    required this.wobble,
   });
 }
 
 // ---------------------------------------------------------------------------
-// Particle field painter
+// Liquid metaball reveal painter
 // ---------------------------------------------------------------------------
-
-class _ParticleFieldPainter extends CustomPainter {
-  final List<_Particle> particles;
+//
+// Timeline (progress 0..1):
+//   0.00 – 0.12   Anticipation — a faint core glow gathers
+//   0.12 – 0.72   Reveal — liquid metaballs bloom out, unveiling the wordmark
+//   0.50 – 0.88   Light-sweep — a diagonal specular highlight crosses the logo
+//   0.74 – 0.95   Settle — wet fill recedes, a clean chromatic glow rests
+//   0.95 – 1.00   Hold
+//
+// The "goo" look comes from the classic metaball trick: draw soft blurred
+// droplets, then push their alpha through a high-contrast colour matrix so the
+// blurred halos snap together into one connected fluid surface. That surface is
+// then used as a dstIn mask to reveal the logo + luminous fill beneath it.
+class _LiquidRevealPainter extends CustomPainter {
   final double progress;
+  final List<_Blob> blobs;
+  final ui.Image? logo;
+  final Rect crop;
 
-  // Timeline:
-  // 0.00 – 0.22  Drift (star field floating)
-  // 0.22 – 0.60  Converge (particles rush to logo shape)
-  // 0.60 – 0.66  Hold (formation visible, brief pause)
-  // 0.66 – 0.74  Dissolve + flash (particles vanish, bright pulse)
-  // 0.74+        Nothing (clean canvas for logo widget)
-  static const double _driftEnd = 0.22;
-  static const double _convergeEnd = 0.60;
-  static const double _holdEnd = 0.66;
-  static const double _dissolveEnd = 0.74;
-  static const double _maxDrift = 32.0;
+  _LiquidRevealPainter({
+    required this.progress,
+    required this.blobs,
+    required this.logo,
+    required this.crop,
+  });
 
-  _ParticleFieldPainter({required this.particles, required this.progress});
+  // Alpha-threshold matrix: blurred edges below the threshold vanish, above it
+  // snap to opaque — the merge that makes neighbouring droplets read as one.
+  static const ColorFilter _goo = ColorFilter.matrix(<double>[
+    1, 0, 0, 0, 0, //
+    0, 1, 0, 0, 0, //
+    0, 0, 1, 0, 0, //
+    0, 0, 0, 26, -2200.0, //
+  ]);
 
-  double _ease(double t) {
-    if (t < 0.5) {
-      return 4 * t * t * t;
-    } else {
-      final f = (2 * t) - 2;
-      return 0.5 * f * f * f + 1;
-    }
+  double _smoothstep(double a, double b, double x) {
+    final t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    return t * t * (3 - 2 * t);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // After dissolve, nothing to draw
-    if (progress >= _dissolveEnd) return;
+    final p = progress;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final full = Offset.zero & size;
 
-    final paint = Paint();
-    final driftT = (progress / _driftEnd).clamp(0.0, 1.0);
+    // Logo geometry (from the cropped, content-only region of the asset).
+    final aspect = logo != null
+        ? (logo!.width * crop.width) / (logo!.height * crop.height)
+        : 2.1;
+    final logoW = (size.width * 0.72).clamp(240.0, 560.0).toDouble();
+    final logoH = logoW / aspect;
+    final logoRect = Rect.fromCenter(
+      center: Offset(cx, cy),
+      width: logoW,
+      height: logoH,
+    );
 
-    for (final p in particles) {
-      final driftDx = cos(p.driftAngle) * p.driftSpeed * driftT * _maxDrift;
-      final driftDy = sin(p.driftAngle) * p.driftSpeed * driftT * _maxDrift;
-      final driftedX = p.startX + driftDx;
-      final driftedY = p.startY + driftDy;
+    final coverage = Curves.easeOutCubic.transform(
+      _smoothstep(0.12, 0.72, p),
+    );
+    final settle = _smoothstep(0.74, 0.95, p);
+    final blurSigma = (logoH * 0.16).clamp(8.0, 26.0);
 
-      double px, py, opacity, drawSize;
-
-      if (p.type == 2) {
-        // Ambient: float and fade, gone before hold phase
-        final extraDrift = 1.0 + progress * 0.6;
-        px = p.startX + driftDx * extraDrift;
-        py = p.startY + driftDy * extraDrift;
-        final fadeOut = (progress / _convergeEnd).clamp(0.0, 1.0);
-        opacity = 0.30 * (1.0 - fadeOut);
-        drawSize = p.size;
-      } else if (progress <= _driftEnd) {
-        // Drift phase
-        px = driftedX;
-        py = driftedY;
-        opacity = 0.45 + 0.35 * driftT;
-        drawSize = p.size;
-      } else if (progress <= _convergeEnd) {
-        // Converge phase
-        final rawT =
-            ((progress - _driftEnd) / (_convergeEnd - _driftEnd))
-                .clamp(0.0, 1.0);
-        final delayed =
-            ((rawT - p.delay) / (1.0 - p.delay)).clamp(0.0, 1.0);
-        final eased = _ease(delayed);
-
-        px = driftedX + (p.targetX - driftedX) * eased;
-        py = driftedY + (p.targetY - driftedY) * eased;
-        opacity = 0.80 + 0.20 * eased;
-        drawSize = p.size * (1.0 + eased * 0.3);
-      } else if (progress <= _holdEnd) {
-        // Hold phase — particles sit at target
-        px = p.targetX;
-        py = p.targetY;
-        opacity = 1.0;
-        drawSize = p.size * 1.3;
-      } else {
-        // Dissolve phase — fast uniform fadeout
-        px = p.targetX;
-        py = p.targetY;
-        final fadeT =
-            ((progress - _holdEnd) / (_dissolveEnd - _holdEnd))
-                .clamp(0.0, 1.0);
-        opacity = 1.0 - fadeT;
-        drawSize = p.size * (1.3 - 0.5 * fadeT);
-      }
-
-      if (opacity <= 0.01) continue;
-
-      paint.color = Color.fromRGBO(
-        (p.r * 255).toInt(),
-        (p.g * 255).toInt(),
-        (p.b * 255).toInt(),
-        opacity.clamp(0.0, 1.0),
-      );
-
-      if (drawSize > 1.0) {
-        paint.maskFilter =
-            MaskFilter.blur(BlurStyle.normal, drawSize * 0.3);
-      } else {
-        paint.maskFilter = null;
-      }
-
-      canvas.drawCircle(Offset(px, py), drawSize, paint);
+    // --- Glow ---------------------------------------------------------------
+    // A soft indigo halo gathers in anticipation, tracks the reveal, then rests
+    // behind the finished wordmark. Drawn behind the logo so it never washes out
+    // the (intentionally light, thin) letterforms.
+    final anticip = _smoothstep(0.0, 0.12, p);
+    final glowAlpha =
+        (anticip * 0.30 + coverage * 0.18 + settle * 0.28).clamp(0.0, 1.0);
+    if (glowAlpha > 0.01) {
+      final glowRadius = logoW * (0.42 + 0.12 * settle);
+      // Very subtle chromatic fringing — cyan/magenta offset twins.
+      _radialGlow(canvas, Offset(cx - 6, cy), glowRadius,
+          const Color(0xFF22D3EE), 0.05 * settle);
+      _radialGlow(canvas, Offset(cx + 6, cy), glowRadius,
+          const Color(0xFFC084FC), 0.05 * settle);
+      _radialGlow(canvas, Offset(cx, cy), glowRadius,
+          const Color(0xFF4F46E5), glowAlpha * 0.55);
     }
 
-    // Flash pulse during dissolve — masks the particle-to-logo handoff
-    if (progress > _holdEnd && progress < _dissolveEnd) {
-      final flashT =
-          ((progress - _holdEnd) / (_dissolveEnd - _holdEnd))
-              .clamp(0.0, 1.0);
-      // Quick in, slower out
-      final flashIntensity = flashT < 0.3
-          ? (flashT / 0.3)
-          : 1.0 - ((flashT - 0.3) / 0.7);
-      final center = Offset(size.width / 2, size.height / 2);
+    if (logo == null) return;
 
-      final flashPaint = Paint()
-        ..shader = RadialGradient(
+    final iw = logo!.width.toDouble();
+    final ih = logo!.height.toDouble();
+    final srcRect = Rect.fromLTRB(
+      crop.left * iw,
+      crop.top * ih,
+      crop.right * iw,
+      crop.bottom * ih,
+    );
+
+    // --- Liquid-masked reveal -----------------------------------------------
+    canvas.saveLayer(full, Paint());
+
+    // 1. The wordmark itself, in its true colours.
+    canvas.drawImageRect(
+      logo!,
+      srcRect,
+      logoRect,
+      Paint()..filterQuality = FilterQuality.high,
+    );
+
+    // 2. Diagonal light-sweep — a restrained specular pass over the revealed
+    //    art. Kept low so it sheens, not washes.
+    final sweepT = _smoothstep(0.5, 0.86, p);
+    if (sweepT > 0.0 && sweepT < 1.0) {
+      final sweepIntensity = sin(sweepT * pi);
+      final bandW = logoW * 0.32;
+      final sweepX = ui.lerpDouble(cx - logoW * 0.7, cx + logoW * 0.7, sweepT)!;
+      canvas.save();
+      canvas.translate(cx, cy);
+      canvas.rotate(-0.35);
+      canvas.translate(-cx, -cy);
+      final bandRect = Rect.fromCenter(
+        center: Offset(sweepX, cy),
+        width: bandW,
+        height: size.height * 1.6,
+      );
+      final sweepPaint = Paint()
+        ..blendMode = BlendMode.plus
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
           colors: [
-            Color.fromRGBO(129, 140, 248, 0.35 * flashIntensity),
-            Color.fromRGBO(99, 102, 241, 0.12 * flashIntensity),
-            const Color.fromRGBO(99, 102, 241, 0),
+            const Color(0x00FFFFFF),
+            Color.fromRGBO(255, 255, 255, 0.20 * sweepIntensity),
+            const Color(0x00FFFFFF),
           ],
-          stops: const [0.0, 0.4, 1.0],
-        ).createShader(
-            Rect.fromCircle(center: center, radius: 180 + 40 * flashT));
+          stops: const [0.0, 0.5, 1.0],
+        ).createShader(bandRect);
+      canvas.drawRect(bandRect, sweepPaint);
+      canvas.restore();
+    }
 
-      canvas.drawCircle(center, 180 + 40 * flashT, flashPaint);
+    // 3. Cut everything above to the liquid surface (metaball mask).
+    canvas.saveLayer(full, Paint()..blendMode = BlendMode.dstIn);
+    canvas.saveLayer(full, Paint()..colorFilter = _goo);
+    canvas.saveLayer(
+      full,
+      Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+    );
+    _drawDroplets(canvas, logoRect, coverage, p);
+    canvas.restore(); // blur
+    canvas.restore(); // goo threshold
+    canvas.restore(); // dstIn mask
+
+    canvas.restore(); // visible composite
+  }
+
+  void _drawDroplets(Canvas canvas, Rect logo, double coverage, double p) {
+    final paint = Paint()..color = Colors.white;
+    final spreadX = logo.width * 0.5;
+    final spreadY = logo.height * 0.5;
+    final cx = logo.center.dx;
+    final cy = logo.center.dy;
+
+    for (final b in blobs) {
+      final wob = b.wobble == 0
+          ? 0.0
+          : sin(p * pi * 2 * b.freq + b.phase) * b.wobble * logo.width;
+      final x = cx + b.nx * spreadX * coverage + wob;
+      final y = cy + b.ny * spreadY * coverage + wob * 0.6;
+      final r = b.radiusFrac *
+          logo.width *
+          ui.lerpDouble(0.12, 1.0, coverage)!;
+      if (r <= 0.5) continue;
+      canvas.drawCircle(Offset(x, y), r, paint);
     }
   }
 
+  void _radialGlow(
+      Canvas canvas, Offset center, double radius, Color color, double alpha) {
+    if (alpha <= 0.01) return;
+    final paint = Paint()
+      ..blendMode = BlendMode.plus
+      ..shader = RadialGradient(
+        colors: [
+          color.withValues(alpha: alpha),
+          color.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 1.0],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawCircle(center, radius, paint);
+  }
+
   @override
-  bool shouldRepaint(covariant _ParticleFieldPainter old) =>
-      old.progress != progress;
+  bool shouldRepaint(covariant _LiquidRevealPainter old) =>
+      old.progress != progress || old.logo != logo || old.crop != crop;
 }
