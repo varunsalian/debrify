@@ -427,6 +427,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             updatePauseButtonLabel()
         }
 
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // The player is reused across every content swap (next episode, IPTV
+            // and Stremio channel/source switches, subtitle reloads), so the audio
+            // session id stays the same and onAudioSessionIdChanged never fires.
+            // But each new media item rebuilds the AudioTrack, detaching the
+            // night-mode LoudnessEnhancer — leaving the button reading e.g. "High"
+            // with no boost actually applied. Drop the stale instance here so the
+            // STATE_READY handler recreates it against the live audio track.
+            //
+            // Defensive: repeat mode isn't enabled today (looping is manual via
+            // STATE_ENDED), so this can't currently fire. But if it ever is, a
+            // seamless repeat reuses the same AudioTrack (effect still attached)
+            // and won't re-fire STATE_READY — releasing there would kill night
+            // mode with nothing to rebuild it.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
+            releaseLoudnessEnhancer()
+        }
+
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             // Reinitialize night mode effect when audio session changes
             if (nightModeIndex > 0 && audioSessionId != 0) {
