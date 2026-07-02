@@ -2551,19 +2551,78 @@ class StorageService {
   // IPTV Channel Favorites
   // ==========================================================================
 
-  /// Check if an IPTV channel is favorited (by URL)
-  static Future<bool> isIptvChannelFavorited(String channelUrl) async {
+  /// Canonical comparison key for an IPTV channel URL. Xtream Codes stream
+  /// URL formats have changed over time (optional /live/ prefix,
+  /// percent-encoded credentials), so favorites are matched on a
+  /// format-insensitive key rather than the raw string.
+  static String canonicalIptvChannelKey(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return url;
+    // pathSegments are percent-decoded, which normalizes credential encoding.
+    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    // Drop the /live/ prefix only for URLs shaped like Xtream live streams
+    // (.../live/<user>/<pass>/<numeric id>.<ext>) — not arbitrary /live/
+    // paths, which belong to ordinary playlists where the segment is
+    // significant.
+    if (segments.length >= 4 &&
+        segments[segments.length - 4] == 'live' &&
+        RegExp(r'^\d+\.\w+$').hasMatch(segments.last)) {
+      segments.removeAt(segments.length - 4);
+    }
+    final port = uri.hasPort ? ':${uri.port}' : '';
+    // Keep the query: distinct channels can differ only by query params.
+    final query = uri.hasQuery ? '?${uri.query}' : '';
+    return '${uri.scheme}://${uri.host}$port/${segments.join('/')}$query';
+  }
+
+  /// Rewrite stored favorite URLs to the current format when a fetched
+  /// channel matches an existing favorite canonically but not literally
+  /// (e.g. favorites saved before the Xtream /live/ URL fix). Keeps the
+  /// Home favorites row playing working URLs.
+  static Future<void> reconcileIptvFavoriteUrls(List<IptvChannel> channels) async {
     final prefs = await SharedPreferences.getInstance();
     final favoritesJson = prefs.getString(_iptvFavoriteChannelsKey);
+    if (favoritesJson == null) return;
 
-    if (favoritesJson == null) return false;
-
+    Map<String, dynamic> favorites;
     try {
-      final favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
-      return favorites.containsKey(channelUrl);
-    } catch (e) {
-      debugPrint('Error reading IPTV channel favorites: $e');
-      return false;
+      favorites = jsonDecode(favoritesJson) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    if (favorites.isEmpty) return;
+
+    final storedByCanonical = <String, String>{
+      for (final key in favorites.keys) canonicalIptvChannelKey(key): key,
+    };
+
+    // Cheap pre-filter: a channel can only match a favorite on the same
+    // host, and canonicalizing tens of thousands of URLs on the UI isolate
+    // is not free.
+    final favoriteHosts = <String>{
+      for (final key in favorites.keys)
+        if (Uri.tryParse(key)?.host.isNotEmpty ?? false) Uri.parse(key).host,
+    };
+
+    var changed = false;
+    for (final channel in channels) {
+      if (storedByCanonical.isEmpty) break;
+      if (!favoriteHosts.any(channel.url.contains)) continue;
+      // Consume the mapping so a second canonically-equal channel can't
+      // re-move (and null out) an already-migrated entry.
+      final storedKey =
+          storedByCanonical.remove(canonicalIptvChannelKey(channel.url));
+      if (storedKey != null && storedKey != channel.url) {
+        final metadata = favorites.remove(storedKey);
+        if (metadata != null) {
+          favorites[channel.url] = metadata;
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));
     }
   }
 
@@ -2586,6 +2645,13 @@ class StorageService {
       } catch (_) {}
     }
 
+    // Match older stored URL formats too, so toggling can't leave stale
+    // duplicates behind.
+    final canonical = canonicalIptvChannelKey(channelUrl);
+    favorites.removeWhere(
+      (key, _) => canonicalIptvChannelKey(key) == canonical,
+    );
+
     if (isFavorited) {
       // Store channel metadata along with the favorite status
       favorites[channelUrl] = {
@@ -2595,8 +2661,6 @@ class StorageService {
         'playlistId': playlistId ?? '',
         'addedAt': DateTime.now().millisecondsSinceEpoch,
       };
-    } else {
-      favorites.remove(channelUrl);
     }
 
     await prefs.setString(_iptvFavoriteChannelsKey, jsonEncode(favorites));

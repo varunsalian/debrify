@@ -1,9 +1,26 @@
+import 'dart:convert';
+
 import '../models/iptv_playlist.dart';
 
 /// Parser for M3U/M3U8 playlist files
 class M3uParser {
+  /// Decode raw playlist bytes as UTF-8 so non-ASCII channel names survive,
+  /// falling back to latin1 for legacy playlists. Shared by the URL-fetch and
+  /// file-import paths so both decode identically.
+  static String decodeBytes(List<int> bytes) {
+    try {
+      return utf8.decode(bytes);
+    } catch (_) {
+      return latin1.decode(bytes);
+    }
+  }
+
   /// Parse M3U content into a list of channels
   static IptvParseResult parse(String content) {
+    // Strip a UTF-8 BOM so the #EXTM3U header is recognized
+    if (content.startsWith('﻿')) {
+      content = content.substring(1);
+    }
     final lines = content.split('\n').map((l) => l.trim()).toList();
     final channels = <IptvChannel>[];
     final categories = <String>{};
@@ -51,11 +68,11 @@ class M3uParser {
         // This is the URL line
         if (currentName != null && line.isNotEmpty) {
           final url = line.trim();
-          // Only add if URL looks valid
-          if (url.startsWith('http://') ||
-              url.startsWith('https://') ||
-              url.startsWith('rtmp://') ||
-              url.startsWith('rtsp://')) {
+          // Accept playable stream schemes; keep the list curated so
+          // non-playable entries (plugin://, file://, ...) stay filtered out.
+          if (RegExp(r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
+                  caseSensitive: false)
+              .hasMatch(url)) {
             channels.add(IptvChannel(
               name: currentName,
               url: url,
@@ -95,13 +112,46 @@ class M3uParser {
     final attributes = <String, String>{};
 
     // Remove #EXTINF: prefix
-    var content = line.substring(8);
+    final content = line.substring(8);
 
-    // Find the comma that separates attributes from name
-    final commaIndex = content.lastIndexOf(',');
+    // Parse quoted attributes (key="value" or key='value') first; the
+    // backreference keeps apostrophes inside double-quoted values intact.
+    final attrRegex = RegExp(r'''(\S+?)=(["'])(.*?)\2''');
+    final attrMatches = attrRegex.allMatches(content).toList();
+    final searchFrom = attrMatches.isEmpty ? 0 : attrMatches.last.end;
+
+    // The name is everything after the first comma that follows the quoted
+    // attributes and is not itself inside quotes; names may contain commas.
+    int commaIndex = -1;
+    String? quoteChar;
+    for (int i = searchFrom; i < content.length; i++) {
+      final c = content[i];
+      if (quoteChar != null) {
+        if (c == quoteChar) quoteChar = null;
+      } else if (c == '"' || c == "'") {
+        quoteChar = c;
+      } else if (c == ',') {
+        commaIndex = i;
+        break;
+      }
+    }
+    // An unquoted attribute (key=value) before the comma means the comma may
+    // sit inside an attribute value; prefer the last comma as separator then.
+    if (commaIndex != -1 &&
+        content.substring(searchFrom, commaIndex).contains('=')) {
+      commaIndex = content.lastIndexOf(',');
+    }
+    // A stray/unclosed quote can swallow the rest of the line; fall back to
+    // the last comma so malformed-but-real-world lines still yield a name.
+    if (commaIndex == -1) {
+      final fallback = content.lastIndexOf(',');
+      if (fallback >= searchFrom) {
+        commaIndex = fallback;
+      }
+    }
+
     if (commaIndex != -1) {
       name = content.substring(commaIndex + 1).trim();
-      content = content.substring(0, commaIndex);
     }
 
     // Parse duration (first part before space or attributes)
@@ -110,18 +160,23 @@ class M3uParser {
       duration = int.tryParse(durationMatch.group(1) ?? '');
     }
 
-    // Parse attributes (key="value" or key='value')
-    final attrRegex = RegExp(r'''(\S+?)=["']([^"']*)["']''');
-    for (final match in attrRegex.allMatches(content)) {
+    for (final match in attrMatches) {
+      // Ignore anything that merely looks like an attribute inside the name.
+      if (commaIndex != -1 && match.start > commaIndex) break;
       final key = match.group(1)?.toLowerCase();
-      final value = match.group(2);
+      final value = match.group(3);
       if (key != null && value != null) {
         attributes[key] = value;
       }
     }
 
+    // Fall back to tvg-name for entries without a display name
+    if (name == null || name.isEmpty) {
+      name = attributes['tvg-name'];
+    }
+
     return _ExtInfResult(
-      name: name ?? 'Unknown Channel',
+      name: (name == null || name.isEmpty) ? 'Unknown Channel' : name,
       duration: duration,
       attributes: attributes,
     );

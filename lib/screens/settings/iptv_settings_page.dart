@@ -180,9 +180,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
 
   Future<void> _importFromFile() async {
     try {
+      // FileType.any instead of custom extensions: Android's MIME mapping for
+      // .m3u/.m3u8 is unreliable and can leave valid files unselectable in the
+      // picker. The extension is validated below instead.
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['m3u', 'm3u8'],
+        type: FileType.any,
         allowMultiple: false,
         withData: true,
       );
@@ -201,24 +203,24 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       }
 
       // Read file content
-      String content;
-      if (file.bytes != null) {
-        content = String.fromCharCodes(file.bytes!);
-      } else if (file.path != null) {
-        final fileBytes = await file.xFile.readAsBytes();
-        content = String.fromCharCodes(fileBytes);
-      } else {
+      final Uint8List? fileBytes =
+          file.bytes ?? (file.path != null ? await file.xFile.readAsBytes() : null);
+      if (fileBytes == null) {
         _showSnackBar('Could not read file content');
         return;
       }
+
+      // Decode as UTF-8 so non-ASCII channel names survive; falls back to
+      // latin1 for legacy playlists.
+      final content = M3uParser.decodeBytes(fileBytes);
 
       // Validate file size (warn for >5MB)
       if (content.length > 5 * 1024 * 1024) {
         _showSnackBar('File is very large (>${(content.length / 1024 / 1024).toStringAsFixed(1)}MB). This may cause issues.');
       }
 
-      // Parse to validate content
-      final parseResult = M3uParser.parse(content);
+      // Parse to validate content (off the UI isolate for large files)
+      final parseResult = await IptvService.instance.parseContent(content);
 
       if (parseResult.hasError) {
         _showSnackBar('Failed to parse playlist: ${parseResult.error}');
@@ -296,11 +298,33 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
       return;
     }
 
-    // Normalize server URL
+    // Normalize the server URL: users often paste the full get.php or
+    // player_api.php URL their provider sent them. Strip the query and any
+    // trailing .php endpoint, but keep a base path — panels can be hosted
+    // under a path prefix (e.g. behind a reverse proxy).
     var serverUrl = server;
     if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
       serverUrl = 'http://$serverUrl';
     }
+    final serverUri = Uri.tryParse(serverUrl);
+    if (serverUri == null || serverUri.host.isEmpty) {
+      _showSnackBar('Please enter a valid server URL');
+      return;
+    }
+    final pathSegments = serverUri.pathSegments
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (pathSegments.isNotEmpty && pathSegments.last.endsWith('.php')) {
+      pathSegments.removeLast();
+    }
+    serverUrl = Uri(
+      scheme: serverUri.scheme,
+      // Keep basic-auth credentials if the pasted URL carried them.
+      userInfo: serverUri.userInfo.isEmpty ? null : serverUri.userInfo,
+      host: serverUri.host,
+      port: serverUri.hasPort ? serverUri.port : null,
+      pathSegments: pathSegments,
+    ).toString();
     if (serverUrl.endsWith('/')) {
       serverUrl = serverUrl.substring(0, serverUrl.length - 1);
     }
@@ -420,8 +444,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage> with SingleTickerPr
     if (result.hasError) {
       _showSnackBar('Failed to refresh "${playlist.name}": ${result.error}');
     } else {
+      final suffix = result.warning != null ? ' (${result.warning})' : '';
       _showSnackBar(
-        'Updated "${playlist.name}" — ${result.channels.length} channels',
+        'Updated "${playlist.name}" — ${result.channels.length} channels$suffix',
         isError: false,
       );
     }

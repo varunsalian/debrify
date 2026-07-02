@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
@@ -44,15 +43,9 @@ class IptvService {
         );
       }
 
-      // Try to decode as UTF-8, fallback to latin1
-      String content;
-      try {
-        content = utf8.decode(response.bodyBytes);
-      } catch (e) {
-        content = latin1.decode(response.bodyBytes);
-      }
+      final content = M3uParser.decodeBytes(response.bodyBytes);
 
-      final result = M3uParser.parse(content);
+      final result = await _parse(content);
 
       // Cache the result
       _cache[url] = _CachedPlaylist(
@@ -119,11 +112,18 @@ class IptvService {
   }
 
   /// Parse M3U content directly (for file-based playlists)
-  IptvParseResult parseContent(String content) {
+  Future<IptvParseResult> parseContent(String content) async {
     debugPrint('IptvService: Parsing content directly (${content.length} chars)');
-    final result = M3uParser.parse(content);
+    final result = await _parse(content);
     debugPrint('IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories');
     return result;
+  }
+
+  /// Parse large playlists off the UI isolate to avoid freezing the app
+  Future<IptvParseResult> _parse(String content) async {
+    return content.length > 100 * 1024
+        ? await compute(M3uParser.parse, content)
+        : M3uParser.parse(content);
   }
 }
 

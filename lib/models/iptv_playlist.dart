@@ -81,8 +81,12 @@ class IptvChannel {
     this.attributes = const {},
   });
 
-  /// Check if this is a live stream (no duration or -1 duration)
-  bool get isLive => duration == null || duration == -1;
+  /// Check if this is a live stream. Xtream Codes channels carry an explicit
+  /// content type; M3U channels fall back to the duration heuristic.
+  bool get isLive {
+    if (contentType != null) return contentType == 'live';
+    return duration == null || duration == -1;
+  }
 
   /// Get tvg-id attribute if present
   String? get tvgId => attributes['tvg-id'];
@@ -109,10 +113,15 @@ class IptvParseResult {
   final List<String> categories;
   final String? error;
 
+  /// Non-fatal problem worth surfacing to the user (e.g. categories
+  /// unavailable, so channels are shown ungrouped).
+  final String? warning;
+
   const IptvParseResult({
     required this.channels,
     required this.categories,
     this.error,
+    this.warning,
   });
 
   bool get hasError => error != null;

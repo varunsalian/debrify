@@ -202,7 +202,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
         result = await xcService.fetchLiveStreams(playlist.serverUrl!, playlist.username!, playlist.password!);
       }
     } else if (playlist.isLocalFile) {
-      result = _iptvService.parseContent(playlist.content!);
+      result = await _iptvService.parseContent(playlist.content!);
     } else {
       result = await _iptvService.fetchPlaylist(playlist.url);
     }
@@ -217,6 +217,13 @@ class IptvResultsViewState extends State<IptvResultsView> {
       return;
     }
 
+    // Migrate favorites saved under older URL formats (e.g. before the
+    // Xtream /live/ URL fix) to the freshly fetched URLs, then reload so
+    // the stars line up.
+    await StorageService.reconcileIptvFavoriteUrls(result.channels);
+    await _loadFavorites();
+    if (!mounted) return;
+
     // Focus nodes are created lazily per channel (keyed by URL) in the
     // grid's itemBuilder via _focusNodeFor.
 
@@ -225,6 +232,14 @@ class IptvResultsViewState extends State<IptvResultsView> {
       _allChannels = result.channels;
       _categories = result.categories;
     });
+
+    // Surface non-fatal degradation (e.g. categories unavailable) so missing
+    // groups don't look like deleted channels.
+    if (result.warning != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.warning!)),
+      );
+    }
 
     _applyFilters();
   }
