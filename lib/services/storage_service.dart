@@ -333,6 +333,16 @@ class StorageService {
     await prefs.remove(_torboxApiKey);
   }
 
+  static Future<bool> getSeriesBrowserDenseView() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('series_browser_dense_view') ?? false;
+  }
+
+  static Future<void> setSeriesBrowserDenseView(bool dense) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('series_browser_dense_view', dense);
+  }
+
   static Future<bool> getTorboxCacheCheckEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_torboxCacheCheckPref) ?? false;
