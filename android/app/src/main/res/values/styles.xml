@@ -13,6 +13,27 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
+    <!-- Dark, red-accented dialog for the TV subtitle title-search flow.
+         Fixes the default AppCompat teal accent + light button so the dialog
+         matches the Netflix-style player chrome. -->
+    <style name="Theme.Debrify.SubtitleDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/debrify_red</item>
+        <item name="colorControlNormal">#66FFFFFF</item>
+        <item name="colorControlActivated">@color/debrify_red</item>
+        <item name="colorControlHighlight">#33E50914</item>
+        <item name="android:textColorPrimary">@color/netflix_text_primary</item>
+        <item name="android:textColorSecondary">@color/netflix_text_secondary</item>
+        <item name="android:textColorHint">#80FFFFFF</item>
+        <item name="android:editTextColor">@color/netflix_text_primary</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Theme.Debrify.SubtitleDialog.Button</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Theme.Debrify.SubtitleDialog.Button</item>
+    </style>
+
+    <style name="Theme.Debrify.SubtitleDialog.Button" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/debrify_red</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <style name="DebrifyTvChipButton" parent="Widget.AppCompat.Button">
         <item name="android:background">@drawable/debrify_tv_premium_button_bg</item>
         <item name="android:textAllCaps">false</item>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Reuse the subtitle panel's red-tinted focus box for DPAD focus / press -->
+    <item android:state_focused="true" android:drawable="@drawable/subtitle_row_focused" />
+    <item android:state_pressed="true" android:drawable="@drawable/subtitle_row_focused" />
+    <item android:drawable="@android:color/transparent" />
+</selector>

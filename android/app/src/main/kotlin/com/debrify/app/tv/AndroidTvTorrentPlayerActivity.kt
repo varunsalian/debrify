@@ -3,17 +3,20 @@ package com.debrify.app.tv
 import android.animation.ValueAnimator
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
+import androidx.core.content.ContextCompat
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -2296,16 +2299,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setText(buildSubtitleSearchInitialQuery(currentItem))
             setSelectAllOnFocus(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x80FFFFFF.toInt())
         }
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(12), 0, dp(8))
         }
 
         val searchButton = AppCompatButton(this).apply {
             text = "Search"
             isFocusable = true
+            isAllCaps = true
+            setTextColor(Color.WHITE)
+            setBackgroundResource(R.drawable.subtitle_search_button_bg)
+            stateListAnimator = null
+            minimumHeight = dp(44)
         }
 
         val progressBar = ProgressBar(this).apply {
@@ -2327,13 +2338,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val statusText = TextView(this).apply {
             text = "Find subtitles by choosing the correct title."
             setPadding(0, 0, 0, dp(8))
+            setTextColor(0xB3FFFFFF.toInt())
         }
 
         val resultList = ListView(this).apply {
             this.adapter = adapter
             isFocusable = true
             isFocusableInTouchMode = true
+            selector = ContextCompat.getDrawable(context, R.drawable.subtitle_catalog_row_selector)
+            isDrawSelectorOnTop = false
+            divider = ColorDrawable(0x14FFFFFF)
             dividerHeight = 1
+            // Keep the DPAD-focused row fully on screen: with bottom padding + clipToPadding
+            // off, ListView scrolls the selection above the padding instead of half-clipping it.
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(48))
             emptyView = null
         }
 
@@ -2460,7 +2479,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        dialog = AlertDialog.Builder(this)
+        dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)
             .setTitle("Search Movie/Show Subtitles")
             .setView(container)
             .setNegativeButton("Cancel", null)
@@ -2663,6 +2682,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_NEXT
             setText((currentItem?.season ?: manualSubtitleSeason ?: 1).toString())
             setSelectAllOnFocus(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x80FFFFFF.toInt())
         }
 
         val episodeInput = EditText(this).apply {
@@ -2671,6 +2692,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             imeOptions = EditorInfo.IME_ACTION_DONE
             setText((currentItem?.episode ?: manualSubtitleEpisode ?: 1).toString())
             setSelectAllOnFocus(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x80FFFFFF.toInt())
         }
 
         row.addView(
@@ -2698,7 +2721,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
         )
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_Debrify_SubtitleDialog)
             .setTitle("Series Episode")
             .setView(container)
             .setPositiveButton("Search", null)

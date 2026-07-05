@@ -8,7 +8,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.TypedValue;
@@ -16,10 +18,16 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
@@ -301,6 +309,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private boolean embeddedSubtitleSelected = false;  // Track if embedded subtitle was auto-selected
     private int addonSubtitleFetchToken = 0;  // Guard against stale async fetches on content switch
     private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
+    // Title chosen via manual "Search Movie/Show Subtitles" flow (null = auto-detected)
+    @Nullable private String manualSubtitleDisplayLabel = null;
 
     private final Random random = new Random();
     private final Runnable hideTitleRunnable = this::fadeOutTitle;
@@ -1951,6 +1961,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         stremioSubtitles.clear();
         currentStremioSubtitleIndex = -1;
         embeddedSubtitleSelected = false;
+        manualSubtitleDisplayLabel = null;
         addonSubtitleFetchToken++;
 
         MediaMetadata metadata = new MediaMetadata.Builder()
@@ -2071,18 +2082,26 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      * Fetch subtitles from Stremio addons using a known IMDB ID.
      */
     private void fetchStremioSubtitlesWithImdb(String imdbId) {
+        fetchStremioSubtitlesWithImdb(imdbId, "movie", null, null);
+    }
+
+    private void fetchStremioSubtitlesWithImdb(String imdbId, String type,
+                                               @Nullable Integer season, @Nullable Integer episode) {
         if (stremioSubtitleService == null) {
+            // Clear any loading state set by the caller so the panel doesn't hang on ⏳.
+            clearStremioLoadingState();
             return;
         }
 
         final StremioSubtitleService service = stremioSubtitleService;
+        final String contentType = "series".equals(type) ? "series" : "movie";
         // Capture token to detect if content changes during async fetch
         final int fetchToken = addonSubtitleFetchToken;
 
         subtitleExecutor.execute(() -> {
             try {
                 // Use the blocking version for Java interop
-                List<StremioSubtitle> subtitles = service.fetchSubtitlesBlocking("movie", imdbId, null, null);
+                List<StremioSubtitle> subtitles = service.fetchSubtitlesBlocking(contentType, imdbId, season, episode);
 
                 runOnUiThread(() -> {
                     // Check if content changed during fetch
@@ -3156,13 +3175,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
             @Override
             public void onSearchSubtitle() {
-                // Torbox player has no online search flow yet
+                showSearchSubtitleDialog();
             }
 
             @NonNull
             @Override
             public String getIdentityLabel() {
-                return "Detected title unavailable";
+                if (manualSubtitleDisplayLabel != null && !manualSubtitleDisplayLabel.isEmpty()) {
+                    return "Chosen: " + manualSubtitleDisplayLabel;
+                }
+                String query = buildSubtitleSearchInitialQuery(currentStreamTitle);
+                if (!query.isEmpty()) {
+                    return "Search subtitles for \"" + query + "\"";
+                }
+                return "Search movie/show subtitles";
             }
 
             @Override
@@ -3185,9 +3211,494 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
             @Override
             public boolean supportsSearch() {
-                return false;
+                return true;
             }
         };
+    }
+
+    // ---------------------------------------------------------------------
+    // Manual "Search Movie/Show Subtitles" flow
+    // ---------------------------------------------------------------------
+
+    /** Callback for a successful subtitle-catalog search from Flutter. */
+    private interface CatalogSearchSuccess {
+        void onResult(@NonNull List<SubtitleCatalogResult> results);
+    }
+
+    /** Callback for a failed subtitle-catalog search. */
+    private interface CatalogSearchError {
+        void onError(@NonNull String message);
+    }
+
+    /** A movie/series entry the user can pick to identify the title for subtitle lookup. */
+    private static final class SubtitleCatalogResult {
+        final String imdbId;
+        final String type; // "movie" or "series"
+        final String name;
+        @Nullable final String year;
+        @Nullable final String source;
+
+        SubtitleCatalogResult(String imdbId, String type, String name,
+                              @Nullable String year, @Nullable String source) {
+            this.imdbId = imdbId;
+            this.type = type;
+            this.name = name;
+            this.year = year;
+            this.source = source;
+        }
+
+        String titleLine() {
+            return (year != null && !year.isEmpty()) ? name + " (" + year + ")" : name;
+        }
+
+        String detailLine() {
+            StringBuilder sb = new StringBuilder("series".equals(type) ? "Series" : "Movie");
+            if (source != null && !source.isEmpty()) sb.append(" · ").append(source);
+            sb.append(" · ").append(imdbId);
+            return sb.toString();
+        }
+    }
+
+    private void showSearchSubtitleDialog() {
+        final List<SubtitleCatalogResult> results = new ArrayList<>();
+        final ArrayAdapter<SubtitleCatalogResult> adapter = createSubtitleCatalogResultAdapter(results);
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dpToPx(24), dpToPx(8), dpToPx(24), 0);
+
+        final EditText queryInput = new EditText(this);
+        queryInput.setSingleLine(true);
+        queryInput.setHint("Movie or show title");
+        queryInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        queryInput.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        queryInput.setText(buildSubtitleSearchInitialQuery(currentStreamTitle));
+        queryInput.setSelectAllOnFocus(true);
+        queryInput.setTextColor(Color.WHITE);
+        queryInput.setHintTextColor(0x80FFFFFF);
+
+        LinearLayout actionRow = new LinearLayout(this);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        actionRow.setPadding(0, dpToPx(12), 0, dpToPx(8));
+
+        final AppCompatButton searchButton = new AppCompatButton(this);
+        searchButton.setText("Search");
+        searchButton.setFocusable(true);
+        searchButton.setAllCaps(true);
+        searchButton.setTextColor(Color.WHITE);
+        searchButton.setBackgroundResource(R.drawable.subtitle_search_button_bg);
+        searchButton.setStateListAnimator(null);
+        searchButton.setMinHeight(dpToPx(44));
+
+        final ProgressBar progressBar = new ProgressBar(this);
+        progressBar.setIndeterminate(true);
+        progressBar.setVisibility(View.GONE);
+
+        actionRow.addView(searchButton,
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(dpToPx(48), dpToPx(48));
+        progressLp.leftMargin = dpToPx(16);
+        actionRow.addView(progressBar, progressLp);
+
+        final TextView statusText = new TextView(this);
+        statusText.setText("Find subtitles by choosing the correct title.");
+        statusText.setPadding(0, 0, 0, dpToPx(8));
+        statusText.setTextColor(0xB3FFFFFF);
+
+        final ListView resultList = new ListView(this);
+        resultList.setAdapter(adapter);
+        resultList.setFocusable(true);
+        resultList.setFocusableInTouchMode(true);
+        resultList.setSelector(R.drawable.subtitle_catalog_row_selector);
+        resultList.setDrawSelectorOnTop(false);
+        resultList.setDivider(new ColorDrawable(0x14FFFFFF));
+        resultList.setDividerHeight(1);
+        // Keep the DPAD-focused row fully on screen: with bottom padding + clipToPadding
+        // off, ListView scrolls the selection above the padding instead of half-clipping it.
+        resultList.setClipToPadding(false);
+        resultList.setPadding(0, 0, 0, dpToPx(48));
+
+        container.addView(queryInput, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(actionRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(statusText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(resultList, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(360)));
+
+        // Dark, red-accented dialog theme so the rows/buttons match the player chrome
+        // and stay readable regardless of the activity's DayNight state.
+        final AlertDialog dialog = new AlertDialog.Builder(
+                this, R.style.Theme_Debrify_SubtitleDialog)
+                .setTitle("Search Movie/Show Subtitles")
+                .setView(container)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        final Runnable doSearch = () -> {
+            String query = queryInput.getText() != null ? queryInput.getText().toString().trim() : "";
+            if (query.isEmpty()) {
+                results.clear();
+                adapter.notifyDataSetChanged();
+                statusText.setText("Enter a title to search.");
+                queryInput.requestFocus();
+                return;
+            }
+            progressBar.setVisibility(View.VISIBLE);
+            searchButton.setEnabled(false);
+            queryInput.setEnabled(false);
+            statusText.setText("Searching…");
+            requestSubtitleCatalogSearchFromFlutter(
+                    query,
+                    newResults -> {
+                        if (!dialog.isShowing()) return;
+                        progressBar.setVisibility(View.GONE);
+                        searchButton.setEnabled(true);
+                        queryInput.setEnabled(true);
+                        results.clear();
+                        results.addAll(newResults);
+                        adapter.notifyDataSetChanged();
+                        if (newResults.isEmpty()) {
+                            statusText.setText("No matching movie/show results found.");
+                            searchButton.requestFocus();
+                        } else {
+                            statusText.setText(newResults.size() == 1
+                                    ? "1 result" : newResults.size() + " results");
+                            resultList.requestFocus();
+                            resultList.setSelection(0);
+                        }
+                    },
+                    message -> {
+                        if (!dialog.isShowing()) return;
+                        progressBar.setVisibility(View.GONE);
+                        searchButton.setEnabled(true);
+                        queryInput.setEnabled(true);
+                        results.clear();
+                        adapter.notifyDataSetChanged();
+                        statusText.setText(message);
+                        searchButton.requestFocus();
+                    });
+        };
+
+        resultList.setOnItemClickListener((parent, view, position, id) -> {
+            SubtitleCatalogResult selected = adapter.getItem(position);
+            if (selected == null) return;
+            dialog.dismiss();
+            if ("series".equals(selected.type)) {
+                int[] parsed = parseSeasonEpisodeFromTitle(currentStreamTitle);
+                if (parsed != null) {
+                    applyManualSubtitleIdentity(selected, parsed[0], parsed[1]);
+                } else {
+                    showSeasonEpisodePrompt(selected);
+                }
+            } else {
+                applyManualSubtitleIdentity(selected, null, null);
+            }
+        });
+
+        searchButton.setOnClickListener(v -> doSearch.run());
+        queryInput.setOnEditorActionListener((v, actionId, event) -> {
+            boolean isSearchAction = actionId == EditorInfo.IME_ACTION_SEARCH;
+            boolean isEnterKey = event != null
+                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_UP;
+            if (isSearchAction || isEnterKey) {
+                doSearch.run();
+                return true;
+            }
+            return false;
+        });
+
+        dialog.setOnShowListener(d -> searchButton.requestFocus());
+        dialog.show();
+    }
+
+    private ArrayAdapter<SubtitleCatalogResult> createSubtitleCatalogResultAdapter(
+            List<SubtitleCatalogResult> results) {
+        return new ArrayAdapter<SubtitleCatalogResult>(this, 0, results) {
+            @NonNull
+            @Override
+            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+                LinearLayout row;
+                if (convertView instanceof LinearLayout) {
+                    row = (LinearLayout) convertView;
+                } else {
+                    row = new LinearLayout(getContext());
+                    row.setOrientation(LinearLayout.VERTICAL);
+                    row.setPadding(dpToPx(20), dpToPx(12), dpToPx(20), dpToPx(12));
+                    row.setMinimumHeight(dpToPx(72));
+                }
+                row.removeAllViews();
+
+                SubtitleCatalogResult item = getItem(position);
+                TextView title = new TextView(getContext());
+                title.setText(item != null ? item.titleLine() : "");
+                title.setTextSize(18f);
+                title.setTextColor(Color.WHITE);
+                title.setTypeface(Typeface.DEFAULT_BOLD);
+                title.setMaxLines(1);
+                title.setEllipsize(TextUtils.TruncateAt.END);
+
+                TextView detail = new TextView(getContext());
+                detail.setText(item != null ? item.detailLine() : "");
+                detail.setTextSize(14f);
+                detail.setTextColor(Color.LTGRAY);
+                detail.setMaxLines(1);
+                detail.setEllipsize(TextUtils.TruncateAt.END);
+
+                row.addView(title, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                row.addView(detail, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                return row;
+            }
+        };
+    }
+
+    private void requestSubtitleCatalogSearchFromFlutter(
+            String query, CatalogSearchSuccess onSuccess, CatalogSearchError onError) {
+        try {
+            MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+            if (channel == null) {
+                onError.onError("Subtitle search is unavailable.");
+                return;
+            }
+            Map<String, Object> args = new HashMap<>();
+            args.put("query", query);
+            channel.invokeMethod("searchSubtitleCatalogs", args, new MethodChannel.Result() {
+                @Override
+                public void success(@Nullable Object result) {
+                    final List<SubtitleCatalogResult> parsed = parseSubtitleCatalogResults(result);
+                    runOnUiThread(() -> onSuccess.onResult(parsed));
+                }
+
+                @Override
+                public void error(String errorCode, @Nullable String errorMessage,
+                                  @Nullable Object errorDetails) {
+                    android.util.Log.e("StremioSubs",
+                            "Subtitle catalog search failed: " + errorCode + " - " + errorMessage);
+                    runOnUiThread(() -> onError.onError(
+                            errorMessage != null ? errorMessage : "Subtitle search failed."));
+                }
+
+                @Override
+                public void notImplemented() {
+                    runOnUiThread(() -> onError.onError("Subtitle search is unavailable."));
+                }
+            });
+        } catch (Exception e) {
+            android.util.Log.e("StremioSubs", "Subtitle catalog search exception", e);
+            onError.onError("Subtitle search failed.");
+        }
+    }
+
+    private List<SubtitleCatalogResult> parseSubtitleCatalogResults(@Nullable Object result) {
+        List<SubtitleCatalogResult> out = new ArrayList<>();
+        if (!(result instanceof List)) return out;
+        for (Object raw : (List<?>) result) {
+            if (!(raw instanceof Map)) continue;
+            Map<?, ?> map = (Map<?, ?>) raw;
+            String imdbId = safeString(map.get("imdbId"));
+            if (imdbId == null || !imdbId.startsWith("tt")) continue;
+            String type = safeString(map.get("type"));
+            if (type == null) continue;
+            type = type.toLowerCase(Locale.US);
+            if (!type.equals("movie") && !type.equals("series")) continue;
+            String name = safeString(map.get("name"));
+            name = (name == null || name.trim().isEmpty()) ? imdbId : name.trim();
+            String year = safeString(map.get("year"));
+            if (year != null) { year = year.trim(); if (year.isEmpty()) year = null; }
+            String source = safeString(map.get("source"));
+            if (source != null) { source = source.trim(); if (source.isEmpty()) source = null; }
+            out.add(new SubtitleCatalogResult(imdbId, type, name, year, source));
+        }
+        return out;
+    }
+
+    private void applyManualSubtitleIdentity(SubtitleCatalogResult result,
+                                             @Nullable Integer season, @Nullable Integer episode) {
+        String type = "series".equals(result.type) ? "series" : "movie";
+        if (type.equals("series")
+                && (season == null || episode == null || season <= 0 || episode <= 0)) {
+            showSeasonEpisodePrompt(result);
+            return;
+        }
+
+        // Invalidate any in-flight auto-fetch and reset subtitle state.
+        addonSubtitleFetchToken++;
+        stremioSubtitles.clear();
+        currentStremioSubtitleIndex = -1;
+        currentSubtitleTrackIndex = -1;
+        embeddedSubtitleSelected = false;
+        isLoadingStremioSubtitles = true;
+        manualSubtitleDisplayLabel = buildManualSubtitleLabel(result, type, season, episode);
+
+        // Turn off any embedded subtitle so the fetched addon subtitle can take over.
+        // Done silently (no "Subtitles off" toast) since we immediately search.
+        if (trackSelector != null) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build());
+        }
+
+        if (subtitleSettingsVisible) {
+            refreshSubtitlePanelForLoading();
+        }
+
+        showToast("Searching subtitles for " + result.name);
+        fetchStremioSubtitlesWithImdb(result.imdbId, type, season, episode);
+    }
+
+    private String buildManualSubtitleLabel(SubtitleCatalogResult result, String type,
+                                            @Nullable Integer season, @Nullable Integer episode) {
+        if ("series".equals(type) && season != null && episode != null) {
+            return result.name + " · S" + season + "E" + episode;
+        }
+        return result.titleLine();
+    }
+
+    private void showSeasonEpisodePrompt(SubtitleCatalogResult result) {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dpToPx(24), dpToPx(8), dpToPx(24), 0);
+
+        TextView title = new TextView(this);
+        title.setText(result.titleLine());
+        title.setTextSize(18f);
+        title.setPadding(0, 0, 0, dpToPx(12));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+
+        final EditText seasonInput = new EditText(this);
+        seasonInput.setHint("Season");
+        seasonInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        seasonInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        seasonInput.setText("1");
+        seasonInput.setSelectAllOnFocus(true);
+        seasonInput.setTextColor(Color.WHITE);
+        seasonInput.setHintTextColor(0x80FFFFFF);
+
+        final EditText episodeInput = new EditText(this);
+        episodeInput.setHint("Episode");
+        episodeInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        episodeInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        episodeInput.setText("1");
+        episodeInput.setSelectAllOnFocus(true);
+        episodeInput.setTextColor(Color.WHITE);
+        episodeInput.setHintTextColor(0x80FFFFFF);
+
+        LinearLayout.LayoutParams seasonLp =
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        seasonLp.rightMargin = dpToPx(12);
+        row.addView(seasonInput, seasonLp);
+        row.addView(episodeInput,
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        container.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final AlertDialog dialog = new AlertDialog.Builder(
+                this, R.style.Theme_Debrify_SubtitleDialog)
+                .setTitle("Series Episode")
+                .setView(container)
+                .setPositiveButton("Search", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        final Runnable submit = () -> {
+            Integer season = parseIntOrNull(
+                    seasonInput.getText() != null ? seasonInput.getText().toString() : null);
+            Integer episode = parseIntOrNull(
+                    episodeInput.getText() != null ? episodeInput.getText().toString() : null);
+            if (season == null || episode == null || season <= 0 || episode <= 0) {
+                showToast("Enter a valid season and episode");
+                return;
+            }
+            dialog.dismiss();
+            applyManualSubtitleIdentity(result, season, episode);
+        };
+
+        episodeInput.setOnEditorActionListener((v, actionId, event) -> {
+            boolean isDoneAction = actionId == EditorInfo.IME_ACTION_DONE;
+            boolean isEnterKey = event != null
+                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                    && event.getAction() == KeyEvent.ACTION_UP;
+            if (isDoneAction || isEnterKey) {
+                submit.run();
+                return true;
+            }
+            return false;
+        });
+
+        dialog.setOnShowListener(d -> {
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (positive != null) {
+                positive.setOnClickListener(v -> submit.run());
+            }
+            seasonInput.requestFocus();
+        });
+        dialog.show();
+    }
+
+    private String buildSubtitleSearchInitialQuery(@Nullable String rawTitle) {
+        if (rawTitle == null || rawTitle.trim().isEmpty()) return "";
+        String filename = rawTitle;
+        int slash = filename.lastIndexOf('/');
+        if (slash >= 0) filename = filename.substring(slash + 1);
+        int q = filename.indexOf('?');
+        if (q >= 0) filename = filename.substring(0, q);
+        String cleaned = filename
+                .replaceAll("(?i)\\.(mkv|mp4|avi|mov|m4v|webm|ts|m2ts|mpg|mpeg|flv|wmv|vob|ogv|3gp|divx)$", "")
+                .replaceAll("[._]+", " ")
+                .replaceAll("(?i)\\bS\\d{1,2}\\s*E\\d{1,3}\\b", " ")
+                .replaceAll("(?i)\\b\\d{1,2}x\\d{1,3}\\b", " ")
+                .replaceAll("(?i)\\b(2160p|1080p|720p|480p|4k|uhd|hdr|web[- ]?dl|webrip|bluray|brrip|hdtv|dvdrip|x264|x265|h264|h265|hevc|aac|dts|yify)\\b", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return cleaned.isEmpty() ? rawTitle.trim() : cleaned;
+    }
+
+    @Nullable
+    private int[] parseSeasonEpisodeFromTitle(@Nullable String title) {
+        if (title == null) return null;
+        java.util.regex.Pattern[] patterns = new java.util.regex.Pattern[]{
+                java.util.regex.Pattern.compile("(?i)\\bS(\\d{1,2})\\s*E(\\d{1,3})\\b"),
+                // Bare NxNN form: cap episode at 2 digits so resolution artifacts like
+                // "12x480" / "5x264" don't get misread as season/episode.
+                java.util.regex.Pattern.compile("(?i)\\b(\\d{1,2})x(\\d{1,2})\\b"),
+                java.util.regex.Pattern.compile("(?i)\\bSeason\\s*(\\d{1,2})\\s*(?:Episode|Ep|E)\\s*(\\d{1,3})\\b")
+        };
+        for (java.util.regex.Pattern pattern : patterns) {
+            java.util.regex.Matcher matcher = pattern.matcher(title);
+            if (matcher.find()) {
+                Integer season = parseIntOrNull(matcher.group(1));
+                Integer episode = parseIntOrNull(matcher.group(2));
+                if (season != null && episode != null && season > 0 && episode > 0) {
+                    return new int[]{season, episode};
+                }
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private Integer parseIntOrNull(@Nullable String value) {
+        if (value == null) return null;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     private void showSubtitleSettingsPanel() {
