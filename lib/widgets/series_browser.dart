@@ -70,6 +70,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   // Top padding on the episode grid; part of the scroll-centering math.
   static const double _gridTopPadding = 4.0;
 
+  // Each dense-view row appends a 1px Divider (see _buildDenseRow), so its
+  // laid-out height is _lastRowExtent + this. The comfortable GridView has no
+  // divider, so it's only added to the stride when _denseView is on.
+  static const double _denseRowDivider = 1.0;
+
   // Layout values captured during build so _recenterCurrentEpisode can
   // compute offsets that match the grid actually on screen.
   int _lastColumns = 1;
@@ -537,7 +542,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     // Center the row containing the current episode, using the extents
     // captured during the last build (they match the live layout).
     final rowIndex = episodeIndexInSeason ~/ _lastColumns;
-    final rowStride = _lastRowExtent + _lastRowSpacing;
+    final rowStride =
+        _lastRowExtent + _lastRowSpacing + (_denseView ? _denseRowDivider : 0);
     final viewport = _scrollController.position.viewportDimension;
     final target =
         _gridTopPadding + rowIndex * rowStride - (viewport - _lastRowExtent) / 2;
