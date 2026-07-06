@@ -12,6 +12,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'screens/torrent_search_screen.dart';
+import 'screens/browse_screen.dart';
+import 'widgets/iptv/iptv_results_view.dart';
+import 'widgets/youtube/youtube_results_view.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/torbox/torbox_downloads_screen.dart';
 import 'screens/pikpak/pikpak_files_screen.dart';
@@ -570,6 +573,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     const WebDavFilesScreen(), // 10: WebDAV
     const PremiumizeFilesScreen(), // 11: Premiumize
     const AllDebridFilesScreen(), // 12: AllDebrid
+    // 13: IPTV and 14: YouTube are built on demand by _buildPage (they need the
+    // resolved TV flag passed in), so they have no entry in this const list.
   ];
 
   final List<String> _titles = [
@@ -586,6 +591,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'WebDAV',
     'Premiumize',
     'AllDebrid',
+    'IPTV',
+    'YouTube',
   ];
 
   final List<IconData> _icons = [
@@ -602,6 +609,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.cloud_sync_rounded,
     Icons.workspace_premium_rounded,
     Icons.all_inclusive_rounded,
+    Icons.live_tv_rounded,
+    Icons.ondemand_video_rounded,
   ];
 
   @override
@@ -2111,9 +2120,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final indices = <int>[
         0,
         2,
+        13,
+        14,
         3,
         9,
-      ]; // Torrent, Downloads, Debrify TV, Stremio TV
+      ]; // Torrent, Downloads, IPTV, YouTube, Debrify TV, Stremio TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
@@ -2150,10 +2161,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final allDebrid = allDebridEnabled ?? _allDebridEnabled;
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
-      return [0, 9, 7, 8]; // Home, Stremio TV, Addons, Settings
+      return [
+        0,
+        13,
+        14,
+        9,
+        7,
+        8,
+      ]; // Home, IPTV, YouTube, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[0, 2, 3, 9];
+    final indices = <int>[0, 2, 13, 14, 3, 9];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
@@ -2172,6 +2190,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 0: // Home
       case 2: // Downloads
         return 'Main';
+      case 13: // IPTV
+      case 14: // YouTube
+        return 'Browse';
       case 3: // Debrify TV
       case 9: // Stremio TV
         return 'TV';
@@ -2196,6 +2217,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// keep each group contiguous and its header shown once.
   static const List<String> _navSectionOrder = [
     'Main',
+    'Browse',
     'Library',
     'TV',
     'Setup',
@@ -2212,6 +2234,44 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return visibleIndices.indexOf(a).compareTo(visibleIndices.indexOf(b));
     });
     return ordered;
+  }
+
+  /// Resolve the widget for a nav index. Most come straight from the const
+  /// [_pages] list; the "Browse" tabs (IPTV/YouTube) are built here so the
+  /// already-resolved [_isAndroidTv] flag can be passed in (avoiding a
+  /// first-frame layout/focus flash from async re-detection).
+  Widget _buildPage(int index) {
+    switch (index) {
+      case 13: // IPTV
+        return BrowseScreen(
+          tabIndex: 13,
+          hintText: 'Search channels...',
+          submitOnly: false,
+          isTelevision: _isAndroidTv,
+          viewBuilder: (args) => IptvResultsView(
+            key: args.resultKey,
+            searchQuery: args.query,
+            isTelevision: args.isTelevision,
+            onUpArrowFromFilters: args.onUpArrowToSearch,
+          ),
+        );
+      case 14: // YouTube
+        return BrowseScreen(
+          tabIndex: 14,
+          hintText: 'Search YouTube...',
+          submitOnly: true,
+          isTelevision: _isAndroidTv,
+          viewBuilder: (args) => YoutubeResultsView(
+            key: args.resultKey,
+            searchQuery: args.query,
+            searchToken: args.searchToken,
+            isTelevision: args.isTelevision,
+            onUpArrowFromFilters: args.onUpArrowToSearch,
+          ),
+        );
+      default:
+        return _pages[index];
+    }
   }
 
   /// Shared fade + slide page switcher used by every layout (TV, desktop
@@ -2236,7 +2296,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         },
         child: KeyedSubtree(
           key: ValueKey<int>(_selectedIndex),
-          child: _pages[_selectedIndex],
+          child: _buildPage(_selectedIndex),
         ),
       ),
     );

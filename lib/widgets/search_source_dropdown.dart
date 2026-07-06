@@ -713,15 +713,12 @@ class SearchSourceOptionsLoader {
       debugPrint('SearchSourceOptionsLoader: Error checking Trakt auth: $e');
     }
 
-    // IPTV
-    options.add(SearchSourceOption.iptv());
-
-    // YouTube.
-    // NOTE: Reddit and Lemmy are intentionally hidden from navigation for now
-    // (Lemmy still needs more work). Their enum values, search-screen dispatch,
-    // and result views remain in place so they can be re-enabled by simply
-    // adding `SearchSourceOption.lemmy()` / `.reddit()` back here.
-    options.add(SearchSourceOption.youtube());
+    // NOTE: IPTV and YouTube now live as their own "Browse" sidebar tabs
+    // (see BrowseScreen in main.dart's _buildPage), so they are no longer
+    // offered here as search sources. Reddit and Lemmy are likewise hidden for
+    // now (Lemmy still needs more work). Their enum values, search-screen
+    // dispatch, and result views remain in place so any of them can be
+    // re-enabled by adding the matching `SearchSourceOption.*()` back here.
 
     return options;
   }

@@ -41,14 +41,24 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final traktListType = await StorageService.getHomeDefaultTraktListType();
       final traktContentType = await StorageService.getHomeDefaultTraktContentType();
 
+      // Coerce any stale/unsupported saved value to a valid option so the
+      // dropdown can't crash. IPTV and YouTube are no longer default-view
+      // options (they moved to their own "Browse" tabs), so a previously-saved
+      // 'iptv'/'youtube' — like the long-hidden 'reddit' — normalizes to 'all'.
+      const validSourceTypes = {'all', 'keyword', 'addon', 'trakt'};
+      final normalizedSourceType =
+          validSourceTypes.contains(sourceType) ? sourceType! : 'all';
+      // Persist the coercion so a dropped preference doesn't silently linger.
+      // Only when there was an actual stale value — not for a fresh install
+      // (null), which already defaults to 'all' without needing a write.
+      if (sourceType != null && normalizedSourceType != sourceType) {
+        await StorageService.setHomeDefaultSourceType(normalizedSourceType);
+      }
+
       if (!mounted) return;
       setState(() {
         _addons = addons;
-        // Coerce any stale/unsupported saved value (e.g. a previously-selected
-        // 'reddit', now hidden) to a valid option so the dropdown can't crash.
-        const validSourceTypes = {'all', 'keyword', 'addon', 'trakt', 'iptv', 'youtube'};
-        _selectedSourceType =
-            validSourceTypes.contains(sourceType) ? sourceType! : 'all';
+        _selectedSourceType = normalizedSourceType;
         _selectedAddonUrl = addonUrl;
         _selectedCatalogId = catalogId;
         _selectedTraktListType = traktListType ?? 'progress';
@@ -255,8 +265,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         DropdownMenuItem(value: 'keyword', child: Text('Keyword')),
                         DropdownMenuItem(value: 'addon', child: Text('Addon')),
                         DropdownMenuItem(value: 'trakt', child: Text('Trakt')),
-                        DropdownMenuItem(value: 'iptv', child: Text('IPTV')),
-                        DropdownMenuItem(value: 'youtube', child: Text('YouTube')),
                       ],
                       onChanged: (value) {
                         if (value != null) _selectSourceType(value);
@@ -506,10 +514,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return Icons.search;
       case 'addon':
         return Icons.extension;
-      case 'iptv':
-        return Icons.live_tv;
-      case 'youtube':
-        return Icons.smart_display_outlined;
       case 'trakt':
         return Icons.movie_filter_rounded;
       default:
@@ -525,10 +529,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         return 'The home screen will open in keyword search mode, ready for you to type a torrent search query.';
       case 'addon':
         return 'The home screen will open directly to the selected addon\'s catalog, showing its content immediately.';
-      case 'iptv':
-        return 'The home screen will open in IPTV mode, showing your M3U playlist channels.';
-      case 'youtube':
-        return 'The home screen will open in YouTube mode, ready to search and play videos.';
       case 'trakt':
         return 'The home screen will open in Trakt mode, showing your watchlist, continue watching, and more.';
       default:

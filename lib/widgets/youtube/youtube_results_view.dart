@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/playlist_view_mode.dart';
+import '../browse/browse_results_focus.dart';
 import '../../services/youtube_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
@@ -17,17 +18,29 @@ class YoutubeResultsView extends StatefulWidget {
   final String searchQuery;
   final bool isTelevision;
 
+  /// Bumped by the parent on every submit — including a re-submit of the same
+  /// text — so a retry after a failed/empty search re-runs even though
+  /// [searchQuery] is unchanged.
+  final int searchToken;
+
+  /// Called when the user presses DPAD-up from the filter row, to return focus
+  /// to the search field (TV navigation).
+  final VoidCallback? onUpArrowFromFilters;
+
   const YoutubeResultsView({
     super.key,
     required this.searchQuery,
     this.isTelevision = false,
+    this.searchToken = 0,
+    this.onUpArrowFromFilters,
   });
 
   @override
   State<YoutubeResultsView> createState() => YoutubeResultsViewState();
 }
 
-class YoutubeResultsViewState extends State<YoutubeResultsView> {
+class YoutubeResultsViewState extends State<YoutubeResultsView>
+    implements BrowseResultsFocusController {
   final ScrollController _scrollController = ScrollController();
   final List<YoutubeVideo> _videos = [];
 
@@ -67,7 +80,10 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
   @override
   void didUpdateWidget(YoutubeResultsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.searchQuery != _lastSearchQuery) {
+    // Re-search when the query changes, or when the token advances (a re-submit
+    // of the same text — e.g. a retry after a transient failure).
+    if (widget.searchQuery != _lastSearchQuery ||
+        widget.searchToken != oldWidget.searchToken) {
       _lastSearchQuery = widget.searchQuery;
       _performSearch();
     }
@@ -262,6 +278,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
   }
 
   /// DPAD entry point from the search input: focus the quality selector.
+  @override
   void focusFirstFilter() {
     _qualityFocusNode.requestFocus();
   }
@@ -276,6 +293,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView> {
           isTelevision: widget.isTelevision,
           onQualityChanged: _onQualityChanged,
           qualityFocusNode: _qualityFocusNode,
+          onUpArrowPressed: widget.onUpArrowFromFilters,
         ),
         Expanded(child: _buildContent()),
       ],

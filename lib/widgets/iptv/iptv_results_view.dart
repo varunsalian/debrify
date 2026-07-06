@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/iptv_playlist.dart';
+import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
@@ -29,7 +30,8 @@ class IptvResultsView extends StatefulWidget {
   State<IptvResultsView> createState() => IptvResultsViewState();
 }
 
-class IptvResultsViewState extends State<IptvResultsView> {
+class IptvResultsViewState extends State<IptvResultsView>
+    implements BrowseResultsFocusController {
   final ScrollController _scrollController = ScrollController();
   final IptvService _iptvService = IptvService.instance;
 
@@ -319,6 +321,7 @@ class IptvResultsViewState extends State<IptvResultsView> {
   }
 
   /// Focus the first filter (for DPAD navigation from search input)
+  @override
   void focusFirstFilter() {
     _playlistFilterFocusNode.requestFocus();
   }

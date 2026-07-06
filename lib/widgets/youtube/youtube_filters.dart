@@ -16,6 +16,10 @@ class YoutubeFiltersBar extends StatelessWidget {
   final ValueChanged<int> onQualityChanged;
   final FocusNode? qualityFocusNode;
 
+  /// Called when DPAD-up is pressed on the first filter, to return focus to the
+  /// search field (TV navigation).
+  final VoidCallback? onUpArrowPressed;
+
   const YoutubeFiltersBar({
     super.key,
     required this.selectedHeight,
@@ -23,6 +27,7 @@ class YoutubeFiltersBar extends StatelessWidget {
     required this.isTelevision,
     required this.onQualityChanged,
     this.qualityFocusNode,
+    this.onUpArrowPressed,
   });
 
   @override
@@ -40,6 +45,7 @@ class YoutubeFiltersBar extends StatelessWidget {
               selectedHeight: selectedHeight,
               onChanged: onQualityChanged,
               focusNode: qualityFocusNode,
+              onUpArrowPressed: onUpArrowPressed,
             ),
             const SizedBox(width: 12),
             if (resultCount > 0)
@@ -62,11 +68,13 @@ class _QualityDropdown extends StatefulWidget {
   final int selectedHeight;
   final ValueChanged<int> onChanged;
   final FocusNode? focusNode;
+  final VoidCallback? onUpArrowPressed;
 
   const _QualityDropdown({
     required this.selectedHeight,
     required this.onChanged,
     this.focusNode,
+    this.onUpArrowPressed,
   });
 
   @override
@@ -110,6 +118,12 @@ class _QualityDropdownState extends State<_QualityDropdown> {
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
           _showPicker();
+          return KeyEventResult.handled;
+        }
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            widget.onUpArrowPressed != null) {
+          widget.onUpArrowPressed!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
