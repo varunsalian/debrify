@@ -366,20 +366,53 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
     }
 
     return TvFocusScrollWrapper(
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.only(top: 8, bottom: 16),
-        itemCount: _videos.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= _videos.length) {
-            return _buildLoadingIndicator();
-          }
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const hPad = 16.0;
+          const spacing = 16.0;
+          final columns = youtubeGridColumnsFor(
+            constraints.maxWidth,
+            isTelevision: widget.isTelevision,
+          );
+          // Derive the card aspect ratio from the actual column width so the
+          // 16:9 thumbnail plus a fixed meta block fits exactly at any size —
+          // no overflow, no clipped titles, whatever the device.
+          final colWidth =
+              (constraints.maxWidth - hPad * 2 - spacing * (columns - 1)) /
+                  columns;
+          const metaHeight = 96.0;
+          final cardHeight = colWidth * 9 / 16 + metaHeight;
+          final aspectRatio = colWidth / cardHeight;
 
-          return YoutubeVideoCard(
-            video: _videos[index],
-            onTap: () => _playVideo(_videos[index]),
-            onDownload: () => _downloadVideo(_videos[index]),
-            focusNode: index < _cardFocusNodes.length ? _cardFocusNodes[index] : null,
+          return CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(hPad, 12, hPad, 8),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    childAspectRatio: aspectRatio,
+                    mainAxisSpacing: 22,
+                    crossAxisSpacing: spacing,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => YoutubeVideoCard(
+                      video: _videos[index],
+                      isTelevision: widget.isTelevision,
+                      onTap: () => _playVideo(_videos[index]),
+                      onDownload: () => _downloadVideo(_videos[index]),
+                      focusNode: index < _cardFocusNodes.length
+                          ? _cardFocusNodes[index]
+                          : null,
+                    ),
+                    childCount: _videos.length,
+                  ),
+                ),
+              ),
+              if (_hasMore)
+                SliverToBoxAdapter(child: _buildLoadingIndicator()),
+            ],
           );
         },
       ),

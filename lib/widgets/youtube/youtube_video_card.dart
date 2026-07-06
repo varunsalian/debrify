@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/youtube_service.dart';
+import '../browse/brand_accent.dart';
+import '../home/home_theme.dart';
 import '../../utils/tv_keys.dart';
 
-/// Card widget for displaying a YouTube video.
+/// Vertical grid card for a YouTube video: 16:9 thumbnail on top, then a
+/// channel-avatar + title + meta block below. Mirrors the app's premium
+/// focus language (scale + gold ring/glow) shared with the poster/IPTV grids.
 class YoutubeVideoCard extends StatefulWidget {
   final YoutubeVideo video;
   final VoidCallback onTap;
   final VoidCallback? onDownload;
   final FocusNode? focusNode;
+  final bool isTelevision;
 
   const YoutubeVideoCard({
     super.key,
@@ -16,6 +21,7 @@ class YoutubeVideoCard extends StatefulWidget {
     required this.onTap,
     this.onDownload,
     this.focusNode,
+    this.isTelevision = false,
   });
 
   @override
@@ -24,7 +30,9 @@ class YoutubeVideoCard extends StatefulWidget {
 
 class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
   late FocusNode _focusNode;
-  bool _isFocused = false;
+  bool _focused = false;
+  bool _hovered = false;
+  bool get _active => _focused || _hovered;
 
   @override
   void initState() {
@@ -43,7 +51,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
   }
 
   void _onFocusChange() {
-    setState(() => _isFocused = _focusNode.hasFocus);
+    if (mounted) setState(() => _focused = _focusNode.hasFocus);
   }
 
   String _formatDuration(int seconds) {
@@ -68,8 +76,28 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
         video.publishedLabel!,
     ];
 
+    final fx = widget.isTelevision
+        ? Duration.zero
+        : const Duration(milliseconds: 160);
+
     return Focus(
       focusNode: _focusNode,
+      onFocusChange: (f) {
+        if (f) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: widget.isTelevision
+                  ? Duration.zero
+                  : const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
           widget.onTap();
@@ -77,145 +105,240 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
         }
         return KeyEventResult.ignored;
       },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onDownload,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isFocused ? colorScheme.primary : Colors.transparent,
-              width: _isFocused ? 2 : 0,
-            ),
-            boxShadow: _isFocused
-                ? [
-                    BoxShadow(
-                      color: colorScheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onLongPress: widget.onDownload,
+          behavior: HitTestBehavior.opaque,
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Thumbnail
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 160,
-                      height: 90,
-                      color: colorScheme.surfaceContainerHigh,
-                      child: video.thumbnailUrl != null
-                          ? Image.network(
-                              video.thumbnailUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Center(
-                                child: Icon(
-                                  Icons.play_circle_outline,
-                                  size: 40,
-                                  color: colorScheme.onSurfaceVariant,
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: AnimatedScale(
+                  duration: fx,
+                  curve: Curves.easeOutCubic,
+                  scale: _active ? 1.03 : 1.0,
+                  child: AnimatedContainer(
+                    duration: fx,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: _active ? 0.55 : 0.3),
+                          blurRadius: _active ? 28 : 12,
+                          offset: const Offset(0, 10),
+                        ),
+                        if (_active)
+                          BoxShadow(
+                            color: HomeTheme.focusGold.withValues(alpha: 0.45),
+                            blurRadius: 30,
+                            spreadRadius: 1,
+                          ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Container(
+                            color: colorScheme.surfaceContainerHigh,
+                            child: video.thumbnailUrl != null
+                                ? Image.network(
+                                    video.thumbnailUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _thumbFallback(colorScheme),
+                                  )
+                                : _thumbFallback(colorScheme),
+                          ),
+                          if (video.durationSeconds != null)
+                            Positioned(
+                              bottom: 6,
+                              right: 6,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.82),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  _formatDuration(video.durationSeconds!),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            )
-                          : Center(
-                              child: Icon(
-                                Icons.play_circle_outline,
-                                size: 40,
-                                color: colorScheme.onSurfaceVariant,
+                            ),
+                          if (_active)
+                            const Positioned.fill(child: _PlayOverlay()),
+                          if (_active)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: HomeTheme.focusGold,
+                                      width: 2.5,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
+                        ],
+                      ),
                     ),
-                    if (video.durationSeconds != null)
-                      Positioned(
-                        bottom: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _formatDuration(video.durationSeconds!),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_isFocused)
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          child: const Center(
-                            child: Icon(
-                              Icons.play_arrow,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
 
-              // Content
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        video.title,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        video.author,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (metaParts.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          metaParts.join(' • '),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+              const SizedBox(height: 11),
+
+              // Meta: channel avatar + title + author + stats
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ChannelAvatar(author: video.author),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            video.title,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
+                          const SizedBox(height: 4),
+                          Text(
+                            video.author,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (metaParts.isNotEmpty)
+                            Text(
+                              metaParts.join(' • '),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.85),
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbFallback(ColorScheme colorScheme) {
+    return Center(
+      child: Icon(
+        Icons.play_circle_outline,
+        size: 40,
+        color: colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+/// Number of YouTube grid columns. One column on phones (full-width thumbnail
+/// with meta beneath, à la mobile YouTube), scaling up on wider screens/TV.
+int youtubeGridColumnsFor(double width, {bool isTelevision = false}) {
+  if (isTelevision || width >= 1600) return 4;
+  if (width >= 1100) return 3;
+  if (width >= 680) return 2;
+  return 1;
+}
+
+class _PlayOverlay extends StatelessWidget {
+  const _PlayOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.28),
+        alignment: Alignment.center,
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.55),
+              width: 1.5,
+            ),
+          ),
+          child: const Icon(Icons.play_arrow_rounded,
+              size: 26, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+/// Circular channel monogram, tinted by a stable per-channel accent.
+class _ChannelAvatar extends StatelessWidget {
+  final String author;
+  const _ChannelAvatar({required this.author});
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = author.trim();
+    final letter = trimmed.isEmpty ? '?' : trimmed[0].toUpperCase();
+    final color = brandAccentFor(author);
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color, HSLColor.fromColor(color).withLightness(0.42).toColor()],
+        ),
+      ),
+      child: Text(
+        letter,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
