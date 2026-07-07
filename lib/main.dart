@@ -2422,8 +2422,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _showTabHiddenSnack(name);
       return;
     }
-    // Don't stack a second identical provider route (rapid re-tap / duplicate
-    // deep link while one is already open).
+    // Don't stack a second provider route on top of one already open (rapid
+    // re-tap / a deep link firing while a provider is open) — the user backs out
+    // to the hub first, then opens another.
     if (_cloudProviderRouteOpen) return;
     _cloudProviderRouteOpen = true;
 
