@@ -220,14 +220,6 @@ class TorrentPlaybackService {
     PosterPlayLoadingOverlay? overlay,
     bool Function()? isCancelled,
   }) async {
-    final prov = provider ?? await _pickProvider(context);
-    if (!context.mounted) return;
-    if (prov == _cancelled) return; // user dismissed the picker
-    if (prov == null) {
-      _snack(context, 'No debrid provider configured. Add one in Settings.');
-      return;
-    }
-
     final rootNav = Navigator.of(context, rootNavigator: true);
     // Dismiss whichever loading affordance is on screen, exactly once (the
     // poster mask handle, else the DebridLoadingOverlay route).
@@ -241,7 +233,9 @@ class TorrentPlaybackService {
 
     bool cancelled() => isCancelled?.call() ?? false;
 
-    // A direct-URL addon stream, if present, is the cheapest instant play.
+    // A direct-URL addon stream, if present, is the cheapest instant play — and
+    // needs no debrid provider, so play it before prompting for one. This is the
+    // IPTV / non-IMDb catalog path (streams come straight from the addon).
     Torrent? direct;
     for (final t in torrents) {
       if (t.streamType == StreamType.directUrl &&
@@ -257,6 +251,25 @@ class TorrentPlaybackService {
         VideoPlayerLaunchArgs(
             videoUrl: direct.directUrl!, title: direct.displayTitle),
       );
+      return;
+    }
+
+    final prov = provider ?? await _pickProvider(context);
+    // These bail-outs are reachable when the caller passed no provider (the
+    // non-IMDb addon-stream path with only torrent results). Dismiss the
+    // caller's overlay on each, or it stays stuck full-screen (both overlays
+    // are non-dismissable by the system back button).
+    if (!context.mounted) {
+      if (overlayAlreadyShown) closeLoading();
+      return;
+    }
+    if (prov == _cancelled) {
+      if (overlayAlreadyShown) closeLoading(); // user dismissed the picker
+      return;
+    }
+    if (prov == null) {
+      if (overlayAlreadyShown) closeLoading();
+      _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
 
@@ -353,6 +366,25 @@ class TorrentPlaybackService {
       return;
     }
 
+    // Genuinely non-IMDb catalog content (IPTV channels, TV, etc.) — a
+    // non-standard type AND no `tt…` id, so there's nothing to torrent-search.
+    // It resolves from the addon's own stream endpoint instead. (A non-standard
+    // type that DOES carry a `tt…` id, e.g. some `anime` catalogs, keeps the
+    // normal torrent search below so the on-device engines still run.)
+    final ct = meta.contentType;
+    if (ct != null &&
+        ct != 'movie' &&
+        ct != 'series' &&
+        !imdbId.startsWith('tt')) {
+      await _playAddonStream(context, imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          meta: meta,
+          label: label);
+      return;
+    }
+
     // Bound-source reuse: if the user pinned a source for this title, play it
     // directly and skip the torrent search entirely. A series binding is only
     // usable when a concrete season+episode is requested (to land in the pack).
@@ -429,6 +461,85 @@ class TorrentPlaybackService {
     }
     await playBest(context, torrents,
         provider: provider,
+        title: label,
+        meta: meta,
+        overlayAlreadyShown: true,
+        overlay: overlay,
+        isCancelled: () => cancel.cancelled);
+  }
+
+  /// Play non-IMDb catalog content (IPTV / TV channels) straight from the
+  /// addon's own stream endpoint — no torrent engine, no debrid provider. Shows
+  /// the same cinematic overlay as [playFromSelection] and hands the resolved
+  /// streams to [playBest], which plays a direct stream instantly.
+  static Future<void> _playAddonStream(
+    BuildContext context,
+    String id, {
+    required bool isMovie,
+    int? season,
+    int? episode,
+    required PlaybackMeta meta,
+    required String label,
+  }) async {
+    const accent = Color(0xFF7B5CFF);
+    final cancel = _PlaybackCancelToken();
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    final usePoster = meta.posterUrl != null && meta.posterUrl!.isNotEmpty;
+    PosterPlayLoadingOverlay? overlay;
+    if (usePoster) {
+      overlay = PosterPlayLoadingOverlay.show(
+        context,
+        posterUrl: meta.posterUrl,
+        title: label,
+        provider: 'Stream',
+        accentColor: accent,
+        icon: Icons.live_tv_rounded,
+        onCancel: () => cancel.cancelled = true,
+      );
+    } else {
+      DebridLoadingOverlay.show(context,
+          provider: 'Stream',
+          torrentName: label,
+          accentColor: accent,
+          icon: Icons.live_tv_rounded);
+    }
+    void closeLoading() {
+      if (overlay != null) {
+        overlay.dismiss();
+      } else if (rootNav.canPop()) {
+        rootNav.pop();
+      }
+    }
+
+    Map<String, dynamic> res;
+    try {
+      res = await TorrentService.searchByImdbWithStremio(
+        id,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        contentType: meta.contentType,
+      );
+    } catch (e) {
+      if (cancel.cancelled) return;
+      closeLoading();
+      if (context.mounted) _snack(context, 'Search failed: $e');
+      return;
+    }
+    if (cancel.cancelled) return;
+    if (!context.mounted) {
+      closeLoading();
+      return;
+    }
+    final torrents = (res['torrents'] as List).cast<Torrent>();
+    if (torrents.isEmpty) {
+      closeLoading();
+      _snack(context, 'No stream found for "$label".');
+      return;
+    }
+    // playBest plays a direct addon stream instantly (no provider needed); if
+    // there somehow isn't one it falls through to the normal provider path.
+    await playBest(context, torrents,
         title: label,
         meta: meta,
         overlayAlreadyShown: true,

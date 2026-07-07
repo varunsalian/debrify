@@ -1916,7 +1916,13 @@ class _SearchScreenState extends State<SearchScreen> {
 
   AdvancedSearchSelection _movieSelection(StremioMeta item) =>
       AdvancedSearchSelection(
-        imdbId: item.imdbId ?? (item.id.startsWith('tt') ? item.id : ''),
+        // Keep the raw addon id ONLY for non-standard types (IPTV / TV / channel)
+        // so playback/Sources can resolve the addon's own stream endpoint. A
+        // movie/series without a `tt…` id (e.g. tmdb/kitsu-only) keeps '' so it
+        // still shows the clear "No IMDb match" message instead of a doomed
+        // torrent search — the isolated engine can't resolve those ids anyway.
+        imdbId: item.effectiveImdbId ??
+            (item.type == 'movie' || item.type == 'series' ? '' : item.id),
         isSeries: false,
         title: item.name,
         year: item.year,
@@ -2021,10 +2027,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
   PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta(
-        // null (not '') when absent, so the launcher's Trakt auto-sync + local
-        // Continue Watching never fire on a garbage id.
-        imdbId: sel.imdbId.isEmpty ? null : sel.imdbId,
-        contentType: sel.isSeries ? 'series' : 'movie',
+        // Only a real IMDb id here — the launcher's Trakt auto-sync + local
+        // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
+        // even though the search itself still uses sel.imdbId (the addon id).
+        imdbId: sel.imdbId.startsWith('tt') ? sel.imdbId : null,
+        contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
         season: sel.season,
         episode: sel.episode,
         title: sel.title,
@@ -3714,14 +3721,29 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     }
     _nodes.clear();
     try {
+      final sel = widget.selection;
+      // Only genuinely non-IMDb items (non-standard type AND no `tt…` id) resolve
+      // from the addon; a non-standard type that still has a `tt…` id keeps the
+      // normal torrent search so the on-device engines run.
+      final useAddonStream = sel.isNonImdb && !sel.imdbId.startsWith('tt');
       final res = _keywordMode
           ? await TorrentService.searchAllEngines(_query)
-          : await TorrentService.searchByImdb(
-              widget.selection.imdbId,
-              isMovie: !widget.selection.isSeries,
-              season: widget.selection.season,
-              episode: widget.selection.episode,
-            );
+          : useAddonStream
+              // IPTV / non-IMDb catalog items have no torrent-indexer match —
+              // resolve their streams from the addon (skips the torrent engine).
+              ? await TorrentService.searchByImdbWithStremio(
+                  sel.imdbId,
+                  isMovie: !sel.isSeries,
+                  season: sel.season,
+                  episode: sel.episode,
+                  contentType: sel.contentType,
+                )
+              : await TorrentService.searchByImdb(
+                  sel.imdbId,
+                  isMovie: !sel.isSeries,
+                  season: sel.season,
+                  episode: sel.episode,
+                );
       if (!mounted || token != _searchToken) return;
       final torrents = (res['torrents'] as List).cast<Torrent>();
       for (var i = 0; i < torrents.length; i++) {
