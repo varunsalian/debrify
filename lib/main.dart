@@ -2492,28 +2492,28 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           },
                         ),
                         Expanded(
-                          child: SafeArea(
-                            left: false,
-                            child: Stack(
-                              children: [
-                                // Page fills the whole area so its own
-                                // background covers the animated backdrop.
-                                Positioned.fill(child: _buildAnimatedPage()),
-                                // Invisible top strip keeps the frameless
-                                // window draggable now that the AppBar is
-                                // gone — overlaid (not a reserved row) so it
-                                // doesn't expose the backdrop glow. Sits
-                                // above the screen's own header padding, so
-                                // it doesn't block any controls.
-                                const Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: WindowDragArea(
-                                    child: SizedBox(height: 26),
+                          // Clip so nothing in the page (e.g. a horizontally
+                          // scrolled poster row) can ever paint over the sidebar.
+                          child: ClipRect(
+                            child: SafeArea(
+                              left: false,
+                              child: Stack(
+                                children: [
+                                  // Page fills the whole area so its own
+                                  // background covers the animated backdrop.
+                                  Positioned.fill(child: _buildAnimatedPage()),
+                                  // Invisible top strip keeps the frameless
+                                  // window draggable now that the AppBar is gone.
+                                  const Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: WindowDragArea(
+                                      child: SizedBox(height: 26),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),

@@ -22,12 +22,17 @@ import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/torrent_filter_matcher.dart';
-import '../widgets/catalog_item_tile.dart';
+import '../utils/tv_keys.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import 'catalog_item_detail_screen.dart';
 import 'episodes_screen.dart';
+
+/// Stremio-style palette for the Search tab: an indigo/purple accent and a deep
+/// near-black indigo base behind the poster board.
+const Color kStremioAccent = Color(0xFF7B5CFF);
+const Color kStremioBg = Color(0xFF0D0B1A);
 
 /// Dedicated Search tab.
 ///
@@ -236,7 +241,8 @@ class _SearchScreenState extends State<SearchScreen> {
         : null;
     _heroItem.value = first;
     _heroEnriched.value = null;
-    if (first != null) _enrichHero(first);
+    // The hero is TV-only (see _buildBoard), so skip the backdrop fetch off-TV.
+    if (first != null && widget.isTelevision) _enrichHero(first);
   }
 
   /// Cross-addon catalog search, grouped as one horizontal row per addon so it
@@ -251,26 +257,29 @@ class _SearchScreenState extends State<SearchScreen> {
       final addons = (await _stremio.getBrowseableOrSearchableAddons())
           .where((a) => a.hasSearchableCatalogs)
           .toList();
-      final raw = await Future.wait(
-        addons.map((addon) async {
-          try {
-            final items = await _stremio.searchAddonCatalogs(addon, query);
-            if (items.isEmpty) return null;
-            final catalog = addon.catalogs.firstWhere(
-              (c) => c.supportsSearch,
-              orElse: () => addon.catalogs.first,
-            );
-            return CatalogSection(
-              title: '${addon.name} · Results',
-              addon: addon,
-              catalog: catalog,
-              items: items,
-            );
-          } catch (_) {
-            return null;
-          }
-        }),
-      );
+      // One row PER searchable catalog (so Movies and Series land in separate
+      // categorised rows, like Stremio) instead of one merged row per addon.
+      final tasks = <Future<CatalogSection?>>[];
+      for (final addon in addons) {
+        for (final catalog in addon.catalogs.where((c) => c.supportsSearch)) {
+          tasks.add(() async {
+            try {
+              final items =
+                  await _stremio.searchSingleCatalog(addon, catalog, query);
+              if (items.isEmpty) return null;
+              return CatalogSection(
+                title: '${addon.name}: ${catalog.name}',
+                addon: addon,
+                catalog: catalog,
+                items: items,
+              );
+            } catch (_) {
+              return null;
+            }
+          }());
+        }
+      }
+      final raw = await Future.wait(tasks);
       if (!mounted || token != _catalogSearchToken) return;
       setState(() => _catalogSearching = false);
       _applySections(raw.whereType<CatalogSection>().toList());
@@ -844,95 +853,142 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(child: _buildBody()),
-          ],
+      backgroundColor: kStremioBg,
+      // Stremio-style indigo/purple glow: a soft purple bloom near the top
+      // fading into deep near-black indigo.
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.75),
+            radius: 1.35,
+            colors: [
+              Color(0xFF322A6B), // purple bloom
+              Color(0xFF1A1734),
+              Color(0xFF100E20),
+              kStremioBg,
+            ],
+            stops: [0.0, 0.42, 0.72, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildHeader() {
-    final scheme = Theme.of(context).colorScheme;
     final tv = widget.isTelevision;
+    // On narrow phones the search box + Catalog/Keyword toggle crowd each other
+    // in one row, so stack the toggle underneath. Wide/TV keeps them inline.
+    final narrow = !tv && MediaQuery.of(context).size.width < 620;
+
+    final field = _buildSearchField(tv);
+    final toggle = _ModeToggle(
+      mode: _mode,
+      isTelevision: tv,
+      fullWidth: narrow,
+      onChanged: _switchMode,
+    );
+
+    if (narrow) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, tv ? 16 : 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            field,
+            const SizedBox(height: 10),
+            toggle,
+          ],
+        ),
+      );
+    }
+
+    // Wide/TV: a centered pill search (Stremio-style) with the mode toggle
+    // pinned to the right. A left spacer matching the toggle keeps the search
+    // truly centered.
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, tv ? 16 : 12, 16, 8),
+      padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
+          const SizedBox(width: 172),
           Expanded(
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  _focusContent();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Container(
-                height: tv ? 54 : 48,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.search_rounded,
-                        size: 20, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        onChanged: _onQueryChanged,
-                        onSubmitted: _onQuerySubmitted,
-                        textInputAction: TextInputAction.search,
-                        style: TextStyle(
-                          fontSize: tv ? 16 : 15,
-                          color: scheme.onSurface,
-                        ),
-                        decoration: InputDecoration(
-                          isCollapsed: true,
-                          border: InputBorder.none,
-                          hintText: _mode == _Mode.catalog
-                              ? 'Search movies & shows…'
-                              : 'Search torrents by keyword…',
-                          hintStyle:
-                              TextStyle(color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _searchController,
-                      builder: (context, value, _) {
-                        if (value.text.isEmpty) return const SizedBox.shrink();
-                        return GestureDetector(
-                          onTap: _clearQuery,
-                          child: Icon(Icons.close_rounded,
-                              size: 18, color: scheme.onSurfaceVariant),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 680),
+                child: field,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          _ModeToggle(
-            mode: _mode,
-            isTelevision: tv,
-            onChanged: _switchMode,
-          ),
+          const SizedBox(width: 12),
+          toggle,
         ],
+      ),
+    );
+  }
+
+  /// Centered translucent pill search — mirrors Stremio's search bar (rounded
+  /// pill, centered text, a search glyph on the right that becomes a clear ✕).
+  Widget _buildSearchField(bool tv) {
+    final scheme = Theme.of(context).colorScheme;
+    final radius = BorderRadius.circular(26);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _focusContent();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _searchController,
+        builder: (context, value, _) {
+          final hasText = value.text.isNotEmpty;
+          return TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            onChanged: _onQueryChanged,
+            onSubmitted: _onQuerySubmitted,
+            textInputAction: TextInputAction.search,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
+            decoration: InputDecoration(
+              hintText: _mode == _Mode.catalog
+                  ? 'Search or paste link'
+                  : 'Search torrents by keyword',
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.32)),
+              suffixIcon: hasText
+                  ? IconButton(
+                      icon: Icon(Icons.close_rounded,
+                          color: Colors.white.withValues(alpha: 0.55)),
+                      onPressed: _clearQuery,
+                    )
+                  : Icon(Icons.search_rounded,
+                      color: Colors.white.withValues(alpha: 0.4)),
+              border: OutlineInputBorder(
+                  borderRadius: radius, borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: radius, borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: radius,
+                borderSide: BorderSide(color: kStremioAccent.withValues(alpha: 0.6)),
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.06),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 20, vertical: tv ? 16 : 14),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1170,28 +1226,32 @@ class _SearchScreenState extends State<SearchScreen> {
 
     return Column(
       children: [
-        ValueListenableBuilder<StremioMeta?>(
-          valueListenable: _heroItem,
-          builder: (context, item, _) {
-            if (item == null) return const SizedBox.shrink();
-            return ValueListenableBuilder<StremioMeta?>(
-              valueListenable: _heroEnriched,
-              builder: (context, enriched, __) {
-                return _HeroSpotlight(
-                  item: item,
-                  background: item.background?.isNotEmpty == true
-                      ? item.background
-                      : enriched?.background,
-                  description: item.description?.isNotEmpty == true
-                      ? item.description
-                      : enriched?.description,
-                  isTelevision: tv,
-                  height: heroH,
-                );
-              },
-            );
-          },
-        ),
+        // The hero spotlight only changes as DPAD focus moves across tiles, so
+        // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
+        // sit frozen on the first item and waste vertical space — hide it.
+        if (tv)
+          ValueListenableBuilder<StremioMeta?>(
+            valueListenable: _heroItem,
+            builder: (context, item, _) {
+              if (item == null) return const SizedBox.shrink();
+              return ValueListenableBuilder<StremioMeta?>(
+                valueListenable: _heroEnriched,
+                builder: (context, enriched, __) {
+                  return _HeroSpotlight(
+                    item: item,
+                    background: item.background?.isNotEmpty == true
+                        ? item.background
+                        : enriched?.background,
+                    description: item.description?.isNotEmpty == true
+                        ? item.description
+                        : enriched?.description,
+                    isTelevision: tv,
+                    height: heroH,
+                  );
+                },
+              );
+            },
+          ),
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.only(top: 6, bottom: 32),
@@ -1204,47 +1264,86 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  /// "Movies" / "Series" (etc.) tag for a catalog row, so two "Popular" rows
+  /// (one movies, one series) are distinguishable. Null for unknown types.
+  String? _sectionTypeLabel(CatalogSection section) {
+    switch (section.catalog.type.toLowerCase()) {
+      case 'movie':
+        return 'Movies';
+      case 'series':
+        return 'Series';
+      case 'tv':
+        return 'TV';
+      case 'channel':
+        return 'Channels';
+      default:
+        return null;
+    }
+  }
+
   Widget _buildRow(int rowIndex) {
     final section = _sections[rowIndex];
     final nodes = _rowNodes[rowIndex];
     final tv = widget.isTelevision;
-    final posterW = tv ? 148.0 : 122.0;
+    final width = MediaQuery.of(context).size.width;
+    // Bigger, roomier posters on desktop (Stremio-scale); smaller on phones.
+    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
     final posterH = posterW * 3 / 2;
-    final rowH = posterH + 26;
+    // Cell = poster + gap + a 2-line title below. Size the title band from the
+    // actual (accessibility-scaled) line height so a large system font can't
+    // overflow the fixed cell.
+    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
+    final cellH = posterH + 10 + titleH + 6;
+    final rowH = cellH + 14; // headroom for the hover/focus lift
+    final typeLabel = _sectionTypeLabel(section);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-          child: Text(
-            section.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: tv ? 19 : 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.4,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  section.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: tv ? 20 : 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              if (typeLabel != null) ...[
+                const SizedBox(width: 10),
+                _CategoryTag(typeLabel),
+              ],
+            ],
           ),
         ),
         SizedBox(
           height: rowH,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
+            // Clip the horizontal viewport so scrolled-off cards don't paint
+            // over the sidebar to the left. rowH has enough headroom that the
+            // hover/focus lift still isn't clipped.
+            clipBehavior: Clip.hardEdge,
             cacheExtent: 2000,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 13),
             itemCount: section.items.length,
             itemBuilder: (context, col) {
               final item = section.items[col];
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: Center(
                   child: SizedBox(
                     width: posterW,
-                    height: posterH,
+                    height: cellH,
                     child: _BoardCell(
                       item: item,
                       isTelevision: tv,
@@ -1480,9 +1579,36 @@ class _HeroSpotlight extends StatelessWidget {
       );
 }
 
-/// [CatalogItemTile] plus DPAD arrow navigation. The tile owns SELECT, its
+/// Small pill next to a catalog-row header marking it as Movies / Series / etc.
+class _CategoryTag extends StatelessWidget {
+  final String label;
+  const _CategoryTag(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: kStremioAccent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kStremioAccent.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFFB9A9FF),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+/// [_StremioCard] plus DPAD arrow navigation. The card owns SELECT, its
 /// focus visuals and ensureVisible; this ancestor [Focus] catches the arrows
-/// the tile ignores (left/right within the row, up/down to adjacent rows or
+/// the card ignores (left/right within the row, up/down to adjacent rows or
 /// the search field) and reports focus to drive the hero.
 class _BoardCell extends StatelessWidget {
   final StremioMeta item;
@@ -1548,7 +1674,7 @@ class _BoardCell extends StatelessWidget {
         if (has) onFocused();
       },
       onKeyEvent: _handleArrows,
-      child: CatalogItemTile(
+      child: _StremioCard(
         item: item,
         isTelevision: isTelevision,
         focusNode: focusNode,
@@ -1559,21 +1685,224 @@ class _BoardCell extends StatelessWidget {
   }
 }
 
+/// Stremio-style poster card: clean rounded poster with a soft shadow that
+/// lifts on hover/focus, and the title centered BELOW the poster (2 lines).
+/// Deliberately minimal (no MOVIE/rating chips) to mirror Stremio's board.
+class _StremioCard extends StatefulWidget {
+  final StremioMeta item;
+  final bool isTelevision;
+  final FocusNode focusNode;
+  final bool hasBoundSource;
+  final VoidCallback onOpen;
+
+  const _StremioCard({
+    required this.item,
+    required this.isTelevision,
+    required this.focusNode,
+    required this.hasBoundSource,
+    required this.onOpen,
+  });
+
+  @override
+  State<_StremioCard> createState() => _StremioCardState();
+}
+
+class _StremioCardState extends State<_StremioCard> {
+  bool _focused = false;
+  bool _hovered = false;
+  bool _keyDown = false;
+  bool get _active => _focused || _hovered;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final poster = item.poster;
+    final fx = widget.isTelevision
+        ? Duration.zero
+        : const Duration(milliseconds: 160);
+
+    final posterCard = AnimatedScale(
+      duration: fx,
+      curve: Curves.easeOutCubic,
+      scale: _active ? 1.05 : 1.0,
+      child: AspectRatio(
+        aspectRatio: 2 / 3,
+        child: AnimatedContainer(
+          duration: fx,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _active ? 0.6 : 0.35),
+                blurRadius: _active ? 28 : 12,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (poster != null && poster.isNotEmpty)
+                  CachedNetworkImage(
+                    imageUrl: poster,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _placeholder(item.name),
+                    errorWidget: (_, __, ___) => _placeholder(item.name),
+                  )
+                else
+                  _placeholder(item.name),
+                if (widget.hasBoundSource)
+                  const Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Icon(Icons.bookmark_rounded,
+                        size: 18,
+                        color: Colors.white,
+                        shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+                  ),
+                // Selection ring — accent on TV focus, subtle white on hover.
+                if (_active)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: widget.isTelevision
+                                ? kStremioAccent
+                                : Colors.white.withValues(alpha: 0.6),
+                            width: widget.isTelevision ? 2.5 : 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        if (!f) _keyDown = false;
+        if (f) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: widget.isTelevision
+                  ? Duration.zero
+                  : const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
+      onKeyEvent: (node, event) {
+        if (isActivateKey(event.logicalKey) ||
+            event.logicalKey == LogicalKeyboardKey.space) {
+          if (event is KeyDownEvent) {
+            _keyDown = true;
+            return KeyEventResult.handled;
+          } else if (event is KeyUpEvent) {
+            if (_keyDown) widget.onOpen();
+            _keyDown = false;
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onOpen,
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              posterCard,
+              const SizedBox(height: 10),
+              Text(
+                item.name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: _active
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.92),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _placeholder(String title) {
+    return Container(
+      color: const Color(0xFF15151F),
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Catalog / Keyword segmented toggle.
 class _ModeToggle extends StatelessWidget {
   final _Mode mode;
   final bool isTelevision;
+
+  /// When true the two segments split the full available width (used when the
+  /// toggle is stacked below the search box on narrow screens).
+  final bool fullWidth;
   final ValueChanged<_Mode> onChanged;
 
   const _ModeToggle({
     required this.mode,
     required this.isTelevision,
     required this.onChanged,
+    this.fullWidth = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final catalog =
+        _segment(context, _Mode.catalog, 'Catalog', Icons.grid_view_rounded);
+    final keyword =
+        _segment(context, _Mode.keyword, 'Keyword', Icons.bolt_rounded);
     return Container(
       height: isTelevision ? 54 : 48,
       padding: const EdgeInsets.all(4),
@@ -1583,10 +1912,10 @@ class _ModeToggle extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
-        children: [
-          _segment(context, _Mode.catalog, 'Catalog', Icons.grid_view_rounded),
-          _segment(context, _Mode.keyword, 'Keyword', Icons.bolt_rounded),
-        ],
+        mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
+        children: fullWidth
+            ? [Expanded(child: catalog), Expanded(child: keyword)]
+            : [catalog, keyword],
       ),
     );
   }
@@ -1601,7 +1930,7 @@ class _ModeToggle extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: on ? HomeTheme.focusGold : Colors.transparent,
+          color: on ? kStremioAccent : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -1610,7 +1939,7 @@ class _ModeToggle extends StatelessWidget {
             Icon(icon,
                 size: 16,
                 color: on
-                    ? const Color(0xFF0A0F18)
+                    ? Colors.white
                     : Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(width: 6),
             Text(
@@ -1619,7 +1948,7 @@ class _ModeToggle extends StatelessWidget {
                 fontSize: isTelevision ? 14 : 13,
                 fontWeight: FontWeight.w700,
                 color: on
-                    ? const Color(0xFF0A0F18)
+                    ? Colors.white
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),

@@ -1722,6 +1722,19 @@ class StremioService {
   }
 
   /// Search a single catalog
+  /// Public per-catalog search — lets callers group results per catalog (e.g.
+  /// separate Movie / Series rows) instead of merging them like
+  /// [searchAddonCatalogs]. Returns [] for a non-searchable catalog.
+  Future<List<StremioMeta>> searchSingleCatalog(
+    StremioAddon addon,
+    StremioAddonCatalog catalog,
+    String query,
+  ) async {
+    if (query.trim().isEmpty || !catalog.supportsSearch) return [];
+    return _searchSingleCatalog(
+        addon, catalog, Uri.encodeComponent(query.trim()));
+  }
+
   Future<List<StremioMeta>> _searchSingleCatalog(
     StremioAddon addon,
     StremioAddonCatalog catalog,

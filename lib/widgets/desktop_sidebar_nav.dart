@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'home/home_theme.dart';
 import 'window_drag_area.dart';
 
-/// One entry in the desktop sidebar. [section] is the group header it lives
-/// under (e.g. "Main"); consecutive entries sharing a section are grouped.
+/// Stremio-style indigo accent + purple-tinted rail background.
+const Color _kAccent = Color(0xFF7B5CFF);
+const Color _kRailBg = Color(0xFF120F24);
+
+/// One entry in the desktop sidebar. [section] groups consecutive entries; a
+/// small divider is inserted whenever the section changes.
 class DesktopNavEntry {
   final IconData icon;
   final String label;
@@ -13,10 +16,11 @@ class DesktopNavEntry {
   const DesktopNavEntry(this.icon, this.label, this.section, {this.tag});
 }
 
-/// Always-visible left navigation rail for wide desktop windows — replaces
-/// the top nav bar. Mouse-driven (hover + click); the TV build keeps its own
-/// focus-driven [TvSidebarNav] and mobile keeps the floating bar. Entries are
-/// rendered as grouped sections in the order given.
+/// Stremio-style icon rail for wide desktop windows. Each item is a rounded
+/// cell showing its icon; the active item — and any item on hover — reveals its
+/// label beneath the icon inside a highlighted rounded box (no floating
+/// tooltip, no rail expansion). TV keeps its focus-driven rail and mobile keeps
+/// the floating bar.
 class DesktopSidebarNav extends StatelessWidget {
   /// Index into [entries] of the active screen.
   final int currentIndex;
@@ -25,7 +29,7 @@ class DesktopSidebarNav extends StatelessWidget {
   /// Called with the index into [entries] that was clicked.
   final ValueChanged<int> onTap;
 
-  static const double width = 248.0;
+  static const double width = 90.0;
 
   const DesktopSidebarNav({
     super.key,
@@ -36,18 +40,14 @@ class DesktopSidebarNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    // Build a flat child list, injecting a section header whenever the
-    // section label changes from the previous entry.
     final children = <Widget>[];
     String? lastSection;
     for (var i = 0; i < entries.length; i++) {
       final e = entries[i];
-      if (e.section != lastSection) {
-        children.add(_SectionLabel(e.section));
-        lastSection = e.section;
+      if (lastSection != null && e.section != lastSection) {
+        children.add(const _GroupDivider());
       }
+      lastSection = e.section;
       children.add(
         _SidebarItem(
           icon: e.icon,
@@ -60,46 +60,31 @@ class DesktopSidebarNav extends StatelessWidget {
 
     return Container(
       width: width,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0C13),
+      decoration: const BoxDecoration(color: _kRailBg),
+      foregroundDecoration: BoxDecoration(
         border: Border(
-          right: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+          right: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Logo header doubles as the window drag handle (no AppBar here).
+          // Logo doubles as the window drag handle (no AppBar here).
           WindowDragArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/app_icon.png',
-                      width: 28,
-                      height: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Debrify',
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(vertical: 22),
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: Image.asset('assets/app_icon.png',
+                      width: 32, height: 32),
+                ),
               ),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+              padding: const EdgeInsets.only(top: 2, bottom: 16),
               children: children,
             ),
           ),
@@ -109,22 +94,16 @@ class DesktopSidebarNav extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
+class _GroupDivider extends StatelessWidget {
+  const _GroupDivider();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 18, 12, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.38),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.1,
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+      child: Container(
+        height: 1,
+        color: Colors.white.withValues(alpha: 0.06),
       ),
     );
   }
@@ -154,44 +133,59 @@ class _SidebarItemState extends State<_SidebarItem> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final selected = widget.selected;
+    // The label shows for the active item and for any item on hover.
+    final showLabel = selected || _hovered;
     final Color fg = selected
-        ? HomeTheme.focusGold
-        : (_hovered ? cs.onSurface : Colors.white.withValues(alpha: 0.72));
-
+        ? _kAccent
+        : (_hovered ? cs.onSurface : Colors.white.withValues(alpha: 0.6));
     final Color bg = selected
-        ? HomeTheme.focusGold.withValues(alpha: 0.14)
-        : (_hovered ? Colors.white.withValues(alpha: 0.06) : Colors.transparent);
+        ? _kAccent.withValues(alpha: 0.16)
+        : (_hovered ? Colors.white.withValues(alpha: 0.05) : Colors.transparent);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        // Guard against a trailing onExit after the rail unmounts (e.g. the
+        // window shrinks below the desktop-layout threshold while hovered).
+        onEnter: (_) {
+          if (mounted) setState(() => _hovered = true);
+        },
+        onExit: (_) {
+          if (mounted) setState(() => _hovered = false);
+        },
         child: GestureDetector(
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 130),
             curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(widget.icon, size: 20, color: fg),
-                const SizedBox(width: 14),
-                Expanded(
+                Icon(widget.icon, size: 24, color: fg),
+                const SizedBox(height: 5),
+                // Label height is always reserved (one line) so hovering never
+                // reflows the rail; only its visibility toggles.
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 130),
+                  style: TextStyle(
+                    color: fg.withValues(alpha: showLabel ? 1 : 0),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                    letterSpacing: 0.1,
+                  ),
                   child: Text(
                     widget.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: fg,
-                      fontSize: 14,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
                   ),
                 ),
               ],
