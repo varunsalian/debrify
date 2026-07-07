@@ -46,6 +46,14 @@ const Color kStremioBg = Color(0xFF0D0B1A);
 /// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
 const Color _kCwProgressRed = Color(0xFFE50914);
 
+/// Board (homepage) infinite scroll: how many catalog rows to fetch per batch as
+/// the user scrolls, and how many items to keep per row. Enumerating catalogs is
+/// free (manifest metadata) — only fetching each row's items costs a call — so we
+/// list every catalog up front and lazily pull batches on scroll (Stremio-style)
+/// instead of a hard global row cap.
+const int _kBoardBatchSize = 8;
+const int _kBoardItemsPerRow = 20;
+
 /// Format a season/episode as a compact 'S2 · E5' label, or null when unknown.
 String? _seLabel(int? season, int? episode) {
   if (season == null || episode == null || season <= 0 || episode <= 0) {
@@ -130,6 +138,22 @@ class _SearchScreenState extends State<SearchScreen> {
   final List<List<FocusNode>> _rowNodes = [];
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
+
+  // Board infinite scroll. Every (addon, catalog) pair is enumerated up front in
+  // [_boardRefs] (cheap — manifest metadata, no network), then fetched in batches
+  // as the user nears the bottom. [_boardCursor] is the next ref to load; it
+  // persists across a search detour so returning to the board keeps its place.
+  final List<(StremioAddon, StremioAddonCatalog)> _boardRefs = [];
+  int _boardCursor = 0;
+  bool _boardLoadingMore = false;
+  final ScrollController _boardScroll = ScrollController();
+
+  /// Whether more board rows remain to lazily load (board mode only — never
+  /// during a catalog search, which fetches all its rows in one shot).
+  bool get _boardHasMore =>
+      _catalogQuery.isEmpty &&
+      !_catalogSearching &&
+      _boardCursor < _boardRefs.length;
 
   // LOCAL Continue Watching rows. Reads the SAME local store Home writes to
   // (StorageService `continue_watching_v1`) — read-only here, so Home is never
@@ -246,6 +270,7 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
+    _boardScroll.addListener(_onBoardScroll);
     _load();
     _loadContinueWatching();
     _loadTraktContinueWatching();
@@ -277,6 +302,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _boardScroll.dispose();
     _disposeNodes();
     _disposeKwNodes();
     for (final n in [
@@ -310,15 +336,34 @@ class _SearchScreenState extends State<SearchScreen> {
     });
     unawaited(_refreshPikpakOnly());
     try {
-      final sections = await _stremio.fetchHomepageContent();
+      final addons = await _stremio.getCatalogAddons();
       if (!mounted) return;
-      _homeSections = sections;
+      // Enumerate every BROWSABLE catalog across all addons — no global row cap.
+      // This is cheap (manifest data); items are pulled lazily in batches on
+      // scroll. Catalogs that require a `search` extra are search-only: browsing
+      // them without a query just returns empty after a wasted round trip, so
+      // skip them here (they still power the Keyword/catalog search path).
+      _boardRefs
+        ..clear()
+        ..addAll([
+          for (final a in addons)
+            for (final c in a.catalogs)
+              if (!c.extras.any((e) => e.name == 'search' && e.isRequired))
+                (a, c),
+        ]);
+      _boardCursor = 0;
       _addonsById.clear();
-      for (final s in sections) {
-        _addonsById.putIfAbsent(s.addon.id, () => s.addon);
+      for (final a in addons) {
+        _addonsById.putIfAbsent(a.id, () => a);
       }
+      // First batch is blocking so the board isn't empty on first paint; skip
+      // runs of empty catalogs so we always land on some visible rows.
+      final first = await _fetchBoardBatchUntilNonEmpty();
+      if (!mounted) return;
+      _homeSections = first;
       setState(() => _loading = false);
-      _applySections(sections);
+      _applySections(first);
+      _maybeAutoFillBoard();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -326,6 +371,105 @@ class _SearchScreenState extends State<SearchScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// Fetch the next batch of catalog rows from [_boardCursor], skipping over any
+  /// runs of empty catalogs, and return the non-empty sections (advancing the
+  /// cursor as it goes). Empty result ⇒ the board is exhausted.
+  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty() async {
+    while (_boardCursor < _boardRefs.length) {
+      final batch = await _fetchBoardBatch(_kBoardBatchSize);
+      if (batch.isNotEmpty) return batch;
+    }
+    return const [];
+  }
+
+  /// Fetch exactly one batch of up to [n] catalog rows in parallel, advancing
+  /// [_boardCursor], and return the non-empty ones (order preserved).
+  Future<List<CatalogSection>> _fetchBoardBatch(int n) async {
+    final end = (_boardCursor + n).clamp(0, _boardRefs.length);
+    final slice = _boardRefs.sublist(_boardCursor, end);
+    _boardCursor = end;
+    final results = await Future.wait(slice.map((ref) async {
+      final (addon, catalog) = ref;
+      try {
+        final items = await _stremio.fetchCatalog(addon, catalog);
+        if (items.isEmpty) return null;
+        return CatalogSection(
+          title: '${addon.name}: ${catalog.name}',
+          addon: addon,
+          catalog: catalog,
+          items: items.take(_kBoardItemsPerRow).toList(),
+        );
+      } catch (_) {
+        return null;
+      }
+    }));
+    return results.whereType<CatalogSection>().toList();
+  }
+
+  /// After a batch lands, if the board still doesn't fill the viewport (so the
+  /// user can't scroll to trigger more) keep pulling batches until it does or
+  /// the board is exhausted. No-ops outside board mode (search sets no cursor).
+  void _maybeAutoFillBoard() {
+    if (!_boardHasMore || _boardLoadingMore) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_boardHasMore || _boardLoadingMore) return;
+      if (!_boardScroll.hasClients) return;
+      final pos = _boardScroll.position;
+      if (pos.maxScrollExtent <= 0 || pos.pixels >= pos.maxScrollExtent - 600) {
+        _loadMoreBoard();
+      }
+    });
+  }
+
+  /// Fire off the next batch as the user nears the bottom of the board.
+  void _onBoardScroll() {
+    if (!_boardHasMore || _boardLoadingMore) return;
+    if (!_boardScroll.hasClients) return;
+    final pos = _boardScroll.position;
+    if (pos.pixels >= pos.maxScrollExtent - 600) {
+      _loadMoreBoard();
+    }
+  }
+
+  /// Load and append the next batch of board rows (deduped against re-entry).
+  Future<void> _loadMoreBoard() async {
+    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return;
+    setState(() => _boardLoadingMore = true);
+    try {
+      final more = await _fetchBoardBatchUntilNonEmpty();
+      if (!mounted) return;
+      if (more.isNotEmpty) {
+        // Always keep the board cache growing so nothing is lost…
+        _homeSections = [..._homeSections, ...more];
+        // …but only fold into the live view when the board is still what's
+        // shown. If a catalog search started while this batch was in flight,
+        // `_sections`/`_rowNodes` now hold search results — appending board rows
+        // there would corrupt the search view. They'll reappear on _restoreHome.
+        if (_catalogQuery.isEmpty && !_catalogSearching) {
+          _appendSections(more);
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _boardLoadingMore = false);
+      _maybeAutoFillBoard();
+    }
+  }
+
+  /// Append newly-loaded board rows without disturbing the rows already shown:
+  /// grow the per-row focus nodes in lockstep with [_sections].
+  void _appendSections(List<CatalogSection> more) {
+    for (final section in more) {
+      _rowNodes.add(
+        List.generate(
+          section.items.length,
+          (i) => FocusNode(debugLabel: 'search_r${_rowNodes.length}_c$i'),
+        ),
+      );
+    }
+    setState(() => _sections = [..._sections, ...more]);
+    unawaited(_refreshBoundSources());
   }
 
   /// IMDb id for a catalog item, or null when it isn't a `tt…` id.
@@ -730,6 +874,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _catalogSearching = false;
     });
     _applySections(_homeSections);
+    _maybeAutoFillBoard();
   }
 
   // ── Focus entry ──────────────────────────────────────────────────────────
@@ -758,7 +903,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _focusRow(int row, int column) {
-    if (row < 0 || row >= _rowNodes.length) return;
+    if (row >= _rowNodes.length) {
+      // DPAD-down past the last loaded row on TV: pull the next board batch.
+      if (_boardHasMore) _loadMoreBoard();
+      return;
+    }
+    if (row < 0) return;
     final nodes = _rowNodes[row];
     if (nodes.isEmpty) return;
     nodes[column.clamp(0, nodes.length - 1)].requestFocus();
@@ -2538,15 +2688,22 @@ class _SearchScreenState extends State<SearchScreen> {
             // rows; the catalog sections follow, offset by the CW row count.
             final cwRows = showCw ? _cwRows : const <_CwRow>[];
             final cwCount = cwRows.length;
+            // Footer spinner tracks the actual fetch, not just "more remain":
+            // `_boardCursor` advances synchronously so the final in-flight batch
+            // still shows it, and an idle board with more rows doesn't spin.
+            final showFooter = _boardLoadingMore;
             return ListView.builder(
+              controller: _boardScroll,
               padding: const EdgeInsets.only(top: 6, bottom: 32),
               cacheExtent: 2000,
-              itemCount: _sections.length + cwCount,
+              itemCount: _sections.length + cwCount + (showFooter ? 1 : 0),
               itemBuilder: (context, i) {
                 if (i < cwCount) {
                   return _buildContinueWatchingRow(cwRows[i], i, cwCount);
                 }
-                return _buildRow(i - cwCount);
+                final s = i - cwCount;
+                if (s >= _sections.length) return _buildBoardFooter();
+                return _buildRow(s);
               },
             );
           }),
@@ -2661,6 +2818,20 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Bottom-of-board loading indicator shown while more catalog rows stream in.
+  Widget _buildBoardFooter() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
     );
   }
 
