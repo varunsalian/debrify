@@ -13,6 +13,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
+import 'screens/search_screen.dart';
 import 'widgets/iptv/iptv_results_view.dart';
 import 'widgets/youtube/youtube_results_view.dart';
 import 'screens/debrid_downloads_screen.dart';
@@ -593,6 +594,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'AllDebrid',
     'IPTV',
     'YouTube',
+    'Search', // 15: appended at end so existing indices don't shift
   ];
 
   final List<IconData> _icons = [
@@ -611,6 +613,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.all_inclusive_rounded,
     Icons.live_tv_rounded,
     Icons.ondemand_video_rounded,
+    Icons.search_rounded, // 15: Search
   ];
 
   @override
@@ -2118,13 +2121,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final allDebrid = allDebridEnabled ?? _allDebridEnabled;
       final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
       final indices = <int>[
+        15,
         0,
         2,
         13,
         14,
         3,
         9,
-      ]; // Torrent, Downloads, IPTV, YouTube, Debrify TV, Stremio TV
+      ]; // Search, Torrent, Downloads, IPTV, YouTube, Debrify TV, Stremio TV
       if (rd && !rdHidden) {
         indices.add(4); // Real Debrid downloads
       }
@@ -2162,16 +2166,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       return [
+        15,
         0,
         13,
         14,
         9,
         7,
         8,
-      ]; // Home, IPTV, YouTube, Stremio TV, Addons, Settings
+      ]; // Search, Home, IPTV, YouTube, Stremio TV, Addons, Settings
     }
 
-    final indices = <int>[0, 2, 13, 14, 3, 9];
+    final indices = <int>[15, 0, 2, 13, 14, 3, 9];
     if (rd && !rdHidden) indices.add(4);
     if (tb && !tbHidden) indices.add(5);
     if (pikpak && !ppHidden) indices.add(6);
@@ -2188,6 +2193,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   String _navSectionForIndex(int screenIndex) {
     switch (screenIndex) {
       case 0: // Home
+      case 15: // Search
       case 2: // Downloads
         return 'Main';
       case 13: // IPTV
@@ -2269,6 +2275,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             onUpArrowFromFilters: args.onUpArrowToSearch,
           ),
         );
+      case 15: // Search
+        return SearchScreen(isTelevision: _isAndroidTv);
       default:
         return _pages[index];
     }

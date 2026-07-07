@@ -281,6 +281,10 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
   String _errorMessage = '';
   bool _hasSearched = false;
   bool _showSearchField = false;
+  // Search + catalog browsing now live in the dedicated Search tab, so the
+  // Home screen hides its own search/source-dropdown controls. Flip to true to
+  // restore the in-Home search bar (e.g. if the Search tab is removed).
+  final bool _showHomeSearchControls = false;
   bool _traktAuthenticated = false;
   bool _traktSyncCatalog = false;
   Future<void> Function()? _pendingTraktEpisodeModeExitAction;
@@ -450,6 +454,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Safely focus the sources/control area — falls back to dropdown if sources not visible.
   void _focusControlRow() {
+    if (!_showHomeSearchControls && _isIdleHomeSections) {
+      // The control row is hidden in idle Home — nothing above the sections to
+      // move focus into, so keep focus where it is.
+      return;
+    }
     final isSearchActive =
         _showSearchField || _hasSearched || _searchController.text.isNotEmpty;
     if (isSearchActive) {
@@ -2718,6 +2727,15 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
 
   /// Handle focus request from TV sidebar - intelligently focuses the right element
   void _handleTvContentFocus() {
+    // When the in-Home search controls are hidden AND Home is showing its idle
+    // content sections, enter those directly instead of the absent source
+    // dropdown. In every other state the controls block is still rendered, so
+    // fall through to the normal catalog/aggregated/results focus logic below.
+    if (!_showHomeSearchControls && _isIdleHomeSections) {
+      _homeFocusController.focusFirstHomeSection();
+      return;
+    }
+
     // Check if AggregatedSearchResults is visible (All mode with query, browsing catalog results)
     final isAggregatedVisible =
         _selectedSource.type == SearchSourceType.all &&
@@ -20717,8 +20735,14 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               child: Column(
                 children: [
                   // ── Controls ── (hidden while the Trakt inline episode
-                  // guide is open; the catalog drill-down is a separate route)
-                  if (!_inEpisodeGuide)
+                  // guide is open; the catalog drill-down is a separate route.
+                  // When search has moved to the dedicated Search tab
+                  // (_showHomeSearchControls=false) the block is hidden ONLY in
+                  // the idle home-sections state — active searches reached from
+                  // Home rows, addon/aggregated/Trakt browsing still render it
+                  // (they need the season/episode controls + focus targets).)
+                  if (!_inEpisodeGuide &&
+                      (_showHomeSearchControls || !_isIdleHomeSections))
                     Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -22708,6 +22732,22 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     ];
 
     return contentSections.any(_homeFocusController.sectionHasItems);
+  }
+
+  /// True only when Home is showing its idle content sections (favorites /
+  /// continue-watching / etc), i.e. exactly the states where `_buildHomeSection`
+  /// renders (see the build gate ~21345). The in-Home search controls are hidden
+  /// ONLY in this state; every other state (active search reached from a Home
+  /// row, addon catalog browser, aggregated/Trakt browsing) still needs the
+  /// controls block and its focus targets, so it stays visible there.
+  bool get _isIdleHomeSections {
+    if (_hasSearched) return false;
+    final type = _selectedSource.type;
+    if (type == SearchSourceType.all) return _searchController.text.isEmpty;
+    final catalogVisible = type == SearchSourceType.trakt ||
+        (type == SearchSourceType.addon &&
+            (_selectedSource.addon?.supportsCatalogs ?? false));
+    return !catalogVisible;
   }
 
   bool get _isResolvingInitialHomeContent =>
