@@ -644,6 +644,15 @@ class _SearchScreenState extends State<SearchScreen> {
       _kwSelectionMode = false;
       _kwSelected.clear();
     });
+    // Carry the typed query across: if there's text in the box, run the target
+    // mode's search immediately instead of showing the empty state.
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+    if (mode == _Mode.keyword) {
+      if (query != _kwQuery) _runKeyword(query);
+    } else {
+      if (query != _catalogQuery) _runCatalogSearch(query);
+    }
   }
 
   // ── Playback / detail delegation ───────────────────────────────────────────
@@ -1016,9 +1025,11 @@ class _SearchScreenState extends State<SearchScreen> {
             'sources, then tap one to play.',
       );
     }
-    return Column(
+    final narrow =
+        !widget.isTelevision && MediaQuery.of(context).size.width < 600;
+    final content = Column(
       children: [
-        _buildKeywordToolbar(),
+        _buildKeywordToolbar(floatingSelect: narrow),
         Expanded(
           child: _kwResults.isEmpty
               ? _message(
@@ -1086,16 +1097,31 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ],
     );
+
+    if (!narrow) return content;
+    // Small screens: Home-style floating select FAB / selection bar overlaid
+    // on the results, instead of the toolbar "Select" pill.
+    final canSelect = _kwSelectableResults.isNotEmpty;
+    return Stack(
+      children: [
+        Positioned.fill(child: content),
+        if (canSelect)
+          _kwSelectionMode ? _buildKwSelectionBar() : _buildKwSelectFab(),
+      ],
+    );
   }
 
-  Widget _buildKeywordToolbar() {
+  /// [floatingSelect] true on small screens where the multi-select entry is a
+  /// floating FAB + bar (Home-style) rather than a toolbar pill — so the
+  /// toolbar stays Sort/Filters/Sources and never swaps to selection controls.
+  Widget _buildKeywordToolbar({bool floatingSelect = false}) {
     final scheme = Theme.of(context).colorScheme;
     final filterCount = _kwFilters.qualities.length +
         _kwFilters.ripSources.length +
         _kwFilters.languages.length;
 
     Widget pill(IconData icon, String label, VoidCallback onTap,
-        {bool active = false}) {
+        {bool active = false, bool compact = false}) {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: Material(
@@ -1104,7 +1130,9 @@ class _SearchScreenState extends State<SearchScreen> {
             onTap: onTap,
             borderRadius: BorderRadius.circular(999),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+              padding: compact
+                  ? const EdgeInsets.all(10)
+                  : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
               decoration: BoxDecoration(
                 color: active
                     ? scheme.primary.withValues(alpha: 0.16)
@@ -1116,25 +1144,29 @@ class _SearchScreenState extends State<SearchScreen> {
                       : Colors.white.withValues(alpha: 0.10),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface)),
-                ],
-              ),
+              child: compact
+                  ? Icon(icon,
+                      size: 18,
+                      color: active ? scheme.primary : scheme.onSurfaceVariant)
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 15, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Text(label,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurface)),
+                      ],
+                    ),
             ),
           ),
         ),
       );
     }
 
-    if (_kwSelectionMode) {
+    if (_kwSelectionMode && !floatingSelect) {
       final selectable = _kwSelectableResults.length;
       final count = _kwSelected.length;
       final allSelected = count > 0 && count == selectable;
@@ -1167,17 +1199,146 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Row(
         children: [
           pill(Icons.sort_rounded, 'Sort · ${_sortLabel(_kwSort)}',
-              _openKeywordSort),
+              _openKeywordSort,
+              compact: floatingSelect),
           pill(
             Icons.filter_list_rounded,
             filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
             _openKeywordFilters,
             active: filterCount > 0,
+            compact: floatingSelect,
           ),
-          pill(Icons.dns_rounded, 'Sources', _openKeywordSources),
-          if (canSelect)
+          pill(Icons.dns_rounded, 'Sources', _openKeywordSources,
+              compact: floatingSelect),
+          if (canSelect && !floatingSelect)
             pill(Icons.checklist_rounded, 'Select', _enterKwSelection),
         ],
+      ),
+    );
+  }
+
+  /// Floating checklist FAB (bottom-left) that enters multi-select on small
+  /// screens — ported from Home's torrent-search layout.
+  Widget _buildKwSelectFab() {
+    return Positioned(
+      left: 16,
+      bottom: 16,
+      child: GestureDetector(
+        onTap: _enterKwSelection,
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: const Color(0xFF334155),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.checklist_rounded,
+              color: Colors.white, size: 20),
+        ),
+      ),
+    );
+  }
+
+  /// Floating multi-select bar (bottom) — Home-style. Right-inset so it clears
+  /// the mobile floating "Menu" nav.
+  Widget _buildKwSelectionBar() {
+    final selectable = _kwSelectableResults.length;
+    final count = _kwSelected.length;
+    final allSelected = count > 0 && count == selectable;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
+    Widget chip(Widget child, VoidCallback? onTap, Color bg) => GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: child,
+          ),
+        );
+
+    return Positioned(
+      left: 12,
+      right: 108, // clear the bottom-right "Menu" FAB
+      bottom: 12 + bottomPad,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kStremioAccent.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            chip(
+              const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
+              _exitKwSelection,
+              Colors.white.withValues(alpha: 0.1),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                '$count selected',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: count > 0 ? kStremioAccent : Colors.white54,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            chip(
+              Text(
+                allSelected ? 'None' : 'All',
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12),
+              ),
+              allSelected ? _deselectAllKw : _selectAllKw,
+              Colors.white.withValues(alpha: 0.08),
+            ),
+            const SizedBox(width: 8),
+            chip(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.playlist_add_rounded,
+                      color: count > 0 ? Colors.white : Colors.white38,
+                      size: 16),
+                  const SizedBox(width: 4),
+                  Text('Add',
+                      style: TextStyle(
+                          color: count > 0 ? Colors.white : Colors.white38,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12)),
+                ],
+              ),
+              count > 0 ? _openBulkAdd : null,
+              count > 0
+                  ? kStremioAccent
+                  : kStremioAccent.withValues(alpha: 0.3),
+            ),
+          ],
+        ),
       ),
     );
   }
