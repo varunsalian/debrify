@@ -381,6 +381,79 @@ class VideoPlayerLauncher {
     return nameWithoutExt.hashCode.toString();
   }
 
+  /// Seed the local finished-episodes store from Trakt watched history so the
+  /// in-player playlist (SeriesBrowser, which reads local playback state) shows
+  /// Trakt-watched episodes. Runs on every series launch that has an IMDb id;
+  /// a no-op when Trakt isn't connected or has nothing for the show. Only fully
+  /// watched (>=95%) episodes are written — partial progress is left to the
+  /// per-episode `traktProgressPercent` resume so we never store a fake
+  /// position/duration. Best-effort: any failure is swallowed.
+  static Future<void> _seedTraktWatchedEpisodes(
+    List<PlaylistEntry> playlist,
+    String imdbId,
+    String fallbackTitle,
+  ) async {
+    try {
+      final trakt = TraktService.instance;
+      if (!await trakt.isAuthenticated()) return;
+
+      final results = await Future.wait([
+        trakt.fetchWatchedShowEpisodes(imdbId),
+        trakt.fetchEpisodePlaybackProgress(imdbId),
+      ]);
+      final watchedSet = results[0] as Set<String>; // "season-episode" keys
+      final playbackMap = results[1] as Map<String, double>; // key → 0-100
+
+      final merged = <String, double>{};
+      for (final key in watchedSet) {
+        merged[key] = 100.0;
+      }
+      for (final entry in playbackMap.entries) {
+        if (entry.value > 0) merged[entry.key] = entry.value;
+      }
+      if (merged.isEmpty) return;
+
+      final filenames = playlist.map((e) => e.title).toList();
+      final parsed = SeriesParser.parsePlaylist(filenames);
+      // Derive the same series title SeriesBrowser keys on (from filenames).
+      final effectiveTitle =
+          SeriesParser.extractCommonSeriesTitle(filenames) ?? fallbackTitle;
+
+      for (var i = 0; i < parsed.length; i++) {
+        final info = parsed[i];
+        if (info.season == null || info.episode == null) continue;
+        final traktPercent = merged['${info.season}-${info.episode}'];
+        if (traktPercent == null || traktPercent < 95) continue;
+
+        // Writes to 'finishedEpisodes' (badges) + 'seasons' (bars), preserving
+        // any existing local progress.
+        await StorageService.markEpisodeAsFinished(
+          seriesTitle: effectiveTitle,
+          season: info.season!,
+          episode: info.episode!,
+          imdbId: imdbId,
+        );
+
+        // Video format (Kotlin Android TV player) — only if no local state, so
+        // we never clobber a real resume position.
+        final resumeId =
+            resumeIdForEntry(playlist[i], fallbackTitle: effectiveTitle);
+        final existingState =
+            await StorageService.getVideoPlaybackState(videoTitle: resumeId);
+        if (existingState == null) {
+          await StorageService.saveVideoPlaybackState(
+            videoTitle: resumeId,
+            videoUrl: '',
+            positionMs: 100,
+            durationMs: 100,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('VideoPlayerLauncher: Trakt watched seed failed: $e');
+    }
+  }
+
   static Future<void> push(
     BuildContext context,
     VideoPlayerLaunchArgs originalArgs, {
@@ -474,6 +547,22 @@ class VideoPlayerLauncher {
         posterUrl: args.posterUrl,
         year: args.contentYear,
         addonId: args.addonId,
+      );
+    }
+
+    // Seed the local finished-episodes store from Trakt so the in-player
+    // playlist shows Trakt-watched episodes. Runs for every series launch (all
+    // entry points), not just Home's bound-source path. Guarded to non-movie
+    // multi-file playlists — a non-series playlist simply parses no season/
+    // episode and writes nothing, so this also covers series with a null
+    // contentType (matching the old unconditional Home behavior).
+    if (args.contentType != 'movie' &&
+        args.contentImdbId != null &&
+        (args.playlist?.length ?? 0) > 1) {
+      await _seedTraktWatchedEpisodes(
+        args.playlist!,
+        args.contentImdbId!,
+        args.contentTitle ?? args.title,
       );
     }
 

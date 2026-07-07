@@ -5419,97 +5419,6 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
     return null;
   }
 
-  /// Sync Trakt watch progress to StorageService so the player's playlist UI
-  /// shows correct watched/progress statuses for each episode.
-  Future<void> _syncTraktProgressToStorage({
-    required String seriesTitle,
-    required String imdbId,
-    required List<PlaylistEntry> playlist,
-  }) async {
-    try {
-      final traktService = TraktService.instance;
-
-      // Fetch Trakt watch data in parallel
-      final results = await Future.wait([
-        traktService.fetchWatchedShowEpisodes(imdbId),
-        traktService.fetchEpisodePlaybackProgress(imdbId),
-      ]);
-      final watchedSet = results[0] as Set<String>; // "season-episode" keys
-      final playbackMap =
-          results[1] as Map<String, double>; // "season-episode" → 0-100
-
-      // Merge: watched = 100%, playback overrides with partial %
-      final merged = <String, double>{};
-      for (final key in watchedSet) {
-        merged[key] = 100.0;
-      }
-      for (final entry in playbackMap.entries) {
-        if (entry.value > 0) {
-          merged[entry.key] = entry.value;
-        }
-      }
-
-      if (merged.isEmpty) return;
-
-      // Parse playlist filenames to map S/E to entries
-      final filenames = playlist.map((e) => e.title).toList();
-      final parsed = SeriesParser.parsePlaylist(filenames);
-
-      // Derive the same series title that the player's SeriesBrowser uses
-      // (extracted from filenames, not the raw torrent name)
-      final extractedTitle = SeriesParser.extractCommonSeriesTitle(filenames);
-      final effectiveTitle = extractedTitle ?? seriesTitle;
-
-      // Write Trakt progress for fully-watched episodes only.
-      // Partial progress is skipped because we don't know the real duration in ms —
-      // storing fake positionMs would cause the player to seek to the wrong spot.
-      // The current episode's partial Trakt progress is handled via traktProgressPercent
-      // which the player reads separately.
-      for (int i = 0; i < parsed.length; i++) {
-        final info = parsed[i];
-        if (info.season == null || info.episode == null) continue;
-        final key = '${info.season}-${info.episode}';
-        final traktPercent = merged[key];
-        if (traktPercent == null || traktPercent < 95) continue;
-
-        // Mark as finished in series format (Dart SeriesBrowser reads this).
-        // markEpisodeAsFinished writes to both 'finishedEpisodes' (for badges)
-        // and 'seasons' (for progress bars), and preserves existing local progress.
-        await StorageService.markEpisodeAsFinished(
-          seriesTitle: effectiveTitle,
-          season: info.season!,
-          episode: info.episode!,
-          imdbId: imdbId,
-        );
-
-        // Write to video format (Kotlin Android TV player reads this)
-        // Only write if no existing local state — avoid overwriting real resume position
-        final resumeId = VideoPlayerLauncher.resumeIdForEntry(
-          playlist[i],
-          fallbackTitle: effectiveTitle,
-        );
-        final existingState = await StorageService.getVideoPlaybackState(
-          videoTitle: resumeId,
-        );
-        if (existingState == null) {
-          await StorageService.saveVideoPlaybackState(
-            videoTitle: resumeId,
-            videoUrl: '',
-            positionMs: 100,
-            durationMs: 100,
-          );
-        }
-      }
-
-      debugPrint(
-        'TorrentSearchScreen: Synced Trakt progress for ${merged.length} episodes to StorageService',
-      );
-    } catch (e) {
-      // Non-critical — player still works, just without Trakt status indicators
-      debugPrint('TorrentSearchScreen: Failed to sync Trakt progress: $e');
-    }
-  }
-
   /// Launch the video player with a series playlist and clean up after.
   Future<void> _launchBoundSourcePlayer({
     required String videoUrl,
@@ -5526,12 +5435,8 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
       _searchPhase = SearchPhase.idle;
     });
 
-    // Sync Trakt watch progress to storage so the player shows correct statuses
-    await _syncTraktProgressToStorage(
-      seriesTitle: title,
-      imdbId: selection.imdbId,
-      playlist: playlist,
-    );
+    // Trakt watched → local seeding now runs inside VideoPlayerLauncher.push for
+    // every series launch, so no per-call sync is needed here.
 
     if (!mounted) return;
 
