@@ -22,6 +22,7 @@ import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
+import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/torrent_filter_matcher.dart';
@@ -41,6 +42,17 @@ import 'torbox/torbox_downloads_screen.dart';
 /// near-black indigo base behind the poster board.
 const Color kStremioAccent = Color(0xFF7B5CFF);
 const Color kStremioBg = Color(0xFF0D0B1A);
+
+/// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
+const Color _kCwProgressRed = Color(0xFFE50914);
+
+/// Format a season/episode as a compact 'S2 · E5' label, or null when unknown.
+String? _seLabel(int? season, int? episode) {
+  if (season == null || episode == null || season <= 0 || episode <= 0) {
+    return null;
+  }
+  return 'S$season · E$episode';
+}
 
 /// Dedicated Search tab.
 ///
@@ -119,7 +131,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
 
-  // Continue Watching rows. Reads the SAME local store Home writes to
+  // LOCAL Continue Watching rows. Reads the SAME local store Home writes to
   // (StorageService `continue_watching_v1`) — read-only here, so Home is never
   // affected. Split into two recency-ordered rows (Movies, then Series), each
   // shown as a leading board row when non-empty. Removal happens only from the
@@ -128,6 +140,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<StremioMeta> _cwMovies = [];
   List<StremioMeta> _cwSeries = [];
   final Map<String, double> _cwProgress = {}; // imdbId → 0..1 watched fraction
+  final Map<String, String> _cwEpisode = {}; // imdbId → 'S2 · E5' (series only)
   final Set<String> _cwIds = {}; // imdbIds currently in Continue Watching
   final Map<String, String?> _cwAddonId = {}; // imdbId → source addon id
   final List<FocusNode> _cwMovieNodes = [];
@@ -138,6 +151,19 @@ class _SearchScreenState extends State<SearchScreen> {
   /// and dispose the focus nodes / state the newer run just installed.
   int _cwLoadToken = 0;
 
+  // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
+  // from the Trakt account (no local store). Shown after the local rows when
+  // connected + non-empty. Network-loaded once on init / integration change and
+  // cached in memory (the shows fetch is heavy: ~2 + N calls).
+  List<StremioMeta> _traktMovies = [];
+  List<StremioMeta> _traktSeries = [];
+  final Map<String, double> _traktProgress = {}; // imdbId → 0..1
+  final Map<String, String> _traktEpisode = {}; // imdbId → 'S2 · E5' (series)
+  final Map<String, TraktContinueWatchingItem> _traktByImdb = {};
+  final List<FocusNode> _traktMovieNodes = [];
+  final List<FocusNode> _traktSeriesNodes = [];
+  int _traktCwToken = 0;
+
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
@@ -146,21 +172,64 @@ class _SearchScreenState extends State<SearchScreen> {
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
 
-  /// The Continue Watching rows to render, in order, each with its type label,
-  /// items, and focus nodes. Only non-empty groups are included.
-  List<({String label, List<StremioMeta> items, List<FocusNode> nodes})>
-      get _cwRows => [
-            if (_cwMovies.isNotEmpty)
-              (label: 'Movies', items: _cwMovies, nodes: _cwMovieNodes),
-            if (_cwSeries.isNotEmpty)
-              (label: 'Series', items: _cwSeries, nodes: _cwSeriesNodes),
-          ];
+  /// The leading Continue Watching rows to render, in order: local Movies /
+  /// Series (when enabled), then Trakt Movies / Shows (when connected). Only
+  /// non-empty groups are included. Each row carries its own progress lookup
+  /// and open / quick-play handlers so local and Trakt sources coexist.
+  List<_CwRow> get _cwRows => [
+        if (_cwEnabled && _cwMovies.isNotEmpty)
+          _CwRow(
+            title: 'Continue Watching',
+            tag: 'Movies',
+            items: _cwMovies,
+            nodes: _cwMovieNodes,
+            progressOf: (m) => _cwProgress[m.imdbId],
+            episodeOf: (_) => null,
+            onOpen: _openContinueItem,
+            onQuickPlay: _onContinuePlay,
+          ),
+        if (_cwEnabled && _cwSeries.isNotEmpty)
+          _CwRow(
+            title: 'Continue Watching',
+            tag: 'Series',
+            items: _cwSeries,
+            nodes: _cwSeriesNodes,
+            progressOf: (m) => _cwProgress[m.imdbId],
+            episodeOf: (m) => _cwEpisode[m.imdbId],
+            onOpen: _openContinueItem,
+            onQuickPlay: _onContinuePlay,
+          ),
+        if (_traktMovies.isNotEmpty)
+          _CwRow(
+            title: 'Trakt Movies',
+            tag: null,
+            items: _traktMovies,
+            nodes: _traktMovieNodes,
+            progressOf: (m) => _traktProgress[m.imdbId],
+            episodeOf: (_) => null,
+            onOpen: _openTraktItem,
+            onQuickPlay: _playTraktItem,
+          ),
+        if (_traktSeries.isNotEmpty)
+          _CwRow(
+            title: 'Trakt Shows',
+            tag: null,
+            items: _traktSeries,
+            nodes: _traktSeriesNodes,
+            progressOf: (m) => _traktProgress[m.imdbId],
+            episodeOf: (m) => _traktEpisode[m.imdbId],
+            onOpen: _openTraktItem,
+            onQuickPlay: _playTraktItem,
+          ),
+      ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
-  /// wiring between it and the first catalog row).
+  /// wiring between it and the first catalog row). Uses allocation-free field
+  /// checks (not `_cwRows`) since it's read on the per-card build hot path.
   bool get _cwVisible =>
-      _cwEnabled &&
-      (_cwMovies.isNotEmpty || _cwSeries.isNotEmpty) &&
+      ((_cwEnabled && (_cwMovies.isNotEmpty || _cwSeries.isNotEmpty)) ||
+          _traktMovies.isNotEmpty ||
+          _traktSeries.isNotEmpty) &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
@@ -179,15 +248,17 @@ class _SearchScreenState extends State<SearchScreen> {
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _load();
     _loadContinueWatching();
+    _loadTraktContinueWatching();
     _refreshTraktAuthState();
   }
 
   /// An integration (Trakt / a debrid provider) was connected or disconnected
   /// elsewhere while this tab stayed alive — refresh the state that gates the
-  /// detail quick actions and the PikPak-only Play hiding.
+  /// detail quick actions, the PikPak-only Play hiding, and the Trakt rows.
   void _onIntegrationsChanged() {
     _refreshTraktAuthState();
     _refreshPikpakOnly();
+    _loadTraktContinueWatching();
   }
 
   Future<void> _refreshTraktAuthState() async {
@@ -208,11 +279,18 @@ class _SearchScreenState extends State<SearchScreen> {
     _searchFocusNode.dispose();
     _disposeNodes();
     _disposeKwNodes();
-    for (final n in [..._cwMovieNodes, ..._cwSeriesNodes]) {
+    for (final n in [
+      ..._cwMovieNodes,
+      ..._cwSeriesNodes,
+      ..._traktMovieNodes,
+      ..._traktSeriesNodes,
+    ]) {
       n.dispose();
     }
     _cwMovieNodes.clear();
     _cwSeriesNodes.clear();
+    _traktMovieNodes.clear();
+    _traktSeriesNodes.clear();
     super.dispose();
   }
 
@@ -278,6 +356,8 @@ class _SearchScreenState extends State<SearchScreen> {
       for (final section in _sections) ...section.items,
       ..._cwMovies,
       ..._cwSeries,
+      ..._traktMovies,
+      ..._traktSeries,
     ];
     for (final item in items) {
       final imdb = _imdbOf(item);
@@ -327,6 +407,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _cwSeries = [];
         _cwIds.clear();
         _cwProgress.clear();
+        _cwEpisode.clear();
         _cwAddonId.clear();
       });
       return;
@@ -335,6 +416,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final raw = await StorageService.getContinueWatchingItems();
     final items = <StremioMeta>[];
     final progress = <String, double>{};
+    final episode = <String, String>{};
     final ids = <String>{};
     final addonIds = <String, String?>{};
     for (final m in raw) {
@@ -364,6 +446,8 @@ class _SearchScreenState extends State<SearchScreen> {
           if (durMs > 0) {
             pct = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
           }
+          final se = _seLabel(lastEp['season'] as int?, lastEp['episode'] as int?);
+          if (se != null) episode[imdbId] = se;
         }
       } else {
         final state = await StorageService.getVideoPlaybackStateByImdbId(imdbId);
@@ -399,6 +483,9 @@ class _SearchScreenState extends State<SearchScreen> {
       _cwProgress
         ..clear()
         ..addAll(progress);
+      _cwEpisode
+        ..clear()
+        ..addAll(episode);
       _cwAddonId
         ..clear()
         ..addAll(addonIds);
@@ -457,6 +544,103 @@ class _SearchScreenState extends State<SearchScreen> {
   /// (series resume the last-played episode) without opening the detail.
   void _onContinuePlay(StremioMeta item) {
     _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
+  }
+
+  // ── Trakt Continue Watching ───────────────────────────────────────────────
+
+  /// Fetch the Trakt "Continue Watching" rows (in-progress movies + up-next
+  /// episodes) from the connected account. Network-heavy (the shows path is
+  /// ~2 + N calls), so this runs once on init / integration change and caches
+  /// in memory — never on every rebuild. Token-guarded against overlap; hides
+  /// the rows when Trakt isn't connected.
+  Future<void> _loadTraktContinueWatching() async {
+    final token = ++_traktCwToken;
+    final List<TraktContinueWatchingItem> movies;
+    final List<TraktContinueWatchingItem> shows;
+    try {
+      final authed = await TraktService.instance.isAuthenticated();
+      if (!mounted || token != _traktCwToken) return;
+      if (!authed) {
+        _syncCwNodes(_traktMovieNodes, 0, 'tmovie');
+        _syncCwNodes(_traktSeriesNodes, 0, 'tseries');
+        setState(() {
+          _traktMovies = [];
+          _traktSeries = [];
+          _traktProgress.clear();
+          _traktEpisode.clear();
+          _traktByImdb.clear();
+        });
+        return;
+      }
+      final cw = TraktContinueWatchingService.instance;
+      movies = await cw.fetchMovies();
+      shows = await cw.fetchShows();
+    } catch (e) {
+      // Leave any existing rows in place on a transient Trakt/network error.
+      debugPrint('SearchScreen: Trakt continue-watching load failed: $e');
+      return;
+    }
+    if (!mounted || token != _traktCwToken) return;
+
+    final movieMetas = <StremioMeta>[];
+    final showMetas = <StremioMeta>[];
+    final progress = <String, double>{};
+    final episode = <String, String>{};
+    final byImdb = <String, TraktContinueWatchingItem>{};
+    void ingest(List<TraktContinueWatchingItem> items, List<StremioMeta> into) {
+      for (final it in items) {
+        final id = it.id;
+        if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
+        into.add(it.meta);
+        byImdb[id] = it;
+        final p = it.progress;
+        if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
+        final se = _seLabel(it.season, it.episode);
+        if (se != null) episode[id] = se;
+      }
+    }
+
+    ingest(movies, movieMetas);
+    ingest(shows, showMetas);
+    _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
+    _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
+    setState(() {
+      _traktMovies = movieMetas;
+      _traktSeries = showMetas;
+      _traktProgress
+        ..clear()
+        ..addAll(progress);
+      _traktEpisode
+        ..clear()
+        ..addAll(episode);
+      _traktByImdb
+        ..clear()
+        ..addAll(byImdb);
+    });
+    unawaited(_refreshBoundSources());
+  }
+
+  /// Open a Trakt Continue Watching title as a normal detail page.
+  void _openTraktItem(StremioMeta item) {
+    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+  }
+
+  /// Resume a Trakt Continue Watching title — resolves the paused/next episode
+  /// (an extra Trakt call for series) and plays.
+  Future<void> _playTraktItem(StremioMeta item) async {
+    final cwItem = _traktByImdb[_imdbOf(item)];
+    if (cwItem == null) {
+      _openTraktItem(item);
+      return;
+    }
+    final sel = await TraktContinueWatchingService.instance
+        .selectionForItem(cwItem);
+    if (!mounted) return;
+    if (sel == null) {
+      _snack("Couldn't resolve where to resume \"${item.name}\".");
+      return;
+    }
+    _playSelection(sel);
   }
 
   /// Detail-screen action for a Continue Watching title. Only handles removal;
@@ -2350,15 +2534,9 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         Expanded(
           child: Builder(builder: (context) {
-            // Continue Watching Movies/Series (when shown) are the leading board
+            // Continue Watching rows (local, then Trakt) are the leading board
             // rows; the catalog sections follow, offset by the CW row count.
-            final cwRows = showCw
-                ? _cwRows
-                : const <({
-                    String label,
-                    List<StremioMeta> items,
-                    List<FocusNode> nodes
-                  })>[];
+            final cwRows = showCw ? _cwRows : const <_CwRow>[];
             final cwCount = cwRows.length;
             return ListView.builder(
               padding: const EdgeInsets.only(top: 6, bottom: 32),
@@ -2366,14 +2544,7 @@ class _SearchScreenState extends State<SearchScreen> {
               itemCount: _sections.length + cwCount,
               itemBuilder: (context, i) {
                 if (i < cwCount) {
-                  final row = cwRows[i];
-                  return _buildContinueWatchingRow(
-                    row.label,
-                    row.items,
-                    row.nodes,
-                    i,
-                    cwCount,
-                  );
+                  return _buildContinueWatchingRow(cwRows[i], i, cwCount);
                 }
                 return _buildRow(i - cwCount);
               },
@@ -2493,17 +2664,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// A Continue Watching row (Movies or Series) — same poster cards as the
-  /// catalog rows, plus a bottom progress bar and a type tag in the header.
+  /// A leading Continue Watching row (local or Trakt) — same poster cards as the
+  /// catalog rows, plus a bottom progress bar and an optional type tag.
   /// [cwIndex] is this row's position among the visible CW rows and [cwCount]
   /// the total, so DPAD up/down can move between CW rows and into the catalog.
-  Widget _buildContinueWatchingRow(
-    String label,
-    List<StremioMeta> items,
-    List<FocusNode> nodes,
-    int cwIndex,
-    int cwCount,
-  ) {
+  Widget _buildContinueWatchingRow(_CwRow row, int cwIndex, int cwCount) {
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
     final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
@@ -2511,6 +2676,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
     final cellH = posterH + 10 + titleH + 6;
     final rowH = cellH + 14;
+    final items = row.items;
+    final nodes = row.nodes;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2522,7 +2689,7 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               Flexible(
                 child: Text(
-                  'Continue Watching',
+                  row.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2533,8 +2700,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              _CategoryTag(label),
+              if (row.tag != null) ...[
+                const SizedBox(width: 10),
+                _CategoryTag(row.tag!),
+              ],
             ],
           ),
         ),
@@ -2561,9 +2730,10 @@ class _SearchScreenState extends State<SearchScreen> {
                       column: col,
                       rowNodes: nodes,
                       hasBoundSource: _isBound(item),
-                      progress: _cwProgress[item.imdbId],
+                      progress: row.progressOf(item),
+                      episodeLabel: row.episodeOf(item),
                       onQuickPlay:
-                          _pikpakOnly ? null : () => _onContinuePlay(item),
+                          _pikpakOnly ? null : () => row.onQuickPlay(item),
                       onFocused: () => _setHero(item),
                       // Up: previous CW row, or the search field from the first.
                       onUp: cwIndex == 0
@@ -2573,7 +2743,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       onDown: cwIndex < cwCount - 1
                           ? () => _focusCwRow(cwIndex + 1, col)
                           : () => _focusRow(0, col),
-                      onOpen: () => _openContinueItem(item),
+                      onOpen: () => row.onOpen(item),
                     ),
                   ),
                 ),
@@ -2823,6 +2993,33 @@ class _CategoryTag extends StatelessWidget {
   }
 }
 
+/// A leading "Continue Watching" board row (local or Trakt). Carries its own
+/// header, focus nodes, per-item progress lookup, and open / quick-play
+/// handlers so the local and Trakt sources render through one row builder.
+class _CwRow {
+  final String title; // e.g. 'Continue Watching' or 'Trakt Movies'
+  final String? tag; // 'Movies' / 'Series' pill, or null
+  final List<StremioMeta> items;
+  final List<FocusNode> nodes;
+  final double? Function(StremioMeta) progressOf;
+
+  /// Subtle 'S2 · E5' label for series cards (null for movies / when unknown).
+  final String? Function(StremioMeta) episodeOf;
+  final void Function(StremioMeta) onOpen;
+  final void Function(StremioMeta) onQuickPlay;
+
+  const _CwRow({
+    required this.title,
+    required this.tag,
+    required this.items,
+    required this.nodes,
+    required this.progressOf,
+    required this.episodeOf,
+    required this.onOpen,
+    required this.onQuickPlay,
+  });
+}
+
 /// [_StremioCard] plus DPAD arrow navigation. The card owns SELECT, its
 /// focus visuals and ensureVisible; this ancestor [Focus] catches the arrows
 /// the card ignores (left/right within the row, up/down to adjacent rows or
@@ -2838,6 +3035,9 @@ class _BoardCell extends StatelessWidget {
   /// 0..1 watched fraction — draws a bottom progress bar when non-null (used by
   /// the Continue Watching row). Null on regular catalog rows.
   final double? progress;
+
+  /// Subtle 'S2 · E5' badge for a Continue Watching series card, or null.
+  final String? episodeLabel;
 
   /// Long-press quick-play (mobile/desktop). Null hides the shortcut — used to
   /// mirror the catalog tiles' long-press-to-play when quick-play is available.
@@ -2855,6 +3055,7 @@ class _BoardCell extends StatelessWidget {
     required this.rowNodes,
     required this.hasBoundSource,
     this.progress,
+    this.episodeLabel,
     this.onQuickPlay,
     required this.onFocused,
     required this.onUp,
@@ -2907,6 +3108,7 @@ class _BoardCell extends StatelessWidget {
         focusNode: focusNode,
         hasBoundSource: hasBoundSource,
         progress: progress,
+        episodeLabel: episodeLabel,
         onQuickPlay: onQuickPlay,
         onOpen: onOpen,
       ),
@@ -2926,6 +3128,9 @@ class _StremioCard extends StatefulWidget {
   /// 0..1 watched fraction — draws a bottom progress bar when non-null.
   final double? progress;
 
+  /// Subtle 'S2 · E5' badge for a Continue Watching series card, or null.
+  final String? episodeLabel;
+
   /// Long-press quick-play (mobile/desktop). Null hides the shortcut.
   final VoidCallback? onQuickPlay;
   final VoidCallback onOpen;
@@ -2936,6 +3141,7 @@ class _StremioCard extends StatefulWidget {
     required this.focusNode,
     required this.hasBoundSource,
     this.progress,
+    this.episodeLabel,
     this.onQuickPlay,
     required this.onOpen,
   });
@@ -2999,30 +3205,46 @@ class _StremioCardState extends State<_StremioCard> {
                         color: Colors.white,
                         shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
                   ),
-                // Continue Watching progress — a thin bar pinned to the bottom
-                // of the poster (clipped to the rounded corners by the parent).
+                // Subtle season/episode badge for a Continue Watching series
+                // card — sits just above the progress bar, bottom-left.
+                if (widget.episodeLabel != null)
+                  Positioned(
+                    left: 6,
+                    bottom: widget.progress != null ? 11 : 6,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.66),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        widget.episodeLabel!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Continue Watching progress — a red bar pinned to the bottom of
+                // the poster (Stremio-style, clipped to the rounded corners). A
+                // faint dark track keeps it readable on bright posters.
                 if (widget.progress != null)
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: SizedBox(
-                      height: 4,
-                      child: Stack(
-                        children: [
-                          Container(color: Colors.black.withValues(alpha: 0.55)),
-                          FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: widget.progress!.clamp(0.0, 1.0),
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [kStremioAccent, Color(0xFF9E86FF)],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                    child: Container(
+                      height: 5,
+                      color: Colors.black.withValues(alpha: 0.45),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: widget.progress!.clamp(0.0, 1.0),
+                        heightFactor: 1,
+                        child: const ColoredBox(color: _kCwProgressRed),
                       ),
                     ),
                   ),
