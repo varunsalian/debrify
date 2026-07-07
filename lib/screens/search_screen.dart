@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../models/torrent_filter_state.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/engine_registry.dart';
 import '../services/engine/settings_manager.dart';
+import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/premiumize_service.dart';
 import '../services/series_source_service.dart';
@@ -20,14 +22,20 @@ import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
 import '../services/torrent_service.dart';
+import '../services/trakt/trakt_service.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
+import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
+import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
+import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
+import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
+import 'torbox/torbox_downloads_screen.dart';
 
 /// Stremio-style palette for the Search tab: an indigo/purple accent and a deep
 /// near-black indigo base behind the poster board.
@@ -111,6 +119,51 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _catalogSearching = false;
   int _catalogSearchToken = 0;
 
+  // Continue Watching rows. Reads the SAME local store Home writes to
+  // (StorageService `continue_watching_v1`) — read-only here, so Home is never
+  // affected. Split into two recency-ordered rows (Movies, then Series), each
+  // shown as a leading board row when non-empty. Removal happens only from the
+  // detail screen's action.
+  bool _cwEnabled = true;
+  List<StremioMeta> _cwMovies = [];
+  List<StremioMeta> _cwSeries = [];
+  final Map<String, double> _cwProgress = {}; // imdbId → 0..1 watched fraction
+  final Set<String> _cwIds = {}; // imdbIds currently in Continue Watching
+  final Map<String, String?> _cwAddonId = {}; // imdbId → source addon id
+  final List<FocusNode> _cwMovieNodes = [];
+  final List<FocusNode> _cwSeriesNodes = [];
+
+  /// Monotonic guard so an earlier, slower Continue Watching load (which does
+  /// one SharedPreferences round-trip per item) can't finish after a newer one
+  /// and dispose the focus nodes / state the newer run just installed.
+  int _cwLoadToken = 0;
+
+  /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
+  /// (watchlist / collection / watched / rate / list). App actions (Select
+  /// Source, Add to Stremio TV, Search Packs) show regardless.
+  bool _isTraktAuthenticated = false;
+  // Addons that produced homepage rows, indexed by id, so a Continue Watching
+  // tap can route back through the right addon (for Episodes / next-episode).
+  final Map<String, StremioAddon> _addonsById = {};
+
+  /// The Continue Watching rows to render, in order, each with its type label,
+  /// items, and focus nodes. Only non-empty groups are included.
+  List<({String label, List<StremioMeta> items, List<FocusNode> nodes})>
+      get _cwRows => [
+            if (_cwMovies.isNotEmpty)
+              (label: 'Movies', items: _cwMovies, nodes: _cwMovieNodes),
+            if (_cwSeries.isNotEmpty)
+              (label: 'Series', items: _cwSeries, nodes: _cwSeriesNodes),
+          ];
+
+  /// Whether any Continue Watching row is currently on-screen (drives focus
+  /// wiring between it and the first catalog row).
+  bool get _cwVisible =>
+      _cwEnabled &&
+      (_cwMovies.isNotEmpty || _cwSeries.isNotEmpty) &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
+
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
   final ValueNotifier<StremioMeta?> _heroItem = ValueNotifier<StremioMeta?>(null);
@@ -123,12 +176,30 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
+    MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _load();
+    _loadContinueWatching();
+    _refreshTraktAuthState();
+  }
+
+  /// An integration (Trakt / a debrid provider) was connected or disconnected
+  /// elsewhere while this tab stayed alive — refresh the state that gates the
+  /// detail quick actions and the PikPak-only Play hiding.
+  void _onIntegrationsChanged() {
+    _refreshTraktAuthState();
+    _refreshPikpakOnly();
+  }
+
+  Future<void> _refreshTraktAuthState() async {
+    final auth = await TraktService.instance.isAuthenticated();
+    if (!mounted || auth == _isTraktAuthenticated) return;
+    setState(() => _isTraktAuthenticated = auth);
   }
 
   @override
   void dispose() {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
     _heroItem.dispose();
@@ -137,6 +208,11 @@ class _SearchScreenState extends State<SearchScreen> {
     _searchFocusNode.dispose();
     _disposeNodes();
     _disposeKwNodes();
+    for (final n in [..._cwMovieNodes, ..._cwSeriesNodes]) {
+      n.dispose();
+    }
+    _cwMovieNodes.clear();
+    _cwSeriesNodes.clear();
     super.dispose();
   }
 
@@ -159,6 +235,10 @@ class _SearchScreenState extends State<SearchScreen> {
       final sections = await _stremio.fetchHomepageContent();
       if (!mounted) return;
       _homeSections = sections;
+      _addonsById.clear();
+      for (final s in sections) {
+        _addonsById.putIfAbsent(s.addon.id, () => s.addon);
+      }
       setState(() => _loading = false);
       _applySections(sections);
     } catch (e) {
@@ -191,13 +271,19 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _refreshBoundSources() async {
     final counts = <String, int>{};
     final seen = <String>{};
-    for (final section in _sections) {
-      for (final item in section.items) {
-        final imdb = _imdbOf(item);
-        if (imdb == null || !seen.add(imdb)) continue;
-        final n = (await SeriesSourceService.getSources(imdb)).length;
-        if (n > 0) counts[imdb] = n;
-      }
+    // Cover every on-screen tile that renders a bound badge: catalog sections
+    // AND the Continue Watching rows (whose titles may not appear in any
+    // section, so editing their sources must still refresh the CW card badge).
+    final items = [
+      for (final section in _sections) ...section.items,
+      ..._cwMovies,
+      ..._cwSeries,
+    ];
+    for (final item in items) {
+      final imdb = _imdbOf(item);
+      if (imdb == null || !seen.add(imdb)) continue;
+      final n = (await SeriesSourceService.getSources(imdb)).length;
+      if (n > 0) counts[imdb] = n;
     }
     if (!mounted) return;
     setState(() => _boundCounts
@@ -220,6 +306,169 @@ class _SearchScreenState extends State<SearchScreen> {
     if (mounted && onlyPikpak != _pikpakOnly) {
       setState(() => _pikpakOnly = onlyPikpak);
     }
+  }
+
+  /// Load the Continue Watching row from the shared local store. Mirrors
+  /// Home's join (item list + per-title playback progress) but is read-only —
+  /// it never writes, so Home's row is untouched. Safe to call repeatedly
+  /// (e.g. after returning from a detail/playback).
+  Future<void> _loadContinueWatching() async {
+    final token = ++_cwLoadToken;
+    final enabled = await StorageService.getHomeContinueWatchingEnabled();
+    if (!mounted || token != _cwLoadToken) return;
+    if (!enabled) {
+      // Free the focus nodes too — otherwise they linger allocated until
+      // dispose while the rows are hidden.
+      _syncCwNodes(_cwMovieNodes, 0, 'movie');
+      _syncCwNodes(_cwSeriesNodes, 0, 'series');
+      setState(() {
+        _cwEnabled = false;
+        _cwMovies = [];
+        _cwSeries = [];
+        _cwIds.clear();
+        _cwProgress.clear();
+        _cwAddonId.clear();
+      });
+      return;
+    }
+
+    final raw = await StorageService.getContinueWatchingItems();
+    final items = <StremioMeta>[];
+    final progress = <String, double>{};
+    final ids = <String>{};
+    final addonIds = <String, String?>{};
+    for (final m in raw) {
+      final imdbId = m['imdbId'] as String?;
+      if (imdbId == null || imdbId.isEmpty) continue;
+      final type = (m['contentType'] as String?) ?? 'movie';
+      items.add(StremioMeta(
+        id: imdbId,
+        imdbId: imdbId,
+        type: type,
+        name: (m['title'] as String?) ?? 'Untitled',
+        poster: m['posterUrl'] as String?,
+        year: m['year'] as String?,
+      ));
+      ids.add(imdbId);
+      addonIds[imdbId] = m['addonId'] as String?;
+
+      // Watched fraction — joined from the playback-state store, exactly like
+      // HomeContinueWatchingSection (finished episodes count as 100%).
+      double? pct;
+      if (type == 'series') {
+        final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(imdbId);
+        if (lastEp != null) {
+          final finished = lastEp['finished'] == true;
+          final posMs = lastEp['positionMs'] as int? ?? 0;
+          final durMs = lastEp['durationMs'] as int? ?? 1;
+          if (durMs > 0) {
+            pct = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
+          }
+        }
+      } else {
+        final state = await StorageService.getVideoPlaybackStateByImdbId(imdbId);
+        if (state != null) {
+          final posMs = state['positionMs'] as int? ?? 0;
+          final durMs = state['durationMs'] as int? ?? 1;
+          if (durMs > 0) pct = (posMs / durMs * 100).clamp(0.0, 100.0);
+        }
+      }
+      if (pct != null) progress[imdbId] = pct / 100.0;
+    }
+
+    // Bail if a newer load superseded this one while we were awaiting — never
+    // dispose/replace nodes or state a later run already committed.
+    if (!mounted || token != _cwLoadToken) return;
+
+    // Split into two recency-ordered rows; `items` is already most-recent-first.
+    final movies = items.where((m) => m.type != 'series').toList();
+    final series = items.where((m) => m.type == 'series').toList();
+    // Keep each row's focus-node list length in sync with its item count. Only
+    // rebuild when the count changes (a plain refresh keeps the same nodes so
+    // an active TV focus isn't dropped).
+    _syncCwNodes(_cwMovieNodes, movies.length, 'movie');
+    _syncCwNodes(_cwSeriesNodes, series.length, 'series');
+
+    setState(() {
+      _cwEnabled = true;
+      _cwMovies = movies;
+      _cwSeries = series;
+      _cwIds
+        ..clear()
+        ..addAll(ids);
+      _cwProgress
+        ..clear()
+        ..addAll(progress);
+      _cwAddonId
+        ..clear()
+        ..addAll(addonIds);
+    });
+  }
+
+  /// Resize a Continue Watching row's focus-node list to [count], reusing the
+  /// existing nodes when the length already matches.
+  void _syncCwNodes(List<FocusNode> nodes, int count, String tag) {
+    if (nodes.length == count) return;
+    for (final n in nodes) {
+      n.dispose();
+    }
+    nodes
+      ..clear()
+      ..addAll(List.generate(
+        count,
+        (i) => FocusNode(debugLabel: 'search_cw_${tag}_$i'),
+      ));
+  }
+
+  /// Focus a card in the Continue Watching row at [cwIndex] (index into the
+  /// visible CW rows), clamping the column to that row's length.
+  void _focusCwRow(int cwIndex, int column) {
+    final rows = _cwRows;
+    if (cwIndex < 0 || cwIndex >= rows.length) return;
+    final nodes = rows[cwIndex].nodes;
+    if (nodes.isEmpty) return;
+    nodes[column.clamp(0, nodes.length - 1)].requestFocus();
+  }
+
+  /// Resolve the addon that a Continue Watching title should route through.
+  /// Prefers the stored source addon; falls back to any homepage addon, then a
+  /// minimal placeholder so Play still works even if the addon is gone.
+  StremioAddon _addonForContinue(String? addonId) {
+    if (addonId != null && _addonsById.containsKey(addonId)) {
+      return _addonsById[addonId]!;
+    }
+    if (_homeSections.isNotEmpty) return _homeSections.first.addon;
+    return StremioAddon(
+      id: addonId ?? 'continue_watching',
+      name: 'Continue Watching',
+      manifestUrl: '',
+      baseUrl: '',
+    );
+  }
+
+  /// Open a Continue Watching title as a normal detail page (no Home-style
+  /// list menu). The detail's action row + a "Remove from Continue Watching"
+  /// action are wired via [_openItem] (which detects membership in [_cwIds]).
+  void _openContinueItem(StremioMeta item) {
+    _openItem(item, _addonForContinue(_cwAddonId[item.imdbId]));
+  }
+
+  /// Long-press quick-play for a Continue Watching title — resumes directly
+  /// (series resume the last-played episode) without opening the detail.
+  void _onContinuePlay(StremioMeta item) {
+    _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
+  }
+
+  /// Detail-screen action for a Continue Watching title. Only handles removal;
+  /// pops the detail and lets the push's `.then` refresh the row.
+  Future<void> _handleContinueDetailAction(
+      TraktItemMenuAction action, String imdbId) async {
+    if (action != TraktItemMenuAction.removeFromPlayback) return;
+    await StorageService.removeContinueWatchingItem(imdbId);
+    await StorageService.clearPlaybackStateByImdbId(imdbId);
+    if (!mounted) return;
+    Navigator.of(context).pop(); // close the detail; `.then` reloads the row
+    _snack('Removed from Continue Watching');
   }
 
   /// Swap the displayed sections (homepage or search results): rebuild the
@@ -309,6 +558,13 @@ class _SearchScreenState extends State<SearchScreen> {
       }
       _searchFocusNode.requestFocus();
       return;
+    }
+    if (_cwVisible) {
+      final rows = _cwRows;
+      if (rows.isNotEmpty && rows.first.nodes.isNotEmpty) {
+        rows.first.nodes.first.requestFocus();
+        return;
+      }
     }
     if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
       _rowNodes.first.first.requestFocus();
@@ -659,6 +915,34 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _openItem(StremioMeta item, StremioAddon addon) {
     _activeAddonId = addon.id;
+    final imdb = _imdbOf(item);
+    // Show a "Remove from Continue Watching" action when this title is on the
+    // Continue Watching row (regardless of which row opened it).
+    final inCw = imdb != null && _cwIds.contains(imdb);
+
+    // Full quick-actions menu, mirroring the catalog/aggregated detail screens:
+    // app actions (Select Source, Add to Stremio TV, Search Packs, Random
+    // Episode) always, Trakt-syncing actions only when connected — plus Remove
+    // for Continue Watching titles.
+    final options = <TraktMenuOption>[
+      ...buildTraktAddOnlyMenuOptions(
+        isSeries: item.type == 'series',
+        isMovie: item.type == 'movie',
+        hasBoundSource: _isBound(item),
+        // The Trakt-syncing actions key off the IMDb id, so only offer them for
+        // titles that have one (otherwise the sync call fails with an error).
+        isTraktAuthenticated: _isTraktAuthenticated && imdb != null,
+      ),
+      if (inCw)
+        const TraktMenuOption(
+          action: TraktItemMenuAction.removeFromPlayback,
+          icon: Icons.delete_sweep_rounded,
+          color: Color(0xFFEF4444),
+          label: 'Remove from Continue Watching',
+          caption: 'Remove',
+        ),
+    ];
+
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -672,11 +956,571 @@ class _SearchScreenState extends State<SearchScreen> {
               hasBoundSource: _isBound(item),
               onPlay: () => _onCatalogPlay(item, addon),
               onBrowse: () => _onCatalogBrowse(item, addon),
+              traktMenuOptions: options,
+              onTraktAction: (a) =>
+                  _handleDetailQuickAction(item, addon, a, inCw: inCw, imdb: imdb),
+              // "More Like This" rail + sparse-item meta backfill, matching the
+              // catalog detail flow.
+              recommendationsLoader: imdb != null
+                  ? () =>
+                      _stremio.getRecommendations(imdbId: imdb, type: item.type)
+                  : null,
+              onRecommendationTap: imdb != null
+                  ? (rec) => _openItem(rec, rec.sourceAddon ?? addon)
+                  : null,
+              metaEnricher: (id, type) =>
+                  _stremio.fetchMetaDetails(imdbId: id, type: type),
             ),
           ),
         )
-        // A bind/unbind may have happened inside the detail flow.
-        .then((_) => _refreshBoundSources());
+        // A bind/unbind may have happened inside the detail flow; playback may
+        // also have changed Continue Watching progress.
+        .then((_) {
+      _refreshBoundSources();
+      _loadContinueWatching();
+      _refreshTraktAuthState();
+    });
+  }
+
+  /// Dispatch a detail-screen quick action. Reuses the shared
+  /// [handleTraktMenuAction] for the standard actions and handles the
+  /// Continue-Watching removal locally. The detail page stays underneath (like
+  /// Play/Sources), so Back returns to it.
+  Future<void> _handleDetailQuickAction(
+    StremioMeta item,
+    StremioAddon addon,
+    TraktItemMenuAction action, {
+    required bool inCw,
+    String? imdb,
+  }) async {
+    if (action == TraktItemMenuAction.removeFromPlayback) {
+      if (imdb != null) await _handleContinueDetailAction(action, imdb);
+      return;
+    }
+    await handleTraktMenuAction(
+      context,
+      item,
+      action,
+      // "Select Source" when nothing is bound → straight to the picker; when a
+      // source is already bound → the rich edit dialog (list / reorder / remove
+      // / add). Matches the catalog/aggregated detail flow.
+      onSelectSource: _openBindSources,
+      onEditSource: _handleEditOrSelectSource,
+      onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
+      onSearchPacks: _searchPacksFromDetail,
+      onAddToStremioTv: _addToStremioTvFromDetail,
+    );
+  }
+
+  /// "Select/Edit Source" entry: edit dialog when a source is already bound,
+  /// otherwise the add-source picker.
+  Future<void> _handleEditOrSelectSource(StremioMeta item) async {
+    final imdb = _imdbOf(item);
+    final bound =
+        imdb == null ? const <SeriesSource>[] : await SeriesSourceService.getSources(imdb);
+    if (!mounted) return;
+    if (bound.isNotEmpty) {
+      await _showEditSourceDialog(item, bound);
+    } else {
+      _showAddSourcePicker(item);
+    }
+  }
+
+  /// Manage the bound sources for [item]: list them, reorder by priority
+  /// (series — first match wins), delete individually, Remove All, or add
+  /// another via the picker. Ported from the catalog/aggregated detail flow.
+  Future<void> _showEditSourceDialog(
+      StremioMeta item, List<SeriesSource> initial) async {
+    final imdbId = _imdbOf(item);
+    if (imdbId == null) return;
+    final isMovie = item.type == 'movie';
+    final sources = List<SeriesSource>.of(initial);
+    if (sources.isEmpty) return;
+
+    // [closeIfEmpty] pops the dialog via its OWN route (passed in from the
+    // builder) when the last source is removed — robust to nested navigators,
+    // and a callback (not a BuildContext) so it's safe across the awaits here.
+    Future<void> refreshInto(
+        void Function(void Function()) setDialogState,
+        VoidCallback closeIfEmpty) async {
+      final updated = await SeriesSourceService.getSources(imdbId);
+      if (!mounted) return;
+      setDialogState(() {
+        sources
+          ..clear()
+          ..addAll(updated);
+      });
+      await _refreshBoundSources();
+      if (updated.isEmpty) closeIfEmpty();
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            void closeIfEmpty() {
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints:
+                    const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.link_rounded,
+                              color: Color(0xFF60A5FA), size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            isMovie
+                                ? 'Movie Source'
+                                : 'Series Sources (${sources.length})',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      if (!isMovie) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'First match wins — reorder by priority',
+                            style:
+                                TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: isMovie
+                            ? ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                itemBuilder: (context, index) =>
+                                    _buildSourceListTile(
+                                  key: ValueKey(sources[index].torrentHash),
+                                  source: sources[index],
+                                  index: index,
+                                  showDragHandle: false,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(
+                                        imdbId, sources[index].torrentHash);
+                                    await refreshInto(setDialogState, closeIfEmpty);
+                                  },
+                                ),
+                              )
+                            : ReorderableListView.builder(
+                                shrinkWrap: true,
+                                itemCount: sources.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  if (newIndex > oldIndex) newIndex--;
+                                  setDialogState(() {
+                                    final moved = sources.removeAt(oldIndex);
+                                    sources.insert(newIndex, moved);
+                                  });
+                                  SeriesSourceService.setSources(
+                                      imdbId, List.of(sources));
+                                  _refreshBoundSources();
+                                },
+                                proxyDecorator: (child, index, animation) =>
+                                    Material(
+                                        color: Colors.transparent,
+                                        elevation: 4,
+                                        child: child),
+                                itemBuilder: (context, index) =>
+                                    _buildSourceListTile(
+                                  key: ValueKey(sources[index].torrentHash),
+                                  source: sources[index],
+                                  index: index,
+                                  onDelete: () async {
+                                    await SeriesSourceService.removeSourceByHash(
+                                        imdbId, sources[index].torrentHash);
+                                    await refreshInto(setDialogState, closeIfEmpty);
+                                  },
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                                _showAddSourcePicker(item);
+                              },
+                              icon: Icon(
+                                  isMovie
+                                      ? Icons.swap_horiz_rounded
+                                      : Icons.add_rounded,
+                                  size: 18),
+                              label:
+                                  Text(isMovie ? 'Change Source' : 'Add Source'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF6366F1),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          if (!isMovie && sources.length > 1) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(
+                                      imdbId);
+                                  await _refreshBoundSources();
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                },
+                                icon: const Icon(Icons.delete_sweep_outlined,
+                                    size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove All',
+                                    style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                      color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isMovie) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SeriesSourceService.removeAllSources(
+                                      imdbId);
+                                  await _refreshBoundSources();
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                },
+                                icon: const Icon(Icons.delete_outline_rounded,
+                                    size: 18, color: Color(0xFFEF4444)),
+                                label: const Text('Remove',
+                                    style: TextStyle(color: Color(0xFFEF4444))),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                      color: Color(0xFFEF4444), width: 1),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close',
+                            style: TextStyle(color: Colors.white54)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Add-source picker: Torrent Search (imdb) / Local file / Real-Debrid /
+  /// TorBox. (Keyword-add isn't offered here — the Search tab's keyword flow
+  /// doesn't bind sources.)
+  Future<void> _showAddSourcePicker(StremioMeta item) async {
+    final imdbId = _imdbOf(item);
+    if (imdbId == null) {
+      _snack('No IMDb match to pin a source for "${item.name}".');
+      return;
+    }
+    // Capture the navigator before the awaits so the RD/TorBox push closures
+    // don't reference `context` across an async gap.
+    final navigator = Navigator.of(context);
+    final rdKey = await StorageService.getApiKey();
+    final torboxKey = await StorageService.getTorboxApiKey();
+    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
+    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+    if (!mounted) return;
+
+    final isMovie = item.type == 'movie';
+    final supportsLocal = !LocalBoundSourceService.isLocalBindingDisabled;
+
+    Future<void> saveSource(SeriesSource source) async {
+      if (isMovie) {
+        await SeriesSourceService.setSources(imdbId, [source]);
+      } else {
+        await SeriesSourceService.addSource(imdbId, source);
+      }
+      await _refreshBoundSources();
+    }
+
+    // No cloud providers and no local option → go straight to torrent search.
+    if (!rdEnabled && !torboxEnabled && !supportsLocal) {
+      _openBindSources(item);
+      return;
+    }
+
+    await showAddSourcePickerDialog(
+      context,
+      onTorrentSearch: () => _openBindSources(item),
+      onLocal: supportsLocal ? () => _pickAndSaveLocalSource(item) : null,
+      localDisabledReason: LocalBoundSourceService.localDisabledReason,
+      onRealDebrid: rdEnabled
+          ? () => navigator.push(MaterialPageRoute(
+                builder: (_) => DebridDownloadsScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ))
+          : null,
+      onTorbox: torboxEnabled
+          ? () => navigator.push(MaterialPageRoute(
+                builder: (_) => TorboxDownloadsScreen(
+                  isPushedRoute: true,
+                  initialSearchQuery: item.name,
+                  selectSourceMode: true,
+                  onSourceSelected: saveSource,
+                ),
+              ))
+          : null,
+    );
+  }
+
+  Future<void> _pickAndSaveLocalSource(StremioMeta item) async {
+    final imdbId = _imdbOf(item);
+    if (imdbId == null) return;
+    final SeriesSource? source;
+    if (item.type == 'series') {
+      source = await LocalBoundSourceService.pickSeriesSource(context,
+          title: item.name);
+    } else {
+      source = await LocalBoundSourceService.pickMovieSource(context,
+          title: item.name, year: item.year);
+    }
+    if (source == null) return;
+    if (item.type == 'series') {
+      await SeriesSourceService.addSource(imdbId, source);
+    } else {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    }
+    await _refreshBoundSources();
+    if (!mounted) return;
+    _snack('Local source set: ${source.torrentName}');
+  }
+
+  /// One bound-source row for the edit dialog (index badge, name, provider
+  /// chip, delete). Ported from the catalog/aggregated detail flow.
+  Widget _buildSourceListTile({
+    required Key key,
+    required SeriesSource source,
+    required int index,
+    required VoidCallback onDelete,
+    bool showDragHandle = true,
+  }) {
+    Color serviceColor;
+    String serviceLabel;
+    switch (source.debridService) {
+      case 'rd':
+        serviceColor = const Color(0xFF10B981);
+        serviceLabel = 'Real-Debrid';
+      case 'torbox':
+        serviceColor = const Color(0xFF3B82F6);
+        serviceLabel = 'TorBox';
+      case 'pikpak':
+        serviceColor = const Color(0xFFF59E0B);
+        serviceLabel = 'PikPak';
+      case 'premiumize':
+        serviceColor = const Color(0xFFFB923C);
+        serviceLabel = 'Premiumize';
+      case 'alldebrid':
+        serviceColor = const Color(0xFF26A69A);
+        serviceLabel = 'AllDebrid';
+      case SeriesSource.localService:
+        serviceColor = const Color(0xFF60A5FA);
+        serviceLabel = 'Local';
+      default:
+        serviceColor = Colors.white54;
+        serviceLabel = source.debridService;
+    }
+
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          if (showDragHandle) ...[
+            Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                    color: Color(0xFF60A5FA),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  source.torrentName,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: serviceColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    serviceLabel,
+                    style: TextStyle(
+                        color: serviceColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded,
+                size: 16, color: Color(0xFFEF4444)),
+            onPressed: onDelete,
+            tooltip: 'Remove source',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+          if (showDragHandle)
+            const Icon(Icons.drag_handle_rounded,
+                size: 18, color: Colors.white24),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addToStremioTvFromDetail(StremioMeta item) async {
+    final result = await StremioTvCatalogPickerDialog.show(context, item: item);
+    if (!mounted || result == null) return;
+    _snack(result.message);
+  }
+
+  void _searchPacksFromDetail(StremioMeta item) {
+    final imdb = _imdbOf(item);
+    if (imdb == null) {
+      _snack('No IMDb match to find packs for "${item.name}".');
+      return;
+    }
+    _browseSelection(AdvancedSearchSelection(
+      imdbId: imdb,
+      isSeries: true,
+      title: item.name,
+      year: item.year,
+      contentType: item.type,
+      posterUrl: item.poster,
+    ));
+  }
+
+  /// Resolve a meta-capable addon (for episode listings): the preferred addon
+  /// if it serves meta, otherwise the first enabled addon that does.
+  Future<StremioAddon?> _metaAddonFor(StremioAddon preferred) async {
+    if (preferred.resources.contains('meta') && preferred.baseUrl.isNotEmpty) {
+      return preferred;
+    }
+    for (final a in await _stremio.getEnabledAddons()) {
+      if (a.resources.contains('meta') && a.baseUrl.isNotEmpty) return a;
+    }
+    return null;
+  }
+
+  Future<void> _playRandomEpisodeFromDetail(
+      StremioMeta item, StremioAddon addon) async {
+    final imdb = _imdbOf(item);
+    if (imdb == null) {
+      _snack('No IMDb match to pick an episode for "${item.name}".');
+      return;
+    }
+    final metaAddon = await _metaAddonFor(addon);
+    // If we fell back to a different meta addon than the item's origin, its
+    // content id won't match — query by IMDb id instead of the origin's id.
+    final contentId = (metaAddon != null && metaAddon.id == addon.id)
+        ? item.id
+        : imdb;
+    final videos = metaAddon == null
+        ? null
+        : await _stremio.fetchSeriesMeta(metaAddon, contentId);
+    if (!mounted) return;
+
+    final episodes = <({int season, int episode})>[];
+    for (final v in videos ?? const <Map<String, dynamic>>[]) {
+      final sRaw = v['season'];
+      final s = sRaw is num ? sRaw.toInt() : null;
+      if (s == null || s <= 0) continue; // skip specials (season 0)
+      final eRaw = v['number'] ?? v['episode'];
+      final e = eRaw is num ? eRaw.toInt() : null;
+      if (e == null) continue;
+      episodes.add((season: s, episode: e));
+    }
+    if (episodes.isEmpty) {
+      _snack("Couldn't load episodes for \"${item.name}\".");
+      return;
+    }
+
+    final pick = episodes[Random().nextInt(episodes.length)];
+    _playSelection(AdvancedSearchSelection(
+      imdbId: imdb,
+      isSeries: true,
+      title: item.name,
+      year: item.year,
+      season: pick.season,
+      episode: pick.episode,
+      contentType: item.type,
+      posterUrl: item.poster,
+    ));
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
@@ -760,9 +1604,12 @@ class _SearchScreenState extends State<SearchScreen> {
               // these, so we're back on the Search screen when they run.
               onQuickPlay: _playSelection,
               onItemSelected: _browseSelection,
-              // "Select Source" button: pin a pack as this show's bound source.
+              // "Select Source" button: manage/pin sources via the same picker
+              // the detail screen uses (edit dialog when already bound, else the
+              // Torrent Search / Local / RD / TorBox picker) for a consistent
+              // entry point.
               boundSourceCount: _boundCountFor,
-              onSelectSource: _openBindSources,
+              onSelectSource: _handleEditOrSelectSource,
             ),
           ),
         )
@@ -1413,7 +2260,8 @@ class _SearchScreenState extends State<SearchScreen> {
         _error!,
       );
     }
-    if (_sections.isEmpty) {
+    final showCw = _cwVisible;
+    if (_sections.isEmpty && !showCw) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -1463,12 +2311,36 @@ class _SearchScreenState extends State<SearchScreen> {
             },
           ),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(top: 6, bottom: 32),
-            cacheExtent: 2000,
-            itemCount: _sections.length,
-            itemBuilder: (context, i) => _buildRow(i),
-          ),
+          child: Builder(builder: (context) {
+            // Continue Watching Movies/Series (when shown) are the leading board
+            // rows; the catalog sections follow, offset by the CW row count.
+            final cwRows = showCw
+                ? _cwRows
+                : const <({
+                    String label,
+                    List<StremioMeta> items,
+                    List<FocusNode> nodes
+                  })>[];
+            final cwCount = cwRows.length;
+            return ListView.builder(
+              padding: const EdgeInsets.only(top: 6, bottom: 32),
+              cacheExtent: 2000,
+              itemCount: _sections.length + cwCount,
+              itemBuilder: (context, i) {
+                if (i < cwCount) {
+                  final row = cwRows[i];
+                  return _buildContinueWatchingRow(
+                    row.label,
+                    row.items,
+                    row.nodes,
+                    i,
+                    cwCount,
+                  );
+                }
+                return _buildRow(i - cwCount);
+              },
+            );
+          }),
         ),
       ],
     );
@@ -1561,12 +2433,109 @@ class _SearchScreenState extends State<SearchScreen> {
                       column: col,
                       rowNodes: nodes,
                       hasBoundSource: _isBound(item),
+                      onQuickPlay: _pikpakOnly
+                          ? null
+                          : () => _onCatalogPlay(item, section.addon),
                       onFocused: () => _setHero(item),
                       onUp: rowIndex == 0
-                          ? () => _searchFocusNode.requestFocus()
+                          ? (_cwVisible
+                              ? () => _focusCwRow(_cwRows.length - 1, col)
+                              : () => _searchFocusNode.requestFocus())
                           : () => _focusRow(rowIndex - 1, col),
                       onDown: () => _focusRow(rowIndex + 1, col),
                       onOpen: () => _openItem(item, section.addon),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A Continue Watching row (Movies or Series) — same poster cards as the
+  /// catalog rows, plus a bottom progress bar and a type tag in the header.
+  /// [cwIndex] is this row's position among the visible CW rows and [cwCount]
+  /// the total, so DPAD up/down can move between CW rows and into the catalog.
+  Widget _buildContinueWatchingRow(
+    String label,
+    List<StremioMeta> items,
+    List<FocusNode> nodes,
+    int cwIndex,
+    int cwCount,
+  ) {
+    final tv = widget.isTelevision;
+    final width = MediaQuery.of(context).size.width;
+    final posterW = tv ? 152.0 : (width >= 900 ? 162.0 : 118.0);
+    final posterH = posterW * 3 / 2;
+    final titleH = MediaQuery.textScalerOf(context).scale(14) * 1.25 * 2;
+    final cellH = posterH + 10 + titleH + 6;
+    final rowH = cellH + 14;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  'Continue Watching',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: tv ? 20 : 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _CategoryTag(label),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: rowH,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 2000,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            itemCount: items.length,
+            itemBuilder: (context, col) {
+              final item = items[col];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Center(
+                  child: SizedBox(
+                    width: posterW,
+                    height: cellH,
+                    child: _BoardCell(
+                      item: item,
+                      isTelevision: tv,
+                      focusNode: nodes[col],
+                      column: col,
+                      rowNodes: nodes,
+                      hasBoundSource: _isBound(item),
+                      progress: _cwProgress[item.imdbId],
+                      onQuickPlay:
+                          _pikpakOnly ? null : () => _onContinuePlay(item),
+                      onFocused: () => _setHero(item),
+                      // Up: previous CW row, or the search field from the first.
+                      onUp: cwIndex == 0
+                          ? () => _searchFocusNode.requestFocus()
+                          : () => _focusCwRow(cwIndex - 1, col),
+                      // Down: next CW row, or the first catalog row from the last.
+                      onDown: cwIndex < cwCount - 1
+                          ? () => _focusCwRow(cwIndex + 1, col)
+                          : () => _focusRow(0, col),
+                      onOpen: () => _openContinueItem(item),
                     ),
                   ),
                 ),
@@ -1827,6 +2796,14 @@ class _BoardCell extends StatelessWidget {
   final int column;
   final List<FocusNode> rowNodes;
   final bool hasBoundSource;
+
+  /// 0..1 watched fraction — draws a bottom progress bar when non-null (used by
+  /// the Continue Watching row). Null on regular catalog rows.
+  final double? progress;
+
+  /// Long-press quick-play (mobile/desktop). Null hides the shortcut — used to
+  /// mirror the catalog tiles' long-press-to-play when quick-play is available.
+  final VoidCallback? onQuickPlay;
   final VoidCallback onFocused;
   final VoidCallback onUp;
   final VoidCallback onDown;
@@ -1839,6 +2816,8 @@ class _BoardCell extends StatelessWidget {
     required this.column,
     required this.rowNodes,
     required this.hasBoundSource,
+    this.progress,
+    this.onQuickPlay,
     required this.onFocused,
     required this.onUp,
     required this.onDown,
@@ -1889,6 +2868,8 @@ class _BoardCell extends StatelessWidget {
         isTelevision: isTelevision,
         focusNode: focusNode,
         hasBoundSource: hasBoundSource,
+        progress: progress,
+        onQuickPlay: onQuickPlay,
         onOpen: onOpen,
       ),
     );
@@ -1903,6 +2884,12 @@ class _StremioCard extends StatefulWidget {
   final bool isTelevision;
   final FocusNode focusNode;
   final bool hasBoundSource;
+
+  /// 0..1 watched fraction — draws a bottom progress bar when non-null.
+  final double? progress;
+
+  /// Long-press quick-play (mobile/desktop). Null hides the shortcut.
+  final VoidCallback? onQuickPlay;
   final VoidCallback onOpen;
 
   const _StremioCard({
@@ -1910,6 +2897,8 @@ class _StremioCard extends StatefulWidget {
     required this.isTelevision,
     required this.focusNode,
     required this.hasBoundSource,
+    this.progress,
+    this.onQuickPlay,
     required this.onOpen,
   });
 
@@ -1971,6 +2960,33 @@ class _StremioCardState extends State<_StremioCard> {
                         size: 18,
                         color: Colors.white,
                         shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+                  ),
+                // Continue Watching progress — a thin bar pinned to the bottom
+                // of the poster (clipped to the rounded corners by the parent).
+                if (widget.progress != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: SizedBox(
+                      height: 4,
+                      child: Stack(
+                        children: [
+                          Container(color: Colors.black.withValues(alpha: 0.55)),
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: widget.progress!.clamp(0.0, 1.0),
+                            child: const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [kStremioAccent, Color(0xFF9E86FF)],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 // Selection ring — accent on TV focus, subtle white on hover.
                 if (_active)
@@ -2040,6 +3056,7 @@ class _StremioCardState extends State<_StremioCard> {
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onOpen,
+          onLongPress: widget.onQuickPlay,
           behavior: HitTestBehavior.opaque,
           child: Column(
             mainAxisSize: MainAxisSize.min,
