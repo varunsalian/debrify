@@ -1018,11 +1018,27 @@ class _SearchScreenState extends State<SearchScreen> {
       return _message(Icons.error_outline_rounded, 'Search failed', _kwError!);
     }
     if (_kwQuery.isEmpty) {
-      return _message(
-        Icons.bolt_rounded,
-        'Keyword torrent search',
-        'Type a title and press search to find torrents across your enabled '
-            'sources, then tap one to play.',
+      // Surface Sources before searching so users can enable/disable the
+      // trackers that get queried up front.
+      return Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: _kwSourcesButton(),
+            ),
+          ),
+          Expanded(
+            child: _message(
+              Icons.bolt_rounded,
+              'Keyword torrent search',
+              'Type a title and press search to find torrents across your '
+                  'enabled sources, then tap one to play. Use Sources to choose '
+                  'which trackers are queried.',
+            ),
+          ),
+        ],
       );
     }
     final narrow =
@@ -1108,6 +1124,39 @@ class _SearchScreenState extends State<SearchScreen> {
         if (canSelect)
           _kwSelectionMode ? _buildKwSelectionBar() : _buildKwSelectFab(),
       ],
+    );
+  }
+
+  /// Standalone "Sources" pill shown in the pre-search keyword state so users
+  /// can pick which trackers are queried before typing a query.
+  Widget _kwSourcesButton() {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openKeywordSources,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.dns_rounded, size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Text('Sources',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
