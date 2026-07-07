@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/alldebrid_file.dart';
 import '../models/premiumize_file.dart';
@@ -98,6 +99,27 @@ class TorrentPlaybackService {
         VideoPlayerLaunchArgs(
             videoUrl: torrent.directUrl!, title: torrent.displayTitle),
       );
+      return;
+    }
+
+    // External addon streams open in an external app/browser (no debrid), same
+    // as Home's _openExternalStream. Both stream kinds carry their URL in
+    // directUrl.
+    if (torrent.streamType == StreamType.externalUrl &&
+        (torrent.directUrl?.isNotEmpty ?? false)) {
+      final uri = Uri.tryParse(torrent.directUrl!);
+      if (uri == null) {
+        _snack(context, 'Invalid stream URL.');
+        return;
+      }
+      try {
+        final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!ok && context.mounted) {
+          _snack(context, 'Could not open link — no app to handle it.');
+        }
+      } catch (e) {
+        if (context.mounted) _snack(context, 'Could not open link: $e');
+      }
       return;
     }
 

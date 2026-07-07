@@ -366,6 +366,35 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
   }
 
   Widget _buildMetadataRow() {
+    final t = widget.torrent;
+    // Addon direct / external streams carry no torrent metadata (size, seeders),
+    // so show a stream badge + source instead of a misleading "0 B · 0 seeders".
+    // (Home renders these as its own cards and never feeds them here; only the
+    // Search tab's Sources list does, so this branch is additive.)
+    if (t.isDirectStream || t.isExternalStream) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _buildMetaChip(
+            icon: t.isExternalStream
+                ? Icons.open_in_new_rounded
+                : Icons.play_circle_outline_rounded,
+            // Match Home's direct-stream cards: green "Direct" / indigo "External".
+            label: t.isExternalStream ? 'External' : 'Direct',
+            color: t.isExternalStream
+                ? const Color(0xFF6366F1) // indigo
+                : const Color(0xFF10B981), // green
+          ),
+          _buildMetaChip(
+            icon: Icons.source_rounded,
+            label: t.source.toUpperCase(),
+            color: const Color(0xFFA78BFA), // Purple 400
+          ),
+        ],
+      );
+    }
     return Wrap(
       spacing: 8,
       runSpacing: 4,

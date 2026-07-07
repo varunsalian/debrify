@@ -3722,28 +3722,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _nodes.clear();
     try {
       final sel = widget.selection;
-      // Only genuinely non-IMDb items (non-standard type AND no `tt…` id) resolve
-      // from the addon; a non-standard type that still has a `tt…` id keeps the
-      // normal torrent search so the on-device engines run.
-      final useAddonStream = sel.isNonImdb && !sel.imdbId.startsWith('tt');
+      // Match Home's Sources list: the Stremio-aware search returns BOTH torrents
+      // AND addon direct-link streams for movies/series, and resolves IPTV/non-IMDb
+      // items straight from the addon (it skips the on-device torrent engines for
+      // non-standard content types by contentType). Previously this path was
+      // torrent-only, so addon direct links never appeared in the Search tab's
+      // Sources list even though Home showed them.
       final res = _keywordMode
           ? await TorrentService.searchAllEngines(_query)
-          : useAddonStream
-              // IPTV / non-IMDb catalog items have no torrent-indexer match —
-              // resolve their streams from the addon (skips the torrent engine).
-              ? await TorrentService.searchByImdbWithStremio(
-                  sel.imdbId,
-                  isMovie: !sel.isSeries,
-                  season: sel.season,
-                  episode: sel.episode,
-                  contentType: sel.contentType,
-                )
-              : await TorrentService.searchByImdb(
-                  sel.imdbId,
-                  isMovie: !sel.isSeries,
-                  season: sel.season,
-                  episode: sel.episode,
-                );
+          : await TorrentService.searchByImdbWithStremio(
+              sel.imdbId,
+              isMovie: !sel.isSeries,
+              season: sel.season,
+              episode: sel.episode,
+              contentType: sel.contentType,
+            );
       if (!mounted || token != _searchToken) return;
       final torrents = (res['torrents'] as List).cast<Torrent>();
       for (var i = 0; i < torrents.length; i++) {
@@ -3796,7 +3789,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     ));
   }
 
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   Future<void> _pin(Torrent t) async {
+    // Direct / external streams have no infohash/magnet to bind as a reusable
+    // source — reject rather than store a broken pin.
+    if (t.isDirectStream || t.isExternalStream) {
+      _snack("Direct streams can't be pinned as a source.");
+      return;
+    }
     if (_pinning) return; // guard concurrent binds (double-tap on TV)
     _pinning = true;
     try {
@@ -3843,6 +3850,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   void _showRowMenu(Torrent t, int i) {
+    // Direct / external addon streams have no infohash to pin — offer the
+    // stream-appropriate actions (play/open + copy link), mirroring Home's
+    // direct-stream action sheet.
+    if (t.isDirectStream || t.isExternalStream) {
+      _showStreamRowMenu(t, i);
+      return;
+    }
     final bound = _boundHashes.contains(t.infohash);
     showModalBottomSheet<void>(
       context: context,
@@ -3879,6 +3893,59 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 } else {
                   unawaited(_pin(t));
                 }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Options sheet for a direct / external addon stream: play (in-app) or open
+  /// (external), plus copy the stream URL. No "Pin as source" — streams have no
+  /// infohash to bind.
+  void _showStreamRowMenu(Torrent t, int i) {
+    final external = t.isExternalStream;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
+                color: Colors.white,
+              ),
+              title: Text(external ? 'Open externally' : 'Play now',
+                  style: const TextStyle(color: Colors.white)),
+              subtitle: Text(
+                external
+                    ? 'Open this link in your browser'
+                    : 'Stream directly — no debrid needed',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              ),
+              onTap: () {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                _playNow(t, i);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
+              title:
+                  const Text('Copy URL', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                DialogTapGuard.markKeyAction();
+                Navigator.of(sheetCtx).pop();
+                final url = t.directUrl ?? '';
+                if (url.isEmpty) {
+                  _snack('No stream URL available.');
+                  return;
+                }
+                await Clipboard.setData(ClipboardData(text: url));
+                _snack('URL copied to clipboard');
               },
             ),
           ],
