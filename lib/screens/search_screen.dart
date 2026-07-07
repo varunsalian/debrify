@@ -1244,9 +1244,8 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Add-source picker: Torrent Search (imdb) / Local file / Real-Debrid /
-  /// TorBox. (Keyword-add isn't offered here — the Search tab's keyword flow
-  /// doesn't bind sources.)
+  /// Add-source picker: Torrent Search (imdb) / Keyword Search (free-text) /
+  /// Local file / Real-Debrid / TorBox.
   Future<void> _showAddSourcePicker(StremioMeta item) async {
     final imdbId = _imdbOf(item);
     if (imdbId == null) {
@@ -1283,6 +1282,7 @@ class _SearchScreenState extends State<SearchScreen> {
     await showAddSourcePickerDialog(
       context,
       onTorrentSearch: () => _openBindSources(item),
+      onKeywordSearch: () => _openKeywordBind(item),
       onLocal: supportsLocal ? () => _pickAndSaveLocalSource(item) : null,
       localDisabledReason: LocalBoundSourceService.localDisabledReason,
       onRealDebrid: rdEnabled
@@ -1640,6 +1640,44 @@ class _SearchScreenState extends State<SearchScreen> {
               meta: _metaFor(sel),
               isTelevision: widget.isTelevision,
               bindMode: true,
+            ),
+          ),
+        )
+        .then((_) => _refreshBoundSources());
+  }
+
+  /// Free-text keyword bind: push the sources screen seeded with a pack query
+  /// (series → `name complete`, movie → `name year`), where tapping a result
+  /// pins it as [show]'s bound source. The query is editable.
+  void _openKeywordBind(StremioMeta show) {
+    final imdb = _imdbOf(show);
+    if (imdb == null) {
+      _snack('No IMDb match to pin a source for "${show.name}".');
+      return;
+    }
+    final isSeries = show.type == 'series';
+    final seed = isSeries
+        ? '${show.name} complete'
+        : (show.year != null && show.year!.isNotEmpty
+            ? '${show.name} ${show.year}'
+            : show.name);
+    final sel = AdvancedSearchSelection(
+      imdbId: imdb,
+      isSeries: isSeries,
+      title: show.name,
+      year: show.year,
+      contentType: show.type,
+      posterUrl: show.poster,
+    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => _SourcesScreen(
+              selection: sel,
+              meta: _metaFor(sel),
+              isTelevision: widget.isTelevision,
+              bindMode: true,
+              keywordSeed: seed,
             ),
           ),
         )
@@ -3200,11 +3238,18 @@ class _SourcesScreen extends StatefulWidget {
   /// false it's the normal Sources list: tap plays, long-press pins/unpins.
   final bool bindMode;
 
+  /// When non-null the screen searches TORRENTS BY FREE-TEXT KEYWORD (seeded
+  /// with this query, editable) instead of by the selection's IMDb id — used by
+  /// the "Keyword Search" add-source option. Implies [bindMode]. The selection
+  /// still supplies the pin target (imdbId / movie-vs-series).
+  final String? keywordSeed;
+
   const _SourcesScreen({
     required this.selection,
     required this.meta,
     required this.isTelevision,
     this.bindMode = false,
+    this.keywordSeed,
   });
 
   @override
@@ -3218,6 +3263,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   final List<FocusNode> _nodes = [];
   List<SeriesSource> _bound = [];
 
+  /// Free-text keyword-bind mode: an editable query that seeds a pack search.
+  bool get _keywordMode => widget.keywordSeed != null;
+  late final TextEditingController _kwCtrl;
+  String _query = '';
+
+  /// Monotonic guard so a slow earlier search can't clobber a newer one.
+  int _searchToken = 0;
+
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
   Set<String> get _boundHashes => _bound.map((s) => s.torrentHash).toSet();
@@ -3225,11 +3278,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   @override
   void initState() {
     super.initState();
+    _query = widget.keywordSeed ?? '';
+    _kwCtrl = TextEditingController(text: _query);
     _load();
   }
 
   @override
   void dispose() {
+    _kwCtrl.dispose();
     for (final n in _nodes) {
       n.dispose();
     }
@@ -3245,14 +3301,35 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   Future<void> _load() async {
     await _reloadBound();
+    await _runSearch();
+  }
+
+  /// Run the source search (free-text keyword pack search in keyword-bind mode,
+  /// otherwise the IMDb-exact search) and rebuild the row focus nodes. Guarded
+  /// by a token so a slow earlier re-search can't clobber a newer one's results
+  /// or leak its focus nodes.
+  Future<void> _runSearch() async {
+    final token = ++_searchToken;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    for (final n in _nodes) {
+      n.dispose();
+    }
+    _nodes.clear();
     try {
-      final res = await TorrentService.searchByImdb(
-        widget.selection.imdbId,
-        isMovie: !widget.selection.isSeries,
-        season: widget.selection.season,
-        episode: widget.selection.episode,
-      );
-      if (!mounted) return;
+      final res = _keywordMode
+          ? await TorrentService.searchAllEngines(_query)
+          : await TorrentService.searchByImdb(
+              widget.selection.imdbId,
+              isMovie: !widget.selection.isSeries,
+              season: widget.selection.season,
+              episode: widget.selection.episode,
+            );
+      if (!mounted || token != _searchToken) return;
       final torrents = (res['torrents'] as List).cast<Torrent>();
       for (var i = 0; i < torrents.length; i++) {
         _nodes.add(FocusNode(debugLabel: 'src_$i'));
@@ -3269,12 +3346,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _searchToken) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
+  }
+
+  void _submitKeyword(String q) {
+    final trimmed = q.trim();
+    if (trimmed.isEmpty || trimmed == _query) return;
+    _query = trimmed;
+    _runSearch();
   }
 
   bool _pinning = false;
@@ -3395,9 +3479,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       backgroundColor: scheme.surface,
       appBar: AppBar(
         title: Text(
-          widget.bindMode
-              ? 'Pick a source for ${widget.selection.title}'
-              : widget.selection.formattedLabel,
+          _keywordMode
+              ? 'Find a source for ${widget.selection.title}'
+              : widget.bindMode
+                  ? 'Pick a source for ${widget.selection.title}'
+                  : widget.selection.formattedLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -3413,17 +3499,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _centered(scheme, 'Search failed.\n$_error')
-              : Column(
-                  children: [
-                    if (_bound.isNotEmpty) _pinnedBanner(),
-                    Expanded(
-                      child: _torrents.isEmpty
-                          ? _centered(scheme, 'No sources found.')
-                          : ListView.builder(
+      body: Column(
+        children: [
+          if (_keywordMode) _keywordSearchField(scheme),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? _centered(scheme, 'Search failed.\n$_error')
+                    : Column(
+                        children: [
+                          if (_bound.isNotEmpty) _pinnedBanner(),
+                          Expanded(
+                            child: _torrents.isEmpty
+                                ? _centered(scheme, 'No sources found.')
+                                : ListView.builder(
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               cacheExtent: 1200,
                               itemCount: _torrents.length,
@@ -3454,9 +3544,40 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                 );
                               },
                             ),
-                    ),
-                  ],
-                ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Editable free-text search box shown at the top of the keyword-bind screen.
+  Widget _keywordSearchField(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: TextField(
+        controller: _kwCtrl,
+        textInputAction: TextInputAction.search,
+        onSubmitted: _submitKeyword,
+        style: TextStyle(color: scheme.onSurface),
+        decoration: InputDecoration(
+          hintText: 'Search torrents by keyword',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.arrow_forward_rounded),
+            onPressed: () => _submitKeyword(_kwCtrl.text),
+          ),
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
     );
   }
 
