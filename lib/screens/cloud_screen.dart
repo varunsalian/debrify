@@ -60,6 +60,10 @@ class _CloudScreenState extends State<CloudScreen> {
   /// One focus node per visible tile (Android TV DPAD navigation).
   final List<FocusNode> _nodes = [];
 
+  /// The sidebar requested content focus before the async provider load
+  /// finished (nodes didn't exist yet) — re-arm once tiles are built.
+  bool _tvFocusPending = false;
+
   static const int _tabIndex = 16;
 
   @override
@@ -100,6 +104,9 @@ class _CloudScreenState extends State<CloudScreen> {
       _syncNodes(available.length);
       _loading = false;
     });
+    // If the sidebar handed us focus mid-load (before tiles existed), honor it
+    // now that the tiles are built.
+    if (_tvFocusPending && widget.isTelevision) _focusFirstTile();
   }
 
   /// Grow/shrink [_nodes] to match the visible tile count.
@@ -163,7 +170,13 @@ class _CloudScreenState extends State<CloudScreen> {
   }
 
   void _focusFirstTile() {
-    if (!mounted || _nodes.isEmpty) return;
+    if (!mounted) return;
+    if (_nodes.isEmpty) {
+      // Tiles not built yet (still loading) — re-arm; _load() retries when ready.
+      _tvFocusPending = true;
+      return;
+    }
+    _tvFocusPending = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _nodes.isNotEmpty) _nodes.first.requestFocus();
     });
@@ -189,8 +202,11 @@ class _CloudScreenState extends State<CloudScreen> {
       return KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
-      // Left edge → hand focus back to the sidebar.
-      MainPageBridge.focusTvSidebar?.call();
+      // Left edge → hand focus back to the TV sidebar. Off-TV there's no
+      // sidebar to focus, so let the event fall through (don't swallow it).
+      final focusSidebar = MainPageBridge.focusTvSidebar;
+      if (focusSidebar == null) return KeyEventResult.ignored;
+      focusSidebar();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.select ||

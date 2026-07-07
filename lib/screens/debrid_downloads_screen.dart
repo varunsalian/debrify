@@ -229,9 +229,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (widget.isPushedRoute) {
       // Pushed as a route - use pushed route handler
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
-      // Set up timeout - if we're still at root after 10 seconds, pop and show error
+      // Set up timeout - if a DEEP LINK into a specific torrent hasn't resolved
+      // after 10s, pop and show an error. Only when we were actually deep-linked
+      // (initialTorrentForOptions); when browsing from the Cloud hub there's no
+      // target, so the torrents-list root is the resting state — no timeout.
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && widget.isPushedRoute && !widget.selectSourceMode && _currentTorrentId == null) {
+        if (mounted &&
+            widget.isPushedRoute &&
+            !widget.selectSourceMode &&
+            widget.initialTorrentForOptions != null &&
+            _currentTorrentId == null) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -400,8 +407,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     // At torrent root level (viewing torrent files, not inside a subfolder)
     if (_currentTorrentId != null && _folderPath.isEmpty) {
-      // If pushed as a route, pop to go back
-      if (widget.isPushedRoute) {
+      // Deep-linked directly into this torrent (pushed WITH a target) → pop back
+      // to the caller. Browsing (pushed from the Cloud hub without a target, or a
+      // normal tab) → fall through to _navigateUp so Back returns to the torrents
+      // list, not straight out of the screen.
+      if (widget.isPushedRoute && widget.initialTorrentForOptions != null) {
         Navigator.of(context).pop();
         return true;
       }

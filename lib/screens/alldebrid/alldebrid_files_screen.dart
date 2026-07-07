@@ -93,7 +93,12 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   @override
   void initState() {
     super.initState();
-    if (!widget.isPushedRoute) {
+    if (widget.isPushedRoute) {
+      // Pushed as a route (e.g. from the consolidated Cloud hub) — register a
+      // pushed-route back handler so hardware/gesture Back navigates up within
+      // the screen before popping, matching the other provider screens.
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+    } else {
       MainPageBridge.registerTabBackHandler('alldebrid', _handleBackNavigation);
       _tvContentFocusHandler = () {
         _shouldFocusOnLoad = true;
@@ -103,12 +108,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         _tabIndex,
         _tvContentFocusHandler!,
       );
-      MainPageBridge.focusAllDebridWebDownloads = _focusWebDownloads;
-      // A shared web link may have been saved while this tab was unmounted;
-      // open directly on the Web Downloads view so the new link is visible.
-      if (MainPageBridge.getAndClearAllDebridFocusWebDownloads()) {
-        _selectedView = _AdView.webDownloads;
-      }
+    }
+    // The "shared web link → open on Web Downloads" deep link works in BOTH tab
+    // and pushed (Cloud hub) modes — the Cloud hub always pushes, so gating this
+    // on !isPushedRoute would silently drop the feature. Wire the live handler
+    // and consume any pending flag regardless of how we were opened.
+    MainPageBridge.focusAllDebridWebDownloads = _focusWebDownloads;
+    if (MainPageBridge.getAndClearAllDebridFocusWebDownloads()) {
+      _selectedView = _AdView.webDownloads;
     }
     _load();
     if (_selectedView == _AdView.webDownloads) {
@@ -136,7 +143,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   @override
   void dispose() {
-    if (!widget.isPushedRoute) {
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
       MainPageBridge.unregisterTabBackHandler('alldebrid');
       if (_tvContentFocusHandler != null) {
         MainPageBridge.unregisterTvContentFocusHandler(
@@ -144,9 +153,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           _tvContentFocusHandler!,
         );
       }
-      if (MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads) {
-        MainPageBridge.focusAllDebridWebDownloads = null;
-      }
+    }
+    if (MainPageBridge.focusAllDebridWebDownloads == _focusWebDownloads) {
+      MainPageBridge.focusAllDebridWebDownloads = null;
     }
     _searchController.dispose();
     _searchFocusNode.dispose();

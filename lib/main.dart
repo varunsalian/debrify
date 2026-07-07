@@ -561,6 +561,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   bool _supportCampaignResolved = false;
   bool _autoUpdateCheckResolved = false;
 
+  /// True while a Cloud-hub provider route is on the stack, so a rapid re-tap or
+  /// a duplicate deep link doesn't stack a second identical provider route.
+  bool _cloudProviderRouteOpen = false;
+
   final List<Widget> _pages = [
     const TorrentSearchScreen(), // 0: Home
     const PlaylistScreen(), // 1: Playlist
@@ -2418,21 +2422,42 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _showTabHiddenSnack(name);
       return;
     }
+    // Don't stack a second identical provider route (rapid re-tap / duplicate
+    // deep link while one is already open).
+    if (_cloudProviderRouteOpen) return;
+    _cloudProviderRouteOpen = true;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => PopScope(
-          canPop: false,
-          onPopInvoked: (didPop) {
-            if (didPop) return;
-            if (!MainPageBridge.handleBackNavigation()) {
-              Navigator.of(ctx).pop();
-            }
-          },
-          child: child,
-        ),
-      ),
-    );
+    void back(BuildContext ctx) {
+      if (!MainPageBridge.handleBackNavigation()) {
+        Navigator.of(ctx).pop();
+      }
+    }
+
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            settings: const RouteSettings(name: 'cloud_provider'),
+            builder: (ctx) => PopScope(
+              canPop: false,
+              onPopInvoked: (didPop) {
+                if (didPop) return;
+                back(ctx);
+              },
+              // Desktop has no system Back gesture and these provider roots may
+              // show no back button, so bind Escape to the same back handler.
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.escape): () =>
+                      back(ctx),
+                },
+                child: child,
+              ),
+            ),
+          ),
+        )
+        .then((_) {
+      if (mounted) _cloudProviderRouteOpen = false;
+    });
   }
 
   @override

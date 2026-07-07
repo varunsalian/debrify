@@ -127,9 +127,14 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
-      // Set up timeout - if we're still at root after 10 seconds, pop and show error
+      // Set up timeout - only when DEEP-LINKED into a specific folder
+      // (initialFolderId). Browsing from the Cloud hub has no target, so the
+      // root is the resting state — no spurious auto-close.
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && widget.isPushedRoute && _currentFolderId == null) {
+        if (mounted &&
+            widget.isPushedRoute &&
+            widget.initialFolderId != null &&
+            _currentFolderId == null) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

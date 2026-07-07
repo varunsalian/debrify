@@ -211,9 +211,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
-      // Set up timeout - if we're still at root after 10 seconds, pop and show error
+      // Set up timeout - only when DEEP-LINKED into a specific torrent
+      // (initialTorrentToOpen). Browsing from the Cloud hub has no target, so
+      // the root list is the resting state — no spurious auto-close.
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted && widget.isPushedRoute && !widget.selectSourceMode && _isAtRoot) {
+        if (mounted &&
+            widget.isPushedRoute &&
+            !widget.selectSourceMode &&
+            widget.initialTorrentToOpen != null &&
+            _isAtRoot) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1057,8 +1063,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     // At torrent root level (viewing torrent files, not inside a subfolder)
     if (!_isAtRoot && _navigationStack.length == 1) {
-      // If pushed as a route, pop to go back
-      if (widget.isPushedRoute) {
+      // Deep-linked directly into this torrent (pushed WITH a target) → pop back
+      // to the caller. Browsing from the Cloud hub (no target) → fall through to
+      // _navigateUp so Back returns to the downloads list, not out of the screen.
+      if (widget.isPushedRoute && widget.initialTorrentToOpen != null) {
         Navigator.of(context).pop();
         return true;
       }
