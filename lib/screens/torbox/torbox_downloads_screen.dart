@@ -4141,7 +4141,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   }
 
   void _openSettings() {
-    MainPageBridge.switchTab?.call(6);
+    // NOTE: pre-existing behavior — this "Open Torbox Settings" button navigated
+    // to the PikPak tab (index 6), which looks like a bug (Settings is index 8).
+    // Preserved as-is through the Cloud consolidation (index 6 is no longer a nav
+    // tab, so route through the Cloud hub). Flagged for review — do not "fix"
+    // silently.
+    MainPageBridge.openCloudProvider?.call('pikpak');
   }
 
   // ==================== FILE/FOLDER ACTION METHODS ====================

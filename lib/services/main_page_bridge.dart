@@ -14,6 +14,15 @@ class MainPageBridge {
   static void Function()? openPremiumizeFolder;
   static void Function()? openAllDebridFolder;
 
+  /// Open a specific cloud provider from the consolidated "Cloud" tab. Pushes
+  /// the provider's screen (like [openDebridOptions] et al.) so "view in
+  /// provider" and post-add flows land on the right provider even though the
+  /// six providers no longer have their own nav tabs. [providerKey] is one of:
+  /// 'realdebrid' | 'torbox' | 'pikpak' | 'premiumize' | 'alldebrid' | 'webdav'.
+  /// Shows the same missing-key / hidden-tab snackbar as [switchTab] did when
+  /// the provider isn't available. Set by main.dart.
+  static void Function(String providerKey)? openCloudProvider;
+
   /// Flag to track if user came from torrent search "Open in xxx" flow.
   /// When true, back navigation should return to torrent search instead of folder navigation.
   static bool returnToTorrentSearchOnBack = false;

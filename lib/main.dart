@@ -13,6 +13,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
+import 'screens/cloud_screen.dart';
 import 'screens/search_screen.dart';
 import 'widgets/iptv/iptv_results_view.dart';
 import 'widgets/youtube/youtube_results_view.dart';
@@ -595,6 +596,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'IPTV',
     'YouTube',
     'Search', // 15: appended at end so existing indices don't shift
+    'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
   ];
 
   final List<IconData> _icons = [
@@ -614,6 +616,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.live_tv_rounded,
     Icons.ondemand_video_rounded,
     Icons.search_rounded, // 15: Search
+    Icons.cloud_rounded, // 16: Cloud
   ];
 
   @override
@@ -778,6 +781,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ),
       );
     };
+    MainPageBridge.openCloudProvider = _openCloudProvider;
     MainPageBridge.hideAutoLaunchOverlay = _hideAutoLaunchOverlay;
     MainPageBridge.addIntegrationListener(_handleIntegrationChanged);
     _loadIntegrationState();
@@ -835,6 +839,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.openPikPakFolder = null;
     MainPageBridge.openPremiumizeFolder = null;
     MainPageBridge.openAllDebridFolder = null;
+    MainPageBridge.openCloudProvider = null;
     MainPageBridge.hideAutoLaunchOverlay = null;
     MainPageBridge.focusTvSidebar = null;
     _animationController.dispose();
@@ -894,8 +899,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           await MainPageBridge.handleTorboxResult?.call(torrent);
         },
         onTorboxAdded: (torrent) {
-          // Fallback: Navigate to Torbox tab
-          MainPageBridge.switchTab?.call(5); // Torbox tab index
+          // Fallback: open Torbox in the Cloud hub
+          MainPageBridge.openCloudProvider?.call('torbox');
         },
         onPikPakResult: (fileId, fileName) async {
           // Use the same post-action flow as torrent search
@@ -907,14 +912,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           }
         },
         onPikPakAdded: () {
-          // Fallback: Navigate to PikPak tab
-          MainPageBridge.switchTab?.call(6); // PikPak tab index
+          // Fallback: open PikPak in the Cloud hub
+          MainPageBridge.openCloudProvider?.call('pikpak');
         },
         onPremiumizeAdded: () {
-          MainPageBridge.switchTab?.call(11); // Premiumize tab index
+          MainPageBridge.openCloudProvider?.call('premiumize');
         },
         onAllDebridAdded: () {
-          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
+          MainPageBridge.openCloudProvider?.call('alldebrid');
         },
       );
 
@@ -969,20 +974,20 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           }
         },
         onPikPakAdded: () {
-          MainPageBridge.switchTab?.call(6); // PikPak tab index
+          MainPageBridge.openCloudProvider?.call('pikpak');
         },
         onPremiumizeAdded: () {
-          MainPageBridge.switchTab?.call(11); // Premiumize tab index
+          MainPageBridge.openCloudProvider?.call('premiumize');
         },
         onAllDebridAdded: () {
-          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
+          MainPageBridge.openCloudProvider?.call('alldebrid');
         },
         onAllDebridUrlResult: () {
           // Shared web link was saved → open AllDebrid on its Web Downloads
           // view and refresh so the new link is visible. notify() before
-          // switchTab so the freshly-built screen picks up the pending flag.
+          // opening so the freshly-built screen picks up the pending flag.
           MainPageBridge.notifyAllDebridFocusWebDownloads();
-          MainPageBridge.switchTab?.call(12); // AllDebrid tab index
+          MainPageBridge.openCloudProvider?.call('alldebrid');
         },
       );
 
@@ -2129,23 +2134,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         3,
         9,
       ]; // Search, Torrent, Downloads, IPTV, YouTube, Debrify TV, Stremio TV
-      if (rd && !rdHidden) {
-        indices.add(4); // Real Debrid downloads
-      }
-      if (tb && !tbHidden) {
-        indices.add(5); // Torbox downloads
-      }
-      if (pikpak && !ppHidden) {
-        indices.add(6); // PikPak
-      }
-      if (premiumize && !pmHidden) {
-        indices.add(11); // Premiumize
-      }
-      if (allDebrid && !adHidden) {
-        indices.add(12); // AllDebrid
-      }
-      if (webDav && !wdHidden) {
-        indices.add(10); // WebDAV
+      // Consolidated Cloud tab: one entry when ANY provider is enabled & not
+      // hidden (replaces the former per-provider RD/Torbox/PikPak/Premiumize/
+      // AllDebrid/WebDAV tabs). The in-tab hub lists the available providers.
+      if ((rd && !rdHidden) ||
+          (tb && !tbHidden) ||
+          (pikpak && !ppHidden) ||
+          (premiumize && !pmHidden) ||
+          (allDebrid && !adHidden) ||
+          (webDav && !wdHidden)) {
+        indices.add(16); // Cloud
       }
       indices.add(7); // Addons
       indices.add(8); // Settings
@@ -2177,12 +2175,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
 
     final indices = <int>[15, 0, 2, 13, 14, 3, 9];
-    if (rd && !rdHidden) indices.add(4);
-    if (tb && !tbHidden) indices.add(5);
-    if (pikpak && !ppHidden) indices.add(6);
-    if (premiumize && !pmHidden) indices.add(11);
-    if (allDebrid && !adHidden) indices.add(12);
-    if (webDav && !wdHidden) indices.add(10);
+    // Consolidated Cloud tab (see TV branch above): one entry when any provider
+    // is enabled & not hidden.
+    if ((rd && !rdHidden) ||
+        (tb && !tbHidden) ||
+        (pikpak && !ppHidden) ||
+        (premiumize && !pmHidden) ||
+        (allDebrid && !adHidden) ||
+        (webDav && !wdHidden)) {
+      indices.add(16); // Cloud
+    }
     indices.add(7); // Addons
     indices.add(8); // Settings
     return indices;
@@ -2202,7 +2204,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 3: // Debrify TV
       case 9: // Stremio TV
         return 'TV';
-      case 4: // Real Debrid
+      case 16: // Cloud (consolidated provider hub)
+      case 4: // Real Debrid (legacy per-provider indices, no longer in nav)
       case 5: // Torbox
       case 6: // PikPak
       case 10: // WebDAV
@@ -2277,6 +2280,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         );
       case 15: // Search
         return SearchScreen(isTelevision: _isAndroidTv);
+      case 16: // Cloud (consolidated provider hub)
+        return CloudScreen(isTelevision: _isAndroidTv);
       default:
         return _pages[index];
     }
@@ -2341,6 +2346,90 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       SnackBar(
         content: Text(
           '$provider tab is hidden. Enable it in Settings to access.',
+        ),
+      ),
+    );
+  }
+
+  /// Open a single cloud provider (from the Cloud hub or a "view in provider" /
+  /// post-add deep link). Pushes the provider screen — the same PopScope/pushed
+  /// pattern the openXFolder bridges use — so Back returns to wherever the user
+  /// was (the Cloud hub, Home, etc.). Preserves the old switchTab guard's UX:
+  /// not configured -> missing-key snack; configured but hidden -> hidden snack.
+  void _openCloudProvider(String providerKey) {
+    if (!mounted) return;
+
+    late final bool enabled;
+    late final bool hidden;
+    late final String name;
+    late final Widget child;
+    switch (providerKey) {
+      case 'realdebrid':
+        enabled = _hasRealDebridKey;
+        hidden = _rdHiddenFromNav;
+        name = 'Real Debrid';
+        child = const DebridDownloadsScreen(isPushedRoute: true);
+        break;
+      case 'torbox':
+        enabled = _hasTorboxKey;
+        hidden = _tbHiddenFromNav;
+        name = 'Torbox';
+        child = const TorboxDownloadsScreen(isPushedRoute: true);
+        break;
+      case 'pikpak':
+        enabled = _pikpakEnabled;
+        hidden = _pikpakHiddenFromNav;
+        name = 'PikPak';
+        child = const PikPakFilesScreen(isPushedRoute: true);
+        break;
+      case 'premiumize':
+        enabled = _premiumizeEnabled;
+        hidden = _premiumizeHiddenFromNav;
+        name = 'Premiumize';
+        child = const PremiumizeFilesScreen(isPushedRoute: true);
+        break;
+      case 'alldebrid':
+        enabled = _allDebridEnabled;
+        hidden = _allDebridHiddenFromNav;
+        name = 'AllDebrid';
+        child = const AllDebridFilesScreen(isPushedRoute: true);
+        break;
+      case 'webdav':
+        enabled = _webDavEnabled;
+        hidden = _webDavHiddenFromNav;
+        name = 'WebDAV';
+        // WebDAV renders a bare Column (no Scaffold/AppBar) and has no
+        // isPushedRoute of its own, so wrap it with a Scaffold + AppBar back
+        // affordance for the pushed route. Its own toolbar handles folder nav.
+        child = Scaffold(
+          appBar: AppBar(title: const Text('WebDAV')),
+          body: const SafeArea(child: WebDavFilesScreen()),
+        );
+        break;
+      default:
+        return;
+    }
+
+    if (!enabled) {
+      _showMissingApiKeySnack(name);
+      return;
+    }
+    if (hidden) {
+      _showTabHiddenSnack(name);
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => PopScope(
+          canPop: false,
+          onPopInvoked: (didPop) {
+            if (didPop) return;
+            if (!MainPageBridge.handleBackNavigation()) {
+              Navigator.of(ctx).pop();
+            }
+          },
+          child: child,
         ),
       ),
     );

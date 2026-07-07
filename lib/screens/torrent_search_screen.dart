@@ -23201,11 +23201,11 @@ class _TorrentSearchScreenState extends State<TorrentSearchScreen>
               focusController: _homeFocusController,
               isTelevision: _isTelevision,
               onTapRealDebrid: () =>
-                  MainPageBridge.switchTab?.call(4), // RD tab
+                  MainPageBridge.openCloudProvider?.call('realdebrid'),
               onTapTorbox: () =>
-                  MainPageBridge.switchTab?.call(5), // Torbox tab
+                  MainPageBridge.openCloudProvider?.call('torbox'),
               onTapPikPak: () =>
-                  MainPageBridge.switchTab?.call(6), // PikPak tab
+                  MainPageBridge.openCloudProvider?.call('pikpak'),
               onRequestFocusAbove: () {
                 final prev = _homeFocusController.getPreviousSection(
                   HomeSection.providers,
