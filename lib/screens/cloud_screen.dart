@@ -4,6 +4,11 @@ import 'package:flutter/services.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 
+/// Stremio-style palette shared with the Search tab: an indigo/purple accent
+/// over a deep near-black indigo base.
+const Color _kStremioAccent = Color(0xFF7B5CFF);
+const Color _kStremioBg = Color(0xFF0D0B1A);
+
 /// Consolidated "Cloud" hub. Replaces the six separate provider nav tabs
 /// (Real Debrid / Torbox / PikPak / Premiumize / AllDebrid / WebDAV) with a
 /// single tab that lists the providers the user has enabled. Tapping one opens
@@ -45,7 +50,7 @@ class _CloudScreenState extends State<CloudScreen> {
     _CloudProviderInfo('pikpak', 'PikPak', 'Cloud storage',
         Icons.cloud_circle_rounded, Color(0xFF34D399)),
     _CloudProviderInfo('premiumize', 'Premiumize', 'Debrid service',
-        Icons.workspace_premium_rounded, Color(0xFFF59E0B)),
+        Icons.workspace_premium_rounded, Color(0xFFFB923C)),
     _CloudProviderInfo('alldebrid', 'AllDebrid', 'Debrid service',
         Icons.all_inclusive_rounded, Color(0xFFEF4444)),
     _CloudProviderInfo('webdav', 'WebDAV', 'File server',
@@ -220,35 +225,69 @@ class _CloudScreenState extends State<CloudScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _providers.isEmpty
-                ? _emptyState(scheme)
-                : _providerList(scheme),
+      backgroundColor: _kStremioBg,
+      // Same soft purple bloom over deep indigo the Search tab uses.
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.75),
+            radius: 1.35,
+            colors: [
+              Color(0xFF322A6B),
+              Color(0xFF1A1734),
+              Color(0xFF100E20),
+              _kStremioBg,
+            ],
+            stops: [0.0, 0.42, 0.72, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: _loading
+              ? const Center(
+                  child: CircularProgressIndicator(color: _kStremioAccent))
+              : _providers.isEmpty
+                  ? _emptyState()
+                  : _providerList(),
+        ),
       ),
     );
   }
 
-  Widget _emptyState(ColorScheme scheme) {
+  Widget _emptyState() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded,
-                size: 56, color: scheme.onSurface.withValues(alpha: 0.4)),
-            const SizedBox(height: 16),
-            Text(
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _kStremioAccent.withValues(alpha: 0.22),
+                    _kStremioAccent.withValues(alpha: 0.06),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: _kStremioAccent.withValues(alpha: 0.35)),
+              ),
+              child: const Icon(Icons.cloud_off_rounded,
+                  size: 40, color: _kStremioAccent),
+            ),
+            const SizedBox(height: 20),
+            const Text(
               'No cloud providers connected',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: scheme.onSurface,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
@@ -258,7 +297,8 @@ class _CloudScreenState extends State<CloudScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: scheme.onSurface.withValues(alpha: 0.6),
+                height: 1.4,
+                color: Colors.white.withValues(alpha: 0.55),
               ),
             ),
           ],
@@ -267,38 +307,38 @@ class _CloudScreenState extends State<CloudScreen> {
     );
   }
 
-  Widget _providerList(ColorScheme scheme) {
+  Widget _providerList() {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
+        constraints: const BoxConstraints(maxWidth: 640),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 0, 4, 2),
               child: Text(
                 'Cloud',
                 style: TextStyle(
-                  fontSize: 26,
+                  fontSize: 30,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                  color: scheme.onSurface,
+                  letterSpacing: -0.6,
+                  color: Colors.white,
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(6, 0, 6, 16),
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
               child: Text(
                 'Choose a provider to manage its files',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: scheme.onSurface.withValues(alpha: 0.6),
+                  fontSize: 14.5,
+                  color: Colors.white.withValues(alpha: 0.5),
                 ),
               ),
             ),
             for (var i = 0; i < _providers.length; i++) ...[
-              _providerTile(scheme, _providers[i], i),
-              const SizedBox(height: 12),
+              _providerTile(_providers[i], i),
+              const SizedBox(height: 14),
             ],
           ],
         ),
@@ -306,7 +346,7 @@ class _CloudScreenState extends State<CloudScreen> {
     );
   }
 
-  Widget _providerTile(ColorScheme scheme, _CloudProviderInfo p, int index) {
+  Widget _providerTile(_CloudProviderInfo p, int index) {
     return Focus(
       focusNode: index < _nodes.length ? _nodes[index] : null,
       onKeyEvent: (node, event) => _onTileKey(node, event, index),
@@ -319,36 +359,70 @@ class _CloudScreenState extends State<CloudScreen> {
         builder: (context) {
           final focused = Focus.of(context).hasFocus;
           return Material(
-            color: focused
-                ? p.color.withValues(alpha: 0.16)
-                : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
+            color: Colors.transparent,
             child: InkWell(
               // The parent Focus owns keyboard/DPAD focus; keep InkWell out of
               // focus traversal so it doesn't create a competing focus node.
               canRequestFocus: false,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
+              hoverColor: Colors.white.withValues(alpha: 0.03),
               onTap: () => _openProvider(p.key),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                duration: const Duration(milliseconds: 140),
+                curve: Curves.easeOut,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: focused ? p.color : Colors.transparent,
-                    width: 2,
+                  gradient: LinearGradient(
+                    colors: focused
+                        ? [
+                            _kStremioAccent.withValues(alpha: 0.22),
+                            _kStremioAccent.withValues(alpha: 0.07),
+                          ]
+                        : [
+                            Colors.white.withValues(alpha: 0.055),
+                            Colors.white.withValues(alpha: 0.02),
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: focused
+                        ? _kStremioAccent
+                        : Colors.white.withValues(alpha: 0.08),
+                    width: focused ? 1.6 : 1,
+                  ),
+                  boxShadow: focused
+                      ? [
+                          BoxShadow(
+                            color: _kStremioAccent.withValues(alpha: 0.30),
+                            blurRadius: 22,
+                            spreadRadius: -6,
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Row(
                   children: [
+                    // Soft gradient icon tile in the provider's brand colour.
                     Container(
-                      width: 46,
-                      height: 46,
+                      width: 50,
+                      height: 50,
                       decoration: BoxDecoration(
-                        color: p.color.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          colors: [
+                            p.color.withValues(alpha: 0.30),
+                            p.color.withValues(alpha: 0.12),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: p.color.withValues(alpha: 0.35)),
                       ),
-                      child: Icon(p.icon, color: p.color, size: 24),
+                      child: Icon(p.icon, color: p.color, size: 25),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -357,18 +431,19 @@ class _CloudScreenState extends State<CloudScreen> {
                         children: [
                           Text(
                             p.name,
-                            style: TextStyle(
-                              fontSize: 17,
+                            style: const TextStyle(
+                              fontSize: 16.5,
                               fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
+                              letterSpacing: -0.2,
+                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             p.subtitle,
                             style: TextStyle(
-                              fontSize: 13,
-                              color: scheme.onSurface.withValues(alpha: 0.55),
+                              fontSize: 12.5,
+                              color: Colors.white.withValues(alpha: 0.45),
                             ),
                           ),
                         ],
@@ -376,7 +451,8 @@ class _CloudScreenState extends State<CloudScreen> {
                     ),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: scheme.onSurface.withValues(alpha: 0.4),
+                      color: Colors.white
+                          .withValues(alpha: focused ? 0.7 : 0.32),
                     ),
                   ],
                 ),
