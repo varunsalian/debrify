@@ -1,0 +1,319 @@
+import 'package:flutter/material.dart';
+
+import '../../models/stremio_addon.dart';
+import '../../services/app_route_observer.dart';
+import '../../widgets/see_all/see_all_filter_focus.dart';
+import '../../widgets/see_all/see_all_header.dart';
+import '../../widgets/see_all/see_all_poster_grid.dart';
+import '../../widgets/see_all/see_all_theme.dart';
+import '../../widgets/see_all/stremio_dropdown.dart';
+
+/// Sort orders for the Continue Watching grid.
+enum _CwSort { lastWatched, az, za }
+
+/// Full-screen "See All" grid for Continue Watching — both the local and the
+/// Trakt sources use this same screen (they differ only in the [items] +
+/// [progressOf] the host passes in). It's a client-side view over an already-
+/// loaded list: category (All / Movies / Series), sort (Last Watched / A–Z /
+/// Z–A) and watched-state (All / Watched / Unwatched) all filter/sort in memory,
+/// so there's no paging.
+///
+/// [items] must arrive in last-watched order (newest first) — that's the
+/// "Last Watched" sort, restored by leaving the order untouched.
+///
+/// Opening an item (detail or quick-play) can change the underlying data
+/// (progress advances, a finished title drops out), so the screen re-fetches via
+/// [onReload] whenever a route pushed on top of it pops back (tracked with
+/// [RouteAware]) — otherwise the grid would show a stale snapshot.
+class ContinueWatchingSeeAllScreen extends StatefulWidget {
+  final String title;
+  final List<StremioMeta> items;
+  final double? Function(StremioMeta item) progressOf;
+
+  /// Pre-selected category ('all' / 'movie' / 'series') — usually the type of
+  /// the row the user opened See-All from.
+  final String initialCategory;
+
+  /// Opens the detail/playback for an item.
+  final void Function(StremioMeta item) onOpen;
+
+  /// Re-fetches the freshly-reloaded list; called after a pushed route pops
+  /// back. Null keeps the initial snapshot.
+  final Future<List<StremioMeta>> Function()? onReload;
+
+  final void Function(StremioMeta item)? onQuickPlay;
+  final bool Function(StremioMeta item)? isBound;
+  final bool isTelevision;
+
+  const ContinueWatchingSeeAllScreen({
+    super.key,
+    required this.title,
+    required this.items,
+    required this.progressOf,
+    required this.onOpen,
+    this.initialCategory = 'all',
+    this.onReload,
+    this.onQuickPlay,
+    this.isBound,
+    this.isTelevision = false,
+  });
+
+  @override
+  State<ContinueWatchingSeeAllScreen> createState() =>
+      _ContinueWatchingSeeAllScreenState();
+}
+
+class _ContinueWatchingSeeAllScreenState
+    extends State<ContinueWatchingSeeAllScreen> with RouteAware {
+  final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
+
+  // Live source list (refreshed after each open) + the derived, cached view.
+  late List<StremioMeta> _items;
+  List<StremioMeta> _visible = const [];
+
+  late String _category; // all | movie | series
+  _CwSort _sort = _CwSort.lastWatched;
+  String _watch = 'all'; // all | watched | unwatched
+
+  // A title is "watched" once past this fraction, matching the app's
+  // quick-play/continue-watching threshold.
+  static const double _watchedAt = 0.9;
+
+  final FocusNode _backNode = FocusNode(debugLabel: 'cwsa_back');
+  final FocusNode _catNode = FocusNode(debugLabel: 'cwsa_category');
+  final FocusNode _sortNode = FocusNode(debugLabel: 'cwsa_sort');
+  final FocusNode _watchNode = FocusNode(debugLabel: 'cwsa_watch');
+
+  @override
+  void initState() {
+    super.initState();
+    _items = widget.items;
+    _category = widget.initialCategory;
+    _recompute();
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusEntry());
+    }
+  }
+
+  /// Land DPAD focus somewhere usable: the first grid tile, or — when the grid
+  /// is empty (its non-focusable empty-state is shown) — the back button, so the
+  /// remote is never stranded.
+  void _focusEntry() {
+    if (!mounted) return;
+    if (_visible.isEmpty) {
+      _backNode.requestFocus();
+    } else {
+      _gridKey.currentState?.focusFirst();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  // A detail or player route pushed from a grid tile just popped back onto us —
+  // re-fetch so finished titles drop out and progress/order stay fresh.
+  @override
+  void didPopNext() => _refresh();
+
+  Future<void> _refresh() async {
+    final reload = widget.onReload;
+    if (reload == null) return;
+    final fresh = await reload();
+    if (!mounted) return;
+    setState(() {
+      _items = fresh;
+      _recompute();
+    });
+    // The reload may have emptied the grid (last title finished) — its focus
+    // nodes are gone, so move focus to the back button on TV.
+    if (widget.isTelevision && _visible.isEmpty) _backNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    _backNode.dispose();
+    _catNode.dispose();
+    _sortNode.dispose();
+    _watchNode.dispose();
+    super.dispose();
+  }
+
+  // ── Derived list (memoized; recomputed only on data/filter change) ──────────
+
+  bool _isWatched(StremioMeta m) => (widget.progressOf(m) ?? 0) >= _watchedAt;
+
+  void _recompute() {
+    Iterable<StremioMeta> it = _items;
+    if (_category == 'movie') {
+      it = it.where((m) => m.type != 'series');
+    } else if (_category == 'series') {
+      it = it.where((m) => m.type == 'series');
+    }
+    if (_watch == 'watched') {
+      it = it.where(_isWatched);
+    } else if (_watch == 'unwatched') {
+      it = it.where((m) => !_isWatched(m));
+    }
+    final list = it.toList();
+    switch (_sort) {
+      case _CwSort.lastWatched:
+        break; // items already arrive newest-first
+      case _CwSort.az:
+        list.sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case _CwSort.za:
+        list.sort(
+            (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+        break;
+    }
+    _visible = list;
+  }
+
+  void _setFilter(VoidCallback change) {
+    setState(() {
+      change();
+      _recompute();
+    });
+  }
+
+  // ── TV filter-bar focus wiring ──────────────────────────────────────────────
+
+  KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
+    if (!widget.isTelevision) return KeyEventResult.ignored;
+    return handleSeeAllFilterArrows(
+      event,
+      [_catNode, _sortNode, _watchNode],
+      onDown: () => _gridKey.currentState?.focusFirst(),
+      onUp: () => _backNode.requestFocus(),
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kSeeAllBg,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SeeAllHeader(
+              title: widget.title,
+              // Reflect what the grid actually shows, so a filter doesn't leave
+              // the header disagreeing with the body.
+              subtitle: '${_visible.length}'
+                  ' ${_visible.length == 1 ? 'title' : 'titles'}',
+              isTelevision: widget.isTelevision,
+              backNode: _backNode,
+              onFilterDown: () => _catNode.requestFocus(),
+            ),
+            _buildFilterBar(),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _handleFilterKeys,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            StremioDropdown<String>(
+              label: 'Show',
+              value: _category,
+              isTelevision: widget.isTelevision,
+              focusNode: _catNode,
+              options: const [
+                StremioDropdownOption('all', 'All'),
+                StremioDropdownOption('movie', 'Movies'),
+                StremioDropdownOption('series', 'Series'),
+              ],
+              onSelected: (v) => _setFilter(() => _category = v),
+            ),
+            StremioDropdown<_CwSort>(
+              label: 'Sort',
+              value: _sort,
+              isTelevision: widget.isTelevision,
+              focusNode: _sortNode,
+              options: const [
+                StremioDropdownOption(_CwSort.lastWatched, 'Last Watched'),
+                StremioDropdownOption(_CwSort.az, 'A–Z'),
+                StremioDropdownOption(_CwSort.za, 'Z–A'),
+              ],
+              onSelected: (v) => _setFilter(() => _sort = v),
+            ),
+            StremioDropdown<String>(
+              label: 'State',
+              value: _watch,
+              isTelevision: widget.isTelevision,
+              focusNode: _watchNode,
+              options: const [
+                StremioDropdownOption('all', 'All'),
+                StremioDropdownOption('watched', 'Watched'),
+                StremioDropdownOption('unwatched', 'Unwatched'),
+              ],
+              onSelected: (v) => _setFilter(() => _watch = v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_visible.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.history_rounded,
+                  size: 44, color: Colors.white.withValues(alpha: 0.25)),
+              const SizedBox(height: 14),
+              Text(
+                _items.isEmpty
+                    ? 'Nothing to continue yet'
+                    : 'Nothing matches these filters',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return SeeAllPosterGrid(
+      key: _gridKey,
+      items: _visible,
+      isTelevision: widget.isTelevision,
+      loadingMore: false,
+      exhausted: true, // finite, in-memory list — no paging
+      onOpen: widget.onOpen,
+      onQuickPlay: widget.onQuickPlay,
+      progressOf: widget.progressOf,
+      isBound: widget.isBound,
+      onLoadMore: () {},
+      onExitTop: widget.isTelevision ? () => _catNode.requestFocus() : null,
+    );
+  }
+}

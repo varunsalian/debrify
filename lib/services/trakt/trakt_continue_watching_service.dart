@@ -14,6 +14,12 @@ class TraktContinueWatchingItem {
   final int? runtime;
   final List<int> playbackIds;
 
+  /// When Trakt last recorded playback for this item (epoch ms), parsed from the
+  /// playback endpoint's `paused_at`. Null for items sourced from the
+  /// recent-shows augmentation (which have no paused_at). Used to order a merged
+  /// movies+shows list by "last watched".
+  final int? pausedAtMs;
+
   const TraktContinueWatchingItem({
     required this.meta,
     required this.traktContentType,
@@ -22,6 +28,7 @@ class TraktContinueWatchingItem {
     this.episode,
     this.runtime,
     this.playbackIds = const [],
+    this.pausedAtMs,
   });
 
   String get id => meta.effectiveImdbId ?? meta.id;
@@ -150,6 +157,7 @@ class TraktContinueWatchingService {
     );
     final progressById = <String, double>{};
     final playbackIdsById = <String, List<int>>{};
+    final pausedAtById = <String, int>{};
 
     for (final raw in rawItems) {
       if (raw is! Map<String, dynamic>) continue;
@@ -163,6 +171,8 @@ class TraktContinueWatchingService {
       if (playbackId != null) {
         playbackIdsById.putIfAbsent(imdbId, () => []).add(playbackId);
       }
+      final pausedAt = _parsePausedAt(raw['paused_at']);
+      if (pausedAt != null) pausedAtById.putIfAbsent(imdbId, () => pausedAt);
     }
 
     return metas
@@ -172,15 +182,23 @@ class TraktContinueWatchingService {
             traktContentType: moviesContentType,
             progress: progressById[meta.id],
             playbackIds: playbackIdsById[meta.id] ?? const [],
+            pausedAtMs: pausedAtById[meta.id],
           ),
         )
         .toList();
+  }
+
+  /// Parse Trakt's ISO-8601 `paused_at` into epoch ms (null if absent/invalid).
+  static int? _parsePausedAt(dynamic raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.millisecondsSinceEpoch;
   }
 
   List<TraktContinueWatchingItem> _buildShowItems(List<dynamic> rawItems) {
     final metas = TraktItemTransformer.transformPlaybackEpisodes(rawItems);
     final progressById = <String, double>{};
     final playbackIdsById = <String, List<int>>{};
+    final pausedAtById = <String, int>{};
     final episodeInfoById =
         <String, ({int season, int episode, int? runtime})>{};
 
@@ -200,6 +218,8 @@ class TraktContinueWatchingService {
       if (playbackId != null) {
         playbackIdsById.putIfAbsent(imdbId, () => []).add(playbackId);
       }
+      final pausedAt = _parsePausedAt(raw['paused_at']);
+      if (pausedAt != null) pausedAtById.putIfAbsent(imdbId, () => pausedAt);
       if (episode != null && !episodeInfoById.containsKey(imdbId)) {
         episodeInfoById[imdbId] = (
           season: episode['season'] as int? ?? 0,
@@ -219,6 +239,7 @@ class TraktContinueWatchingService {
         episode: episodeInfo?.episode,
         runtime: episodeInfo?.runtime,
         playbackIds: playbackIdsById[meta.id] ?? const [],
+        pausedAtMs: pausedAtById[meta.id],
       );
     }).toList();
   }

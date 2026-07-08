@@ -40,6 +40,8 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import 'playlist_content_view_screen.dart';
+import 'see_all/catalog_see_all_screen.dart';
+import 'see_all/continue_watching_see_all_screen.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -183,6 +185,9 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _cwEnabled = true;
   List<StremioMeta> _cwMovies = [];
   List<StremioMeta> _cwSeries = [];
+  // Movies + series merged in last-watched order (newest first) — the source
+  // for the Continue Watching "See All" grid, which filters by type itself.
+  List<StremioMeta> _cwAll = [];
   final Map<String, double> _cwProgress = {}; // imdbId → 0..1 watched fraction
   final Map<String, String> _cwEpisode = {}; // imdbId → 'S2 · E5' (series only)
   final Set<String> _cwIds = {}; // imdbIds currently in Continue Watching
@@ -201,6 +206,9 @@ class _SearchScreenState extends State<SearchScreen> {
   // cached in memory (the shows fetch is heavy: ~2 + N calls).
   List<StremioMeta> _traktMovies = [];
   List<StremioMeta> _traktSeries = [];
+  // Trakt movies + shows merged in last-watched (paused_at) order — the source
+  // for the Trakt Continue Watching "See All" grid.
+  List<StremioMeta> _traktAll = [];
   final Map<String, double> _traktProgress = {}; // imdbId → 0..1
   final Map<String, String> _traktEpisode = {}; // imdbId → 'S2 · E5' (series)
   final Map<String, TraktContinueWatchingItem> _traktByImdb = {};
@@ -243,6 +251,11 @@ class _SearchScreenState extends State<SearchScreen> {
   // still resolving links (the menu closes immediately, giving no other cue).
   bool _playlistLaunching = false;
 
+  // Focus nodes for the leading "See All" DPAD tiles (one per row that has a
+  // See-All link), keyed by a stable row id. Lazily created so we don't track
+  // row counts; all disposed together in dispose().
+  final Map<String, FocusNode> _seeAllNodes = {};
+
   int _traktCwToken = 0;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -268,6 +281,7 @@ class _SearchScreenState extends State<SearchScreen> {
             episodeOf: (_) => null,
             onOpen: _openContinueItem,
             onQuickPlay: _onContinuePlay,
+            onSeeAll: () => _openContinueWatchingSeeAll('movie'),
           ),
         if (_cwEnabled && _cwSeries.isNotEmpty)
           _CwRow(
@@ -279,6 +293,7 @@ class _SearchScreenState extends State<SearchScreen> {
             episodeOf: (m) => _cwEpisode[m.imdbId],
             onOpen: _openContinueItem,
             onQuickPlay: _onContinuePlay,
+            onSeeAll: () => _openContinueWatchingSeeAll('series'),
           ),
         if (_traktMovies.isNotEmpty)
           _CwRow(
@@ -290,6 +305,7 @@ class _SearchScreenState extends State<SearchScreen> {
             episodeOf: (_) => null,
             onOpen: _openTraktItem,
             onQuickPlay: _playTraktItem,
+            onSeeAll: () => _openTraktSeeAll('movie'),
           ),
         if (_traktSeries.isNotEmpty)
           _CwRow(
@@ -301,6 +317,7 @@ class _SearchScreenState extends State<SearchScreen> {
             episodeOf: (m) => _traktEpisode[m.imdbId],
             onOpen: _openTraktItem,
             onQuickPlay: _playTraktItem,
+            onSeeAll: () => _openTraktSeeAll('series'),
           ),
       ];
 
@@ -389,6 +406,10 @@ class _SearchScreenState extends State<SearchScreen> {
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
     _playlistFavNodes.clear();
+    for (final n in _seeAllNodes.values) {
+      n.dispose();
+    }
+    _seeAllNodes.clear();
     super.dispose();
   }
 
@@ -696,6 +717,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _cwEnabled = false;
         _cwMovies = [];
         _cwSeries = [];
+        _cwAll = [];
         _cwIds.clear();
         _cwProgress.clear();
         _cwEpisode.clear();
@@ -768,6 +790,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _cwEnabled = true;
       _cwMovies = movies;
       _cwSeries = series;
+      _cwAll = items;
       _cwIds
         ..clear()
         ..addAll(ids);
@@ -1379,7 +1402,9 @@ class _SearchScreenState extends State<SearchScreen> {
   /// ~2 + N calls), so this runs once on init / integration change and caches
   /// in memory — never on every rebuild. Token-guarded against overlap; hides
   /// the rows when Trakt isn't connected.
-  Future<void> _loadTraktContinueWatching() async {
+  /// [refreshBound] runs a bound-source refresh at the end; pass false when the
+  /// caller already refreshes bound sources itself (avoids a double pass).
+  Future<void> _loadTraktContinueWatching({bool refreshBound = true}) async {
     final token = ++_traktCwToken;
     final List<TraktContinueWatchingItem> movies;
     final List<TraktContinueWatchingItem> shows;
@@ -1392,6 +1417,7 @@ class _SearchScreenState extends State<SearchScreen> {
         setState(() {
           _traktMovies = [];
           _traktSeries = [];
+          _traktAll = [];
           _traktProgress.clear();
           _traktEpisode.clear();
           _traktByImdb.clear();
@@ -1428,11 +1454,34 @@ class _SearchScreenState extends State<SearchScreen> {
 
     ingest(movies, movieMetas);
     ingest(shows, showMetas);
+    // Merge into one last-watched-ordered list for the See-All grid: sort by
+    // Trakt's paused_at (newest first), items without a paused_at (recent-shows
+    // augmentation) sort last. Ties (incl. two null paused_ats) fall back to the
+    // original movies-then-shows order so the sort is deterministic (Dart's
+    // List.sort isn't stable).
+    final allMetas = [...movieMetas, ...showMetas];
+    final origIndex = <StremioMeta, int>{
+      for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
+    };
+    allMetas.sort((a, b) {
+      final pa = byImdb[a.imdbId]?.pausedAtMs;
+      final pb = byImdb[b.imdbId]?.pausedAtMs;
+      if (pa != null && pb != null) {
+        final c = pb.compareTo(pa);
+        if (c != 0) return c;
+      } else if (pa == null && pb != null) {
+        return 1;
+      } else if (pa != null && pb == null) {
+        return -1;
+      }
+      return origIndex[a]!.compareTo(origIndex[b]!);
+    });
     _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
     _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
     setState(() {
       _traktMovies = movieMetas;
       _traktSeries = showMetas;
+      _traktAll = allMetas;
       _traktProgress
         ..clear()
         ..addAll(progress);
@@ -1443,7 +1492,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ..clear()
         ..addAll(byImdb);
     });
-    unawaited(_refreshBoundSources());
+    if (refreshBound) unawaited(_refreshBoundSources());
   }
 
   /// Open a Trakt Continue Watching title as a normal detail page.
@@ -3590,6 +3639,180 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  /// Open the full-screen Stremio-styled catalog browser for a rail. Seeds the
+  /// grid with the rail's already-loaded items + paging cursor so it continues
+  /// where the rail left off; item taps route back through [_openItem] so the
+  /// existing detail flow (Trakt actions, recommendations) is reused unchanged.
+  void _openCatalogSeeAll(CatalogSection section) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => CatalogSeeAllScreen(
+              addon: section.addon,
+              initialCatalog: section.catalog,
+              seedItems: List<StremioMeta>.of(section.items),
+              seedNextSkip: section.nextSkip,
+              isTelevision: widget.isTelevision,
+              onOpenItem: (item) => _openItem(item, section.addon),
+              onQuickPlay: _pikpakOnly
+                  ? null
+                  : (item) => _onCatalogPlay(item, section.addon),
+              // Bound-source badges are intentionally omitted here: _isBound only
+              // tracks rail/CW items (not See-All paged items) and wouldn't
+              // reactively update in a pushed screen, so a badge would be a false
+              // negative more often than not. Revisit with a per-item lookup.
+            ),
+          ),
+        )
+        .then((_) => _afterSeeAllReturn());
+  }
+
+  /// The focus node backing a row's leading "See All" DPAD tile ([_SeeAllTile]),
+  /// created on first use and keyed by a stable per-row id.
+  FocusNode _seeAllNodeFor(String key) => _seeAllNodes.putIfAbsent(
+      key, () => FocusNode(debugLabel: 'seeall_tile_$key'));
+
+  /// Refresh state that a See-All screen may have changed (Continue Watching
+  /// progress/removal, bound sources) when it pops back to the board. Reload
+  /// first, THEN refresh bound sources — _refreshBoundSources scans the CW lists
+  /// that _loadContinueWatching replaces, so running them concurrently would
+  /// count against the pre-reload item set.
+  Future<void> _afterSeeAllReturn() async {
+    // Fire-and-forget from route .then/onReturn callbacks, so guard against a
+    // transient storage error becoming an unhandled async exception (a stale
+    // refresh is recoverable; a crash-log isn't warranted).
+    try {
+      await _loadContinueWatching();
+      await _refreshBoundSources();
+    } catch (e) {
+      debugPrint('SearchScreen: See-All return refresh failed: $e');
+    }
+  }
+
+  /// Shared push for the Continue Watching "See All" grid (local + Trakt). The
+  /// two sources differ only in title/items/callbacks/onReload and what to
+  /// refresh on return.
+  void _pushCwSeeAll({
+    required String title,
+    required String initialCategory,
+    required List<StremioMeta> items,
+    required double? Function(StremioMeta) progressOf,
+    required void Function(StremioMeta) onOpen,
+    required void Function(StremioMeta)? onQuickPlay,
+    required Future<List<StremioMeta>> Function()? onReload,
+    VoidCallback? onReturn,
+  }) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => ContinueWatchingSeeAllScreen(
+              title: title,
+              initialCategory: initialCategory,
+              items: List<StremioMeta>.of(items),
+              progressOf: progressOf,
+              onOpen: onOpen,
+              onQuickPlay: onQuickPlay,
+              onReload: onReload,
+              // CW items are all rail-loaded, so _boundCounts covers them.
+              isBound: _isBound,
+              isTelevision: widget.isTelevision,
+            ),
+          ),
+        )
+        .then((_) => onReturn?.call());
+  }
+
+  /// Local Continue Watching "See All", pre-filtered to [initialCategory]
+  /// ('movie' / 'series') of the row the user came from. Re-fetches (via
+  /// onReload) whenever a detail/player route pops back onto it, so finished
+  /// titles drop out and progress stays fresh.
+  void _openContinueWatchingSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'Continue Watching',
+      initialCategory: initialCategory,
+      items: _cwAll,
+      progressOf: (m) => _cwProgress[m.imdbId],
+      onOpen: _openContinueItem,
+      onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
+      // Reload CW + refresh bound sources (sequenced), then hand the grid the
+      // fresh list. This runs on every detail/player return AND keeps the board
+      // beneath fresh, so no separate onReturn is needed (it would double the
+      // reload when a detail-close is immediately followed by a board-return).
+      onReload: () async {
+        await _afterSeeAllReturn();
+        return List<StremioMeta>.of(_cwAll);
+      },
+    );
+  }
+
+  /// Trakt Continue Watching "See All". Unlike the local grid this passes no
+  /// [onReload]: re-fetching Trakt on every detail/player return means ~2+N API
+  /// calls each time, so the grid keeps its snapshot and the board's rows
+  /// refresh once when the screen pops (the Trakt load refreshes bound sources
+  /// via its own tail, so there's no separate _refreshBoundSources here).
+  void _openTraktSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'Trakt · Continue Watching',
+      initialCategory: initialCategory,
+      items: _traktAll,
+      progressOf: (m) => _traktProgress[m.imdbId],
+      onOpen: _openTraktItem,
+      onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+      onReload: null,
+      // Reload Trakt first (no bound pass), then _afterSeeAllReturn reloads
+      // local CW and runs the single bound-source refresh against both now-fresh
+      // lists. _loadTraktContinueWatching swallows its own errors, so the bound
+      // refresh still happens even if the Trakt fetch fails.
+      onReturn: () async {
+        await _loadTraktContinueWatching(refreshBound: false);
+        await _afterSeeAllReturn();
+      },
+    );
+  }
+
+  /// Shared header for a board rail: title + optional tag pill, with an optional
+  /// right-pinned "See All" link. Title + tag share all leftover width (Expanded)
+  /// so a plain Spacer can't split the row and truncate the title early.
+  Widget _railHeader({
+    required String title,
+    String? tag,
+    VoidCallback? onSeeAll,
+  }) {
+    final tv = widget.isTelevision;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: tv ? 20 : 19,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                if (tag != null) ...[
+                  const SizedBox(width: 10),
+                  _CategoryTag(tag),
+                ],
+              ],
+            ),
+          ),
+          if (onSeeAll != null) _SeeAllLink(onTap: onSeeAll),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRow(int rowIndex) {
     final section = _sections[rowIndex];
     final nodes = _rowNodes[rowIndex];
@@ -3609,30 +3832,10 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  section.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: tv ? 20 : 19,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              if (typeLabel != null) ...[
-                const SizedBox(width: 10),
-                _CategoryTag(typeLabel),
-              ],
-            ],
-          ),
+        _railHeader(
+          title: section.title,
+          tag: typeLabel,
+          onSeeAll: () => _openCatalogSeeAll(section),
         ),
         SizedBox(
           height: rowH,
@@ -3648,64 +3851,99 @@ class _SearchScreenState extends State<SearchScreen> {
               }
               return false;
             },
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              // Clip the horizontal viewport so scrolled-off cards don't paint
-              // over the sidebar to the left. rowH has enough headroom that the
-              // hover/focus lift still isn't clipped.
-              clipBehavior: Clip.hardEdge,
-              cacheExtent: 2000,
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-              // +1 trailing cell for the paging spinner while more items load.
-              itemCount: section.items.length + (section.loadingMore ? 1 : 0),
-              itemBuilder: (context, col) {
-                if (col >= section.items.length) {
-                  return SizedBox(
-                    width: 52,
-                    height: cellH,
-                    child: const Center(
+            child: Builder(builder: (context) {
+              // Leading DPAD "See All" tile (TV only). It shifts posters and the
+              // trailing spinner one slot right; each poster keeps its 0-based
+              // `column` into `nodes`.
+              final hasTile = tv;
+              final seeAllKey = 'cat_$rowIndex';
+              // Shared up/down DPAD targets for a given column, used by both the
+              // leading tile (col 0) and the poster cards.
+              VoidCallback up(int col) => rowIndex == 0
+                  ? (_anyFavVisible
+                      ? () => _focusFavRowAt(_favRowCount - 1, col)
+                      : (_cwVisible
+                          ? () => _focusCwRow(_cwRows.length - 1, col)
+                          : () => _searchFocusNode.requestFocus()))
+                  : () => _focusRow(rowIndex - 1, col);
+              VoidCallback down(int col) => () => _focusRow(rowIndex + 1, col);
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                // Clip the horizontal viewport so scrolled-off cards don't paint
+                // over the sidebar to the left. rowH has enough headroom that the
+                // hover/focus lift still isn't clipped.
+                clipBehavior: Clip.hardEdge,
+                cacheExtent: 2000,
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                // +1 leading See-All tile (TV) and +1 trailing paging spinner.
+                itemCount: (hasTile ? 1 : 0) +
+                    section.items.length +
+                    (section.loadingMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (hasTile && index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 11),
+                      child: _SeeAllTile(
+                        focusNode: _seeAllNodeFor(seeAllKey),
+                        width: 64,
+                        posterHeight: posterH,
+                        cellHeight: cellH,
+                        onSelect: () => _openCatalogSeeAll(section),
+                        onLeft: () => MainPageBridge.focusTvSidebar?.call(),
+                        onRight: () {
+                          if (nodes.isNotEmpty) nodes[0].requestFocus();
+                        },
+                        onUp: up(0),
+                        onDown: down(0),
+                      ),
+                    );
+                  }
+                  final col = hasTile ? index - 1 : index;
+                  if (col >= section.items.length) {
+                    return SizedBox(
+                      width: 52,
+                      height: cellH,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  }
+                  final item = section.items[col];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    child: Center(
                       child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        width: posterW,
+                        height: cellH,
+                        child: _BoardCell(
+                          item: item,
+                          isTelevision: tv,
+                          focusNode: nodes[col],
+                          column: col,
+                          rowNodes: nodes,
+                          hasBoundSource: _isBound(item),
+                          onQuickPlay: _pikpakOnly
+                              ? null
+                              : () => _onCatalogPlay(item, section.addon),
+                          onFocused: () => _setHero(item),
+                          onUp: up(col),
+                          onDown: down(col),
+                          onOpen: () => _openItem(item, section.addon),
+                          onNearEnd: () => _loadMoreRow(rowIndex),
+                          onLeftEdge: hasTile && col == 0
+                              ? () => _seeAllNodeFor(seeAllKey).requestFocus()
+                              : null,
+                        ),
                       ),
                     ),
                   );
-                }
-                final item = section.items[col];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
-                  child: Center(
-                    child: SizedBox(
-                      width: posterW,
-                      height: cellH,
-                      child: _BoardCell(
-                        item: item,
-                        isTelevision: tv,
-                        focusNode: nodes[col],
-                        column: col,
-                        rowNodes: nodes,
-                        hasBoundSource: _isBound(item),
-                        onQuickPlay: _pikpakOnly
-                            ? null
-                            : () => _onCatalogPlay(item, section.addon),
-                        onFocused: () => _setHero(item),
-                        onUp: rowIndex == 0
-                            ? (_anyFavVisible
-                                ? () => _focusFavRowAt(_favRowCount - 1, col)
-                                : (_cwVisible
-                                    ? () => _focusCwRow(_cwRows.length - 1, col)
-                                    : () => _searchFocusNode.requestFocus()))
-                            : () => _focusRow(rowIndex - 1, col),
-                        onDown: () => _focusRow(rowIndex + 1, col),
-                        onOpen: () => _openItem(item, section.addon),
-                        onNearEnd: () => _loadMoreRow(rowIndex),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                },
+              );
+            }),
           ),
         ),
       ],
@@ -3747,77 +3985,88 @@ class _SearchScreenState extends State<SearchScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  row.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: tv ? 20 : 19,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              if (row.tag != null) ...[
-                const SizedBox(width: 10),
-                _CategoryTag(row.tag!),
-              ],
-            ],
-          ),
+        _railHeader(
+          title: row.title,
+          tag: row.tag,
+          onSeeAll: row.onSeeAll,
         ),
         SizedBox(
           height: rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            cacheExtent: 2000,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: items.length,
-            itemBuilder: (context, col) {
-              final item = items[col];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Center(
-                  child: SizedBox(
-                    width: posterW,
-                    height: cellH,
-                    child: _BoardCell(
-                      item: item,
-                      isTelevision: tv,
-                      focusNode: nodes[col],
-                      column: col,
-                      rowNodes: nodes,
-                      hasBoundSource: _isBound(item),
-                      progress: row.progressOf(item),
-                      episodeLabel: row.episodeOf(item),
-                      onQuickPlay:
-                          _pikpakOnly ? null : () => row.onQuickPlay(item),
-                      onFocused: () => _setHero(item),
-                      // Up: previous CW row, or the search field from the first.
-                      onUp: cwIndex == 0
-                          ? () => _searchFocusNode.requestFocus()
-                          : () => _focusCwRow(cwIndex - 1, col),
-                      // Down: next CW row; from the last, into the first
-                      // favourites row if present, else the first catalog row.
-                      onDown: cwIndex < cwCount - 1
-                          ? () => _focusCwRow(cwIndex + 1, col)
-                          : (favCount > 0
-                              ? () => _focusFavRowAt(0, col)
-                              : () => _focusRow(0, col)),
-                      onOpen: () => row.onOpen(item),
+          child: Builder(builder: (context) {
+            // A leading DPAD "See All" tile (TV only, and only when this row has
+            // a See-All target). It shifts the posters one slot right in the
+            // list, but each poster keeps its 0-based `column` into `nodes`.
+            final hasTile = tv && row.onSeeAll != null;
+            final seeAllKey = 'cw_${row.title}_${row.tag}';
+            // Shared up/down DPAD targets for a given column, used by both the
+            // leading tile (col 0) and the poster cards.
+            VoidCallback up(int col) => cwIndex == 0
+                ? () => _searchFocusNode.requestFocus()
+                : () => _focusCwRow(cwIndex - 1, col);
+            VoidCallback down(int col) => cwIndex < cwCount - 1
+                ? () => _focusCwRow(cwIndex + 1, col)
+                : (favCount > 0
+                    ? () => _focusFavRowAt(0, col)
+                    : () => _focusRow(0, col));
+            return ListView.builder(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.hardEdge,
+              cacheExtent: 2000,
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              itemCount: items.length + (hasTile ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (hasTile && index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    child: _SeeAllTile(
+                      focusNode: _seeAllNodeFor(seeAllKey),
+                      width: 64,
+                      posterHeight: posterH,
+                      cellHeight: cellH,
+                      onSelect: row.onSeeAll!,
+                      onLeft: () => MainPageBridge.focusTvSidebar?.call(),
+                      onRight: () {
+                        if (nodes.isNotEmpty) nodes[0].requestFocus();
+                      },
+                      onUp: up(0),
+                      onDown: down(0),
+                    ),
+                  );
+                }
+                final col = hasTile ? index - 1 : index;
+                final item = items[col];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  child: Center(
+                    child: SizedBox(
+                      width: posterW,
+                      height: cellH,
+                      child: _BoardCell(
+                        item: item,
+                        isTelevision: tv,
+                        focusNode: nodes[col],
+                        column: col,
+                        rowNodes: nodes,
+                        hasBoundSource: _isBound(item),
+                        progress: row.progressOf(item),
+                        episodeLabel: row.episodeOf(item),
+                        onQuickPlay:
+                            _pikpakOnly ? null : () => row.onQuickPlay(item),
+                        onFocused: () => _setHero(item),
+                        onUp: up(col),
+                        onDown: down(col),
+                        onOpen: () => row.onOpen(item),
+                        // Column 0 hands LEFT to the leading See-All tile.
+                        onLeftEdge: hasTile && col == 0
+                            ? () => _seeAllNodeFor(seeAllKey).requestFocus()
+                            : null,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+              },
+            );
+          }),
         ),
       ],
     );
@@ -4317,6 +4566,9 @@ class _CwRow {
   final void Function(StremioMeta) onOpen;
   final void Function(StremioMeta) onQuickPlay;
 
+  /// Opens the "See All" grid for this row's source, or null to hide the link.
+  final VoidCallback? onSeeAll;
+
   const _CwRow({
     required this.title,
     required this.tag,
@@ -4326,6 +4578,7 @@ class _CwRow {
     required this.episodeOf,
     required this.onOpen,
     required this.onQuickPlay,
+    this.onSeeAll,
   });
 }
 
@@ -4361,6 +4614,10 @@ class _BoardCell extends StatelessWidget {
   /// don't paginate (e.g. Continue Watching).
   final VoidCallback? onNearEnd;
 
+  /// DPAD-left from column 0. When null, focus leaves to the sidebar; when set
+  /// (a row with a leading "See All" tile), it hands focus to that tile instead.
+  final VoidCallback? onLeftEdge;
+
   const _BoardCell({
     required this.item,
     required this.isTelevision,
@@ -4376,6 +4633,7 @@ class _BoardCell extends StatelessWidget {
     required this.onDown,
     required this.onOpen,
     this.onNearEnd,
+    this.onLeftEdge,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -4386,6 +4644,8 @@ class _BoardCell extends StatelessWidget {
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (column > 0) {
         rowNodes[column - 1].requestFocus();
+      } else if (onLeftEdge != null) {
+        onLeftEdge!();
       } else {
         MainPageBridge.focusTvSidebar?.call();
       }
@@ -4677,6 +4937,194 @@ class _StremioCardState extends State<_StremioCard> {
             color: Colors.white.withValues(alpha: 0.5),
             fontSize: 11,
             fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The "See All ›" affordance in a rail header — a mouse/tap entry to the
+/// full-screen See-All screen. It stays outside the row's focus graph; DPAD
+/// users reach the same target via the leading [_SeeAllTile] instead.
+class _SeeAllLink extends StatefulWidget {
+  final VoidCallback onTap;
+  const _SeeAllLink({required this.onTap});
+
+  @override
+  State<_SeeAllLink> createState() => _SeeAllLinkState();
+}
+
+class _SeeAllLinkState extends State<_SeeAllLink> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hover ? Colors.white : const Color(0xFFB9A9FF);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: _hover
+                ? kStremioAccent.withValues(alpha: 0.14)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'See All',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right_rounded, size: 17, color: color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Leading DPAD-focusable "See All" tile for a rail (TV only). Sits at the head
+/// of a row's horizontal strip so a remote can reach the full-screen grid:
+/// SELECT opens it, RIGHT enters the posters, LEFT exits to the sidebar, and
+/// UP/DOWN move between rows exactly like the row's first card. Off-TV the
+/// header [_SeeAllLink] handles the pointer, so this tile is TV-only.
+class _SeeAllTile extends StatefulWidget {
+  final FocusNode focusNode;
+  final double width;
+  final double posterHeight;
+  final double cellHeight;
+  final VoidCallback onSelect;
+  final VoidCallback onLeft;
+  final VoidCallback onRight;
+  final VoidCallback onUp;
+  final VoidCallback onDown;
+
+  const _SeeAllTile({
+    required this.focusNode,
+    required this.width,
+    required this.posterHeight,
+    required this.cellHeight,
+    required this.onSelect,
+    required this.onLeft,
+    required this.onRight,
+    required this.onUp,
+    required this.onDown,
+  });
+
+  @override
+  State<_SeeAllTile> createState() => _SeeAllTileState();
+}
+
+class _SeeAllTileState extends State<_SeeAllTile> {
+  bool _focused = false;
+  bool _keyDown = false;
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      if (event is KeyDownEvent) {
+        _keyDown = true;
+        return KeyEventResult.handled;
+      } else if (event is KeyUpEvent) {
+        if (_keyDown) widget.onSelect();
+        _keyDown = false;
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      widget.onLeft();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      widget.onRight();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      widget.onUp();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      widget.onDown();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.focusNode,
+      onKeyEvent: _onKey,
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        if (!f) _keyDown = false;
+        if (f) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Scrollable.ensureVisible(context,
+                alignment: 0.5,
+                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit);
+          });
+        }
+      },
+      child: SizedBox(
+        width: widget.width,
+        height: widget.cellHeight,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            onTap: widget.onSelect,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: widget.width,
+              height: widget.posterHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: kStremioAccent.withValues(alpha: _focused ? 0.22 : 0.10),
+                border: Border.all(
+                  color: kStremioAccent.withValues(alpha: _focused ? 1 : 0.4),
+                  width: _focused ? 2.5 : 1.4,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chevron_right_rounded,
+                      size: 24,
+                      color:
+                          const Color(0xFFB9A9FF).withValues(alpha: _focused ? 1 : 0.85)),
+                  const SizedBox(height: 8),
+                  RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'SEE ALL',
+                      style: TextStyle(
+                        color: const Color(0xFFB9A9FF)
+                            .withValues(alpha: _focused ? 1 : 0.85),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

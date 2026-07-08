@@ -27,6 +27,11 @@ class CatalogItemTile extends StatefulWidget {
   /// bottom of the poster — used by the Trakt "continue watching" grid.
   final double? progress;
 
+  /// When true (default) the title + year fade in over the poster on focus.
+  /// Set false when the caller renders a persistent title below the poster
+  /// (the See-All grid), so the two don't stack.
+  final bool showInlineTitle;
+
   const CatalogItemTile({
     super.key,
     required this.item,
@@ -36,6 +41,7 @@ class CatalogItemTile extends StatefulWidget {
     required this.onOpen,
     this.onLongPress,
     this.progress,
+    this.showInlineTitle = true,
   });
 
   @override
@@ -162,8 +168,9 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                 ),
 
               // Focused title overlay — appears inside the poster on focus
-              // so the chrome below the tile stays calm.
-              if (_active)
+              // so the chrome below the tile stays calm. Suppressed when the
+              // caller shows a persistent title below the poster.
+              if (_active && widget.showInlineTitle)
                 Positioned(
                   left: 12,
                   right: 12,

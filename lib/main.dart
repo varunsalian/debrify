@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'services/app_route_observer.dart';
 import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
 import 'screens/cloud_screen.dart';
@@ -182,6 +183,7 @@ class DebrifyApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
+      navigatorObservers: [appRouteObserver],
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
       // Performance optimizations for TV with TV-aware text scaling
