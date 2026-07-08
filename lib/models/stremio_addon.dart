@@ -337,15 +337,30 @@ class CatalogSection {
   /// The specific catalog
   final StremioAddonCatalog catalog;
 
-  /// Items in this section
+  /// Items in this section. Grows in place as more pages lazy-load, so this
+  /// must be a growable list.
   final List<StremioMeta> items;
 
-  const CatalogSection({
+  /// Offset (`skip`) for the next page fetch. Advances by the raw page size
+  /// returned so it stays aligned with however the addon paginates.
+  int nextSkip;
+
+  /// True while a page fetch is in flight (re-entrancy guard).
+  bool loadingMore;
+
+  /// True once the addon stops returning new items (empty or all-duplicate
+  /// page), so we stop asking.
+  bool exhausted;
+
+  CatalogSection({
     required this.title,
     required this.addon,
     required this.catalog,
     required this.items,
-  });
+    int? nextSkip,
+    this.loadingMore = false,
+    this.exhausted = false,
+  }) : nextSkip = nextSkip ?? items.length;
 }
 
 /// Represents a Stremio addon that can be used for torrent search.

@@ -52,7 +52,9 @@ const Color _kCwProgressRed = Color(0xFFE50914);
 /// list every catalog up front and lazily pull batches on scroll (Stremio-style)
 /// instead of a hard global row cap.
 const int _kBoardBatchSize = 8;
-const int _kBoardItemsPerRow = 20;
+/// When a row's horizontal scroll gets within this many pixels of the end, the
+/// next page for that catalog is fetched (Stremio-style unlimited rows).
+const double _kRowLoadMoreThreshold = 900;
 
 /// Format a season/episode as a compact 'S2 · E5' label, or null when unknown.
 String? _seLabel(int? season, int? episode) {
@@ -393,13 +395,22 @@ class _SearchScreenState extends State<SearchScreen> {
     final results = await Future.wait(slice.map((ref) async {
       final (addon, catalog) = ref;
       try {
-        final items = await _stremio.fetchCatalog(addon, catalog);
+        var rawCount = 0;
+        final items = await _stremio.fetchCatalog(
+          addon,
+          catalog,
+          onRawCount: (c) => rawCount = c,
+        );
         if (items.isEmpty) return null;
         return CatalogSection(
           title: '${addon.name}: ${catalog.name}',
           addon: addon,
           catalog: catalog,
-          items: items.take(_kBoardItemsPerRow).toList(),
+          // Keep the whole first page; more pages stream in on horizontal scroll.
+          items: items.toList(),
+          // Next page starts past the addon's raw first window (not the smaller
+          // post-filter count), keeping paging aligned from the very first fetch.
+          nextSkip: rawCount > 0 ? rawCount : items.length,
         );
       } catch (_) {
         return null;
@@ -470,6 +481,72 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     setState(() => _sections = [..._sections, ...more]);
     unawaited(_refreshBoundSources());
+  }
+
+  /// Fetch the next page for a single catalog row and append it in place, so
+  /// rows grow without bound as the user scrolls right (Stremio-style). Only
+  /// board rows paginate; search-result rows are single-shot. Safe to call
+  /// repeatedly — [CatalogSection.loadingMore]/[CatalogSection.exhausted] guard
+  /// re-entrancy and the end of the catalog.
+  Future<void> _loadMoreRow(int rowIndex) async {
+    // While a catalog search is active, `_sections` holds search results, which
+    // don't paginate — leave them alone.
+    if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+    if (rowIndex < 0 || rowIndex >= _sections.length) return;
+    final section = _sections[rowIndex];
+    if (section.loadingMore || section.exhausted) return;
+    setState(() => section.loadingMore = true);
+    try {
+      // Advance `skip` by the addon's RAW returned count (via onRawCount), not
+      // the post-filter `page.length`, so we stay aligned with the addon's own
+      // paging window and don't slowly under-advance into a false "exhausted".
+      var rawCount = 0;
+      final page = await _stremio.fetchCatalog(
+        section.addon,
+        section.catalog,
+        skip: section.nextSkip,
+        onRawCount: (c) => rawCount = c,
+      );
+      if (!mounted) return;
+      // The row may have been swapped out (a search started) while in flight.
+      if (rowIndex >= _sections.length ||
+          !identical(_sections[rowIndex], section)) {
+        return;
+      }
+      if (page.isEmpty) {
+        section.exhausted = true;
+        return;
+      }
+      // Dedup against what we already have; some addons return valid ids but
+      // repeat entries, and some ignore `skip` entirely.
+      final seen = section.items.map((m) => m.id).toSet();
+      final fresh = page.where((m) => seen.add(m.id)).toList();
+      // Advance by the raw window size (falls back to the filtered count only
+      // if the addon somehow didn't report), so the next skip lands past what
+      // this window already covered.
+      section.nextSkip += rawCount > 0 ? rawCount : page.length;
+      if (fresh.isEmpty) {
+        // Addon returned only duplicates (or ignores skip) — nothing new to add.
+        section.exhausted = true;
+        return;
+      }
+      // Grow this row's focus nodes in lockstep with the new items.
+      final nodes = _rowNodes[rowIndex];
+      final base = nodes.length;
+      for (var i = 0; i < fresh.length; i++) {
+        nodes.add(FocusNode(debugLabel: 'search_r${rowIndex}_c${base + i}'));
+      }
+      setState(() => section.items.addAll(fresh));
+      unawaited(_refreshBoundSources());
+    } catch (_) {
+      // Transient fetch failure — leave the row as-is so a later scroll retries.
+    } finally {
+      if (mounted) {
+        setState(() => section.loadingMore = false);
+      } else {
+        section.loadingMore = false;
+      }
+    }
   }
 
   /// IMDb id for a catalog item, or null when it isn't a `tt…` id.
@@ -2782,46 +2859,74 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         SizedBox(
           height: rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            // Clip the horizontal viewport so scrolled-off cards don't paint
-            // over the sidebar to the left. rowH has enough headroom that the
-            // hover/focus lift still isn't clipped.
-            clipBehavior: Clip.hardEdge,
-            cacheExtent: 2000,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: section.items.length,
-            itemBuilder: (context, col) {
-              final item = section.items[col];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Center(
-                  child: SizedBox(
-                    width: posterW,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (n) {
+              // Pull the next page as the row nears its right edge. Only this
+              // row's horizontal scroll reaches here (the vertical board list is
+              // an ancestor, so its notifications don't bubble down).
+              if (n.metrics.axis == Axis.horizontal &&
+                  n.metrics.pixels >=
+                      n.metrics.maxScrollExtent - _kRowLoadMoreThreshold) {
+                _loadMoreRow(rowIndex);
+              }
+              return false;
+            },
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              // Clip the horizontal viewport so scrolled-off cards don't paint
+              // over the sidebar to the left. rowH has enough headroom that the
+              // hover/focus lift still isn't clipped.
+              clipBehavior: Clip.hardEdge,
+              cacheExtent: 2000,
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              // +1 trailing cell for the paging spinner while more items load.
+              itemCount: section.items.length + (section.loadingMore ? 1 : 0),
+              itemBuilder: (context, col) {
+                if (col >= section.items.length) {
+                  return SizedBox(
+                    width: 52,
                     height: cellH,
-                    child: _BoardCell(
-                      item: item,
-                      isTelevision: tv,
-                      focusNode: nodes[col],
-                      column: col,
-                      rowNodes: nodes,
-                      hasBoundSource: _isBound(item),
-                      onQuickPlay: _pikpakOnly
-                          ? null
-                          : () => _onCatalogPlay(item, section.addon),
-                      onFocused: () => _setHero(item),
-                      onUp: rowIndex == 0
-                          ? (_cwVisible
-                              ? () => _focusCwRow(_cwRows.length - 1, col)
-                              : () => _searchFocusNode.requestFocus())
-                          : () => _focusRow(rowIndex - 1, col),
-                      onDown: () => _focusRow(rowIndex + 1, col),
-                      onOpen: () => _openItem(item, section.addon),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                }
+                final item = section.items[col];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  child: Center(
+                    child: SizedBox(
+                      width: posterW,
+                      height: cellH,
+                      child: _BoardCell(
+                        item: item,
+                        isTelevision: tv,
+                        focusNode: nodes[col],
+                        column: col,
+                        rowNodes: nodes,
+                        hasBoundSource: _isBound(item),
+                        onQuickPlay: _pikpakOnly
+                            ? null
+                            : () => _onCatalogPlay(item, section.addon),
+                        onFocused: () => _setHero(item),
+                        onUp: rowIndex == 0
+                            ? (_cwVisible
+                                ? () => _focusCwRow(_cwRows.length - 1, col)
+                                : () => _searchFocusNode.requestFocus())
+                            : () => _focusRow(rowIndex - 1, col),
+                        onDown: () => _focusRow(rowIndex + 1, col),
+                        onOpen: () => _openItem(item, section.addon),
+                        onNearEnd: () => _loadMoreRow(rowIndex),
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -3225,6 +3330,11 @@ class _BoardCell extends StatelessWidget {
   final VoidCallback onDown;
   final VoidCallback onOpen;
 
+  /// Called when DPAD-right focus nears this row's last card, so the next page
+  /// can be prefetched before the user runs out of cards. Null on rows that
+  /// don't paginate (e.g. Continue Watching).
+  final VoidCallback? onNearEnd;
+
   const _BoardCell({
     required this.item,
     required this.isTelevision,
@@ -3239,6 +3349,7 @@ class _BoardCell extends StatelessWidget {
     required this.onUp,
     required this.onDown,
     required this.onOpen,
+    this.onNearEnd,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -3255,6 +3366,9 @@ class _BoardCell extends StatelessWidget {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
+      // Prefetch the next page a few cards before the end so DPAD users never
+      // hit a wall on a catalog that still has more.
+      if (column >= rowNodes.length - 6) onNearEnd?.call();
       if (column < rowNodes.length - 1) {
         rowNodes[column + 1].requestFocus();
       }

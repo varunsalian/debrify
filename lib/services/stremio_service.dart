@@ -1350,6 +1350,10 @@ class StremioService {
     int skip = 0,
     String? genre,
     Map<String, String>? extras,
+    // Reports the raw number of metas the addon returned for this window
+    // (before invalid-id filtering), so callers can advance `skip` in step with
+    // the addon's own paging rather than the filtered count.
+    void Function(int rawCount)? onRawCount,
   }) async {
     // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
     // With extra parameters: {baseUrl}/catalog/{type}/{catalogId}/genre=Action.json
@@ -1399,6 +1403,7 @@ class StremioService {
 
         final Map<String, dynamic> data = json.decode(response.body);
         final metasRaw = data['metas'] as List<dynamic>?;
+        onRawCount?.call(metasRaw?.length ?? 0);
 
         if (metasRaw == null || metasRaw.isEmpty) {
           debugPrint('StremioService: Catalog returned no items');
