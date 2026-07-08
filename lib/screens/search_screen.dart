@@ -20,6 +20,7 @@ import '../services/engine/engine_registry.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
+import '../services/playlist_player_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/series_source_service.dart';
 import '../services/stremio_service.dart';
@@ -38,6 +39,7 @@ import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
+import 'playlist_content_view_screen.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -227,6 +229,20 @@ class _SearchScreenState extends State<SearchScreen> {
   List<IptvChannel> _iptvFavChannels = [];
   final List<FocusNode> _iptvFavNodes = [];
 
+  // Playlist favourites — a leading row of the user's saved playlist items
+  // (movies / collections added from search or cloud). Cards show the item
+  // poster with resume progress; tapping opens a full action menu (play / play
+  // random / view files / favorite / clear progress / launch-on-startup /
+  // delete), so this row is a complete playlist manager on its own now that the
+  // Home playlist section is being phased out. Loaded once on init.
+  List<Map<String, dynamic>> _playlistItems = [];
+  final List<FocusNode> _playlistFavNodes = [];
+  Map<String, Map<String, dynamic>> _playlistProgress = {};
+  Set<String> _playlistFavKeys = {};
+  // Guards against launching a second concurrent playback while the first is
+  // still resolving links (the menu closes immediately, giving no other cue).
+  bool _playlistLaunching = false;
+
   int _traktCwToken = 0;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -318,6 +334,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadTvFavorites();
     _loadStremioTvFavorites();
     _loadIptvFavorites();
+    _loadPlaylistFavorites();
     _refreshTraktAuthState();
   }
 
@@ -359,6 +376,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
+      ..._playlistFavNodes,
       ..._kwToolbarNodes, // fixed pool — only disposed here, not in _disposeKwNodes
     ]) {
       n.dispose();
@@ -370,6 +388,7 @@ class _SearchScreenState extends State<SearchScreen> {
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
+    _playlistFavNodes.clear();
     super.dispose();
   }
 
@@ -798,12 +817,15 @@ class _SearchScreenState extends State<SearchScreen> {
       _tvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
   bool get _stvFavVisible =>
       _stvFavChannels.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
+  bool get _playlistFavVisible =>
+      _playlistItems.isNotEmpty && _catalogQuery.isEmpty && !_catalogSearching;
 
-  /// The visible favourites rows in render order: Debrify TV, Stremio TV, then
-  /// IPTV. This is the single source of truth for both rendering ([_buildBoard])
-  /// and the index-based DPAD focus wiring below, so the two never drift out of
-  /// sync.
+  /// The visible favourites rows in render order: Playlist, Debrify TV, Stremio
+  /// TV, then IPTV. This is the single source of truth for both rendering
+  /// ([_buildBoard]) and the index-based DPAD focus wiring below, so the two
+  /// never drift out of sync.
   List<_FavKind> get _favRowKinds => [
+        if (_playlistFavVisible) _FavKind.playlist,
         if (_tvFavVisible) _FavKind.debrify,
         if (_stvFavVisible) _FavKind.stremio,
         if (_iptvFavVisible) _FavKind.iptv,
@@ -821,6 +843,8 @@ class _SearchScreenState extends State<SearchScreen> {
         return _tvFavNodes;
       case _FavKind.stremio:
         return _stvFavNodes;
+      case _FavKind.playlist:
+        return _playlistFavNodes;
     }
   }
 
@@ -1027,6 +1051,296 @@ class _SearchScreenState extends State<SearchScreen> {
         viewMode: PlaylistViewMode.sorted,
       ),
     );
+  }
+
+  /// Load the user's saved playlist items for the leading Playlist row. Applies
+  /// poster overrides and resume progress (same as the Home playlist section),
+  /// newest first. Silently leaves the row empty on any error.
+  Future<void> _loadPlaylistFavorites() async {
+    try {
+      final results = await Future.wait([
+        StorageService.getPlaylistItemsRaw(),
+        StorageService.getPlaylistFavoriteKeys(),
+        StorageService.getAllPlaylistPosterOverrides(),
+      ]);
+      final items = results[0] as List<Map<String, dynamic>>;
+      final favKeys = results[1] as Set<String>;
+      final overrides = results[2] as Map<String, String>;
+
+      // Newest first (by addedAt), matching the Home playlist section.
+      items.sort((a, b) {
+        final at = a['addedAt'] as int? ?? 0;
+        final bt = b['addedAt'] as int? ?? 0;
+        return bt.compareTo(at);
+      });
+      // Apply any per-item poster override in a single pass.
+      for (final item in items) {
+        final key = StorageService.getPlaylistItemUniqueKey(item);
+        final ov = overrides[key];
+        if (ov != null && ov.isNotEmpty) item['posterUrl'] = ov;
+      }
+
+      final progress = await StorageService.buildPlaylistProgressMap(items);
+      if (!mounted) return;
+      setState(() {
+        _playlistItems = items;
+        _playlistProgress = progress;
+        _playlistFavKeys = favKeys;
+      });
+      _syncPlaylistFavNodes();
+    } catch (_) {
+      // Row just stays hidden.
+    }
+  }
+
+  void _syncPlaylistFavNodes() {
+    while (_playlistFavNodes.length < _playlistItems.length) {
+      _playlistFavNodes.add(FocusNode(
+          debugLabel: 'search_playlistfav_${_playlistFavNodes.length}'));
+    }
+    while (_playlistFavNodes.length > _playlistItems.length) {
+      final removed = _playlistFavNodes.removeLast();
+      // Unlike the other fav rows, this one deletes items in-row — so the card
+      // being trimmed can be the one that currently holds DPAD focus (delete the
+      // focused last card). Disposing a focused node strands focus on a disposed
+      // object; hand it to the new last card first (or let it fall out cleanly
+      // when the row is now empty).
+      final hadFocus = removed.hasFocus;
+      removed.dispose();
+      if (hadFocus && _playlistFavNodes.isNotEmpty) {
+        _playlistFavNodes.last.requestFocus();
+      }
+    }
+  }
+
+  /// Resume fraction (0..1) for a playlist item, or null if it has no progress.
+  /// [StorageService.buildPlaylistProgressMap] emits `positionMs`/`durationMs`
+  /// (the Home section reads `position`/`duration`, which are never present — so
+  /// its bar silently never draws; read the real keys here so ours works).
+  double? _playlistProgressFor(Map<String, dynamic> item) {
+    final key = StorageService.computePlaylistDedupeKey(item);
+    final p = _playlistProgress[key];
+    if (p == null) return null;
+    final position = (p['positionMs'] as num?)?.toInt();
+    final duration = (p['durationMs'] as num?)?.toInt();
+    if (position == null || duration == null || duration <= 0) return null;
+    return (position / duration).clamp(0.0, 1.0);
+  }
+
+  /// The full action menu for a playlist item — the same set of actions as the
+  /// Home playlist section (Home is being phased out, so this row is a complete
+  /// playlist manager on its own).
+  Future<void> _onPlaylistItemTap(Map<String, dynamic> item) async {
+    if (!mounted) return;
+    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+    final isFavorited = _playlistFavKeys.contains(dedupeKey);
+    final hasProgress = _playlistProgress.containsKey(dedupeKey);
+    final isCollection = (item['kind'] as String?) != 'single';
+    final title = (item['title'] as String?) ?? 'Unknown';
+    final tv = widget.isTelevision;
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 380),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141824),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                _PlaylistMenuItem(
+                  icon: Icons.play_circle_filled_rounded,
+                  label: 'Play',
+                  subtitle: 'Start playback',
+                  color: const Color(0xFF10B981),
+                  autofocus: true,
+                  isTelevision: tv,
+                  onTap: () => Navigator.pop(dialogContext, 'play'),
+                ),
+                if (isCollection)
+                  _PlaylistMenuItem(
+                    icon: Icons.shuffle_rounded,
+                    label: 'Play Random',
+                    subtitle: 'Start a random file from this collection',
+                    color: const Color(0xFFA78BFA),
+                    isTelevision: tv,
+                    onTap: () => Navigator.pop(dialogContext, 'play_random'),
+                  ),
+                _PlaylistMenuItem(
+                  icon: Icons.folder_open_rounded,
+                  label: 'View Files',
+                  subtitle: 'Browse folder contents',
+                  color: const Color(0xFF818CF8),
+                  isTelevision: tv,
+                  onTap: () => Navigator.pop(dialogContext, 'view_files'),
+                ),
+                _PlaylistMenuItem(
+                  icon: isFavorited
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  label:
+                      isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
+                  subtitle: isFavorited
+                      ? 'Remove from your favorites list'
+                      : 'Add to your favorites list',
+                  color: const Color(0xFFFFD700),
+                  isTelevision: tv,
+                  onTap: () => Navigator.pop(dialogContext, 'favorite'),
+                ),
+                if (hasProgress)
+                  _PlaylistMenuItem(
+                    icon: Icons.replay_rounded,
+                    label: 'Clear Progress',
+                    subtitle: 'Reset playback progress',
+                    color: const Color(0xFF60A5FA),
+                    isTelevision: tv,
+                    onTap: () => Navigator.pop(dialogContext, 'clear_progress'),
+                  ),
+                _PlaylistMenuItem(
+                  icon: Icons.launch_rounded,
+                  label: 'Launch on Startup',
+                  subtitle: 'Auto-play this item when Debrify opens',
+                  color: const Color(0xFFEF4444),
+                  subtitleColor: const Color(0xFFFCA5A5),
+                  isTelevision: tv,
+                  onTap: () => Navigator.pop(dialogContext, 'launch_on_startup'),
+                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+                _PlaylistMenuItem(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  subtitle: 'Remove from playlist',
+                  color: const Color(0xFFEF4444),
+                  isTelevision: tv,
+                  onTap: () => Navigator.pop(dialogContext, 'delete'),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case 'play':
+        _playPlaylistItem(item);
+        break;
+      case 'play_random':
+        _playPlaylistItem(item, playRandom: true);
+        break;
+      case 'view_files':
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PlaylistContentViewScreen(playlistItem: item),
+          ),
+        );
+        // Progress / poster may have changed while browsing.
+        _loadPlaylistFavorites();
+        break;
+      case 'favorite':
+        await StorageService.setPlaylistItemFavorited(item, !isFavorited);
+        HapticFeedback.mediumImpact();
+        _loadPlaylistFavorites();
+        break;
+      case 'clear_progress':
+        // Empty (not 'Unknown') fallback so a null-titled item clears nothing
+        // instead of fuzzy-matching the literal word 'unknown' and wiping an
+        // unrelated item's resume point — matches the Home section.
+        await StorageService.clearPlaylistProgress(
+          title: (item['title'] as String?) ?? '',
+        );
+        HapticFeedback.mediumImpact();
+        _loadPlaylistFavorites();
+        break;
+      case 'launch_on_startup':
+        await _setPlaylistLaunchOnStartup(item, dedupeKey);
+        break;
+      case 'delete':
+        await _confirmDeletePlaylistItem(item);
+        break;
+    }
+  }
+
+  Future<void> _playPlaylistItem(
+    Map<String, dynamic> item, {
+    bool playRandom = false,
+  }) async {
+    if (_playlistLaunching) return;
+    _playlistLaunching = true;
+    try {
+      await PlaylistPlayerService.play(context, item, playRandom: playRandom);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to play: $e')),
+      );
+    } finally {
+      if (mounted) _playlistLaunching = false;
+    }
+  }
+
+  Future<void> _setPlaylistLaunchOnStartup(
+    Map<String, dynamic> item,
+    String dedupeKey,
+  ) async {
+    await Future.wait([
+      StorageService.setStartupAutoLaunchEnabled(true),
+      StorageService.setStartupMode('playlist'),
+      StorageService.setStartupPlaylistItemId(dedupeKey),
+    ]);
+    if (!mounted) return;
+    final title = (item['title'] as String?) ?? 'Playlist item';
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('"$title" will launch automatically on startup')),
+    );
+  }
+
+  Future<void> _confirmDeletePlaylistItem(Map<String, dynamic> item) async {
+    final title = (item['title'] as String?) ?? 'this item';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete?'),
+        content: Text('Remove "$title" from your playlist?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HomeTheme.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+      await StorageService.removePlaylistItemByKey(dedupeKey);
+      HapticFeedback.mediumImpact();
+      _loadPlaylistFavorites();
+    }
   }
 
   /// Resolve the addon that a Continue Watching title should route through.
@@ -3520,6 +3834,8 @@ class _SearchScreenState extends State<SearchScreen> {
         return _buildTvFavRow(favIndex, cwCount);
       case _FavKind.stremio:
         return _buildStremioTvFavRow(favIndex, cwCount);
+      case _FavKind.playlist:
+        return _buildPlaylistFavRow(favIndex, cwCount);
     }
   }
 
@@ -3696,6 +4012,40 @@ class _SearchScreenState extends State<SearchScreen> {
             isTelevision: tv,
             focusNode: _iptvFavNodes[col],
             onOpen: () => _playIptvChannel(channel),
+          ),
+        );
+      },
+    );
+  }
+
+  /// The "Playlist" row of the user's saved items. Cards show the item poster
+  /// with a resume-progress bar; tapping opens the full action menu
+  /// ([_onPlaylistItemTap]) — this row is a complete playlist manager on its own.
+  Widget _buildPlaylistFavRow(int favIndex, int cwCount) {
+    final tv = widget.isTelevision;
+    return _buildFavRowShell(
+      title: 'Playlist',
+      tags: const [
+        _CategoryTag('Saved'),
+      ],
+      itemCount: _playlistItems.length,
+      cellBuilder: (col, posterW, cellH) {
+        final item = _playlistItems[col];
+        final posterUrl = item['posterUrl'] as String?;
+        final title = (item['title'] as String?) ?? 'Unknown';
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: _playlistFavNodes,
+          onUp: _favRowOnUp(favIndex, cwCount, col),
+          onDown: _favRowOnDown(favIndex, col),
+          child: _ArtPoster(
+            imageUrl: posterUrl,
+            title: title,
+            progress: _playlistProgressFor(item),
+            isTelevision: tv,
+            focusNode: _playlistFavNodes[col],
+            onOpen: () => _onPlaylistItemTap(item),
           ),
         );
       },
@@ -4334,10 +4684,10 @@ class _StremioCardState extends State<_StremioCard> {
   }
 }
 
-/// The kinds of leading favourites rows. Render order (Debrify TV, Stremio TV,
-/// IPTV) is defined by [_SearchScreenState._favRowKinds], the single source of
-/// truth for both rendering and the index-based DPAD focus wiring.
-enum _FavKind { iptv, debrify, stremio }
+/// The kinds of leading favourites rows. Render order (Playlist, Debrify TV,
+/// Stremio TV, IPTV) is defined by [_SearchScreenState._favRowKinds], the single
+/// source of truth for both rendering and the index-based DPAD focus wiring.
+enum _FavKind { iptv, debrify, stremio, playlist }
 
 /// Generic DPAD arrow-handling wrapper for a favourites-row card — the arrow
 /// counterpart to [_BoardCell] for the IPTV / Debrify TV / Stremio TV rows.
@@ -4420,6 +4770,10 @@ class _ArtPoster extends StatefulWidget {
   /// When true, a red "LIVE" pill is drawn top-right — signalling that this is a
   /// channel and the artwork is what's playing on it right now.
   final bool live;
+
+  /// Optional resume-progress fraction (0..1). When set, a thin progress bar is
+  /// drawn along the bottom edge of the poster (used by the Playlist row).
+  final double? progress;
   final bool isTelevision;
   final FocusNode focusNode;
   final VoidCallback onOpen;
@@ -4433,6 +4787,7 @@ class _ArtPoster extends StatefulWidget {
     this.imageFit = BoxFit.cover,
     this.badge,
     this.live = false,
+    this.progress,
   });
 
   @override
@@ -4571,6 +4926,26 @@ class _ArtPosterState extends State<_ArtPoster> {
                       ),
                     ),
                   ),
+                // Resume-progress bar along the bottom edge (Playlist row).
+                if (widget.progress != null && widget.progress! > 0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: SizedBox(
+                      height: 4,
+                      child: Stack(
+                        children: [
+                          Container(color: Colors.black.withValues(alpha: 0.4)),
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: widget.progress!,
+                            child: Container(color: _kCwProgressRed),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 // Selection ring — accent on TV focus, subtle white on hover.
                 if (_active)
                   Positioned.fill(
@@ -4661,6 +5036,92 @@ class _ArtPosterState extends State<_ArtPoster> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single row in the playlist item action menu ([_onPlaylistItemTap]). Ported
+/// from the Home playlist section so the Search Playlist row is a self-contained
+/// manager; keyboard/DPAD focusable with a highlight on focus.
+class _PlaylistMenuItem extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final Color? subtitleColor;
+  final VoidCallback onTap;
+  final bool autofocus;
+  final bool isTelevision;
+
+  const _PlaylistMenuItem({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.subtitleColor,
+    this.autofocus = false,
+    this.isTelevision = false,
+  });
+
+  @override
+  State<_PlaylistMenuItem> createState() => _PlaylistMenuItemState();
+}
+
+class _PlaylistMenuItemState extends State<_PlaylistMenuItem> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      autofocus: widget.autofocus,
+      canRequestFocus: true,
+      onTap: widget.onTap,
+      onFocusChange: (f) => setState(() => _focused = f),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: widget.isTelevision ? 0 : 150),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: _focused
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: _focused ? 0.2 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(widget.icon, size: 18, color: widget.color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.label,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: widget.subtitleColor ??
+                          Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
