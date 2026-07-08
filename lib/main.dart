@@ -601,8 +601,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'AllDebrid',
     'IPTV',
     'YouTube',
-    'Search', // 15: appended at end so existing indices don't shift
+    'Home New', // 15: the new Stremio-style board (was 'Search'; the old Home
+    // at index 0 will be deprecated/renamed later)
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
+    'Search', // 17: dedicated search tab (TV only)
   ];
 
   final List<IconData> _icons = [
@@ -621,8 +623,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.all_inclusive_rounded,
     Icons.live_tv_rounded,
     Icons.ondemand_video_rounded,
-    Icons.search_rounded, // 15: Search
+    Icons.home_rounded, // 15: Home New (board)
     Icons.cloud_rounded, // 16: Cloud
+    Icons.search_rounded, // 17: Search
   ];
 
   @override
@@ -1620,9 +1623,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       case 12:
         activeTabKey = 'alldebrid';
         break;
-      case 15:
-        // So back closes the Search overlay before leaving the tab; the handler
-        // (registered by SearchScreen) returns false when the overlay is shut.
+      case 17:
+        // Dedicated Search tab: its handler clears an active query on Back
+        // (returning to the blank prompt) before letting Back leave the tab.
         activeTabKey = 'search';
         break;
     }
@@ -1630,15 +1633,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     // Update active tab for TV sidebar navigation
     MainPageBridge.setActiveTvTab(index);
-
-    // TV only: the chrome-free Search board has no persistent search bar, so
-    // re-pressing the already-active Search tab from the sidebar is the entry
-    // point that opens its search overlay. On mobile/desktop the search bar is
-    // always visible and a re-tap conventionally means "scroll to top" — firing
-    // the overlay there would yank focus into the field and pop the keyboard.
-    if (index == 15 && !changed && _isAndroidTv) {
-      MainPageBridge.openSearchOverlay?.call();
-    }
 
     if (changed) {
       _hasTrackedInitialTab = true;
@@ -2078,7 +2072,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
     int nextIndex = _selectedIndex;
     if (!newVisible.contains(nextIndex)) {
-      nextIndex = newVisible.first;
+      // The current tab disappeared — land on a Home board rather than the first
+      // visible tab, which on TV is now the dedicated (blank) Search tab.
+      nextIndex = newVisible.contains(15)
+          ? 15
+          : (newVisible.contains(0) ? 0 : newVisible.first);
     }
 
     if (_hasRealDebridKey == hasRealDebrid &&
@@ -2146,6 +2144,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final allDebrid = allDebridEnabled ?? _allDebridEnabled;
       final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
       final indices = <int>[
+        17,
         15,
         0,
         2,
@@ -2153,7 +2152,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         14,
         3,
         9,
-      ]; // Search, Torrent, Downloads, IPTV, YouTube, Debrify TV, Stremio TV
+      ]; // Search, Home New, Torrent, Downloads, IPTV, YouTube, Debrify TV,
+      // Stremio TV. The dedicated Search tab (17) is TV-only; on desktop/mobile
+      // the Home-New board (15) keeps its own persistent search bar.
       // Consolidated Cloud tab: one entry when ANY provider is enabled & not
       // hidden (replaces the former per-provider RD/Torbox/PikPak/Premiumize/
       // AllDebrid/WebDAV tabs). The in-tab hub lists the available providers.
@@ -2214,8 +2215,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// into [_pages]/[_titles], not the visible-nav position).
   String _navSectionForIndex(int screenIndex) {
     switch (screenIndex) {
+      case 17: // Search (TV only)
+      case 15: // Home New (board)
       case 0: // Home
-      case 15: // Search
       case 2: // Downloads
         return 'Main';
       case 13: // IPTV
@@ -2298,10 +2300,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             onUpArrowFromFilters: args.onUpArrowToSearch,
           ),
         );
-      case 15: // Search
+      case 15: // Home New (Stremio-style board)
         return SearchScreen(isTelevision: _isAndroidTv);
       case 16: // Cloud (consolidated provider hub)
         return CloudScreen(isTelevision: _isAndroidTv);
+      case 17: // Search (dedicated tab — TV only)
+        return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
       default:
         return _pages[index];
     }

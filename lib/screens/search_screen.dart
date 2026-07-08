@@ -91,7 +91,17 @@ String? _seLabel(int? season, int? episode) {
 class SearchScreen extends StatefulWidget {
   final bool isTelevision;
 
-  const SearchScreen({super.key, this.isTelevision = false});
+  /// Dedicated-search-tab mode (TV only). When true the screen is *only* the
+  /// search field + Catalog/Keyword toggle over a blank prompt until the user
+  /// types — no hero/board. When false it's the "Home New" board (chrome-free on
+  /// TV; persistent search bar on desktop/mobile).
+  final bool searchMode;
+
+  const SearchScreen({
+    super.key,
+    this.isTelevision = false,
+    this.searchMode = false,
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -99,17 +109,42 @@ class SearchScreen extends StatefulWidget {
 
 enum _Mode { catalog, keyword }
 
+/// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
+/// override closer than the default text-editing shortcuts) so an empty field
+/// escapes to the sidebar instead of the EditableText silently eating the key.
+class _SearchLeftIntent extends Intent {
+  const _SearchLeftIntent();
+}
+
+/// Escapes an *empty* TV search field to the sidebar on left-arrow. It disables
+/// itself the moment there's text, so [Shortcuts] falls through to the default
+/// caret/selection handling — meaning the wrapper can stay mounted at all times
+/// (a stable subtree root) without the action ever swallowing a real caret move.
+class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
+  _EmptyFieldLeftAction(this._controller, this._onEscape);
+
+  final TextEditingController _controller;
+  final VoidCallback _onEscape;
+
+  @override
+  bool isEnabled(_SearchLeftIntent intent) => _controller.text.isEmpty;
+
+  @override
+  Object? invoke(_SearchLeftIntent intent) {
+    _onEscape();
+    return null;
+  }
+}
+
 class _SearchScreenState extends State<SearchScreen> {
-  static const int _tabIndex = 15;
+  // Which nav tab this instance backs, for the TV content-focus handler: the
+  // dedicated Search tab (17) or the Home-New board (15).
+  int get _tabIndex => widget.searchMode ? 17 : 15;
 
   final StremioService _stremio = StremioService.instance;
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
-  // The small search icon pinned to the top-right of the chrome-free TV board.
-  // It's the visible, discoverable entry into the search overlay (DPAD-up from
-  // the top row lands here; SELECT opens the field).
-  final FocusNode _boardSearchNode = FocusNode(debugLabel: 'board_search_icon');
   // DPAD focus targets for the Catalog / Keyword toggle (TV only), so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
@@ -259,11 +294,6 @@ class _SearchScreenState extends State<SearchScreen> {
   // still resolving links (the menu closes immediately, giving no other cue).
   bool _playlistLaunching = false;
 
-  /// Whether the search overlay (field + Catalog/Keyword toggle + results) is
-  /// showing over the board. The board itself is chrome-free; search is opened
-  /// from the sidebar magnifier (re-pressing the already-active Search tab).
-  bool _searchOpen = false;
-
   int _traktCwToken = 0;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -354,18 +384,50 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
-    MainPageBridge.openSearchOverlay = _openSearchOverlay;
-    MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
+    if (widget.searchMode) {
+      MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
+    }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     _boardScroll.addListener(_onBoardScroll);
-    _load();
-    _loadContinueWatching();
-    _loadTraktContinueWatching();
-    _loadTvFavorites();
-    _loadStremioTvFavorites();
-    _loadIptvFavorites();
-    _loadPlaylistFavorites();
     _refreshTraktAuthState();
+    // The dedicated Search tab only shows a field + blank prompt until a query,
+    // so it skips the whole board pipeline (home catalogs, Continue Watching,
+    // Trakt, favourites) — catalog search fetches its addons on demand. It also
+    // never runs _load(), which is what clears _loading, so clear it here or the
+    // results grid (_buildBoard) would sit on its initial spinner forever.
+    if (widget.searchMode) {
+      _loading = false;
+    } else {
+      _load();
+      _loadContinueWatching();
+      _loadTraktContinueWatching();
+      _loadTvFavorites();
+      _loadStremioTvFavorites();
+      _loadIptvFavorites();
+      _loadPlaylistFavorites();
+    }
+  }
+
+  /// Back on the dedicated Search tab: clear an in-progress search (returning to
+  /// the blank prompt) first; a second Back with nothing to clear falls through
+  /// to leave the tab. Registered only in [SearchScreen.searchMode].
+  bool _handleSearchBack() {
+    final hasQuery =
+        _searchController.text.isNotEmpty ||
+        _catalogQuery.isNotEmpty ||
+        _kwQuery.isNotEmpty;
+    if (!hasQuery) return false;
+    // Back also drops out of Keyword mode, so the tab returns to its default
+    // Catalog prompt (matches the old overlay-close behaviour). _clearQuery
+    // rebuilds, so setting the field first is enough.
+    _mode = _Mode.catalog;
+    _clearQuery();
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocusNode.requestFocus();
+      });
+    }
+    return true;
   }
 
   /// An integration (Trakt / a debrid provider) was connected or disconnected
@@ -374,7 +436,9 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onIntegrationsChanged() {
     _refreshTraktAuthState();
     _refreshPikpakOnly();
-    _loadTraktContinueWatching();
+    // Trakt Continue Watching rows are never rendered on the dedicated Search
+    // tab, so don't refetch them there.
+    if (!widget.searchMode) _loadTraktContinueWatching();
   }
 
   Future<void> _refreshTraktAuthState() async {
@@ -386,10 +450,9 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void dispose() {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
-    if (MainPageBridge.openSearchOverlay == _openSearchOverlay) {
-      MainPageBridge.openSearchOverlay = null;
+    if (widget.searchMode) {
+      MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     }
-    MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     _catalogDebounce?.cancel();
     _heroTimer?.cancel();
@@ -397,7 +460,6 @@ class _SearchScreenState extends State<SearchScreen> {
     _heroEnriched.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _boardSearchNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
     _boardScroll.dispose();
@@ -1589,13 +1651,16 @@ class _SearchScreenState extends State<SearchScreen> {
     }
     setState(() => _sections = sections);
     unawaited(_refreshBoundSources());
-    final first = sections.isNotEmpty && sections.first.items.isNotEmpty
-        ? sections.first.items.first
-        : null;
-    _heroItem.value = first;
-    _heroEnriched.value = null;
-    // The hero is TV-only (see _buildBoard), so skip the backdrop fetch off-TV.
-    if (first != null && widget.isTelevision) _enrichHero(first);
+    // The dedicated Search tab hides the hero, so don't seed it or fire the
+    // backdrop-metadata fetch there (the board hero is TV-only otherwise).
+    if (!widget.searchMode) {
+      final first = sections.isNotEmpty && sections.first.items.isNotEmpty
+          ? sections.first.items.first
+          : null;
+      _heroItem.value = first;
+      _heroEnriched.value = null;
+      if (first != null && widget.isTelevision) _enrichHero(first);
+    }
   }
 
   /// Cross-addon catalog search, grouped as one horizontal row per addon so it
@@ -1658,60 +1723,43 @@ class _SearchScreenState extends State<SearchScreen> {
 
   // ── Focus entry ──────────────────────────────────────────────────────────
 
-  /// DPAD-up from the board's top row. When the search overlay is open the field
-  /// sits above; otherwise land on the top-right search icon (the board's one
-  /// piece of chrome), so search is reachable — and discoverable — with a flick
-  /// up from the first row.
+  /// DPAD-up from the top row. On the dedicated Search tab the field sits above
+  /// the results, so land there; on the Home-New board there's nothing above, so
+  /// hand focus to the sidebar.
   void _leaveBoardTop() {
-    if (_searchOpen) {
+    if (widget.searchMode) {
       _searchFocusNode.requestFocus();
     } else {
-      _boardSearchNode.requestFocus();
+      MainPageBridge.focusTvSidebar?.call();
     }
-  }
-
-  /// Open the search overlay over the board (from the sidebar magnifier) and put
-  /// the caret in the field. Re-opening when already open just refocuses.
-  /// Desktop/mobile show the search bar permanently, so there it only focuses
-  /// the field (the overlay state stays TV-only).
-  void _openSearchOverlay() {
-    if (!mounted) return;
-    if (!widget.isTelevision) {
-      _searchFocusNode.requestFocus();
-      return;
-    }
-    if (!_searchOpen) setState(() => _searchOpen = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _searchFocusNode.requestFocus();
-    });
-  }
-
-  /// Close the search overlay: drop any query, reset to the catalog board, and
-  /// (on TV) move focus back onto the board so the remote isn't left on the
-  /// now-hidden field.
-  void _closeSearchOverlay() {
-    if (!mounted || !_searchOpen) return;
-    _mode = _Mode.catalog;
-    _searchOpen = false;
-    // Clears keyword + catalog search state and restores the home board (this
-    // calls setState, so the board rebuilds without the overlay).
-    _clearQuery();
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusContent();
-      });
-    }
-  }
-
-  /// Remote/hardware back while on the Search tab: swallow it to close an open
-  /// overlay; otherwise let the app handle back normally.
-  bool _handleSearchBack() {
-    if (!_searchOpen) return false;
-    _closeSearchOverlay();
-    return true;
   }
 
   void _focusContent() {
+    // Dedicated Search tab: land on the results when they're on-screen, else the
+    // field (the blank prompt has nothing focusable below it). Only focus board
+    // rows when a query is actually showing them — otherwise their nodes aren't
+    // mounted and focus would be stranded.
+    if (widget.searchMode) {
+      if (_mode == _Mode.keyword) {
+        if (_kwToolbarVisible) {
+          _kwToolbarNodes.first.requestFocus();
+        } else {
+          _searchFocusNode.requestFocus();
+        }
+        return;
+      }
+      // Only when results are actually mounted — not mid-search (the spinner is
+      // up and _rowNodes still holds the previous/stale set).
+      if (_catalogQuery.isNotEmpty &&
+          !_catalogSearching &&
+          _rowNodes.isNotEmpty &&
+          _rowNodes.first.isNotEmpty) {
+        _rowNodes.first.first.requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return;
+    }
     if (_mode == _Mode.keyword) {
       // Toolbar + result rows render together, so entering the content lands on
       // the toolbar first (Down then reaches the rows). When it isn't visible
@@ -1739,14 +1787,13 @@ class _SearchScreenState extends State<SearchScreen> {
       _rowNodes.first.first.requestFocus();
       return;
     }
-    // Nothing on the board is focusable (empty catalogs). The search field is in
-    // the tree on desktop/mobile and inside the open TV overlay; on the closed
-    // TV board it isn't — fall back to the always-present top-right search icon
-    // so the remote never lands on a detached node.
-    if (!widget.isTelevision || _searchOpen) {
+    // Board tab with nothing focusable (empty catalogs). The search field is in
+    // the tree on desktop/mobile (persistent bar) but not on the chrome-free TV
+    // board — bounce to the sidebar there so the remote never lands nowhere.
+    if (!widget.isTelevision) {
       _searchFocusNode.requestFocus();
     } else {
-      _boardSearchNode.requestFocus();
+      MainPageBridge.focusTvSidebar?.call();
     }
   }
 
@@ -1789,6 +1836,9 @@ class _SearchScreenState extends State<SearchScreen> {
   // ── Hero ─────────────────────────────────────────────────────────────────
 
   void _setHero(StremioMeta item) {
+    // The dedicated Search tab suppresses the hero, so don't track it or fire
+    // the backdrop-enrichment timer for results the user never sees it behind.
+    if (widget.searchMode) return;
     if (_heroItem.value?.id == item.id) return;
     _heroItem.value = item;
     _heroEnriched.value = null;
@@ -3092,31 +3142,15 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         child: SafeArea(
-          // On TV the board is chrome-free (no search bar) so the hero + rows
-          // own the screen, Stremio-style; the search field + Catalog/Keyword
-          // toggle + results appear only as an overlay opened from the sidebar
-          // magnifier (re-pressing the already-active Search tab). Desktop and
-          // mobile keep the persistent search bar — there's no re-press-the-rail
-          // gesture there, and the wider canvas has room for it.
-          child: (widget.isTelevision && !_searchOpen)
-              ? Stack(
-                  children: [
-                    _buildBoard(),
-                    // The board's only chrome: a small search icon top-right.
-                    // Visible so search is discoverable; SELECT opens the overlay
-                    // and DPAD-up from the top row also lands here.
-                    Positioned(
-                      top: 6,
-                      right: 18,
-                      child: _BoardSearchButton(
-                        focusNode: _boardSearchNode,
-                        onActivate: _openSearchOverlay,
-                        onDown: _focusContent,
-                        onLeave: () => MainPageBridge.focusTvSidebar?.call(),
-                      ),
-                    ),
-                  ],
-                )
+          // Three layouts:
+          //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
+          //    toggle over a blank prompt until the user types (TV only).
+          //  • Home-New board on TV — chrome-free hero + rows, no search bar
+          //    (search lives in its own tab).
+          //  • Home-New board on desktop/mobile — keeps a persistent search bar
+          //    above the board (no separate Search tab there).
+          child: (widget.isTelevision && !widget.searchMode)
+              ? _buildBoard()
               : Column(
                   children: [
                     _buildHeader(),
@@ -3221,13 +3255,16 @@ class _SearchScreenState extends State<SearchScreen> {
           }
           return KeyEventResult.ignored; // let the caret move right first
         }
+        // Arrow-left is handled via a Shortcuts override on the field (below),
+        // not here — an EditableText consumes left-at-start for the caret before
+        // an ancestor Focus.onKeyEvent can see it.
         return KeyEventResult.ignored;
       },
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _searchController,
         builder: (context, value, _) {
           final hasText = value.text.isNotEmpty;
-          return TextField(
+          final field = TextField(
             controller: _searchController,
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
@@ -3274,6 +3311,28 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           );
+          // TV: wrap the field so left-arrow on an EMPTY field escapes to the
+          // sidebar (the intuitive direction) — the text editor would otherwise
+          // silently eat it. The wrapper is ALWAYS present (a stable subtree root,
+          // so typing/clearing never tears the EditableText down); the action
+          // disables itself once there's text, so the framework's own caret and
+          // selection handling takes over untouched.
+          if (!tv) return field;
+          return Shortcuts(
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.arrowLeft):
+                  _SearchLeftIntent(),
+            },
+            child: Actions(
+              actions: <Type, Action<Intent>>{
+                _SearchLeftIntent: _EmptyFieldLeftAction(
+                  _searchController,
+                  () => MainPageBridge.focusTvSidebar?.call(),
+                ),
+              },
+              child: field,
+            ),
+          );
         },
       ),
     );
@@ -3284,7 +3343,53 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_catalogSearching) {
       return const Center(child: CircularProgressIndicator());
     }
+    // Dedicated Search tab: blank prompt until there's a query (no hero/board).
+    if (widget.searchMode && _catalogQuery.isEmpty) {
+      return _buildSearchPrompt();
+    }
     return _buildBoard();
+  }
+
+  /// Empty state for the dedicated Search tab before the user types.
+  Widget _buildSearchPrompt() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.search_rounded,
+              size: 54,
+              color: Colors.white.withValues(alpha: 0.22),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search movies & shows',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Only reached in Catalog mode — _buildBody routes Keyword mode to
+            // _buildKeyword (which has its own empty state) before it gets here.
+            Text(
+              'Type a title to search your catalogs, or switch to Keyword to '
+              'search torrents directly.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 13.5,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildKeyword() {
@@ -3879,7 +3984,9 @@ class _SearchScreenState extends State<SearchScreen> {
             // The hero spotlight only changes as DPAD focus moves across tiles, so
             // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
             // sit frozen on the first item and waste vertical space — hide it.
-            if (tv)
+            // Also hidden on the dedicated Search tab, where results should read
+            // as a clean grid rather than a browse hero.
+            if (tv && !widget.searchMode)
               ValueListenableBuilder<StremioMeta?>(
                 valueListenable: _heroItem,
                 builder: (context, item, _) {
@@ -5211,97 +5318,6 @@ class _StremioCardState extends State<_StremioCard> {
             color: Colors.white.withValues(alpha: 0.5),
             fontSize: 11,
             fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The small search icon pinned to the top-right of the chrome-free TV board —
-/// the one visible entry into the search overlay. SELECT opens it; DPAD-down
-/// drops into the board's first row; DPAD-left/up leaves to the sidebar. A
-/// tap works too (for touch TVs / pointer).
-class _BoardSearchButton extends StatefulWidget {
-  final FocusNode focusNode;
-  final VoidCallback onActivate;
-  final VoidCallback onDown;
-  final VoidCallback onLeave;
-
-  const _BoardSearchButton({
-    required this.focusNode,
-    required this.onActivate,
-    required this.onDown,
-    required this.onLeave,
-  });
-
-  @override
-  State<_BoardSearchButton> createState() => _BoardSearchButtonState();
-}
-
-class _BoardSearchButtonState extends State<_BoardSearchButton> {
-  bool _focused = false;
-  bool _keyDown = false;
-
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    final key = event.logicalKey;
-    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-      if (event is KeyDownEvent) {
-        _keyDown = true;
-        return KeyEventResult.handled;
-      } else if (event is KeyUpEvent) {
-        if (_keyDown) widget.onActivate();
-        _keyDown = false;
-        return KeyEventResult.handled;
-      }
-    }
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (key == LogicalKeyboardKey.arrowDown) {
-      widget.onDown();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowUp) {
-      widget.onLeave();
-      return KeyEventResult.handled;
-    }
-    // Swallow arrow-right so focus can't escape into the hero/backdrop.
-    if (key == LogicalKeyboardKey.arrowRight) return KeyEventResult.handled;
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: _onKey,
-      onFocusChange: (f) => setState(() => _focused = f),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onActivate,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _focused
-                  ? kStremioAccent.withValues(alpha: 0.9)
-                  : Colors.black.withValues(alpha: 0.42),
-              border: Border.all(
-                color: _focused
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.22),
-                width: _focused ? 2 : 1,
-              ),
-            ),
-            child: Icon(
-              Icons.search_rounded,
-              size: 22,
-              color: Colors.white.withValues(alpha: _focused ? 1 : 0.85),
-            ),
           ),
         ),
       ),

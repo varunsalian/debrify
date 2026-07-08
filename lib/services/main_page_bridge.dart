@@ -285,12 +285,6 @@ class MainPageBridge {
   /// Callback to focus the TV sidebar. Set by main.dart.
   static VoidCallback? focusTvSidebar;
 
-  /// Opens the Search screen's search overlay (field + Catalog/Keyword toggle +
-  /// results) over its chrome-free board. Set by SearchScreen when mounted;
-  /// main.dart calls it when the already-active Search tab is re-selected from
-  /// the sidebar, so the magnifier acts as the search entry point.
-  static VoidCallback? openSearchOverlay;
-
   /// Tab-specific content focus handlers for TV navigation.
   /// Each screen registers how to focus its primary/entry element.
   /// Key is the tab index (0=Home, 1=Playlist, 2=Downloads, etc.)
