@@ -539,6 +539,23 @@ class TraktService {
   // ============================================================================
 
   /// Authenticated GET request with automatic token refresh on 401.
+  /// GET a public Trakt endpoint that needs only the api-key header (no OAuth
+  /// token) — e.g. the global trending/popular/anticipated lists. Returns null
+  /// on any failure, like [_authenticatedGet].
+  Future<http.Response?> _publicGet(String path) async {
+    try {
+      return await http
+          .get(
+            Uri.parse('$kTraktApiBaseUrl$path'),
+            headers: _apiHeaders(),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      debugPrint('Trakt: public GET $path error: $e');
+      return null;
+    }
+  }
+
   Future<http.Response?> _authenticatedGet(String path) async {
     var accessToken = await StorageService.getTraktAccessToken();
     if (accessToken == null) return null;
@@ -622,33 +639,47 @@ class TraktService {
   /// Fetch a standard Trakt list (watchlist, collection, ratings, recommendations).
   /// [listType] is one of: watchlist, collection, ratings, recommendations.
   /// [contentType] is one of: movies, shows.
-  Future<List<dynamic>> fetchList(String listType, String contentType) async {
+  ///
+  /// Returns an empty list on any failure — callers that need to tell a genuine
+  /// outage from a truly empty list should use [fetchListOrNull] instead.
+  Future<List<dynamic>> fetchList(String listType, String contentType) async =>
+      await fetchListOrNull(listType, contentType) ?? const [];
+
+  /// Like [fetchList] but returns null on failure (no auth / non-200 / network /
+  /// parse error) so callers can distinguish a fetch that failed from a list
+  /// that is genuinely empty — the two are visually different states.
+  Future<List<dynamic>?> fetchListOrNull(
+      String listType, String contentType) async {
     final String path;
+    // trending/popular/anticipated are public Trakt endpoints — no OAuth token
+    // required — so serve them without auth to survive a missing/expired token.
+    final bool isPublic = listType == 'trending' ||
+        listType == 'popular' ||
+        listType == 'anticipated';
     if (listType == 'recommendations') {
       path = '/recommendations/$contentType?extended=full';
     } else if (listType == 'watched') {
       path = '/sync/watched/$contentType?extended=full';
     } else if (listType == 'history') {
       path = '/sync/history/$contentType?extended=full&limit=100';
-    } else if (listType == 'trending' ||
-        listType == 'popular' ||
-        listType == 'anticipated') {
+    } else if (isPublic) {
       path = '/$contentType/$listType?extended=full&limit=100';
     } else {
       path = '/sync/$listType/$contentType?extended=full';
     }
 
-    final response = await _authenticatedGet(path);
+    final response =
+        isPublic ? await _publicGet(path) : await _authenticatedGet(path);
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchList failed for $path (${response?.statusCode})');
-      return [];
+      return null;
     }
 
     try {
       return jsonDecode(response.body) as List<dynamic>;
     } catch (e) {
       debugPrint('Trakt: fetchList parse error: $e');
-      return [];
+      return null;
     }
   }
 

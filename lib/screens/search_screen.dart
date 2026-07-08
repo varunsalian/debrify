@@ -43,6 +43,7 @@ import '../widgets/torrent_result_row.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
+import 'see_all/trakt_see_all_screen.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'debrid_downloads_screen.dart';
@@ -4180,29 +4181,42 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// Trakt Continue Watching "See All". Unlike the local grid this passes no
-  /// [onReload]: re-fetching Trakt on every detail/player return means ~2+N API
-  /// calls each time, so the grid keeps its snapshot and the board's rows
-  /// refresh once when the screen pops (the Trakt load refreshes bound sources
-  /// via its own tail, so there's no separate _refreshBoundSources here).
+  /// Trakt "See All". Opens on Continue Watching (the row the user came from,
+  /// handed in already-loaded) and lets them switch to any standard Trakt list
+  /// — Watchlist, History, Collection, Ratings, Recommendations, Trending,
+  /// Popular, Anticipated — from the in-screen "List" dropdown; those are
+  /// fetched on demand inside [TraktSeeAllScreen].
+  ///
+  /// The Continue Watching grid keeps its snapshot (no per-return reload): a
+  /// Trakt refresh is ~2+N API calls, so the board's rows refresh once when the
+  /// screen pops. [_loadTraktContinueWatching] runs first (no bound pass), then
+  /// [_afterSeeAllReturn] reloads local CW and runs the single bound-source
+  /// refresh against both now-fresh lists (it swallows its own errors, so the
+  /// bound refresh still happens even if the Trakt fetch fails).
   void _openTraktSeeAll([String initialCategory = 'all']) {
-    _pushCwSeeAll(
-      title: 'Trakt · Continue Watching',
-      initialCategory: initialCategory,
-      items: _traktAll,
-      progressOf: (m) => _traktProgress[m.imdbId],
-      onOpen: _openTraktItem,
-      onQuickPlay: _pikpakOnly ? null : _playTraktItem,
-      onReload: null,
-      // Reload Trakt first (no bound pass), then _afterSeeAllReturn reloads
-      // local CW and runs the single bound-source refresh against both now-fresh
-      // lists. _loadTraktContinueWatching swallows its own errors, so the bound
-      // refresh still happens even if the Trakt fetch fails.
-      onReturn: () async {
-        await _loadTraktContinueWatching(refreshBound: false);
-        await _afterSeeAllReturn();
-      },
-    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => TraktSeeAllScreen(
+              initialCategory: initialCategory,
+              cwItems: List<StremioMeta>.of(_traktAll),
+              // Pass the live progress map (read-only in the screen) so resume
+              // bars reflect any refresh while the screen is open, matching the
+              // old live-closure behaviour; items stay a snapshot so the grid
+              // doesn't shift under the user.
+              cwProgress: _traktProgress,
+              onOpen: _openTraktItem,
+              onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+              // CW items are all rail-loaded, so _boundCounts covers them.
+              isBound: _isBound,
+              isTelevision: widget.isTelevision,
+            ),
+          ),
+        )
+        .then((_) async {
+          await _loadTraktContinueWatching(refreshBound: false);
+          await _afterSeeAllReturn();
+        });
   }
 
   /// Shared header for a board rail: a plain "Popular · Movies"-style title
