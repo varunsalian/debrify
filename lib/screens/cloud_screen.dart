@@ -422,7 +422,11 @@ class _CloudScreenState extends State<CloudScreen> {
                         border: Border.all(
                             color: p.color.withValues(alpha: 0.35)),
                       ),
-                      child: Icon(p.icon, color: p.color, size: 25),
+                      child: Icon(
+                        p.icon,
+                        color: Colors.white.withValues(alpha: 0.92),
+                        size: 25,
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
