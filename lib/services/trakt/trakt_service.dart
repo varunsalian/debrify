@@ -745,23 +745,29 @@ class TraktService {
     Map<String, dynamic> list,
     String contentType,
   ) async {
+    final base = _likedListBasePath(list);
+    if (base == null) return [];
     final itemType = _userListItemTypeSegment(contentType);
-    final traktId = list['ids']?['trakt']?.toString();
-    if (traktId != null && traktId.isNotEmpty) {
-      final path = '/lists/$traktId/items/$itemType?extended=full';
-      return _fetchPagedListItems(
-        basePath: path,
-        contentType: contentType,
-        logLabel: 'fetchLikedListItems listId=$traktId',
-      );
-    }
+    return _fetchPagedListItems(
+      basePath: '$base/items/$itemType?extended=full',
+      contentType: contentType,
+      logLabel: 'fetchLikedListItems $base',
+    );
+  }
 
+  /// Resolve a liked list to its API base segment (without a trailing `/items`):
+  /// the global `/lists/{traktId}` when the list carries a Trakt id, else
+  /// `/users/{owner}/lists/{slug}`. Null when neither can be built. Shared by the
+  /// paged and single-ordered liked-list fetchers so they can't drift.
+  String? _likedListBasePath(Map<String, dynamic> list) {
+    final traktId = list['ids']?['trakt']?.toString();
+    if (traktId != null && traktId.isNotEmpty) return '/lists/$traktId';
     final slug = list['ids']?['slug'] as String? ?? '';
     final user = list['user'] as Map<String, dynamic>?;
     final owner =
         user?['ids']?['slug'] as String? ?? user?['username'] as String? ?? '';
-    if (owner.isEmpty || slug.isEmpty) return [];
-    return fetchLikedListItems(owner, slug, contentType);
+    if (owner.isEmpty || slug.isEmpty) return null;
+    return '/users/$owner/lists/$slug';
   }
 
   /// Fetch items from a specific custom list.
@@ -778,6 +784,65 @@ class TraktService {
       contentType: contentType,
       logLabel: 'fetchCustomListItems slug=$listId',
     );
+  }
+
+  /// Fetch a user list's movie + show items in one call, preserving the list's
+  /// own cross-type order (rank / listed_at), and returning null on failure so
+  /// callers can tell an outage from a genuinely empty list. Seasons/episodes/
+  /// people are intentionally excluded — the See-All grid renders posters only.
+  ///
+  /// [basePath] is the list segment without the trailing `/items` — e.g.
+  /// `/users/me/lists/{slug}` (own) or `/lists/{traktId}` / `/users/{owner}/
+  /// lists/{slug}` (liked).
+  Future<List<dynamic>?> _fetchListItemsOrderedOrNull(
+    String basePath,
+    String logLabel,
+  ) async {
+    final items = <dynamic>[];
+    var page = 1;
+    var pageCount = 1;
+    do {
+      final path =
+          '$basePath/items/movie,show?extended=full&page=$page&limit=100';
+      final response = await _authenticatedGet(path);
+      if (response == null || response.statusCode != 200) {
+        debugPrint(
+          'Trakt: $logLabel failed for $path (${response?.statusCode})',
+        );
+        // Fail hard only if nothing loaded; a later page failing keeps the pages
+        // already fetched (partial success) rather than blanking the whole list.
+        return items.isEmpty ? null : items;
+      }
+      try {
+        final decoded = jsonDecode(response.body) as List<dynamic>;
+        items.addAll(decoded);
+        pageCount = _paginationPageCount(response);
+      } catch (e) {
+        debugPrint('Trakt: $logLabel parse error: $e');
+        return items.isEmpty ? null : items;
+      }
+      page += 1;
+    } while (page <= pageCount);
+    return items;
+  }
+
+  /// Own custom list items (movies + shows) in list order, null on failure.
+  /// [listRef] is the list's slug (preferred) or Trakt id.
+  Future<List<dynamic>?> fetchCustomListItemsOrderedOrNull(String listRef) {
+    return _fetchListItemsOrderedOrNull(
+      '/users/me/lists/$listRef',
+      'customList $listRef',
+    );
+  }
+
+  /// Liked list items (movies + shows) in list order, null on failure. Resolves
+  /// the list's global-id path when possible, else the owner/slug path.
+  Future<List<dynamic>?> fetchLikedListItemsOrderedOrNull(
+    Map<String, dynamic> list,
+  ) {
+    final base = _likedListBasePath(list);
+    if (base == null) return Future.value(null);
+    return _fetchListItemsOrderedOrNull(base, 'likedList $base');
   }
 
   /// Search Trakt for movies or shows by query.
